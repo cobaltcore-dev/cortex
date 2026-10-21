@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"log/slog"
 	"net/http"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/cinder"
@@ -36,7 +35,7 @@ func checkCinderSchedulerReturnsValidHosts(
 		Weights: map[string]float64{},
 	}
 	apiURL := "http://localhost:8080/scheduler/cinder/external"
-	slog.Info("sending request to external scheduler", "apiURL", apiURL)
+	log.Info("sending request to external scheduler", "apiURL", apiURL)
 
 	requestBody := must.Return(json.Marshal(request))
 	buf := bytes.NewBuffer(requestBody)
@@ -48,7 +47,7 @@ func checkCinderSchedulerReturnsValidHosts(
 	if respRaw.StatusCode != http.StatusOK {
 		// Log the response body for debugging
 		bodyBytes := must.Return(io.ReadAll(respRaw.Body))
-		slog.Error("external scheduler API returned non-200 status code",
+		log.Error(nil, "external scheduler API returned non-200 status code",
 			"statusCode", respRaw.StatusCode,
 			"responseBody", string(bodyBytes),
 		)
@@ -59,5 +58,5 @@ func checkCinderSchedulerReturnsValidHosts(
 	if len(resp.Hosts) == 0 {
 		panic("no share hosts found in response")
 	}
-	slog.Info("check successful, got share hosts", "count", len(resp.Hosts))
+	log.Info("check successful, got share hosts", "count", len(resp.Hosts))
 }

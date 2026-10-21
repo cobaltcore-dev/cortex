@@ -6,7 +6,6 @@ package api
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
@@ -56,16 +55,16 @@ func (r ExternalSchedulerRequest) GetHosts() []string {
 func (r ExternalSchedulerRequest) GetWeights() map[string]float64 {
 	return r.Weights
 }
-func (r ExternalSchedulerRequest) GetTraceLogArgs() []slog.Attr {
+func (r ExternalSchedulerRequest) GetTraceLogArgs() []any {
 	greq := ""
 	if r.Context.GlobalRequestID != nil {
 		greq = *r.Context.GlobalRequestID
 	}
-	return []slog.Attr{
-		slog.String("greq", greq),
-		slog.String("req", r.Context.RequestID),
-		slog.String("user", r.Context.UserID),
-		slog.String("project", r.Context.ProjectID),
+	return []any{
+		"greq", greq,
+		"req", r.Context.RequestID,
+		"user", r.Context.UserID,
+		"project", r.Context.ProjectID,
 	}
 }
 func (r ExternalSchedulerRequest) Filter(includedHosts map[string]float64) lib.FilterWeigherPipelineRequest {

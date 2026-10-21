@@ -7,12 +7,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -69,13 +69,13 @@ type KVMBinpackStep struct {
 }
 
 // Run this weigher in the pipeline after filters have been executed.
-func (s *KVMBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMBinpackStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	result.Statistics["binpack score"] = s.PrepareStats(request, "float")
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
 	hvsByName := make(map[string]hv1.Hypervisor, len(hvs.Items))
@@ -90,7 +90,7 @@ func (s *KVMBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSchedule
 	for host := range result.Activations {
 		hv, ok := hvsByName[host]
 		if !ok {
-			traceLog.Warn("no hv for host, skipping", "host", host)
+			traceLog.Info("no hv for host, skipping", "host", host)
 			continue
 		}
 		var totalWeightedUtilization, totalWeight float64
@@ -99,24 +99,24 @@ func (s *KVMBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSchedule
 			// Effective capacity = capacity * overcommit ratio.
 			capacity, ok := hv.Status.EffectiveCapacity[resourceName]
 			if !ok {
-				traceLog.Warn("no effective capacity in status, skipping",
+				traceLog.Info("no effective capacity in status, skipping",
 					"host", host, "resource", resourceName)
 				continue
 			}
 			if capacity.IsZero() {
-				traceLog.Warn("effective capacity is zero, skipping",
+				traceLog.Info("effective capacity is zero, skipping",
 					"host", host, "resource", resourceName)
 				continue
 			}
 			allocation, ok := hv.Status.Allocation[resourceName]
 			if !ok {
-				traceLog.Warn("no allocation in status, skipping",
+				traceLog.Info("no allocation in status, skipping",
 					"host", host, "resource", resourceName)
 				continue
 			}
 			vmReq, ok := vmResources[resourceName]
 			if !ok {
-				traceLog.Warn("no resource request for vm, skipping",
+				traceLog.Info("no resource request for vm, skipping",
 					"resource", resourceName)
 				continue
 			}

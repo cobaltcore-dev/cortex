@@ -5,7 +5,8 @@ package weighers
 
 import (
 	"context"
-	"log/slog"
+
+	"github.com/go-logr/logr"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -50,7 +51,7 @@ type KVMFailoverEvacuationStep struct {
 // Run the weigher step.
 // For evacuation requests, hosts matching a failover reservation where the VM is in Allocations get a higher weight.
 // For non-evacuation requests (e.g., live migration, rebuild), this weigher has no effect.
-func (s *KVMFailoverEvacuationStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMFailoverEvacuationStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	intent, err := request.GetIntent()

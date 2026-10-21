@@ -5,9 +5,9 @@ package lib
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -43,6 +43,6 @@ func (fm *FilterMonitor[RequestType]) Validate(ctx context.Context, params v1alp
 }
 
 // Run the filter and observe its execution.
-func (fm *FilterMonitor[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
+func (fm *FilterMonitor[RequestType]) Run(traceLog logr.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
 	return fm.monitor.RunWrapped(traceLog, request, fm.filter)
 }

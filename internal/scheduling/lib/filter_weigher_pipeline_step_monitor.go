@@ -5,7 +5,6 @@ package lib
 
 import (
 	"fmt"
-	"log/slog"
 	"maps"
 	"math"
 	"slices"
@@ -14,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -69,7 +69,7 @@ func monitorStep[RequestType FilterWeigherPipelineRequest](stepName string, m Fi
 
 // Run the step and observe its execution.
 func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
-	traceLog *slog.Logger,
+	traceLog logr.Logger,
 	request RequestType,
 	step FilterWeigherPipelineStep[RequestType],
 ) (*FilterWeigherPipelineStepResult, error) {
@@ -200,9 +200,9 @@ func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
 		}
 		impact, err := impact(hostsIn, hostsOut, statData.Hosts, 5)
 		if err != nil {
-			traceLog.Error(
+			traceLog.Error(err,
 				"scheduler: error calculating impact",
-				"name", s.stepName, "stat", statName, "error", err,
+				"name", s.stepName, "stat", statName,
 			)
 			continue
 		}
@@ -251,7 +251,7 @@ func impact(before, after []string, stats map[string]float64, topK int) (float64
 		subimpact := idxDisplacement * statDifference
 		impact += subimpact
 
-		slog.Debug(
+		pipelineLog.V(1).Info(
 			"scheduler: impact calculation",
 			"host", host,
 			"oldIdx", oldIdx,
@@ -263,7 +263,7 @@ func impact(before, after []string, stats map[string]float64, topK int) (float64
 			"subimpact", subimpact,
 		)
 	}
-	slog.Debug(
+	pipelineLog.V(1).Info(
 		"scheduler: total impact",
 		"impact", impact,
 		"hostsBefore", before,

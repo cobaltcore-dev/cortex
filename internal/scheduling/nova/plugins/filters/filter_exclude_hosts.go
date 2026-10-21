@@ -4,7 +4,7 @@
 package filters
 
 import (
-	"log/slog"
+	"github.com/go-logr/logr"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
@@ -28,7 +28,7 @@ type FilterExcludeHostsStepOpts struct {
 func (opts FilterExcludeHostsStepOpts) Validate() error { return nil }
 
 func (s *FilterExcludeHostsStep) Run(
-	traceLog *slog.Logger,
+	traceLog logr.Logger,
 	request api.ExternalSchedulerRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 

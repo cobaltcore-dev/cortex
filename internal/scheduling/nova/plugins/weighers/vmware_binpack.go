@@ -7,8 +7,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"slices"
+
+	"github.com/go-logr/logr"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -85,7 +86,7 @@ func (s *VMwareBinpackStep) Init(ctx context.Context, client client.Client, weig
 }
 
 // Run this weigher in the pipeline after filters have been executed.
-func (s *VMwareBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *VMwareBinpackStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	result.Statistics["binpack score"] = s.PrepareStats(request, "float")
 
@@ -111,7 +112,7 @@ func (s *VMwareBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSched
 	for host := range result.Activations {
 		utilization, ok := utilizationByHost[host]
 		if !ok {
-			traceLog.Warn("no utilization for host, skipping", "host", host)
+			traceLog.Info("no utilization for host, skipping", "host", host)
 			continue
 		}
 		allocations := s.calcHostAllocation(utilization)
@@ -122,7 +123,7 @@ func (s *VMwareBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSched
 		for resourceName, weight := range s.Options.ResourceWeights {
 			capacity, ok := capacities[resourceName]
 			if !ok {
-				traceLog.Warn("no capacity for resource on host, skipping resource in score calculation",
+				traceLog.Info("no capacity for resource on host, skipping resource in score calculation",
 					"host", host, "resource", resourceName)
 				continue
 			}
@@ -131,13 +132,13 @@ func (s *VMwareBinpackStep) Run(traceLog *slog.Logger, request api.ExternalSched
 			}
 			allocation, ok := allocations[resourceName]
 			if !ok {
-				traceLog.Warn("no allocation for resource on host, skipping resource in score calculation",
+				traceLog.Info("no allocation for resource on host, skipping resource in score calculation",
 					"host", host, "resource", resourceName)
 				continue
 			}
 			vmReq, ok := vmResources[resourceName]
 			if !ok {
-				traceLog.Warn("no resource request for vm, skipping",
+				traceLog.Info("no resource request for vm, skipping",
 					"resource", resourceName)
 				continue
 			}

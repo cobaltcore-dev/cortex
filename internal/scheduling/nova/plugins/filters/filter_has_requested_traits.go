@@ -5,7 +5,7 @@ package filters
 
 import (
 	"context"
-	"log/slog"
+	"github.com/go-logr/logr"
 	"slices"
 	"strings"
 
@@ -21,7 +21,7 @@ type FilterHasRequestedTraits struct {
 // Filter hosts that do not have the requested traits given by the extra spec:
 // - "trait:<trait>": "forbidden" means the host must not have the specified trait.
 // - "trait:<trait>": "required" means the host must have the specified trait.
-func (s *FilterHasRequestedTraits) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterHasRequestedTraits) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	var requiredTraits, forbiddenTraits []string
 	for key, value := range request.Spec.Data.Flavor.Data.ExtraSpecs {
@@ -56,7 +56,7 @@ func (s *FilterHasRequestedTraits) Run(traceLog *slog.Logger, request api.Extern
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
 

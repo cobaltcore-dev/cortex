@@ -4,8 +4,6 @@
 package pods
 
 import (
-	"log/slog"
-
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	corev1 "k8s.io/api/core/v1"
@@ -35,8 +33,8 @@ func (r PodPipelineRequest) GetWeights() map[string]float64 {
 	}
 	return weights
 }
-func (r PodPipelineRequest) GetTraceLogArgs() []slog.Attr {
-	return []slog.Attr{}
+func (r PodPipelineRequest) GetTraceLogArgs() []any {
+	return []any{}
 }
 func (r PodPipelineRequest) Filter(includedHosts map[string]float64) lib.FilterWeigherPipelineRequest {
 	filteredNodes := make([]corev1.Node, 0, len(includedHosts))

@@ -4,11 +4,11 @@
 package lib
 
 import (
-	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -52,8 +52,9 @@ func (m *APIMonitor) Callback(w http.ResponseWriter, r *http.Request, pattern st
 }
 
 // Respond to the request with the given code and error.
-// Also log the time it took to handle the request.
-func (c MonitoredCallback) Respond(logger *slog.Logger, code int, err error, text string) {
+// Also log the time it took to handle the request. A zero-value logger falls
+// back to the package logger.
+func (c MonitoredCallback) Respond(logger logr.Logger, code int, err error, text string) {
 	if c.apiMonitor != nil && c.apiMonitor.ApiRequestsTimer != nil {
 		observer := c.apiMonitor.ApiRequestsTimer.WithLabelValues(
 			c.r.Method,
@@ -64,10 +65,10 @@ func (c MonitoredCallback) Respond(logger *slog.Logger, code int, err error, tex
 		observer.Observe(time.Since(c.t).Seconds())
 	}
 	if err != nil {
-		if logger == nil {
-			slog.Error("failed to handle request", "error", err)
+		if logger.GetSink() == nil {
+			pipelineLog.Error(err, "failed to handle request")
 		} else {
-			logger.Error("failed to handle request", "error", err)
+			logger.Error(err, "failed to handle request")
 		}
 		http.Error(c.w, text, code)
 		return

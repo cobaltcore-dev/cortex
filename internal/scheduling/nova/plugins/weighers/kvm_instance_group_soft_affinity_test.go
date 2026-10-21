@@ -4,7 +4,7 @@
 package weighers
 
 import (
-	"log/slog"
+	"github.com/go-logr/logr"
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -346,7 +346,7 @@ func TestKVMInstanceGroupSoftAffinityStep_Run(t *testing.T) {
 			step := &KVMInstanceGroupSoftAffinityStep{}
 			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(logr.Discard(), tt.request)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got nil")

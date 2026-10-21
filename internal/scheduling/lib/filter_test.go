@@ -5,10 +5,10 @@ package lib
 
 import (
 	"context"
-	"log/slog"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -16,7 +16,7 @@ import (
 type mockFilter[RequestType FilterWeigherPipelineRequest] struct {
 	InitFunc     func(ctx context.Context, client client.Client, step v1alpha1.FilterSpec) error
 	ValidateFunc func(ctx context.Context, params v1alpha1.Parameters) error
-	RunFunc      func(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error)
+	RunFunc      func(traceLog logr.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error)
 }
 
 func (m *mockFilter[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.FilterSpec) error {
@@ -31,7 +31,7 @@ func (m *mockFilter[RequestType]) Validate(ctx context.Context, params v1alpha1.
 	}
 	return m.ValidateFunc(ctx, params)
 }
-func (m *mockFilter[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
+func (m *mockFilter[RequestType]) Run(traceLog logr.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
 	if m.RunFunc == nil {
 		return &FilterWeigherPipelineStepResult{}, nil
 	}

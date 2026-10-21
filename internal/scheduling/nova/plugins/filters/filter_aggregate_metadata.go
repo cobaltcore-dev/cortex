@@ -5,7 +5,7 @@ package filters
 
 import (
 	"context"
-	"log/slog"
+	"github.com/go-logr/logr"
 	"slices"
 	"strings"
 
@@ -20,7 +20,7 @@ type FilterAggregateMetadata struct {
 
 // Restrict hosts to specific projects if they are in an aggregate that has
 // the "filter_tenant_id" metadata key set.
-func (s *FilterAggregateMetadata) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterAggregateMetadata) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	// Capacity probe calls are synthetic and not placed on behalf of a tenant
 	// project, so they must ignore tenant pinning. Failover reservations DO respect
@@ -32,7 +32,7 @@ func (s *FilterAggregateMetadata) Run(traceLog *slog.Logger, request api.Externa
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
 

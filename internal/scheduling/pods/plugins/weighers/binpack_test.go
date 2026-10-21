@@ -4,11 +4,11 @@
 package weighers
 
 import (
-	"log/slog"
 	"math"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/external/pods"
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -257,7 +257,7 @@ func TestBinpackingStep_Run(t *testing.T) {
 				},
 			}
 
-			result, err := tt.step.Run(slog.Default(), tt.request)
+			result, err := tt.step.Run(logr.Discard(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

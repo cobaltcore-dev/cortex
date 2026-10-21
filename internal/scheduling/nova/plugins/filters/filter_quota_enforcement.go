@@ -6,7 +6,7 @@ package filters
 import (
 	"context"
 	"fmt"
-	"log/slog"
+	"github.com/go-logr/logr"
 	"math"
 	"time"
 
@@ -72,7 +72,7 @@ type FilterQuotaEnforcement struct {
 	lib.BaseFilter[api.ExternalSchedulerRequest, FilterQuotaEnforcementOpts]
 }
 
-func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	mode := "shadow"
@@ -115,17 +115,17 @@ func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.External
 	hwVersion := request.Spec.Data.Flavor.Data.ExtraSpecs["quota:hw_version"]
 
 	if projectID == "" {
-		traceLog.Warn("no project ID in request, skipping quota enforcement")
+		traceLog.Info("no project ID in request, skipping quota enforcement")
 		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_missing_data", "", az, hwVersion)
 		return result, nil
 	}
 	if az == "" {
-		traceLog.Warn("no availability zone in request, skipping quota enforcement")
+		traceLog.Info("no availability zone in request, skipping quota enforcement")
 		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_missing_data", "", "", hwVersion)
 		return result, nil
 	}
 	if hwVersion == "" {
-		traceLog.Warn("no hw_version in flavor extra specs, skipping quota enforcement")
+		traceLog.Info("no hw_version in flavor extra specs, skipping quota enforcement")
 		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_missing_data", "", az, "")
 		return result, nil
 	}
@@ -161,7 +161,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.External
 	// (bypassing PAYG checks for cores/instances).
 	var crList v1alpha1.CommittedResourceList
 	if err := s.Client.List(context.Background(), &crList); err != nil {
-		traceLog.Error("failed to list CommittedResources", "error", err)
+		traceLog.Error(err, "failed to list CommittedResources")
 		return nil, err
 	}
 
@@ -247,7 +247,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog *slog.Logger, request api.External
 			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_no_quota", "", az, hwVersion)
 			return result, nil
 		}
-		traceLog.Error("failed to get ProjectQuota", "name", pqName, "error", err)
+		traceLog.Error(err, "failed to get ProjectQuota", "name", pqName)
 		return nil, err
 	}
 

@@ -4,7 +4,7 @@
 package filters
 
 import (
-	"log/slog"
+	"github.com/go-logr/logr"
 	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -18,7 +18,7 @@ type FilterInstanceGroupAffinityStep struct {
 
 // Select hosts in spec.instance_group.
 func (s *FilterInstanceGroupAffinityStep) Run(
-	traceLog *slog.Logger,
+	traceLog logr.Logger,
 	request api.ExternalSchedulerRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 

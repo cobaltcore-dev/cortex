@@ -4,11 +4,11 @@
 package filters
 
 import (
-	"log/slog"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/external/pods"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -399,7 +399,7 @@ func TestNodeAffinityFilter_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filter := &NodeAffinityFilter{}
-			result, err := filter.Run(slog.Default(), tt.request)
+			result, err := filter.Run(logr.Discard(), tt.request)
 
 			if err != nil {
 				t.Errorf("expected Run() to succeed, got error: %v", err)

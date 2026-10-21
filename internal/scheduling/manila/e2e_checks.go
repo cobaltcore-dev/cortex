@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"log/slog"
 	"net/http"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/manila"
@@ -59,14 +58,14 @@ func checkManilaSchedulerReturnsValidHosts(
 		Availability: gophercloud.Availability(authenticatedKeystone.Availability()),
 	}))
 	sc.Microversion = "2.65"
-	slog.Info("authenticated against openstack", "url", sc.Endpoint)
-	slog.Info("listing share hosts")
+	log.Info("authenticated against openstack", "url", sc.Endpoint)
+	log.Info("listing share hosts")
 	pages := must.Return(schedulerstats.List(sc, schedulerstats.ListOpts{}).AllPages(ctx))
 	pools := must.Return(schedulerstats.ExtractPools(pages))
 	if len(pools) == 0 {
 		panic("no storage pools found")
 	}
-	slog.Info("found storage pools", "count", len(pools))
+	log.Info("found storage pools", "count", len(pools))
 
 	var hosts []api.ExternalSchedulerHost
 	weights := make(map[string]float64)
@@ -83,7 +82,7 @@ func checkManilaSchedulerReturnsValidHosts(
 		Weights: weights,
 	}
 	apiURL := "http://localhost:8080/scheduler/manila/external"
-	slog.Info("sending request to external scheduler", "apiURL", apiURL)
+	log.Info("sending request to external scheduler", "apiURL", apiURL)
 
 	requestBody := must.Return(json.Marshal(request))
 	buf := bytes.NewBuffer(requestBody)
@@ -95,7 +94,7 @@ func checkManilaSchedulerReturnsValidHosts(
 	if respRaw.StatusCode != http.StatusOK {
 		// Log the response body for debugging
 		bodyBytes := must.Return(io.ReadAll(respRaw.Body))
-		slog.Error("external scheduler API returned non-200 status code",
+		log.Error(nil, "external scheduler API returned non-200 status code",
 			"statusCode", respRaw.StatusCode,
 			"responseBody", string(bodyBytes),
 		)
@@ -106,5 +105,5 @@ func checkManilaSchedulerReturnsValidHosts(
 	if len(resp.Hosts) == 0 {
 		panic("no share hosts found in response")
 	}
-	slog.Info("check successful, got share hosts", "count", len(resp.Hosts))
+	log.Info("check successful, got share hosts", "count", len(resp.Hosts))
 }

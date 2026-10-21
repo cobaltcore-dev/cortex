@@ -5,13 +5,13 @@ package lib
 
 import (
 	"context"
-	"log/slog"
 	"math"
 	"slices"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -27,7 +27,7 @@ func TestPipeline_Run(t *testing.T) {
 	pipeline := &filterWeigherPipeline[mockFilterWeigherPipelineRequest]{
 		filters: map[string]Filter[mockFilterWeigherPipelineRequest]{
 			"mock_filter": &mockFilter[mockFilterWeigherPipelineRequest]{
-				RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+				RunFunc: func(traceLog logr.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
 					// Filter out host3
 					return &FilterWeigherPipelineStepResult{
 						Activations: map[string]float64{
@@ -41,7 +41,7 @@ func TestPipeline_Run(t *testing.T) {
 		filtersOrder: []string{"mock_filter"},
 		weighers: map[string]Weigher[mockFilterWeigherPipelineRequest]{
 			"mock_weigher": &mockWeigher[mockFilterWeigherPipelineRequest]{
-				RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+				RunFunc: func(traceLog logr.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
 					// Assign weights to hosts
 					activations := map[string]float64{
 						"host1": 0.5,
@@ -191,7 +191,7 @@ func TestPipeline_ApplyStepWeights(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := p.applyWeights(slog.Default(), tt.stepWeights, tt.inWeights)
+			result := p.applyWeights(logr.Discard(), tt.stepWeights, tt.inWeights)
 			for host, weight := range tt.expectedResult {
 				if result[host] != weight {
 					t.Errorf("expected weight %f for host %s, got %f", weight, host, result[host])
@@ -245,7 +245,7 @@ func TestPipeline_SortHostsByWeights(t *testing.T) {
 
 func TestPipeline_RunFilters(t *testing.T) {
 	mockStep := &mockFilter[mockFilterWeigherPipelineRequest]{
-		RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+		RunFunc: func(traceLog logr.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
 			// Filter out host3
 			return &FilterWeigherPipelineStepResult{
 				Activations: map[string]float64{
@@ -269,7 +269,7 @@ func TestPipeline_RunFilters(t *testing.T) {
 		Weights: map[string]float64{"host1": 0.0, "host2": 0.0, "host3": 0.0},
 	}
 
-	req, _ := p.runFilters(slog.Default(), request)
+	req, _ := p.runFilters(logr.Discard(), request)
 	if len(req.Hosts) != 2 {
 		t.Fatalf("expected 2 step results, got %d", len(req.Hosts))
 	}
