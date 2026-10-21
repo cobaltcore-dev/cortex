@@ -5,9 +5,9 @@ package weighers
 
 import (
 	"context"
-	"log/slog"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -52,7 +52,7 @@ type KVMCommittedResourceReservationStep struct {
 
 // Run the weigher step.
 // Hosts with a matching CommittedResourceReservation (project + flavor group + free capacity) get a higher weight.
-func (s *KVMCommittedResourceReservationStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMCommittedResourceReservationStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	// Skip for failover reservation scheduling — CR reservations should not influence

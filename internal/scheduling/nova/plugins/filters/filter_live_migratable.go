@@ -6,7 +6,7 @@ package filters
 import (
 	"context"
 	"errors"
-	"log/slog"
+	"github.com/go-logr/logr"
 	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -49,7 +49,7 @@ func (s *FilterLiveMigratableStep) checkHasSufficientFeatures(
 
 // Ensure the target host of a live migration can accept the migrating VM.
 func (s *FilterLiveMigratableStep) Run(
-	traceLog *slog.Logger,
+	traceLog logr.Logger,
 	request api.ExternalSchedulerRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 
@@ -74,7 +74,7 @@ func (s *FilterLiveMigratableStep) Run(
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
 	hvsByName := make(map[string]hv1.Hypervisor)
@@ -85,13 +85,13 @@ func (s *FilterLiveMigratableStep) Run(
 	sourceHV, ok := hvsByName[sourceHost]
 	if !ok {
 		err := errors.New("source host hypervisor not found")
-		traceLog.Error("failed to find source host hypervisor", "host", sourceHost, "error", err)
+		traceLog.Error(err, "failed to find source host hypervisor", "host", sourceHost)
 		return nil, err
 	}
 	for host := range result.Activations {
 		targetHV, ok := hvsByName[host]
 		if !ok {
-			traceLog.Error("hypervisor not found for host", "host", host)
+			traceLog.Error(nil, "hypervisor not found for host", "host", host)
 			delete(result.Activations, host)
 			continue
 		}

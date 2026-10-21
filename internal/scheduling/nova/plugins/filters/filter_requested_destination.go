@@ -5,7 +5,7 @@ package filters
 
 import (
 	"context"
-	"log/slog"
+	"github.com/go-logr/logr"
 	"slices"
 	"strings"
 
@@ -25,7 +25,7 @@ type FilterRequestedDestinationStep struct {
 // OR logic, meaning the host only needs to match ONE of the UUIDs in that group.
 // Example: ["agg1", "agg2,agg3"] means host must be in agg1 AND (agg2 OR agg3).
 func (s *FilterRequestedDestinationStep) processRequestedAggregates(
-	traceLog *slog.Logger,
+	traceLog logr.Logger,
 	aggregates []string,
 	hvsByName map[string]hv1.Hypervisor,
 	activations map[string]float64,
@@ -78,7 +78,7 @@ func (s *FilterRequestedDestinationStep) processRequestedAggregates(
 // processRequestedHost filters hosts based on the requested specific host.
 // It removes all hosts except the one matching the requested hostname.
 func (s *FilterRequestedDestinationStep) processRequestedHost(
-	traceLog *slog.Logger,
+	traceLog logr.Logger,
 	host string,
 	activations map[string]float64,
 ) {
@@ -101,7 +101,7 @@ func (s *FilterRequestedDestinationStep) processRequestedHost(
 // The requested destination can include a specific host, aggregates, or both.
 // When both are specified, aggregate filtering is applied first, followed by
 // host filtering.
-func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterRequestedDestinationStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	// The requested_destination hint is only set by Nova for user-directed placement;
 	if intent, err := request.GetIntent(); err == nil && slices.Contains([]v1alpha1.SchedulingIntent{
@@ -123,7 +123,7 @@ func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.
 	}
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
 	hvsByName := make(map[string]hv1.Hypervisor)

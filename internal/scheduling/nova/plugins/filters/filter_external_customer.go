@@ -6,7 +6,7 @@ package filters
 import (
 	"context"
 	"errors"
-	"log/slog"
+	"github.com/go-logr/logr"
 	"slices"
 	"strings"
 
@@ -34,7 +34,7 @@ type FilterExternalCustomerStep struct {
 
 // Prefix-match the domain name for external customer domains and filter out hosts
 // that are not intended for external customers.
-func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterExternalCustomerStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	// Failover and capacity probe calls are not associated with a user domain;
@@ -51,7 +51,7 @@ func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.Exte
 
 	domainName, err := request.Spec.Data.GetSchedulerHintStr("domain_name")
 	if err != nil {
-		traceLog.Warn("failed to get domain_name scheduler hint, skipping filter", "error", err)
+		traceLog.Error(err, "failed to get domain_name scheduler hint, skipping filter")
 		return result, nil
 	}
 	if slices.Contains(s.Options.CustomerIgnoredDomainNames, domainName) {
@@ -72,7 +72,7 @@ func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.Exte
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
 	hvsWithTrait := make(map[string]struct{})

@@ -5,12 +5,12 @@ package weighers
 
 import (
 	"context"
-	"log/slog"
 	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/go-logr/logr"
 )
 
 // This weigher implements the "soft affinity" and "soft anti-affinity" policy
@@ -26,7 +26,7 @@ type KVMInstanceGroupSoftAffinityStep struct {
 	lib.BaseWeigher[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
-func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	result.Statistics["affinity"] = s.PrepareStats(request, "float")
 
@@ -53,7 +53,7 @@ func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog *slog.Logger, request ap
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
 	hvsByName := make(map[string]hv1.Hypervisor, len(hvs.Items))

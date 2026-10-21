@@ -6,9 +6,9 @@ package lib
 import (
 	"context"
 	"errors"
-	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -20,7 +20,7 @@ type WeigherValidator[RequestType FilterWeigherPipelineRequest] struct {
 
 // Initialize the wrapped weigher with the database and options.
 func (s *WeigherValidator[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.WeigherSpec) error {
-	slog.Info("scheduler: init validation for step", "name", step.Name)
+	pipelineLog.Info("scheduler: init validation for step", "name", step.Name)
 	return s.Weigher.Init(ctx, client, step)
 }
 
@@ -35,7 +35,7 @@ func validateWeigher[RequestType FilterWeigherPipelineRequest](weigher Weigher[R
 }
 
 // Run the weigher and validate what happens.
-func (s *WeigherValidator[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
+func (s *WeigherValidator[RequestType]) Run(traceLog logr.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
 	// Note that for some schedulers the same host (e.g. compute host) may
 	// appear multiple times if there is a substruct (e.g. hypervisor hostname).
 	// Since cortex will only schedule on the host level and not below,

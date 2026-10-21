@@ -6,10 +6,10 @@ package lib
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -146,7 +146,7 @@ func TestFilterValidator_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filter := &mockFilter[mockFilterWeigherPipelineRequest]{
-				RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+				RunFunc: func(traceLog logr.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
 					return tt.runResult, tt.runError
 				},
 			}
@@ -154,7 +154,7 @@ func TestFilterValidator_Run(t *testing.T) {
 			request := mockFilterWeigherPipelineRequest{
 				Hosts: tt.hosts,
 			}
-			traceLog := slog.Default()
+			traceLog := logr.Discard()
 
 			result, err := validator.Run(traceLog, request)
 

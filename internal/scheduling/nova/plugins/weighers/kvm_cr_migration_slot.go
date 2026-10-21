@@ -5,8 +5,8 @@ package weighers
 
 import (
 	"context"
-	"log/slog"
 
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -62,7 +62,7 @@ type KVMCRMigrationSlotStep struct {
 }
 
 func (s *KVMCRMigrationSlotStep) Run(
-	traceLog *slog.Logger,
+	traceLog logr.Logger,
 	request api.ExternalSchedulerRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 

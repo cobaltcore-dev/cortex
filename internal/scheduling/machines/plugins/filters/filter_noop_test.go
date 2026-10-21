@@ -4,11 +4,11 @@
 package filters
 
 import (
-	"log/slog"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/external/ironcore"
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/api/external/ironcore/v1alpha1"
+	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -64,7 +64,7 @@ func TestNoopFilter_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filter := &NoopFilter{}
-			result, err := filter.Run(slog.Default(), tt.request)
+			result, err := filter.Run(logr.Discard(), tt.request)
 
 			if err != nil {
 				t.Errorf("expected Run() to succeed, got error: %v", err)

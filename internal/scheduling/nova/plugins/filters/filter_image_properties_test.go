@@ -4,7 +4,7 @@
 package filters
 
 import (
-	"log/slog"
+	"github.com/go-logr/logr"
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -137,7 +137,7 @@ func TestFilterImagePropertiesStep_Run(t *testing.T) {
 				WithScheme(scheme).
 				WithObjects(hvs...).
 				Build()
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(logr.Discard(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

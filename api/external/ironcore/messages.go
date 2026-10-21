@@ -4,8 +4,6 @@
 package ironcore
 
 import (
-	"log/slog"
-
 	ironcorev1alpha1 "github.com/cobaltcore-dev/cortex/api/external/ironcore/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
@@ -33,8 +31,8 @@ func (r MachinePipelineRequest) GetWeights() map[string]float64 {
 	}
 	return weights
 }
-func (r MachinePipelineRequest) GetTraceLogArgs() []slog.Attr {
-	return []slog.Attr{}
+func (r MachinePipelineRequest) GetTraceLogArgs() []any {
+	return []any{}
 }
 func (r MachinePipelineRequest) Filter(includedHosts map[string]float64) lib.FilterWeigherPipelineRequest {
 	filteredPools := make([]ironcorev1alpha1.MachinePool, 0, len(includedHosts))

@@ -4,11 +4,15 @@
 package filters
 
 import (
-	"log/slog"
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+// log is the package-level logger for non-trace (global) log messages emitted
+// by the nova filters package.
+var log = logf.Log.WithName("filters")
 
 // QuotaEnforcementMetrics holds Prometheus metrics for the quota-enforcement
 // nova filter. The filter runs in either "enforce" mode (rejects when no
@@ -86,7 +90,7 @@ var recordDecisionNilOnce = &sync.Once{}
 func (m *QuotaEnforcementMetrics) RecordDecision(mode, decision, resource, az, flavorGroup string) {
 	if m == nil || m.Decisions == nil {
 		recordDecisionNilOnce.Do(func() {
-			slog.Warn("QuotaEnforcementMetrics is nil; decision metric not recorded "+
+			log.Info("QuotaEnforcementMetrics is nil; decision metric not recorded "+
 				"(is QuotaEnforcementMetricsSingleton initialized in cmd/manager?)",
 				"mode", mode,
 				"decision", decision,

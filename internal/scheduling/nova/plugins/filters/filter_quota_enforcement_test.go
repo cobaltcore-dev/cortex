@@ -5,13 +5,13 @@ package filters
 
 import (
 	"bytes"
-	"log/slog"
 	"strings"
 	"sync"
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -19,6 +19,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 func makeQuotaEnforcementRequest(projectID, az, hwVersion string, memoryMB, numInstances uint64, hints map[string]any) api.ExternalSchedulerRequest {
@@ -924,7 +926,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			filter.Client = fakeClient
 			filter.Options.Enforce = tt.enforce
 
-			result, err := filter.Run(slog.Default(), tt.request)
+			result, err := filter.Run(logr.Discard(), tt.request)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -999,7 +1001,7 @@ func TestFilterQuotaEnforcement_DefaultIsShadow(t *testing.T) {
 	}
 
 	request := makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil)
-	result, err := filter.Run(slog.Default(), request)
+	result, err := filter.Run(logr.Discard(), request)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1063,7 +1065,7 @@ func TestNewQuotaEnforcementMetrics(t *testing.T) {
 }
 
 func TestQuotaEnforcementMetrics_RecordDecision_NilWarns(t *testing.T) {
-	// Capture slog output to confirm the nil-receiver path warns exactly once,
+	// Capture log output to confirm the nil-receiver path warns exactly once,
 	// even when called many times. We freshly arm the package-level sync.Once
 	// so this test deterministically covers the warn path regardless of test
 	// ordering.
@@ -1072,9 +1074,7 @@ func TestQuotaEnforcementMetrics_RecordDecision_NilWarns(t *testing.T) {
 	t.Cleanup(func() { recordDecisionNilOnce = origOnce })
 
 	var buf bytes.Buffer
-	origDefault := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(origDefault) })
+	logf.SetLogger(zap.New(zap.WriteTo(&buf), zap.UseDevMode(true)))
 
 	var nilMetrics *QuotaEnforcementMetrics
 	// Must not panic, and must warn exactly once across multiple calls.
@@ -1112,7 +1112,7 @@ func TestFilterQuotaEnforcement_SkipsForNonPlacementIntent(t *testing.T) {
 	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 	step.Options = FilterQuotaEnforcementOpts{Enforce: true}
 
-	result, err := step.Run(slog.Default(), request)
+	result, err := step.Run(logr.Discard(), request)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

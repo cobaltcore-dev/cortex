@@ -5,7 +5,7 @@ package filters
 
 import (
 	"context"
-	"log/slog"
+	"github.com/go-logr/logr"
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -578,7 +578,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 				},
 			}
 
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(logr.Discard(), tt.request)
 
 			if tt.expectErr {
 				if err == nil {
@@ -684,7 +684,7 @@ func TestFilterRequestedDestinationStep_processRequestedAggregates(t *testing.T)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &FilterRequestedDestinationStep{}
-			step.processRequestedAggregates(slog.Default(), tt.aggregates, tt.hypervisors, tt.activations)
+			step.processRequestedAggregates(logr.Discard(), tt.aggregates, tt.hypervisors, tt.activations)
 			if len(tt.activations) != len(tt.expectedHosts) {
 				t.Errorf("expected %d hosts, got %d", len(tt.expectedHosts), len(tt.activations))
 			}
@@ -726,7 +726,7 @@ func TestFilterRequestedDestinationStep_processRequestedHost(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &FilterRequestedDestinationStep{}
-			step.processRequestedHost(slog.Default(), tt.host, tt.activations)
+			step.processRequestedHost(logr.Discard(), tt.host, tt.activations)
 			if len(tt.activations) != len(tt.expectedHosts) {
 				t.Errorf("expected %d hosts, got %d", len(tt.expectedHosts), len(tt.activations))
 			}
@@ -777,7 +777,7 @@ func TestFilterRequestedDestinationStep_Run_ClientError(t *testing.T) {
 		},
 	}
 
-	_, err := step.Run(slog.Default(), request)
+	_, err := step.Run(logr.Discard(), request)
 	if err == nil {
 		t.Errorf("expected error when client fails, got none")
 	}
@@ -809,7 +809,7 @@ func TestFilterRequestedDestinationStep_SkipsForNonPlacementIntent(t *testing.T)
 				},
 				Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
 			}
-			result, err := step.Run(slog.Default(), request)
+			result, err := step.Run(logr.Discard(), request)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

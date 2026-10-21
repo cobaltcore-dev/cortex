@@ -4,7 +4,7 @@
 package filters
 
 import (
-	"log/slog"
+	"github.com/go-logr/logr"
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -297,7 +297,7 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 				WithScheme(scheme).
 				WithObjects(hvs...).
 				Build()
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(logr.Discard(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
@@ -349,7 +349,7 @@ func TestFilterAllowedProjectsStep_SkipsForCapacityProbeIntent(t *testing.T) {
 		},
 		Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
 	}
-	result, err := step.Run(slog.Default(), request)
+	result, err := step.Run(logr.Discard(), request)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -385,7 +385,7 @@ func TestFilterAllowedProjectsStep_AppliesForFailoverIntents(t *testing.T) {
 				},
 				Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
 			}
-			result, err := step.Run(slog.Default(), request)
+			result, err := step.Run(logr.Discard(), request)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

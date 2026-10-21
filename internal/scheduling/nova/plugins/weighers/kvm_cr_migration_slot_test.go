@@ -4,7 +4,7 @@
 package weighers
 
 import (
-	"log/slog"
+	"github.com/go-logr/logr"
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -235,7 +235,7 @@ func TestKVMCRMigrationSlotStep_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			weigher := newCRMigrationSlotWeigher(t, tt.opts, tt.objects...)
-			result, err := weigher.Run(slog.Default(), tt.request)
+			result, err := weigher.Run(logr.Discard(), tt.request)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

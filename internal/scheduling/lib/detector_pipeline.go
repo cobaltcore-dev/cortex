@@ -6,7 +6,6 @@ package lib
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"slices"
 	"strings"
 	"sync"
@@ -53,7 +52,7 @@ func (p *DetectorPipeline[DetectionType]) Init(
 		}
 		p.steps[stepConf.Name] = step
 		p.order = append(p.order, stepConf.Name)
-		slog.Info("descheduler: added step", "name", stepConf.Name)
+		pipelineLog.Info("descheduler: added step", "name", stepConf.Name)
 	}
 	return unknownDetectors, detectorErrs
 }
@@ -73,20 +72,20 @@ func (p *DetectorPipeline[DetectionType]) Run() map[string][]DetectionType {
 	var wg sync.WaitGroup
 	for stepName, step := range p.steps {
 		wg.Go(func() {
-			slog.Info("descheduler: running step")
+			pipelineLog.Info("descheduler: running step")
 			decisions, err := step.Run()
 			if errors.Is(err, ErrStepSkipped) {
-				slog.Info("descheduler: step skipped")
+				pipelineLog.Info("descheduler: step skipped")
 				return
 			}
 			lock.Lock()
 			defer lock.Unlock()
 			if err != nil {
-				slog.Error("descheduler: failed to run step", "error", err)
+				pipelineLog.Error(err, "descheduler: failed to run step")
 				metricErrLabel = "true"
 				return
 			}
-			slog.Info("descheduler: finished step")
+			pipelineLog.Info("descheduler: finished step")
 			decisionsByStep[stepName] = decisions
 		})
 	}
@@ -132,7 +131,7 @@ func (p *DetectorPipeline[DetectionType]) Combine(decisionsByStep map[string][]D
 			}
 		}
 		if !sameHost {
-			slog.Error("descheduler: conflicting hosts for combined decisions", "resource", resource, "decisions", decisions)
+			pipelineLog.Error(nil, "descheduler: conflicting hosts for combined decisions", "resource", resource, "decisions", decisions)
 			continue
 		}
 		var reasonBuilder strings.Builder
@@ -148,6 +147,6 @@ func (p *DetectorPipeline[DetectionType]) Combine(decisionsByStep map[string][]D
 		combinedDecisions = append(combinedDecisions, mergedDecision)
 	}
 
-	slog.Info("descheduler: combined decisions", "combined", combinedDecisions)
+	pipelineLog.Info("descheduler: combined decisions", "combined", combinedDecisions)
 	return combinedDecisions
 }

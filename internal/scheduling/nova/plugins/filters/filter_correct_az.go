@@ -5,7 +5,7 @@ package filters
 
 import (
 	"context"
-	"log/slog"
+	"github.com/go-logr/logr"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
@@ -18,7 +18,7 @@ type FilterCorrectAZStep struct {
 }
 
 // Only get hosts in the requested az.
-func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterCorrectAZStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	if request.Spec.Data.AvailabilityZone == "" {
 		traceLog.Info("no availability zone requested, skipping filter_correct_az step")
@@ -27,7 +27,7 @@ func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSch
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
 	// The availability zone is provided by the label
@@ -39,7 +39,7 @@ func (s *FilterCorrectAZStep) Run(traceLog *slog.Logger, request api.ExternalSch
 		}
 		az, ok := hv.Labels[corev1.LabelTopologyZone]
 		if !ok {
-			traceLog.Warn("host missing zone label, keeping", "host", hv.Name)
+			traceLog.Info("host missing zone label, keeping", "host", hv.Name)
 			continue
 		}
 		if az == request.Spec.Data.AvailabilityZone {

@@ -5,12 +5,12 @@ package weighers
 
 import (
 	"errors"
-	"log/slog"
 	"math"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/pods"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods/helpers"
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -31,7 +31,7 @@ type BinpackingStep struct {
 	lib.BaseWeigher[api.PodPipelineRequest, BinpackingStepOpts]
 }
 
-func (s *BinpackingStep) Run(traceLog *slog.Logger, request api.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *BinpackingStep) Run(traceLog logr.Logger, request api.PodPipelineRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	podResources := helpers.GetPodResourceRequests(request.Pod)

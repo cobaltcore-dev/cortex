@@ -5,7 +5,7 @@ package weighers
 
 import (
 	"context"
-	"log/slog"
+	"github.com/go-logr/logr"
 	"strings"
 	"testing"
 
@@ -272,7 +272,7 @@ func TestVMwareAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(logr.Discard(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}

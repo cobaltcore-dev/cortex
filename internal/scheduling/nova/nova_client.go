@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
 
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
@@ -106,7 +105,7 @@ func (api *novaClient) Init(ctx context.Context, client client.Client, conf Nova
 	if err != nil {
 		return err
 	}
-	slog.Info("using nova endpoint", "url", url)
+	schedulerLog.Info("using nova endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
 		ProviderClient: provider,
 		Endpoint:       url,
@@ -121,7 +120,7 @@ func (api *novaClient) Init(ctx context.Context, client client.Client, conf Nova
 	eo := gophercloud.EndpointOpts{Availability: gophercloud.Availability(authenticatedKeystone.Availability())}
 	api.osTypeProber, err = liquidapi.NewOSTypeProber(provider, eo)
 	if err != nil {
-		slog.Warn("failed to initialize OS type prober - os_type will be empty", "error", err)
+		schedulerLog.Error(err, "failed to initialize OS type prober - os_type will be empty")
 		// Non-fatal - continue without OS type probing
 	}
 
@@ -187,7 +186,7 @@ func (api *novaClient) GetServerMigrations(ctx context.Context, id string) ([]mi
 		}
 		migrations = append(migrations, list.Migrations...)
 	}
-	slog.Info("fetched migrations for vm", "id", id, "count", len(migrations))
+	schedulerLog.Info("fetched migrations for vm", "id", id, "count", len(migrations))
 	return migrations, nil
 }
 
@@ -302,6 +301,6 @@ func (api *novaClient) ListProjectServers(ctx context.Context, projectID string)
 		}
 	}
 
-	slog.Info("fetched servers for project", "projectID", projectID, "count", len(result))
+	schedulerLog.Info("fetched servers for project", "projectID", projectID, "count", len(result))
 	return result, nil
 }

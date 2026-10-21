@@ -5,7 +5,7 @@ package filters
 
 import (
 	"context"
-	"log/slog"
+	"github.com/go-logr/logr"
 	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -21,7 +21,7 @@ type FilterInstanceGroupAntiAffinityStep struct {
 // Select hosts not in spec_obj.instance_group but only until
 // max_server_per_host is reached (by default = 1).
 func (s *FilterInstanceGroupAntiAffinityStep) Run(
-	traceLog *slog.Logger,
+	traceLog logr.Logger,
 	request api.ExternalSchedulerRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 
@@ -63,7 +63,7 @@ func (s *FilterInstanceGroupAntiAffinityStep) Run(
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
 	hvsByName := make(map[string]hv1.Hypervisor)
@@ -77,7 +77,7 @@ func (s *FilterInstanceGroupAntiAffinityStep) Run(
 	for host := range result.Activations {
 		hv, ok := hvsByName[host]
 		if !ok {
-			traceLog.Error("hypervisor not found for host", "host", host)
+			traceLog.Error(nil, "hypervisor not found for host", "host", host)
 			delete(result.Activations, host)
 			continue
 		}
