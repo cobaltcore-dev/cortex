@@ -254,7 +254,34 @@ func (c *Controller) clusterFailoverPaths(paths [][2]hv1.Hypervisor) ([][]hv1.Hy
 // If the resources of a are less than b, it returns -1.
 // If the resources are equal, it returns 0.
 func cmpResources(a, b map[hv1.ResourceName]resource.Quantity) int {
-	// TODO: Implement the logic to compare the resources of hypervisors a and b.
+	// Consider memory first, then consider cpu if there isn't already
+	// a decisive comparison can be made based on memory.
+	memA, ok := a[hv1.ResourceMemory]
+	if !ok {
+		memA = *resource.NewQuantity(0, resource.BinarySI)
+	}
+	memB, ok := b[hv1.ResourceMemory]
+	if !ok {
+		memB = *resource.NewQuantity(0, resource.BinarySI)
+	}
+	if memA.Cmp(memB) > 0 {
+		return 1
+	} else if memA.Cmp(memB) < 0 {
+		return -1
+	}
+	cpuA, ok := a[hv1.ResourceCPU]
+	if !ok {
+		cpuA = *resource.NewQuantity(0, resource.DecimalSI)
+	}
+	cpuB, ok := b[hv1.ResourceCPU]
+	if !ok {
+		cpuB = *resource.NewQuantity(0, resource.DecimalSI)
+	}
+	if cpuA.Cmp(cpuB) > 0 {
+		return 1
+	} else if cpuA.Cmp(cpuB) < 0 {
+		return -1
+	}
 	return 0
 }
 
