@@ -69,7 +69,7 @@ func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf
 		Type:         "identity",
 		Availability: "public",
 	}))
-	logger.V(1).Info("using identity endpoint", "url", url)
+	logger.Info("using identity endpoint", "url", url)
 	c.keystone = &gophercloud.ServiceClient{
 		ProviderClient: c.provider,
 		Endpoint:       url,
