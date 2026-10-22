@@ -95,7 +95,7 @@ func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf
 		Type:         "resources",
 		Availability: "public",
 	}))
-	logger.V(1).Info("using limes endpoint", "url", url)
+	logger.Info("using limes endpoint", "url", url)
 	c.limes = &gophercloud.ServiceClient{
 		ProviderClient: c.provider,
 		Endpoint:       url,
