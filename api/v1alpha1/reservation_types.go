@@ -19,11 +19,45 @@ type ReservationType string
 const (
 	// ReservationTypeCommittedResource is a reservation for committed/reserved capacity.
 	ReservationTypeCommittedResource ReservationType = "CommittedResourceReservation"
+
 	// ReservationTypeFailover is a reservation for failover capacity.
+	//
+	// Deprecated: FailoverReservations will be replaced with
+	// FailoverHostReservations. See ReservationTypeFailoverHost.
 	ReservationTypeFailover ReservationType = "FailoverReservation"
+
 	// ReservationTypeInFlight is a reservation that blocks capacity for virtual
 	// machines that are currently being scheduled, to avoid double-booking.
 	ReservationTypeInFlight ReservationType = "InFlightReservation"
+
+	// ReservationTypeFailoverHost is a reservation that blocks an entire
+	// host for failover purposes, so that another host can gang-evacuate
+	// its workloads to a designated spot. If this type is set, the reservation
+	// will follow this lifecycle:
+	//
+	// 1. Designation. The reservation has been created on a host. There may be
+	// virtual machines running on this host that need live migration away. As
+	// long as not all virtual machines can be migrated away from the host, the
+	// reservation stays in this state. For pipeline: no new virtual machine
+	// onto this host.
+	//
+	// 2. Active. No more virtual machines on this host. On evacuation this
+	// space can be used.
+	//
+	// 3. Failed. The descheduling failed repeatedly or takes too long, the host
+	// is marked for a certain time to not be designated again.
+	//
+	// 4. In Use. Ongoing gang evacuation onto this host, which will be reused
+	// by subsequent failover events until the evacuation is completed.
+	//
+	// 5. Revoked (=Deleted). The reservation is no longer valid because it no
+	// longer matches any failover partition. This may be because the host has
+	// been marked as no longer schedulable or has been otherwise changed.
+	//
+	// 6. Used (=Deleted). The failover event has been completed. The
+	// reservation is no longer valid and the host is transformed back into
+	// a regular host.
+	ReservationTypeFailoverHost ReservationType = "FailoverHostReservation"
 )
 
 // Label keys for Reservation metadata.
@@ -39,6 +73,7 @@ const (
 	ReservationTypeLabelCommittedResource = "committed-resource"
 	ReservationTypeLabelFailover          = "failover"
 	ReservationTypeLabelInFlight          = "in-flight"
+	ReservationTypeLabelFailoverHost      = "failover-host"
 )
 
 // Annotation keys for Reservation metadata.
@@ -101,7 +136,15 @@ type CommittedResourceReservationSpec struct {
 	Allocations map[string]CommittedResourceAllocation `json:"allocations,omitempty"`
 }
 
+// MatchesGroup reports whether the reservation targets the given project and resource group.
+func (s *CommittedResourceReservationSpec) MatchesGroup(projectID, resourceGroup string) bool {
+	return s.ProjectID == projectID && s.ResourceGroup == resourceGroup
+}
+
 // FailoverReservationSpec defines the spec fields specific to failover reservations.
+//
+// Deprecated: FailoverReservations will be replaced with FailoverHostReservations.
+// See FailoverHostReservationSpec.
 type FailoverReservationSpec struct {
 	// ResourceGroup is the group/category of the resource (e.g., "hana_medium_v2").
 	// +kubebuilder:validation:Optional
@@ -128,10 +171,20 @@ type InFlightReservationSpec struct {
 	Intent SchedulingIntent `json:"intent"`
 }
 
+// FailoverHostReservationSpec defines the spec fields specific to failover
+// host reservations. See ReservationTypeFailoverHost.
+type FailoverHostReservationSpec struct {
+	// SourceHosts is a list of hosts inside the same failover partition from
+	// which a failover event towards the target host may originate.
+	// See Spec.TargetHost for the target host of the failover reservation.
+	// +kubebuilder:validation:Optional
+	SourceHosts []string `json:"sourceHosts,omitempty"`
+}
+
 // ReservationSpec defines the desired state of Reservation.
 type ReservationSpec struct {
 	// Type of reservation.
-	// +kubebuilder:validation:Enum=CommittedResourceReservation;FailoverReservation;InFlightReservation
+	// +kubebuilder:validation:Enum=CommittedResourceReservation;FailoverReservation;InFlightReservation;FailoverHostReservation
 	// +kubebuilder:validation:Required
 	Type ReservationType `json:"type"`
 
@@ -170,12 +223,19 @@ type ReservationSpec struct {
 
 	// FailoverReservation contains fields specific to failover reservations.
 	// Only used when Type is FailoverReservation.
+	//
+	// Deprecated: FailoverReservations will be replaced with FailoverHostReservations.
 	// +kubebuilder:validation:Optional
 	FailoverReservation *FailoverReservationSpec `json:"failoverReservation,omitempty"`
 
 	// InFlightReservation specifies which kind of virtual machine is expected
 	// to land on the reserved slot. Set when Type is InFlightReservation.
 	InFlightReservation *InFlightReservationSpec `json:"inFlightReservation,omitempty"`
+
+	// FailoverHostReservation contains fields specific to failover host reservations.
+	// Only used when Type is FailoverHostReservation.
+	// +kubebuilder:validation:Optional
+	FailoverHostReservation *FailoverHostReservationSpec `json:"failoverHostReservation,omitempty"`
 }
 
 const (
@@ -198,6 +258,9 @@ type CommittedResourceReservationStatus struct {
 }
 
 // FailoverReservationStatus defines the status fields specific to failover reservations.
+//
+// Deprecated: FailoverReservations will be replaced with FailoverHostReservations.
+// See FailoverHostReservationStatus.
 type FailoverReservationStatus struct {
 	// Allocations maps VM/instance UUIDs to the host they are currently allocated on.
 	// Key: VM/instance UUID, Value: Host name where the VM is currently running.
@@ -220,6 +283,51 @@ type FailoverReservationStatus struct {
 // InFlightReservationStatus defines the status fields specific to
 // in-flight reservations.
 type InFlightReservationStatus struct{} // No captured state for now.
+
+// FailoverHostReservationStatus defines the status fields specific to failover
+// host reservations.
+type FailoverHostReservationStatus struct {
+	// SourceHost is the actual host from which the failover event originates.
+	// Only set when the condition ConditionTypeFailoverHostInUse is True.
+	// +kubebuilder:validation:Optional
+	SourceHost string `json:"sourceHost,omitempty"`
+}
+
+// ReservationConditionType represents the type of condition for a reservation.
+type ReservationConditionType = string
+
+const (
+	// ConditionTypeFailoverHostDesignated indicates that the reservation has
+	// been created on a host. There may be virtual machines running on this
+	// host that need live migration away. As long as not all virtual machines
+	// can be migrated away from the host, the reservation stays in this state.
+	// For pipeline: no new virtual machine onto this host.
+	//
+	// status=Unknown: It is unknown if the failover host has been designated.
+	// status=False: The failover host has not been designated (there was an error).
+	// status=True: The failover host has been designated successfully.
+	ConditionTypeFailoverHostDesignated ReservationConditionType = "FailoverHostDesignated"
+
+	// ConditionTypeFailoverHostActive indicates that the failover host is
+	// active and ready to accept evacuations. No more virtual machines have
+	// been seen on this host, so it is empty and ready to receive all vms
+	// from another host.
+	//
+	// status=Unknown: The failover host is not yet ready to be used.
+	// status=False: There has been some error or issue preventing the failover
+	// host from being active.
+	// status=True: The failover host is active and ready to accept evacuations.
+	ConditionTypeFailoverHostActive ReservationConditionType = "FailoverHostActive"
+
+	// ConditionTypeFailoverHostInUse indicates that the failover host reservation
+	// is currently being used by an ongoing evacuation event with inbound
+	// virtual machines being evacuated.
+	//
+	// status=Unknown: It is unknown if the failover host is currently in use.
+	// status=False: The failover host is not currently in use.
+	// status=True: The failover host is currently in use.
+	ConditionTypeFailoverHostInUse ReservationConditionType = "FailoverHostInUse"
+)
 
 // ReservationStatus defines the observed state of Reservation.
 type ReservationStatus struct {
@@ -249,6 +357,8 @@ type ReservationStatus struct {
 
 	// FailoverReservation contains status fields specific to failover reservations.
 	// Only used when Type is FailoverReservation.
+	//
+	// Deprecated: FailoverReservations will be replaced with FailoverHostReservations.
 	// +kubebuilder:validation:Optional
 	FailoverReservation *FailoverReservationStatus `json:"failoverReservation,omitempty"`
 
@@ -256,6 +366,11 @@ type ReservationStatus struct {
 	// Only used when Type is InFlightReservation.
 	// +kubebuilder:validation:Optional
 	InFlightReservation *InFlightReservationStatus `json:"inFlightReservation,omitempty"`
+
+	// FailoverHostReservation contains status fields specific to failover
+	// host reservations. Only used when Type is FailoverHostReservation.
+	// +kubebuilder:validation:Optional
+	FailoverHostReservation *FailoverHostReservationStatus `json:"failoverHostReservation,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -264,12 +379,12 @@ type ReservationStatus struct {
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".metadata.labels['reservations\\.cortex\\.cloud/type']"
 // +kubebuilder:printcolumn:name="Host",type="string",JSONPath=".status.host"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
-// +kubebuilder:printcolumn:name="ResourceGroup",type="string",JSONPath=".spec.committedResourceReservation.resourceGroup"
+// +kubebuilder:printcolumn:name="ResourceGroup",type="string",JSONPath=".spec.committedResourceReservation.resourceGroup",priority=1
 // +kubebuilder:printcolumn:name="HA ResourceGroup",type="string",JSONPath=".spec.failoverReservation.resourceGroup",priority=1
-// +kubebuilder:printcolumn:name="Project",type="string",JSONPath=".spec.committedResourceReservation.projectID"
-// +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone"
+// +kubebuilder:printcolumn:name="Project",type="string",JSONPath=".spec.committedResourceReservation.projectID",priority=1
+// +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone",priority=1
 // +kubebuilder:printcolumn:name="StartTime",type="string",JSONPath=".spec.startTime",priority=1
-// +kubebuilder:printcolumn:name="EndTime",type="string",JSONPath=".spec.endTime"
+// +kubebuilder:printcolumn:name="EndTime",type="string",JSONPath=".spec.endTime",priority=1
 // +kubebuilder:printcolumn:name="Resources",type="string",JSONPath=".spec.resources",priority=1
 // +kubebuilder:printcolumn:name="LastChanged",type="date",JSONPath=".status.failoverReservation.lastChanged",priority=1
 // +kubebuilder:printcolumn:name="AcknowledgedAt",type="date",JSONPath=".status.failoverReservation.acknowledgedAt",priority=1
@@ -300,11 +415,6 @@ type ReservationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Reservation `json:"items"`
-}
-
-// MatchesGroup reports whether the reservation targets the given project and resource group.
-func (s *CommittedResourceReservationSpec) MatchesGroup(projectID, resourceGroup string) bool {
-	return s.ProjectID == projectID && s.ResourceGroup == resourceGroup
 }
 
 // IsReady returns true if the reservation has the Ready condition set to True.
