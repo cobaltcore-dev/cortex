@@ -162,7 +162,7 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 		// Validate flavor group exists in Knowledge
 		_, exists := flavorGroups[flavorGroupName]
 		if !exists {
-			log.V(1).Info("skipping commitment with unknown flavor group",
+			log.Info("skipping commitment with unknown flavor group",
 				"id", id,
 				"flavorGroup", flavorGroupName)
 			if s.monitor != nil {
