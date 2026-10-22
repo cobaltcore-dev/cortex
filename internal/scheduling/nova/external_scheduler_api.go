@@ -212,7 +212,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		return
 	}
 	logger := schedulerLog.WithValues(requestData.GetTraceLogArgs()...)
-	logger.V(1).Info("handling POST request", "url", "/scheduler/nova/external", "body", string(body))
+	logger.Info("handling POST request", "url", "/scheduler/nova/external", "body", string(body))
 
 	// Replicate Nova's forced-destination behavior: when the request is forced
 	// onto specific hosts/nodes (force_hosts/force_nodes) and no _nova_check_type

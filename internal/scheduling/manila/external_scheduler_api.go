@@ -119,7 +119,7 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 		return
 	}
 	logger := log.WithValues(requestData.GetTraceLogArgs()...)
-	logger.V(1).Info("handling POST request", "url", "/scheduler/manila/external", "body", string(body))
+	logger.Info("handling POST request", "url", "/scheduler/manila/external", "body", string(body))
 
 	if ok, reason := httpAPI.canRunScheduler(requestData); !ok {
 		internalErr := fmt.Errorf("cannot run scheduler: %s", reason)
