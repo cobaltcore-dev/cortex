@@ -17,6 +17,7 @@ import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	vmv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -64,7 +65,8 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 // manager.Runnable so the manager owns its lifecycle; it is registered via
 // mgr.Add in SetupWithManager.
 func (c *Controller) Start(ctx context.Context) error {
-	log := logf.FromContext(ctx)
+	log := logf.FromContext(ctx).WithName("failoverhost-controller-startup")
+	log.Info("starting failover host controller")
 
 	// Validate the config
 	interval := c.Config.GenerationInterval.Duration
@@ -261,7 +263,29 @@ func (c *Controller) loop(ctx context.Context) {
 		}
 		// TODO sort hvsNotReservedYet by allocated capacity
 		for _, hv := range hvsNotReservedYet {
-			availableReservations = append(availableReservations, v1alpha1.Reservation{})
+			az, ok := hv.Labels[corev1.LabelTopologyZone]
+			if !ok {
+				continue
+			}
+			sourceHosts := []string{} // other hosts in the same partition
+			for _, otherHv := range partition {
+				if otherHv.Name != hv.Name {
+					sourceHosts = append(sourceHosts, otherHv.Name)
+				}
+			}
+			availableReservations = append(availableReservations, v1alpha1.Reservation{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "failover-host-" + hv.Name,
+				},
+				Spec: v1alpha1.ReservationSpec{
+					Type:                    v1alpha1.ReservationTypeFailoverHost,
+					SchedulingDomain:        v1alpha1.SchedulingDomainNova,
+					AvailabilityZone:        az,
+					Resources:               hv.Status.Capacity,
+					TargetHost:              hv.Name,
+					FailoverHostReservation: &v1alpha1.FailoverHostReservationSpec{SourceHosts: sourceHosts},
+				},
+			})
 		}
 
 		// Limit to the number of reservations we actually need
