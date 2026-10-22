@@ -57,7 +57,7 @@ func (api *cinderAPI) Init(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	log.V(1).Info("using cinder endpoint", "url", url)
+	log.Info("using cinder endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
 		ProviderClient: provider,
 		Endpoint:       url,

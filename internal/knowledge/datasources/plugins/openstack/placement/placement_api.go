@@ -64,7 +64,7 @@ func (api *placementAPI) Init(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	log.V(1).Info("using placement endpoint", "url", url)
+	log.Info("using placement endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
 		ProviderClient: provider,
 		Endpoint:       url,

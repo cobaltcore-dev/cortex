@@ -48,7 +48,7 @@ func (api *identityAPI) Init(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	log.V(1).Info("using identity endpoint", "url", url)
+	log.Info("using identity endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
 		ProviderClient: provider,
 		Endpoint:       url,

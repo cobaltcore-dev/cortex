@@ -63,7 +63,7 @@ func (api *limesAPI) Init(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	log.V(1).Info("using limes endpoint", "url", url)
+	log.Info("using limes endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
 		ProviderClient: provider,
 		Endpoint:       url,
