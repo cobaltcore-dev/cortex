@@ -3,7 +3,7 @@ module github.com/cobaltcore-dev/cortex
 go 1.27
 
 require (
-	github.com/cobaltcore-dev/openstack-hypervisor-operator v1.2.3
+	github.com/cobaltcore-dev/openstack-hypervisor-operator v1.3.0
 	github.com/cobaltcore-dev/vm-operator v0.2.10
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/go-logr/logr v1.4.4
@@ -126,7 +126,7 @@ require (
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad // indirect
 	k8s.io/streaming v0.37.1 // indirect
-	k8s.io/utils v0.0.0-20260626114624-be93311217bd // indirect
+	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.36.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
