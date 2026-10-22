@@ -119,7 +119,7 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 		return
 	}
 	logger := log.WithValues(requestData.GetTraceLogArgs()...)
-	logger.V(1).Info("handling POST request", "url", "/scheduler/cinder/external", "body", string(body))
+	logger.Info("handling POST request", "url", "/scheduler/cinder/external", "body", string(body))
 
 	if ok, reason := httpAPI.canRunScheduler(requestData); !ok {
 		internalErr := fmt.Errorf("cannot run scheduler: %s", reason)
