@@ -6,8 +6,9 @@ package filters
 import (
 	"context"
 	"errors"
-	"github.com/go-logr/logr"
 	"slices"
+
+	"github.com/go-logr/logr"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -291,6 +292,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 				"host with invalid CPU capacity",
 				"host", host, "freeCPU", freeCPU.String(),
 			)
+			delete(result.Activations, host) // host is already overloaded, remove from activations
 			continue
 		}
 		// Calculate how many instances can fit on this host, based on cpu.
@@ -318,6 +320,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 				"host with invalid memory capacity",
 				"host", host, "freeMemory", freeMemory.String(),
 			)
+			delete(result.Activations, host) // host is already overloaded, remove from activations
 			continue
 		}
 		// Calculate how many instances can fit on this host, based on memory.
