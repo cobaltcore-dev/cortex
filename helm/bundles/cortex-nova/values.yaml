@@ -185,6 +185,7 @@ cortex-scheduling-controllers:
       - hypervisor-overcommit-controller
       - committed-resource-reservations-controller
       - failover-reservations-controller
+      - failover-host-reservations-controller
       - quota-controller
       - capacity-controller
     enabledTasks:
@@ -357,6 +358,38 @@ cortex-scheduling-controllers:
     # Maximum number of aged committed-resource Reservation CRDs pruned per syncer run, oldest first.
     # A zero value disables pruning.
     maxReservationDeletesPerRun: 20
+
+    # --- Failover host reservations controller ---
+    # Keeps whole compute hosts reserved as gang-evacuation targets: it groups
+    # hosts into "failover partitions" (sets of hosts that can all be evacuated
+    # onto one another, discovered from the scheduler) and keeps a share of each
+    # partition empty and reserved, so when a host fails its entire workload can
+    # be moved onto a reserved host in one step. This is independent of the
+    # flavor-based failover controller configured above (schedulerURL,
+    # reconcileInterval, flavorFailoverRequirements, ...).
+    #
+    # Nested under `failover.hosts` as a deliberate role model for grouping a
+    # controller's settings under its own key, rather than adding yet more flat
+    # top-level keys. Other controller configs should be refactored toward this.
+    failover:
+      hosts:
+        # Fraction of each partition's hosts to keep reserved as failover
+        # targets, rounded down (e.g. 0.1 of a 10-host partition reserves 1
+        # host). Must be within (0, 1]. Combined with `minimum` below, which
+        # sets a floor so even small partitions keep some headroom.
+        ratio: 0.1
+        # Minimum number of failover hosts to reserve per partition, applied even
+        # when `ratio` would round down to fewer. Must be greater than 0. The
+        # controller never reserves so many that a partition is left with no host
+        # to run workload (it always keeps at least one source host).
+        minimum: 1
+        # How often the failover partitions are recalculated and the reservations
+        # updated to match. Must be at least 1m.
+        generationInterval: 5m
+        # URL of the nova external scheduler API, used to discover which hosts a
+        # given host's workload could be evacuated onto. Typically the same
+        # scheduler endpoint the flavor-based failover controller uses.
+        externalSchedulerURL: "http://localhost:8080/scheduler/nova/external"
 
 cortex-knowledge-controllers:
   <<: *cortex
