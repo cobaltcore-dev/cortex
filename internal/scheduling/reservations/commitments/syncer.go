@@ -139,7 +139,7 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 			v1alpha1.CommitmentStatusExpired:
 			// valid, continue processing
 		default:
-			log.V(1).Info("skipping commitment with unknown status", "id", id, "status", commitment.Status)
+			log.Info("skipping commitment with unknown status", "id", id, "status", commitment.Status)
 			if commitment.UUID != "" {
 				result.skippedUUIDs[commitment.UUID] = true
 			}
