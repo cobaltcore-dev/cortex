@@ -81,7 +81,7 @@ func (c *commitmentsClient) Init(ctx context.Context, client client.Client, conf
 		Type:         "compute",
 		Availability: "public",
 	}))
-	logger.V(1).Info("using nova endpoint", "url", url)
+	logger.Info("using nova endpoint", "url", url)
 	c.nova = &gophercloud.ServiceClient{
 		ProviderClient: c.provider,
 		Endpoint:       url,
