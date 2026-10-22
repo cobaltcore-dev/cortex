@@ -6,30 +6,55 @@ package failoverhost
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
+	"sort"
 	"sync"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	vmv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+// ControllerConfig contains configuration for failover host reservations.
+type ControllerConfig struct {
+	// Ratio is a global ratio that determines how many failover hosts inside
+	// a partition are created. For example, a ratio of 0.1 means that
+	// if a partition consists of 10 hosts, 1 failover host will be created.
+	// The number of resulting failover hosts in a partition will be rounded
+	// down. This means if there are not sufficient hosts inside a partition,
+	// it is possible that no failover hosts will be created.
+	Ratio float64 `json:"ratio"`
+
+	// Minimum is the minimum number of failover hosts that should be created
+	// in a partition, regardless of the ratio. This ensures that even small
+	// partitions have at least a certain number of failover hosts.
+	Minimum int `json:"minimum"`
+
+	// GenerationInterval is the interval within which failover partitions are
+	// recalculated and failover host reservations are updated accordingly.
+	GenerationInterval metav1.Duration `json:"generationInterval"`
+}
 
 // Controller reconciles failover host reservations based on generated partitions.
 // It runs a periodic partitioning algorithm out of which desired reservations
 // are derived and used to update the actual failover host reservations in the
 // cluster.
 type Controller struct {
-	client.Client
+	client.Client // k8s client
 
-	Config FailoverHostConfig
+	Config ControllerConfig
 
 	// desiredReservations contains the desired state of failover host
 	// reservations that has been generated using the partitioning algorithm,
@@ -96,33 +121,12 @@ func (c *Controller) Start(ctx context.Context) error {
 }
 
 // fetchEvacuationCandidates retrieves the possible evacuation targets for a
-// given virtual machine.
+// given virtual machine. It does this by creating an external scheduler
+// request onto the cortex pipeline, putting in the scheduling constraints
+// assigned to this specific virtual machine with evacuation intent.
 func (c *Controller) fetchEvacuationCandidates(ctx context.Context, vm vmv1alpha1.VirtualMachine) ([]hv1.Hypervisor, error) {
+	// TODO: Implement the logic to fetch evacuation candidates for the given VM.
 	return nil, nil
-}
-
-// intersection returns the intersection of two sets of hypervisors.
-// If the first set is empty, it returns the second set.
-func (c *Controller) intersection(a, b []hv1.Hypervisor) []hv1.Hypervisor {
-	if len(a) == 0 {
-		return b
-	}
-	intersection := []hv1.Hypervisor{}
-	for _, ha := range a {
-		for _, hb := range b {
-			if ha.Name == hb.Name {
-				intersection = append(intersection, ha)
-				break
-			}
-		}
-	}
-	return intersection
-}
-
-// targetLargeEnough checks if the given target hypervisor has enough capacity
-// to accommodate the failover from the source hypervisor.
-func (c *Controller) targetLargeEnough(source, target hv1.Hypervisor) bool {
-	return true // TODO
 }
 
 // clusterFailoverPaths clusters the given failover paths into fully connected
@@ -132,10 +136,13 @@ func (c *Controller) clusterFailoverPaths(paths [][2]hv1.Hypervisor) ([][]hv1.Hy
 	return nil, nil // TODO
 }
 
-// findExistingReservations returns the set of hypervisors within the given partition
-// that already have failover host reservations.
-func (c *Controller) findExistingFailoverHostReservations(partition []hv1.Hypervisor) []v1alpha1.Reservation {
-	return nil // TODO
+// cmpResources compares the resources of hypervisor a with the resources
+// of hypervisor b. If the resources of a are greater then b, it returns 1.
+// If the resources of a are less than b, it returns -1.
+// If the resources are equal, it returns 0.
+func cmpResources(a, b map[hv1.ResourceName]resource.Quantity) int {
+	// TODO: Implement the logic to compare the resources of hypervisors a and b.
+	return 0
 }
 
 // loop runs the main calculation loop for failover host reservations.
@@ -167,9 +174,27 @@ func (c *Controller) loop(ctx context.Context) {
 	// Ensure that all vms are on known hypervisors, otherwise abort calculating
 	// the failover partition to avoid calculating on an inconsistent set of hosts.
 	for host := range vmsByHost {
-		if _, ok := hvsByName[host]; !ok {
+		hv, ok := hvsByName[host]
+		if !ok {
 			log.Error(nil, "vm is on unknown hypervisor, aborting", "host", host)
 			return
+		}
+		// Also ensure that the hypervisor has an availability zone assigned.
+		if _, ok := hv.Labels[corev1.LabelTopologyZone]; !ok {
+			log.Error(nil, "hypervisor has no availability zone, aborting", "host", host)
+			return
+		}
+	}
+	// Find existing failover host reservations
+	allReservations := &v1alpha1.ReservationList{}
+	if err := c.List(ctx, allReservations); err != nil {
+		log.Error(err, "failed to list existing failover host reservations")
+		return
+	}
+	existingFailoverHostReservations := make(map[corev1.ObjectReference]v1alpha1.Reservation)
+	for _, reservation := range allReservations.Items {
+		if reservation.Spec.Type == v1alpha1.ReservationTypeFailoverHost {
+			existingFailoverHostReservations[corev1.ObjectReference{Name: reservation.Name}] = reservation
 		}
 	}
 
@@ -181,13 +206,28 @@ func (c *Controller) loop(ctx context.Context) {
 		// is the intersection set of all candidate target hosts for the vms
 		// on this source host.
 		targetHosts := []hv1.Hypervisor{}
-		for _, vm := range vms {
-			candidates, err := c.fetchEvacuationCandidates(ctx, vm)
+		for vmidx, vm := range vms {
+			vmTargetHosts, err := c.fetchEvacuationCandidates(ctx, vm)
 			if err != nil {
 				log.Error(err, "failed to fetch evacuation candidates", "vm", vm.Name)
 				continue
 			}
-			targetHosts = c.intersection(targetHosts, candidates)
+			if vmidx == 0 {
+				targetHosts = vmTargetHosts // Start with all candidates of the first vm
+				continue
+			}
+			if len(targetHosts) == 0 {
+				break // No need to intersect further, will be empty
+			}
+			intersection := []hv1.Hypervisor{}
+			for _, vmTargetHost := range vmTargetHosts {
+				for _, targetHost := range targetHosts {
+					if vmTargetHost.Name == targetHost.Name {
+						intersection = append(intersection, targetHost)
+					}
+				}
+			}
+			targetHosts = intersection
 		}
 		for _, targetHv := range targetHosts {
 			sourceHv := hvsByName[sourceHost]
@@ -195,7 +235,15 @@ func (c *Controller) loop(ctx context.Context) {
 			// where the target host is smaller than the source host. This
 			// ensures that once we gang-schedule all vms during an evacuation,
 			// that all vms fit the target host.
-			if !c.targetLargeEnough(sourceHv, targetHv) {
+			sourceHvCapa := sourceHv.Status.Capacity // fallback to base capacity
+			for resName, resQty := range sourceHv.Status.EffectiveCapacity {
+				sourceHvCapa[resName] = resQty
+			}
+			targetHvCapa := targetHv.Status.Capacity
+			for resName, resQty := range targetHv.Status.EffectiveCapacity {
+				targetHvCapa[resName] = resQty
+			}
+			if cmpResources(sourceHvCapa, targetHvCapa) > 0 {
 				continue
 			}
 			failoverPaths = append(failoverPaths, [2]hv1.Hypervisor{sourceHv, targetHv})
@@ -249,46 +297,63 @@ func (c *Controller) loop(ctx context.Context) {
 	c.desiredReservations = make(map[corev1.ObjectReference]v1alpha1.Reservation)
 	defer c.desiredReservationsMu.Unlock()
 	for _, partition := range partitions {
-		existingReservations := c.findExistingFailoverHostReservations(partition)
+		// Find the reservations that are part of this partition.
+		// The available reservations slice will be constructed as follows:
+		// [res_existing_1, res_existing_2, ..., res_new_1, res_new_2, ...]
+		// Then we can go from index 0 to desiredCount to pick the reservations
+		// we actually need.
+		availableReservations := []v1alpha1.Reservation{}
 		hostsReserved := []string{}
-		for _, reservation := range existingReservations {
+		for _, reservation := range existingFailoverHostReservations {
 			hostsReserved = append(hostsReserved, reservation.Status.Host)
+			for _, hv := range partition {
+				if reservation.Spec.TargetHost == hv.Name {
+					availableReservations = append(availableReservations, reservation)
+					break
+				}
+			}
 		}
-		availableReservations := existingReservations
-		hvsNotReservedYet := []hv1.Hypervisor{}
+		// Sort [res_new_1, res_new_2, ...] by allocated capacity (ascending)
+		// so that creating this failover host costs as few migrated resources
+		// as possible.
+		sort.SliceStable(availableReservations, func(i, j int) bool {
+			return cmpResources(availableReservations[i].Spec.Resources, availableReservations[j].Spec.Resources) < 0
+		})
 		for _, hv := range partition {
-			if !slices.Contains(hostsReserved, hv.Name) {
-				hvsNotReservedYet = append(hvsNotReservedYet, hv)
+			if slices.Contains(hostsReserved, hv.Name) {
+				continue // Don't create a reservation for a host that is already reserved
 			}
-		}
-		// TODO sort hvsNotReservedYet by allocated capacity
-		for _, hv := range hvsNotReservedYet {
-			az, ok := hv.Labels[corev1.LabelTopologyZone]
-			if !ok {
-				continue
-			}
-			sourceHosts := []string{} // other hosts in the same partition
+			sourceHosts := []string{} // Other hosts in the same partition
 			for _, otherHv := range partition {
 				if otherHv.Name != hv.Name {
 					sourceHosts = append(sourceHosts, otherHv.Name)
 				}
 			}
+			reservedResources := hv.Status.Capacity // Fallback to base capacity
+			for resName, resQty := range hv.Status.EffectiveCapacity {
+				reservedResources[resName] = resQty
+			}
 			availableReservations = append(availableReservations, v1alpha1.Reservation{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "failover-host-" + hv.Name,
+					Labels: map[string]string{
+						v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelFailoverHost,
+					},
 				},
 				Spec: v1alpha1.ReservationSpec{
 					Type:                    v1alpha1.ReservationTypeFailoverHost,
 					SchedulingDomain:        v1alpha1.SchedulingDomainNova,
-					AvailabilityZone:        az,
-					Resources:               hv.Status.Capacity,
+					AvailabilityZone:        hv.Labels[corev1.LabelTopologyZone],
+					Resources:               reservedResources, // Allocate full host
 					TargetHost:              hv.Name,
 					FailoverHostReservation: &v1alpha1.FailoverHostReservationSpec{SourceHosts: sourceHosts},
 				},
 			})
 		}
-
-		// Limit to the number of reservations we actually need
+		// We now have the available reservations complete and in the correct order.
+		// Next, we determine the desired count of failover host reservations
+		// based on the configured ratio and minimum, and pick the top available
+		// reservations accordingly.
 		desiredCount := int(float64(len(partition)) * c.Config.Ratio)
 		if desiredCount < c.Config.Minimum {
 			desiredCount = c.Config.Minimum
@@ -296,7 +361,6 @@ func (c *Controller) loop(ctx context.Context) {
 		if len(availableReservations) > desiredCount {
 			availableReservations = availableReservations[:desiredCount]
 		}
-
 		for idx, reservation := range availableReservations {
 			if idx >= desiredCount {
 				break
@@ -306,4 +370,44 @@ func (c *Controller) loop(ctx context.Context) {
 	}
 
 	// Notify the reconcile loop that the desired reservations have changed
+	for _, reservation := range c.desiredReservations {
+		evt := event.GenericEvent{Object: &reservation}
+		select {
+		case c.reconcileCh <- evt:
+		case <-ctx.Done():
+			return
+		}
+	}
+	// Reconcile all other existing reservations that are no longer desired.
+	for _, reservation := range existingFailoverHostReservations {
+		if _, desired := c.desiredReservations[corev1.ObjectReference{Name: reservation.Name}]; !desired {
+			evt := event.GenericEvent{Object: &reservation}
+			select {
+			case c.reconcileCh <- evt:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+}
+
+// SetupWithManager wires the periodic loop into the manager and registers
+// the reconciler to consume failover host reservation events it enqueues.
+func (c *Controller) SetupWithManager(mgr ctrl.Manager) error {
+	if mgr == nil {
+		return fmt.Errorf("manager cannot be nil")
+	}
+
+	c.reconcileCh = make(chan event.GenericEvent)
+	src := source.Channel(c.reconcileCh, &handler.EnqueueRequestForObject{})
+
+	// Register the loop so the manager starts and stops it alongside the controller.
+	if err := mgr.Add(c); err != nil {
+		return err
+	}
+
+	return ctrl.NewControllerManagedBy(mgr).
+		Named("failoverhost-controller").
+		WatchesRawSource(src).
+		Complete(c)
 }
