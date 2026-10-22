@@ -964,7 +964,7 @@ func (c *Reconciler) reservedResourcesByGroupAZ(
 		}
 		group, ok := resolveReservationGroup(res, flavorGroups, flavorToGroup)
 		if !ok {
-			logger.V(1).Info("reservation could not be attributed to a flavor group; its reserved capacity is not reported",
+			logger.Info("reservation could not be attributed to a flavor group; its reserved capacity is not reported",
 				"reservation", res.Name, "type", res.Spec.Type, "az", az)
 			continue
 		}
