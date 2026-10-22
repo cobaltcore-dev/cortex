@@ -4,14 +4,20 @@
 package failoverhost
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"sort"
 	"sync"
 	"time"
 
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -45,6 +51,10 @@ type ControllerConfig struct {
 	// GenerationInterval is the interval within which failover partitions are
 	// recalculated and failover host reservations are updated accordingly.
 	GenerationInterval metav1.Duration `json:"generationInterval"`
+
+	// ExternalSchedulerURL is the URL of the external scheduler service that
+	// will be used to request failover host placements.
+	ExternalSchedulerURL string `json:"externalSchedulerURL"`
 }
 
 // Controller reconciles failover host reservations based on generated partitions.
@@ -69,6 +79,9 @@ type Controller struct {
 	// our controller to trigger a reconciliation on each generated reservation
 	// such that it can be checked against the actual cluster state.
 	reconcileCh chan event.GenericEvent
+
+	// httpClient is used to send requests to the external scheduler service.
+	httpClient *http.Client
 }
 
 // Reconcile reconciles a failover host reservation by comparing the desired state
@@ -79,10 +92,10 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	// TODO:
 	// - Retrieve the reservation from the cluster using the request's namespaced name.
-	// - Retrieve the reservation inside the generatedReservations map using the request's namespaced name.
-	// - Compare the desired state (generatedReservations) map with the actual state from the cluster.
+	// - Retrieve the reservation inside the desiredReservations map using the request's namespaced name.
+	// - Compare the desired state (desiredReservations) map with the actual state from the cluster.
 	// - Update the actual reservation in the cluster if it differs from the desired state.
-	// - Return the appropriate result and error.
+	// - If the reservation is in the cluster but no longer in the desired state, it should be deleted.
 	return ctrl.Result{}, nil
 }
 
@@ -124,9 +137,109 @@ func (c *Controller) Start(ctx context.Context) error {
 // given virtual machine. It does this by creating an external scheduler
 // request onto the cortex pipeline, putting in the scheduling constraints
 // assigned to this specific virtual machine with evacuation intent.
-func (c *Controller) fetchEvacuationCandidates(ctx context.Context, vm vmv1alpha1.VirtualMachine) ([]hv1.Hypervisor, error) {
-	// TODO: Implement the logic to fetch evacuation candidates for the given VM.
-	return nil, nil
+func (c *Controller) fetchEvacuationCandidates(ctx context.Context, vm vmv1alpha1.VirtualMachine, hvsByName map[string]hv1.Hypervisor) ([]hv1.Hypervisor, error) {
+	log := logf.FromContext(ctx)
+
+	resMemoryMB, resVCPUs := uint64(0), uint64(0)
+	if resMemory, ok := vm.Spec.Resources[vmv1alpha1.ResourceMemory]; ok {
+		// Flavors are specified in Mebibytes, even if they declare "MB".
+		resMemoryMB = uint64(resMemory.Value()) / 1024 / 1024
+	}
+	if resCPU, ok := vm.Spec.Resources[vmv1alpha1.ResourceCPU]; ok {
+		resVCPUs = uint64(resCPU.Value())
+	}
+	imageProps := map[string]any{}
+	for k, v := range vm.Spec.Nova.Image.Properties {
+		imageProps[k] = v
+	}
+	requestObj := novaapi.ExternalSchedulerRequest{
+		Options: scheduling.Options{
+			ReadOnly: true, // Don't want to write any resources
+			// We need to ignore existing failover host reservations because
+			// this will otherwise block these hosts, separating them from
+			// their failover partition and breaking the algorithm.
+			IgnoredReservationTypes: []v1alpha1.ReservationType{
+				v1alpha1.ReservationTypeFailoverHost,
+			},
+		},
+		Spec: api.NovaObject[api.NovaSpec]{
+			Data: api.NovaSpec{
+				InstanceUUID:     vm.Name,
+				NumInstances:     1,
+				UserID:           vm.Spec.Nova.Ownership.User,
+				ProjectID:        vm.Spec.Nova.Ownership.Project,
+				AvailabilityZone: vm.Spec.AZ,
+				// Avoid evacuating to the same host as the current VM.
+				IgnoreHosts:    new([]string{vm.Status.Nova.Host}),
+				SchedulerHints: map[string]any{"_nova_check_type": novaapi.EvacuateIntent},
+				Flavor: api.NovaObject[api.NovaFlavor]{
+					Data: api.NovaFlavor{
+						Name:       vm.Spec.Nova.Flavor.Name,
+						ExtraSpecs: vm.Spec.Nova.Flavor.ExtraSpecs,
+						MemoryMB:   resMemoryMB,
+						VCPUs:      resVCPUs,
+					},
+				},
+				Image: api.NovaObject[api.NovaImageMeta]{
+					Data: api.NovaImageMeta{
+						ID: vm.Spec.Nova.Image.UUID,
+						Properties: api.NovaObject[map[string]any]{
+							Data: imageProps,
+						},
+					},
+				},
+			},
+		},
+	}
+	log.V(1).Info("external scheduler request prepared", "request", requestObj)
+
+	// Marshal the request
+	reqBody, err := json.Marshal(requestObj)
+	if err != nil {
+		log.Error(err, "failed to marshal external scheduler request")
+		return nil, fmt.Errorf("failed to marshal external scheduler request: %w", err)
+	}
+
+	// Create HTTP request with context
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		c.Config.ExternalSchedulerURL, bytes.NewReader(reqBody))
+	if err != nil {
+		log.Error(err, "failed to create HTTP request")
+		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	// Send the request and measure duration
+	startTime := time.Now()
+	response, err := c.httpClient.Do(httpReq)
+	duration := time.Since(startTime)
+	if err != nil {
+		log.Error(err, "failed to send external scheduler request")
+		return nil, fmt.Errorf("failed to send external scheduler request: %w", err)
+	}
+	defer response.Body.Close()
+	log.V(1).Info("external scheduler request sent",
+		"duration", duration, "status", response.StatusCode)
+
+	if response.StatusCode != http.StatusOK {
+		log.Error(nil, "external scheduler request failed", "status", response.StatusCode)
+		return nil, fmt.Errorf("external scheduler request failed with status: %d", response.StatusCode)
+	}
+
+	var responseObj api.ExternalSchedulerResponse
+	if err := json.NewDecoder(response.Body).Decode(&responseObj); err != nil {
+		log.Error(err, "failed to decode external scheduler response")
+		return nil, fmt.Errorf("failed to decode external scheduler response: %w", err)
+	}
+
+	log.V(1).Info("external scheduler response received", "response", responseObj)
+	evacuationCandidates := []hv1.Hypervisor{}
+	for _, hv := range hvsByName {
+		if slices.Contains(responseObj.Hosts, hv.Name) {
+			evacuationCandidates = append(evacuationCandidates, hv)
+		}
+	}
+	return evacuationCandidates, nil
 }
 
 // clusterFailoverPaths clusters the given failover paths into fully connected
@@ -207,7 +320,7 @@ func (c *Controller) loop(ctx context.Context) {
 		// on this source host.
 		targetHosts := []hv1.Hypervisor{}
 		for vmidx, vm := range vms {
-			vmTargetHosts, err := c.fetchEvacuationCandidates(ctx, vm)
+			vmTargetHosts, err := c.fetchEvacuationCandidates(ctx, vm, hvsByName)
 			if err != nil {
 				log.Error(err, "failed to fetch evacuation candidates", "vm", vm.Name)
 				continue
@@ -370,23 +483,19 @@ func (c *Controller) loop(ctx context.Context) {
 	}
 
 	// Notify the reconcile loop that the desired reservations have changed
-	for _, reservation := range c.desiredReservations {
+	reservationsToReconcile := make(map[corev1.ObjectReference]v1alpha1.Reservation)
+	for k, v := range existingFailoverHostReservations {
+		reservationsToReconcile[k] = v
+	}
+	for k, v := range c.desiredReservations {
+		reservationsToReconcile[k] = v
+	}
+	for _, reservation := range reservationsToReconcile {
 		evt := event.GenericEvent{Object: &reservation}
 		select {
 		case c.reconcileCh <- evt:
 		case <-ctx.Done():
 			return
-		}
-	}
-	// Reconcile all other existing reservations that are no longer desired.
-	for _, reservation := range existingFailoverHostReservations {
-		if _, desired := c.desiredReservations[corev1.ObjectReference{Name: reservation.Name}]; !desired {
-			evt := event.GenericEvent{Object: &reservation}
-			select {
-			case c.reconcileCh <- evt:
-			case <-ctx.Done():
-				return
-			}
 		}
 	}
 }
