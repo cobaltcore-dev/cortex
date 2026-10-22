@@ -71,6 +71,11 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 	ignoreAllocations := s.Options.IgnoreAllocations || opts.AssumeEmptyHosts
 	ignoredReservationTypes := slices.Concat(s.Options.IgnoredReservationTypes, opts.IgnoredReservationTypes)
 
+	// Overload metrics are only meaningful on placeable capacity probes (real
+	// allocations, not the empty-datacenter variant).
+	intent, intentErr := request.GetIntent()
+	isCapacityProbe := intentErr == nil && intent == api.CapacityProbeIntent && !ignoreAllocations
+
 	// This map holds the free resources per host.
 	freeResourcesByHost := make(map[string]map[hv1.ResourceName]resource.Quantity)
 
@@ -281,6 +286,17 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 	hostsEncountered := make(map[string]struct{})
 	for host, free := range freeResourcesByHost {
 		hostsEncountered[host] = struct{}{}
+
+		// During capacity probes, report per-host overload state for both
+		// resources before any filtering. This covers both resources
+		// independently even when we continue early below.
+		if isCapacityProbe {
+			for _, rn := range []hv1.ResourceName{"cpu", "memory"} {
+				v := free[rn]
+				excess := max(-v.Value(), 0)
+				HostCapacityMetricsSingleton.SetOverloaded(host, string(rn), float64(excess))
+			}
+		}
 
 		// Check cpu capacity.
 		if request.Spec.Data.Flavor.Data.VCPUs == 0 {

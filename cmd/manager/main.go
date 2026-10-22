@@ -402,6 +402,8 @@ func main() {
 	// filter runs.
 	novafilters.QuotaEnforcementMetricsSingleton = novafilters.NewQuotaEnforcementMetrics()
 	metrics.Registry.MustRegister(novafilters.QuotaEnforcementMetricsSingleton)
+	novafilters.HostCapacityMetricsSingleton = novafilters.NewHostCapacityMetrics()
+	metrics.Registry.MustRegister(novafilters.HostCapacityMetricsSingleton)
 
 	// Initialize commitments API for LIQUID interface (Postgres-backed usage reporting).
 	commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
