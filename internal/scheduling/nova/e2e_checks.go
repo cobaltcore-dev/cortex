@@ -135,7 +135,7 @@ func prepare(ctx context.Context, client client.Client, config ChecksConfig) dat
 		Connector{Client: client, HTTPClient: authenticatedHTTP}.
 		FromSecretRef(ctx, config.KeystoneSecretRef))
 	pc := authenticatedKeystone.Client()
-	schedulerLog.V(1).Info("locating nova endpoint")
+	schedulerLog.Info("locating nova endpoint")
 	novaURL := must.Return(pc.EndpointLocator(gophercloud.EndpointOpts{
 		Type:         "compute",
 		Availability: gophercloud.Availability(authenticatedKeystone.Availability()),
@@ -148,16 +148,16 @@ func prepare(ctx context.Context, client client.Client, config ChecksConfig) dat
 		// Since 2.61, the extra_specs are returned in the flavor details.
 		Microversion: "2.61",
 	}
-	schedulerLog.V(1).Info("nova endpoint found", "novaURL", novaURL)
+	schedulerLog.Info("nova endpoint found", "novaURL", novaURL)
 
-	schedulerLog.V(1).Info("listing hypervisors")
+	schedulerLog.Info("listing hypervisors")
 	hypervisors := must.Return(getHypervisors(ctx, novaSC))
 	if len(hypervisors) == 0 {
 		panic("no hypervisors found")
 	}
-	schedulerLog.V(1).Info("found hypervisors", "count", len(hypervisors))
+	schedulerLog.Info("found hypervisors", "count", len(hypervisors))
 
-	schedulerLog.V(1).Info("listing servers")
+	schedulerLog.Info("listing servers")
 	slo := servers.ListOpts{AllTenants: true, Limit: 10}
 	dataServers := &struct {
 		Servers []nova.Server `json:"servers"`
@@ -171,9 +171,9 @@ func prepare(ctx context.Context, client client.Client, config ChecksConfig) dat
 	if len(servers) == 0 {
 		panic("no servers found")
 	}
-	schedulerLog.V(1).Info("found servers", "count", len(servers))
+	schedulerLog.Info("found servers", "count", len(servers))
 
-	schedulerLog.V(1).Info("listing flavors")
+	schedulerLog.Info("listing flavors")
 	flo := flavors.ListOpts{AccessType: flavors.AllAccess}
 	pages := must.Return(flavors.ListDetail(novaSC, flo).AllPages(ctx))
 	dataFlavors := &struct {
@@ -187,12 +187,12 @@ func prepare(ctx context.Context, client client.Client, config ChecksConfig) dat
 		// See: https://github.com/sapcc/nova/blob/5fcb125/nova/utils.py#L1234
 		// And: https://github.com/sapcc/nova/pull/570/files
 		if strings.Contains(f.ExtraSpecs, "capabilities:cpu_arch") {
-			schedulerLog.V(1).Info("skipping baremetal flavor", "flavorName", f.Name)
+			schedulerLog.Info("skipping baremetal flavor", "flavorName", f.Name)
 			continue
 		}
 		// The hypervisor_type extra spec is required to infer the correct pipeline.
 		if !strings.Contains(f.ExtraSpecs, "capabilities:hypervisor_type") {
-			schedulerLog.V(1).Info("skipping flavor without hypervisor_type extra spec", "flavorName", f.Name)
+			schedulerLog.Info("skipping flavor without hypervisor_type extra spec", "flavorName", f.Name)
 			continue
 		}
 		flavors = append(flavors, f)
@@ -200,9 +200,9 @@ func prepare(ctx context.Context, client client.Client, config ChecksConfig) dat
 	if len(flavors) == 0 {
 		panic("no flavors found")
 	}
-	schedulerLog.V(1).Info("found non-bm flavors", "count", len(flavors))
+	schedulerLog.Info("found non-bm flavors", "count", len(flavors))
 
-	schedulerLog.V(1).Info("listing aggregates")
+	schedulerLog.Info("listing aggregates")
 	pages = must.Return(aggregates.List(novaSC).AllPages(ctx))
 	dataAggregates := &struct {
 		Aggregates []nova.RawAggregate `json:"aggregates"`
@@ -212,9 +212,9 @@ func prepare(ctx context.Context, client client.Client, config ChecksConfig) dat
 	if len(aggregates) == 0 {
 		panic("no aggregates found")
 	}
-	schedulerLog.V(1).Info("found aggregates", "count", len(aggregates))
+	schedulerLog.Info("found aggregates", "count", len(aggregates))
 
-	schedulerLog.V(1).Info("locating keystone endpoint")
+	schedulerLog.Info("locating keystone endpoint")
 	keystoneURL := must.Return(pc.EndpointLocator(gophercloud.EndpointOpts{
 		Type:         "identity",
 		Availability: gophercloud.Availability(authenticatedKeystone.Availability()),
@@ -224,9 +224,9 @@ func prepare(ctx context.Context, client client.Client, config ChecksConfig) dat
 		Endpoint:       keystoneURL,
 		Type:           "identity",
 	}
-	schedulerLog.V(1).Info("keystone endpoint found", "keystoneURL", keystoneURL)
+	schedulerLog.Info("keystone endpoint found", "keystoneURL", keystoneURL)
 
-	schedulerLog.V(1).Info("listing projects")
+	schedulerLog.Info("listing projects")
 	pages = must.Return(projects.List(keystoneSC, projects.ListOpts{}).AllPages(ctx))
 	dataProjects := &struct {
 		Projects []identity.RawProject `json:"projects"`
@@ -236,9 +236,9 @@ func prepare(ctx context.Context, client client.Client, config ChecksConfig) dat
 	if len(projects) == 0 {
 		panic("no projects found")
 	}
-	schedulerLog.V(1).Info("found projects", "count", len(projects))
+	schedulerLog.Info("found projects", "count", len(projects))
 
-	schedulerLog.V(1).Info("listing domains")
+	schedulerLog.Info("listing domains")
 	pages = must.Return(domains.List(keystoneSC, nil).AllPages(ctx))
 	dataDomains := &struct {
 		Domains []identity.Domain `json:"domains"`
@@ -248,7 +248,7 @@ func prepare(ctx context.Context, client client.Client, config ChecksConfig) dat
 	if len(domains) == 0 {
 		panic("no domains found")
 	}
-	schedulerLog.V(1).Info("found domains", "count", len(domains))
+	schedulerLog.Info("found domains", "count", len(domains))
 
 	azs := make(map[string]struct{})
 	for _, a := range aggregates {
@@ -264,7 +264,7 @@ func prepare(ctx context.Context, client client.Client, config ChecksConfig) dat
 	if len(azsSlice) == 0 {
 		panic("no availability zones found")
 	}
-	schedulerLog.V(1).Info("found availability zones", "count", len(azsSlice))
+	schedulerLog.Info("found availability zones", "count", len(azsSlice))
 
 	return datacenter{
 		servers:     servers,
@@ -294,12 +294,12 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 	}
 	// Take a random server. If we don't use an existing server the decision will be cleaned up.
 	server := dc.servers[randSource.Intn(len(dc.servers))]
-	schedulerLog.V(1).Info("using server", "serverID", server.ID, "serverName", server.Name)
+	schedulerLog.Info("using server", "serverID", server.ID, "serverName", server.Name)
 	// Get a random az.
 	az := dc.azs[randSource.Intn(len(dc.azs))]
-	schedulerLog.V(1).Info("using availability zone", "az", az)
+	schedulerLog.Info("using availability zone", "az", az)
 	project := dc.projects[randSource.Intn(len(dc.projects))]
-	schedulerLog.V(1).Info("using project", "projectID", project.ID, "projectName", project.Name)
+	schedulerLog.Info("using project", "projectID", project.ID, "projectName", project.Name)
 	// Get the domain for the project.
 	domainsByID := make(map[string]identity.Domain)
 	for _, d := range dc.domains {
@@ -309,10 +309,10 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 	if !ok {
 		panic("project domain not found")
 	}
-	schedulerLog.V(1).Info("using domain", "domainID", domain.ID, "domainName", domain.Name)
+	schedulerLog.Info("using domain", "domainID", domain.ID, "domainName", domain.Name)
 	// Get a random flavor.
 	flavor := dc.flavors[randSource.Intn(len(dc.flavors))]
-	schedulerLog.V(1).Info("using flavor", "flavorName", flavor.Name, "flavorID", flavor.ID)
+	schedulerLog.Info("using flavor", "flavorName", flavor.Name, "flavorID", flavor.ID)
 	// JSON unmarshal the extra specs to a string.
 	var extraSpecs map[string]string
 	if flavor.ExtraSpecs == "" {
@@ -320,7 +320,7 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 	} else if err := json.Unmarshal([]byte(flavor.ExtraSpecs), &extraSpecs); err != nil {
 		panic(err)
 	}
-	schedulerLog.V(1).Info("using flavor extra specs", "extraSpecs", extraSpecs)
+	schedulerLog.Info("using flavor extra specs", "extraSpecs", extraSpecs)
 	request := api.ExternalSchedulerRequest{
 		Spec: api.NovaObject[api.NovaSpec]{Data: api.NovaSpec{
 			// Actual server that exists in nova but with mocked random properties.
@@ -357,7 +357,7 @@ func checkNovaSchedulerReturnsValidHosts(
 ) []string {
 
 	apiURL := "http://localhost:8080/scheduler/nova/external"
-	schedulerLog.V(1).Info("sending request to external scheduler", "apiURL", apiURL)
+	schedulerLog.Info("sending request to external scheduler", "apiURL", apiURL)
 
 	requestBody := must.Return(json.Marshal(req))
 	buf := bytes.NewBuffer(requestBody)
@@ -424,7 +424,7 @@ func CheckDomainNameHintRouting(ctx context.Context, config ChecksConfig) {
 		},
 	}
 
-	schedulerLog.V(1).Info("domain_name hint check: sending CR reservation scheduling request",
+	schedulerLog.Info("domain_name hint check: sending CR reservation scheduling request",
 		"domainName", cfg.DomainName,
 		"eligibleHosts", cfg.EligibleHosts,
 		"flavorName", cfg.FlavorName,
