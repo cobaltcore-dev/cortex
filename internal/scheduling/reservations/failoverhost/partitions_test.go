@@ -4,6 +4,7 @@
 package failoverhost
 
 import (
+	"reflect"
 	"slices"
 	"testing"
 
@@ -118,4 +119,53 @@ func TestBuildPartitions(t *testing.T) {
 			}
 		})
 	}
+}
+
+// hvWithAggregates builds a hypervisor with the given name and aggregates.
+func hvWithAggregates(name string, aggregates ...string) hv1.Hypervisor {
+	h := hv(name)
+	h.Spec.Aggregates = aggregates
+	return h
+}
+
+func TestCharacterizePartition(t *testing.T) {
+	t.Run("empty partition", func(t *testing.T) {
+		if got := characterizePartition(nil); got != nil {
+			t.Errorf("got %v, want nil", got)
+		}
+	})
+
+	t.Run("shared field is reported, differing name is not", func(t *testing.T) {
+		partition := []hv1.Hypervisor{
+			hvWithAggregates("a", "hana"),
+			hvWithAggregates("b", "hana"),
+		}
+		shared := characterizePartition(partition)
+		if got := shared["spec.aggregates"]; !reflect.DeepEqual(got, []any{"hana"}) {
+			t.Errorf("spec.aggregates = %v, want [hana]", got)
+		}
+		if _, ok := shared["metadata.name"]; ok {
+			t.Error("metadata.name should differ and not be shared")
+		}
+	})
+
+	t.Run("differing field drops out", func(t *testing.T) {
+		partition := []hv1.Hypervisor{
+			hvWithAggregates("a", "hana"),
+			hvWithAggregates("b", "general"),
+		}
+		if _, ok := characterizePartition(partition)["spec.aggregates"]; ok {
+			t.Error("spec.aggregates differs and should not be shared")
+		}
+	})
+
+	t.Run("single hypervisor shares all its fields", func(t *testing.T) {
+		shared := characterizePartition([]hv1.Hypervisor{hvWithAggregates("a", "hana")})
+		if got := shared["metadata.name"]; got != "a" {
+			t.Errorf("metadata.name = %v, want a", got)
+		}
+		if got := shared["spec.aggregates"]; !reflect.DeepEqual(got, []any{"hana"}) {
+			t.Errorf("spec.aggregates = %v, want [hana]", got)
+		}
+	})
 }

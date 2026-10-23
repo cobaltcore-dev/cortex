@@ -4,7 +4,9 @@
 package failoverhost
 
 import (
+	"encoding/json"
 	"maps"
+	"reflect"
 	"slices"
 	"sort"
 
@@ -198,4 +200,55 @@ func (cliquePartitionBuilder) BuildPartitions(paths [][2]hv1.Hypervisor) [][]hv1
 		return partitions[i][0].Name < partitions[j][0].Name
 	})
 	return partitions
+}
+
+// characterizePartition returns the fields shared by every hypervisor in the
+// partition: the leaf paths whose value is identical across all of them. This
+// is an implicit description of what makes these hosts a partition (e.g. a
+// common availability zone or hypervisor type) without hard-coding which fields
+// matter. Each hypervisor is serialized to a nested map and the maps are
+// intersected down to their common leaves, keyed by dotted path.
+func characterizePartition(partition []hv1.Hypervisor) map[string]any {
+	if len(partition) == 0 {
+		return nil
+	}
+	flatten := func(hv hv1.Hypervisor) map[string]any {
+		raw, err := json.Marshal(hv)
+		if err != nil {
+			return nil
+		}
+		var nested map[string]any
+		if err := json.Unmarshal(raw, &nested); err != nil {
+			return nil
+		}
+		flat := make(map[string]any)
+		var walk func(prefix string, v any)
+		walk = func(prefix string, v any) {
+			if m, ok := v.(map[string]any); ok {
+				for k, vv := range m {
+					key := k
+					if prefix != "" {
+						key = prefix + "." + k
+					}
+					walk(key, vv)
+				}
+				return
+			}
+			flat[prefix] = v
+		}
+		walk("", nested)
+		return flat
+	}
+	// Start from the first hypervisor's leaves and keep only those whose value
+	// matches in every other hypervisor.
+	shared := flatten(partition[0])
+	for _, hv := range partition[1:] {
+		flat := flatten(hv)
+		for key, want := range shared {
+			if got, ok := flat[key]; !ok || !reflect.DeepEqual(got, want) {
+				delete(shared, key)
+			}
+		}
+	}
+	return shared
 }

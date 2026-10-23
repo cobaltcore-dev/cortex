@@ -385,6 +385,13 @@ func (c *Controller) loop(ctx context.Context) {
 	partitions := c.partitionBuilder.BuildPartitions(paths)
 	log.V(1).Info("clustered failover paths into partitions",
 		"paths", len(paths), "partitions", len(partitions))
+	for i, partition := range partitions {
+		// Describe what (implicitly) characterizes this partition: the set of
+		// fields shared by every hypervisor in it. See characterizePartition.
+		log.V(1).Info("characterized failover partition",
+			"partition", i, "partitionSize", len(partition),
+			"sharedFields", characterizePartition(partition))
+	}
 
 	// Plan the desired reservations per partition and collect them into one map.
 	// We then swap that map in wholesale as the new desired state, under the
