@@ -1363,6 +1363,126 @@ func TestFilterHasEnoughCapacity_NilEffectiveCapacityFallback(t *testing.T) {
 	}
 }
 
+// TestFilterHasEnoughCapacity_CapacityBoundaries exercises every boundary of the CPU and memory
+// capacity checks, including overloaded hosts (allocation > effective capacity).
+//
+// Regression: the negative-free branches called continue without delete(result.Activations, host),
+// so an overloaded host silently passed the filter. The negative guard also exists to prevent
+// the value from being cast to uint64, which would wrap to a huge positive number.
+//
+// Flavor for all cases: 4 vCPUs, 8Gi (= 8192 MiB) memory.
+// CPU cases keep memory ample (100Gi free); memory cases keep CPU ample (100 free).
+// Each case is a single host "h"; effective capacity minus allocation gives the free value.
+func TestFilterHasEnoughCapacity_CapacityBoundaries(t *testing.T) {
+	scheme := buildTestScheme(t)
+
+	const (
+		flavorVCPUs = 4
+		flavorMem   = "8Gi" // 8192 MiB
+	)
+
+	tests := []struct {
+		name     string
+		hv       *hv1.Hypervisor
+		wantPass bool
+	}{
+		// CPU boundary — memory always ample (100Gi free).
+		{
+			// free = 0 - 1 = -1: overloaded, hits underflow guard before uint64 cast
+			name:     "cpu -1 (overloaded: alloc > effective capacity)",
+			hv:       newHypervisor("h", "0", "1", "100Gi", "0"),
+			wantPass: false,
+		},
+		{
+			// free = 0: zero slots
+			name:     "cpu 0",
+			hv:       newHypervisor("h", "0", "0", "100Gi", "0"),
+			wantPass: false,
+		},
+		{
+			// free = 1 < flavor(4): floor(1/4) = 0 slots
+			name:     "cpu 1 (below flavor)",
+			hv:       newHypervisor("h", "1", "0", "100Gi", "0"),
+			wantPass: false,
+		},
+		{
+			// free = 3 = flavor-1: floor(3/4) = 0 slots
+			name:     "cpu 3 (one below flavor floor)",
+			hv:       newHypervisor("h", "3", "0", "100Gi", "0"),
+			wantPass: false,
+		},
+		{
+			// free = 4 = flavor: floor(4/4) = 1 slot
+			name:     "cpu 4 (exactly flavor)",
+			hv:       newHypervisor("h", "4", "0", "100Gi", "0"),
+			wantPass: true,
+		},
+		{
+			// free = 5 = flavor+1: floor(5/4) = 1 slot
+			name:     "cpu 5 (one above flavor)",
+			hv:       newHypervisor("h", "5", "0", "100Gi", "0"),
+			wantPass: true,
+		},
+
+		// Memory boundary — CPU always ample (100 free).
+		{
+			// free = 0 - 1Ki = -1Ki: overloaded, hits underflow guard before uint64 cast
+			name:     "memory -1Ki (overloaded: alloc > effective capacity)",
+			hv:       newHypervisor("h", "100", "0", "0", "1Ki"),
+			wantPass: false,
+		},
+		{
+			// free = 0: zero slots
+			name:     "memory 0",
+			hv:       newHypervisor("h", "100", "0", "0", "0"),
+			wantPass: false,
+		},
+		{
+			// free = 1Mi << flavor(8Gi): floor(1Mi / 8Gi) = 0 slots
+			name:     "memory 1Mi (below flavor)",
+			hv:       newHypervisor("h", "100", "0", "1Mi", "0"),
+			wantPass: false,
+		},
+		{
+			// free = 8191Mi = 8Gi-1Mi: floor(8191Mi / 8192Mi) = 0 slots
+			name:     "memory 8191Mi (one MiB below flavor floor)",
+			hv:       newHypervisor("h", "100", "0", "8191Mi", "0"),
+			wantPass: false,
+		},
+		{
+			// free = 8Gi = flavor: floor(8Gi / 8Gi) = 1 slot
+			name:     "memory 8Gi (exactly flavor)",
+			hv:       newHypervisor("h", "100", "0", "8Gi", "0"),
+			wantPass: true,
+		},
+		{
+			// free = 8193Mi = 8Gi+1Mi: floor(8193Mi / 8192Mi) = 1 slot
+			name:     "memory 8193Mi (one MiB above flavor)",
+			hv:       newHypervisor("h", "100", "0", "8193Mi", "0"),
+			wantPass: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			step := &FilterHasEnoughCapacity{}
+			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.hv.DeepCopy()).Build()
+			step.Options = FilterHasEnoughCapacityOpts{LockReserved: false}
+
+			req := newNovaRequest("inst-1", "project-A", "m1.small", "gp-1", flavorVCPUs, flavorMem, false, []string{"h"})
+			result, err := step.Run(logr.Discard(), req)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantPass {
+				assertActivations(t, result.Activations, []string{"h"}, []string{})
+			} else {
+				assertActivations(t, result.Activations, []string{}, []string{"h"})
+			}
+		})
+	}
+}
+
 // TestFilterHasEnoughCapacity_VMInterReservationMigration covers all realistic phases of a VM
 // migrating from res-a (on hv-a) to res-b (on hv-b).
 //
