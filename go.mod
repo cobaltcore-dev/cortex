@@ -16,7 +16,7 @@ require (
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
 	github.com/sapcc/go-api-declarations v1.25.1
-	github.com/sapcc/go-bits v0.0.0-20261013222358-416f3ade2c19
+	github.com/sapcc/go-bits v0.0.0-20261022170030-e86fd39c4acb
 	go.uber.org/zap v1.28.0
 	go.xyrillian.de/gg v1.19.0
 	golang.org/x/sync v0.24.0
