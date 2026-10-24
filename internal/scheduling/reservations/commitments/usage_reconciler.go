@@ -50,7 +50,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 	// Only active commitments have assigned VMs. Clear stale usage status if present.
 	if !cr.IsActive() {
-		log.Info("skipping: commitment state is not active", "state", cr.Spec.State)
+		log.V(1).Info("skipping: commitment state is not active", "state", cr.Spec.State)
 		if len(cr.Status.AssignedInstances) > 0 || len(cr.Status.UsedResources) > 0 {
 			old := cr.DeepCopy()
 			cr.Status.AssignedInstances = nil
@@ -69,7 +69,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// The state field may not reflect expiry immediately (syncer updates on its own schedule),
 	// so we check EndTime directly to prevent stale assignments from persisting past expiry.
 	if cr.Spec.EndTime != nil && cr.Spec.EndTime.Time.Before(start) {
-		log.Info("skipping: commitment has expired", "endTime", cr.Spec.EndTime)
+		log.V(1).Info("skipping: commitment has expired", "endTime", cr.Spec.EndTime)
 		if len(cr.Status.AssignedInstances) > 0 || len(cr.Status.UsedResources) > 0 {
 			old := cr.DeepCopy()
 			cr.Status.AssignedInstances = nil
@@ -84,7 +84,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, nil
 	}
 	if cr.Spec.StartTime != nil && cr.Spec.StartTime.After(start) {
-		log.Info("skipping: commitment has not started yet", "startTime", cr.Spec.StartTime)
+		log.V(1).Info("skipping: commitment has not started yet", "startTime", cr.Spec.StartTime)
 		return ctrl.Result{}, nil
 	}
 
@@ -97,7 +97,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// condition is written, triggering a fresh reconcile at that point.
 	readyCond := meta.FindStatusCondition(cr.Status.Conditions, v1alpha1.CommittedResourceConditionReady)
 	if readyCond == nil || readyCond.ObservedGeneration != cr.Generation || readyCond.Status != metav1.ConditionTrue {
-		log.Info("skipping: Ready condition not yet accepted for current generation",
+		log.V(1).Info("skipping: Ready condition not yet accepted for current generation",
 			"generation", cr.Generation,
 			"readyCondFound", readyCond != nil,
 		)
@@ -121,7 +121,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		trigger = "generation-change"
 	}
 	logger := log
-	logger.Info("usage reconcile starting", "trigger", trigger, "generation", cr.Generation)
+	logger.V(1).Info("usage reconcile starting", "trigger", trigger, "generation", cr.Generation)
 
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: r.Client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
@@ -136,7 +136,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, err
 	}
 	if len(commitmentsByAZFG) == 0 {
-		logger.Info("no active commitments found for project, retrying after cooldown")
+		logger.V(1).Info("no active commitments found for project, retrying after cooldown")
 		return ctrl.Result{RequeueAfter: cooldown}, nil
 	}
 
@@ -350,7 +350,7 @@ func (p acceptedGenerationPredicate) Update(e event.UpdateEvent) bool {
 	if newCR.Status.UsageObservedGeneration != nil && *newCR.Status.UsageObservedGeneration >= newCond.ObservedGeneration {
 		return false
 	}
-	p.log.Info("predicate fired: Ready accepted, usage not yet up to date",
+	p.log.V(1).Info("predicate fired: Ready accepted, usage not yet up to date",
 		"name", newCR.Name, "generation", newCR.Generation,
 		"usageObservedGeneration", newCR.Status.UsageObservedGeneration)
 	return true

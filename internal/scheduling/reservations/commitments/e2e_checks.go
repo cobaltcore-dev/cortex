@@ -117,7 +117,7 @@ func e2eAZs(config E2EChecksConfig) []liquid.AvailabilityZone {
 func CheckCommitmentsInfoEndpoint(ctx context.Context, config E2EChecksConfig) {
 	baseURL := e2eBaseURL(config)
 	apiURL := baseURL + "/commitments/v1/info"
-	e2eLog.Info("checking commitments info endpoint", "apiURL", apiURL)
+	e2eLog.V(1).Info("checking commitments info endpoint", "apiURL", apiURL)
 
 	httpReq := must.Return(http.NewRequestWithContext(ctx, http.MethodGet, apiURL, http.NoBody))
 	httpReq.Header.Set("Accept", "application/json")
@@ -139,7 +139,7 @@ func CheckCommitmentsInfoEndpoint(ctx context.Context, config E2EChecksConfig) {
 	if serviceInfo.Version < 0 {
 		e2eLog.Info("commitments info returned version -1, knowledge may not be ready yet")
 	}
-	e2eLog.Info("commitments info endpoint check passed",
+	e2eLog.V(1).Info("commitments info endpoint check passed",
 		"version", serviceInfo.Version,
 		"resourceCount", len(serviceInfo.Resources),
 	)
@@ -210,7 +210,7 @@ func e2eRoundTripResource(
 		},
 	}
 
-	e2eLog.Info("round-trip check: creating test commitment",
+	e2eLog.V(1).Info("round-trip check: creating test commitment",
 		"resource", resourceName, "uuid", testUUID, "project", projectID, "az", az)
 
 	rejectionReason := e2eSendChangeCommitments(ctx, baseURL, createReq, requestTimeout)
@@ -225,7 +225,7 @@ func e2eRoundTripResource(
 			"resource", resourceName, "reason", rejectionReason)
 		return
 	}
-	e2eLog.Info("round-trip check: commitment accepted", "resource", resourceName, "uuid", testUUID)
+	e2eLog.V(1).Info("round-trip check: commitment accepted", "resource", resourceName, "uuid", testUUID)
 
 	// Register cleanup immediately so it runs even if the usage check panics.
 	defer func() {
@@ -254,11 +254,11 @@ func e2eRoundTripResource(
 				},
 			},
 		}
-		e2eLog.Info("round-trip check: deleting test commitment", "resource", resourceName, "uuid", testUUID)
+		e2eLog.V(1).Info("round-trip check: deleting test commitment", "resource", resourceName, "uuid", testUUID)
 		if reason := e2eSendChangeCommitments(ctx, baseURL, deleteReq, requestTimeout); reason != "" {
 			panic(fmt.Sprintf("round-trip check: delete of test commitment %s was rejected: %s", testUUID, reason))
 		}
-		e2eLog.Info("round-trip check: commitment deleted", "resource", resourceName, "uuid", testUUID)
+		e2eLog.V(1).Info("round-trip check: commitment deleted", "resource", resourceName, "uuid", testUUID)
 	}()
 
 	report := e2eFetchUsageReport(ctx, baseURL, az, projectID)
@@ -341,12 +341,12 @@ func e2eBatchFlavorGroupResource(
 		},
 	}
 
-	e2eLog.Info("batch check: creating pending commitment",
+	e2eLog.V(1).Info("batch check: creating pending commitment",
 		"resource", resourceName, "uuid", uuidA, "project", projectID, "az", az)
 	if reason := e2eSendChangeCommitments(ctx, baseURL, req1, requestTimeout); reason != "" {
 		panic(fmt.Sprintf("batch check: unexpected rejection for pending creation of %s: %s", resourceName, reason))
 	}
-	e2eLog.Info("batch check: pending commitment accepted", "resource", resourceName, "uuid", uuidA)
+	e2eLog.V(1).Info("batch check: pending commitment accepted", "resource", resourceName, "uuid", uuidA)
 
 	// cleanup is updated as the state advances; the deferred call always runs the latest version.
 	var cleanup func()
@@ -375,11 +375,11 @@ func e2eBatchFlavorGroupResource(
 				},
 			},
 		}
-		e2eLog.Info("batch check: deleting pending commitment", "resource", resourceName, "uuid", uuidA)
+		e2eLog.V(1).Info("batch check: deleting pending commitment", "resource", resourceName, "uuid", uuidA)
 		if reason := e2eSendChangeCommitments(ctx, baseURL, req, requestTimeout); reason != "" {
 			panic(fmt.Sprintf("batch check: delete of pending commitment %s rejected: %s", uuidA, reason))
 		}
-		e2eLog.Info("batch check: pending commitment deleted", "resource", resourceName, "uuid", uuidA)
+		e2eLog.V(1).Info("batch check: pending commitment deleted", "resource", resourceName, "uuid", uuidA)
 	}
 
 	// Request 2: atomic bundle — UUID:A pending→confirmed (grown to amount=3), UUID:B new confirmed amount=1.
@@ -415,7 +415,7 @@ func e2eBatchFlavorGroupResource(
 		},
 	}
 
-	e2eLog.Info("batch check: sending batch confirmation",
+	e2eLog.V(1).Info("batch check: sending batch confirmation",
 		"resource", resourceName, "uuidA", uuidA, "uuidB", uuidB,
 		"totalConfirmed", confirmedAmountA+confirmedAmountB,
 		"project", projectID, "az", az)
@@ -428,7 +428,7 @@ func e2eBatchFlavorGroupResource(
 			"resource", resourceName, "reason", reason)
 		return
 	}
-	e2eLog.Info("batch check: batch confirmed", "resource", resourceName, "uuidA", uuidA, "uuidB", uuidB)
+	e2eLog.V(1).Info("batch check: batch confirmed", "resource", resourceName, "uuidA", uuidA, "uuidB", uuidB)
 
 	report := e2eFetchUsageReport(ctx, baseURL, az, projectID)
 	e2eLogUsageReport(report, az, projectID)
@@ -472,11 +472,11 @@ func e2eBatchFlavorGroupResource(
 				},
 			},
 		}
-		e2eLog.Info("batch check: deleting confirmed commitments", "resource", resourceName, "uuidA", uuidA, "uuidB", uuidB)
+		e2eLog.V(1).Info("batch check: deleting confirmed commitments", "resource", resourceName, "uuidA", uuidA, "uuidB", uuidB)
 		if reason := e2eSendChangeCommitments(ctx, baseURL, req, requestTimeout); reason != "" {
 			panic(fmt.Sprintf("batch check: cleanup of confirmed commitments %s/%s rejected: %s", uuidA, uuidB, reason))
 		}
-		e2eLog.Info("batch check: confirmed commitments deleted", "resource", resourceName, "uuidA", uuidA, "uuidB", uuidB)
+		e2eLog.V(1).Info("batch check: confirmed commitments deleted", "resource", resourceName, "uuidA", uuidA, "uuidB", uuidB)
 	}
 }
 
@@ -543,13 +543,13 @@ func e2eDryRunResource(
 		},
 	}
 
-	e2eLog.Info("dry-run check: sending dry-run request",
+	e2eLog.V(1).Info("dry-run check: sending dry-run request",
 		"resource", resourceName, "uuid", testUUID, "project", projectID, "az", az)
 
 	rejectionReason := e2eSendChangeCommitments(ctx, baseURL, req, requestTimeout)
 	switch {
 	case rejectionReason == "":
-		e2eLog.Info("dry-run check: accepted", "resource", resourceName, "az", az)
+		e2eLog.V(1).Info("dry-run check: accepted", "resource", resourceName, "az", az)
 	case strings.Contains(rejectionReason, "not sufficient capacity") || strings.Contains(rejectionReason, "insufficient CPU cores"):
 		e2eLog.Info("dry-run check: capacity rejection (expected in constrained clusters)",
 			"resource", resourceName, "az", az, "reason", rejectionReason)
@@ -605,7 +605,7 @@ func e2eLogUsageReport(report liquid.ServiceUsageReport, az liquid.AvailabilityZ
 				payg++
 			}
 		}
-		e2eLog.Info("usage report",
+		e2eLog.V(1).Info("usage report",
 			"project", projectID, "az", az, "resource", resourceName,
 			"usage", azReport.Usage,
 			"subresources", len(azReport.Subresources),
@@ -640,7 +640,7 @@ func e2eSendChangeCommitments(ctx context.Context, baseURL string, req liquid.Co
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		panic(fmt.Sprintf("failed to decode change-commitments response (requestID=%s): %v", requestID, err))
 	}
-	e2eLog.Info("change-commitments response", "requestID", requestID, "rejected", result.RejectionReason != "")
+	e2eLog.V(1).Info("change-commitments response", "requestID", requestID, "rejected", result.RejectionReason != "")
 	return result.RejectionReason
 }
 
@@ -740,7 +740,7 @@ func e2eMarketplaceTransferResource(
 		},
 	}
 
-	e2eLog.Info("transfer check: creating commitment in projectA",
+	e2eLog.V(1).Info("transfer check: creating commitment in projectA",
 		"resource", resourceName, "uuid", testUUID, "projectA", projectA, "az", az)
 	if reason := e2eSendChangeCommitments(ctx, baseURL, createReq, requestTimeout); reason != "" {
 		if !strings.Contains(reason, "not sufficient capacity") && !strings.Contains(reason, "insufficient CPU cores") {
@@ -750,7 +750,7 @@ func e2eMarketplaceTransferResource(
 			"resource", resourceName, "reason", reason)
 		return
 	}
-	e2eLog.Info("transfer check: commitment accepted in projectA", "resource", resourceName, "uuid", testUUID)
+	e2eLog.V(1).Info("transfer check: commitment accepted in projectA", "resource", resourceName, "uuid", testUUID)
 
 	// cleanupProject tracks where the commitment lives; the deferred cleanup deletes from there.
 	cleanupProject := projectA
@@ -780,11 +780,11 @@ func e2eMarketplaceTransferResource(
 				},
 			},
 		}
-		e2eLog.Info("transfer check: deleting commitment", "resource", resourceName, "uuid", testUUID, "project", cleanupProject)
+		e2eLog.V(1).Info("transfer check: deleting commitment", "resource", resourceName, "uuid", testUUID, "project", cleanupProject)
 		if reason := e2eSendChangeCommitments(ctx, baseURL, deleteReq, requestTimeout); reason != "" {
 			panic(fmt.Sprintf("transfer check: cleanup of %s rejected: %s", testUUID, reason))
 		}
-		e2eLog.Info("transfer check: commitment deleted", "resource", resourceName, "uuid", testUUID)
+		e2eLog.V(1).Info("transfer check: commitment deleted", "resource", resourceName, "uuid", testUUID)
 	}()
 
 	// Step 2: transfer — delete UUID from projectA, create UUID in projectB, one atomic request.
@@ -822,7 +822,7 @@ func e2eMarketplaceTransferResource(
 		},
 	}
 
-	e2eLog.Info("transfer check: transferring commitment from projectA to projectB",
+	e2eLog.V(1).Info("transfer check: transferring commitment from projectA to projectB",
 		"resource", resourceName, "uuid", testUUID, "projectA", projectA, "projectB", projectB, "az", az)
 	if reason := e2eSendChangeCommitments(ctx, baseURL, transferReq, requestTimeout); reason != "" {
 		if !strings.Contains(reason, "not sufficient capacity") && !strings.Contains(reason, "insufficient CPU cores") {
@@ -836,7 +836,7 @@ func e2eMarketplaceTransferResource(
 
 	// Transfer accepted — update cleanup target to projectB.
 	cleanupProject = projectB
-	e2eLog.Info("transfer check: transfer accepted", "resource", resourceName, "uuid", testUUID, "projectB", projectB)
+	e2eLog.V(1).Info("transfer check: transfer accepted", "resource", resourceName, "uuid", testUUID, "projectB", projectB)
 
 	report := e2eFetchUsageReport(ctx, baseURL, az, projectB)
 	e2eLogUsageReport(report, az, projectB)

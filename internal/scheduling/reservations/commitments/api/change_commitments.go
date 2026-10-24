@@ -307,7 +307,7 @@ ProcessLoop:
 				isDelete := commitment.NewStatus.IsNone()
 				crName := "commitment-" + string(commitment.UUID)
 
-				logger.Info("processing commitment",
+				logger.V(1).Info("processing commitment",
 					"commitmentUUID", commitment.UUID,
 					"oldStatus", commitment.OldStatus.UnwrapOr("none"),
 					"newStatus", commitment.NewStatus.UnwrapOr("none"),
@@ -335,7 +335,7 @@ ProcessLoop:
 						// The create side will update ProjectID in place via CreateOrUpdate; no deletion
 						// needed here. Phase 3 of ApplyCommitmentState will replace any reservation slots
 						// whose ProjectID no longer matches.
-						logger.Info("commitment transfer: skipping deletion, will update in place",
+						logger.V(1).Info("commitment transfer: skipping deletion, will update in place",
 							"commitmentUUID", commitment.UUID)
 						continue
 					}
@@ -424,7 +424,7 @@ ProcessLoop:
 			return nil
 		}
 
-		logger.Info("CommittedResource CRDs written, polling for controller outcome", "count", len(toWatch))
+		logger.V(1).Info("CommittedResource CRDs written, polling for controller outcome", "count", len(toWatch))
 		watchStart := time.Now()
 
 		rejected, watchErrs := watchCRsUntilReady(
@@ -565,10 +565,10 @@ func watchCRsUntilReady(
 
 			switch {
 			case cond.Status == metav1.ConditionTrue:
-				logger.Info("CommittedResource accepted", "name", name)
+				logger.V(1).Info("CommittedResource accepted", "name", name)
 				delete(pending, name)
 			case cond.Status == metav1.ConditionFalse && cond.Reason == v1alpha1.CommittedResourceReasonPlanned:
-				logger.Info("CommittedResource planned (will reserve at activation)", "name", name)
+				logger.V(1).Info("CommittedResource planned (will reserve at activation)", "name", name)
 				delete(pending, name) // planned = accepted; controller will reserve at activation
 			case cond.Status == metav1.ConditionFalse && cond.Reason == v1alpha1.CommittedResourceReasonRejected:
 				logger.Info("CommittedResource rejected", "name", name, "reason", cond.Message)
