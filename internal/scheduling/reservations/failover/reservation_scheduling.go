@@ -86,7 +86,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 	}
 
 	if len(eligibleHypervisors) == 0 {
-		logger.Info("no eligible hypervisors for failover reservation",
+		logger.V(1).Info("no eligible hypervisors for failover reservation",
 			"vmCurrentHypervisor", vm.CurrentHypervisor)
 		return nil, fmt.Errorf("no eligible hypervisors for failover reservation (VM is on %s)", vm.CurrentHypervisor)
 	}
@@ -171,13 +171,13 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 		return nil
 	}
 	if len(validHypervisors) == 0 {
-		logger.Info("no potential hypervisors returned by scheduler for VM", "vmUUID", vm.UUID)
+		logger.V(1).Info("no potential hypervisors returned by scheduler for VM", "vmUUID", vm.UUID)
 		return nil
 	}
 
 	eligibleReservations := FindEligibleReservations(vm, failoverReservations)
 	if len(eligibleReservations) == 0 {
-		logger.Info("no eligible reservations found for VM", "vmUUID", vm.UUID)
+		logger.V(1).Info("no eligible reservations found for VM", "vmUUID", vm.UUID)
 		return nil
 	}
 
@@ -344,7 +344,7 @@ func (c *FailoverReservationController) scheduleAndBuildNewFailoverReservation(
 	}
 
 	if selectedHypervisor == "" {
-		logger.Info("no eligible hypervisors after constraint checking", "vmUUID", vm.UUID, "schedulerReturnedCount", len(validHypervisors))
+		logger.V(1).Info("no eligible hypervisors after constraint checking", "vmUUID", vm.UUID, "schedulerReturnedCount", len(validHypervisors))
 		return nil, fmt.Errorf("no eligible hypervisors after constraint checking (scheduler returned %d hypervisors, all rejected)", len(validHypervisors))
 	}
 
