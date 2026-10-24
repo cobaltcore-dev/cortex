@@ -81,11 +81,11 @@ func (c *DetectorPipelineController) CreateDeschedulingsPeriodically(ctx context
 			}
 			decisionsByStep := p.Run()
 			if len(decisionsByStep) == 0 {
-				schedulerLog.Info("descheduler: no decisions made in this run")
+				schedulerLog.V(1).Info("descheduler: no decisions made in this run")
 				time.Sleep(jobloop.DefaultJitter(time.Minute))
 				continue
 			}
-			schedulerLog.Info("descheduler: decisions made", "decisionsByStep", decisionsByStep)
+			schedulerLog.V(1).Info("descheduler: decisions made", "decisionsByStep", decisionsByStep)
 			decisions := p.Combine(decisionsByStep)
 			var err error
 			decisions, err = p.Breaker.Filter(ctx, decisions)
@@ -102,7 +102,7 @@ func (c *DetectorPipelineController) CreateDeschedulingsPeriodically(ctx context
 				var existing v1alpha1.Descheduling
 				err := p.Get(ctx, client.ObjectKey{Name: decision.VMID}, &existing)
 				if err == nil {
-					schedulerLog.Info("descheduler: descheduling already exists for VM, skipping", "vmId", decision.VMID)
+					schedulerLog.V(1).Info("descheduler: descheduling already exists for VM, skipping", "vmId", decision.VMID)
 					continue
 				}
 

@@ -38,7 +38,7 @@ func (s *FilterRequestedDestinationStep) processRequestedAggregates(
 		hv, exists := hvsByName[host]
 		if !exists {
 			delete(activations, host)
-			traceLog.Info("filtered out host not in requested_destination aggregates (unknown host)", "host", host)
+			traceLog.V(1).Info("filtered out host not in requested_destination aggregates (unknown host)", "host", host)
 			continue
 		}
 		hvAggregateUUIDs := make([]string, 0, len(hv.Status.Aggregates))
@@ -64,14 +64,14 @@ func (s *FilterRequestedDestinationStep) processRequestedAggregates(
 		}
 		if !allMatch {
 			delete(activations, host)
-			traceLog.Info(
+			traceLog.V(1).Info(
 				"filtered out host not in requested_destination aggregates",
 				"host", host, "hostAggregates", hvAggregateUUIDs,
 				"requestedAggregates", aggregates,
 			)
 			continue
 		}
-		traceLog.Info("host is in requested_destination aggregates, keeping", "host", host)
+		traceLog.V(1).Info("host is in requested_destination aggregates, keeping", "host", host)
 	}
 }
 
@@ -84,16 +84,16 @@ func (s *FilterRequestedDestinationStep) processRequestedHost(
 ) {
 
 	if host == "" {
-		traceLog.Info("no specific host in requested_destination, skipping host filtering")
+		traceLog.V(1).Info("no specific host in requested_destination, skipping host filtering")
 		return
 	}
 	for h := range activations {
 		if h != host {
 			delete(activations, h)
-			traceLog.Info("filtered out host not matching requested_destination host", "host", h)
+			traceLog.V(1).Info("filtered out host not matching requested_destination host", "host", h)
 			continue
 		}
-		traceLog.Info("host matches requested_destination host, keeping", "host", h)
+		traceLog.V(1).Info("host matches requested_destination host, keeping", "host", h)
 	}
 }
 
@@ -114,11 +114,11 @@ func (s *FilterRequestedDestinationStep) Run(traceLog logr.Logger, request api.E
 	}
 	rd := request.Spec.Data.RequestedDestination
 	if rd == nil {
-		traceLog.Info("no requested_destination in request, skipping filter")
+		traceLog.V(1).Info("no requested_destination in request, skipping filter")
 		return result, nil
 	}
 	if len(rd.Data.Aggregates) == 0 && rd.Data.Host == "" {
-		traceLog.Info("requested_destination has no host or aggregates, skipping filter")
+		traceLog.V(1).Info("requested_destination has no host or aggregates, skipping filter")
 		return result, nil
 	}
 	hvs := &hv1.HypervisorList{}

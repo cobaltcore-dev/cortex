@@ -23,20 +23,20 @@ func (s *FilterHostInstructionsStep) Run(traceLog logr.Logger, request api.Exter
 	if request.Spec.Data.IgnoreHosts != nil {
 		for _, host := range *request.Spec.Data.IgnoreHosts {
 			delete(result.Activations, host)
-			traceLog.Info("filtering host which is ignored", "host", host)
+			traceLog.V(1).Info("filtering host which is ignored", "host", host)
 		}
 	} else {
-		traceLog.Info("no hosts to ignore specified")
+		traceLog.V(1).Info("no hosts to ignore specified")
 	}
 	if request.Spec.Data.ForceHosts != nil {
 		for host := range result.Activations {
 			if !slices.Contains(*request.Spec.Data.ForceHosts, host) {
 				delete(result.Activations, host)
-				traceLog.Info("filtering host which is not forced", "host", host)
+				traceLog.V(1).Info("filtering host which is not forced", "host", host)
 			}
 		}
 	} else {
-		traceLog.Info("no forced hosts specified")
+		traceLog.V(1).Info("no forced hosts specified")
 	}
 	return result, nil
 }

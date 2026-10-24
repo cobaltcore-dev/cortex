@@ -89,19 +89,19 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 	if err == nil {
 		switch intent {
 		case api.EvacuateIntent, api.LiveMigrationIntent:
-			traceLog.Info("skipping quota enforcement for non-consuming intent", "intent", intent)
+			traceLog.V(1).Info("skipping quota enforcement for non-consuming intent", "intent", intent)
 			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_intent_migration", "", "", "")
 			return result, nil
 		case api.ReserveForFailoverIntent, api.ReuseFailoverReservationIntent:
-			traceLog.Info("skipping quota enforcement for failover reservation intent")
+			traceLog.V(1).Info("skipping quota enforcement for failover reservation intent")
 			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_intent_internal", "", "", "")
 			return result, nil
 		case api.ReserveForCommittedResourceIntent:
-			traceLog.Info("skipping quota enforcement for committed resource reservation intent")
+			traceLog.V(1).Info("skipping quota enforcement for committed resource reservation intent")
 			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_intent_internal", "", "", "")
 			return result, nil
 		case api.CapacityProbeIntent:
-			traceLog.Info("skipping quota enforcement for capacity probe intent")
+			traceLog.V(1).Info("skipping quota enforcement for capacity probe intent")
 			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped", "", "", "")
 			return result, nil
 		}
@@ -115,17 +115,17 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 	hwVersion := request.Spec.Data.Flavor.Data.ExtraSpecs["quota:hw_version"]
 
 	if projectID == "" {
-		traceLog.Info("no project ID in request, skipping quota enforcement")
+		traceLog.V(1).Info("no project ID in request, skipping quota enforcement")
 		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_missing_data", "", az, hwVersion)
 		return result, nil
 	}
 	if az == "" {
-		traceLog.Info("no availability zone in request, skipping quota enforcement")
+		traceLog.V(1).Info("no availability zone in request, skipping quota enforcement")
 		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_missing_data", "", "", hwVersion)
 		return result, nil
 	}
 	if hwVersion == "" {
-		traceLog.Info("no hw_version in flavor extra specs, skipping quota enforcement")
+		traceLog.V(1).Info("no hw_version in flavor extra specs, skipping quota enforcement")
 		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_missing_data", "", az, "")
 		return result, nil
 	}
@@ -147,7 +147,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 	resourceCores := "hw_version_" + hwVersion + "_cores"
 	resourceInstances := "hw_version_" + hwVersion + "_instances"
 
-	traceLog.Info("quota enforcement check",
+	traceLog.V(1).Info("quota enforcement check",
 		"projectID", projectID,
 		"az", az,
 		"hwVersion", hwVersion,
@@ -217,7 +217,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 			}
 			freeGiB := amountGiB - usedGiB
 			if freeGiB >= requestRAM {
-				traceLog.Info("CR headroom found",
+				traceLog.V(1).Info("CR headroom found",
 					"cr", cr.Name,
 					"amountGiB", amountGiB,
 					"usedGiB", usedGiB,
@@ -230,7 +230,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 	}
 
 	if crHasHeadroom {
-		traceLog.Info("quota enforcement ACCEPT: CR headroom available")
+		traceLog.V(1).Info("quota enforcement ACCEPT: CR headroom available")
 		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_cr", "ram", az, hwVersion)
 		return result, nil
 	}
@@ -242,7 +242,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 	pqName := fmt.Sprintf("quota-%s-%s", projectID, az)
 	if err := s.Client.Get(context.Background(), types.NamespacedName{Name: pqName}, &projectQuota); err != nil {
 		if apierrors.IsNotFound(err) {
-			traceLog.Info("no ProjectQuota CRD found for project+AZ, skipping enforcement",
+			traceLog.V(1).Info("no ProjectQuota CRD found for project+AZ, skipping enforcement",
 				"projectID", projectID, "az", az)
 			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_no_quota", "", az, hwVersion)
 			return result, nil
@@ -283,7 +283,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 
 		headroom := quota - check.crDeduct - paygUsage
 
-		traceLog.Info("PAYG headroom calculation",
+		traceLog.V(1).Info("PAYG headroom calculation",
 			"resource", check.name,
 			"quota", quota,
 			"crDeduct", check.crDeduct,
@@ -295,7 +295,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 		if headroom < check.request {
 			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "reject", check.label, az, hwVersion)
 			if !s.Options.Enforce {
-				traceLog.Info("quota enforcement SHADOW: would reject but enforce=false",
+				traceLog.V(1).Info("quota enforcement SHADOW: would reject but enforce=false",
 					"projectID", projectID,
 					"az", az,
 					"flavorGroup", hwVersion,
@@ -305,7 +305,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 				)
 				return result, nil
 			}
-			traceLog.Info("quota enforcement REJECT: no PAYG headroom",
+			traceLog.V(1).Info("quota enforcement REJECT: no PAYG headroom",
 				"projectID", projectID,
 				"az", az,
 				"flavorGroup", hwVersion,
@@ -320,7 +320,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 		}
 	}
 
-	traceLog.Info("quota enforcement ACCEPT: PAYG headroom available")
+	traceLog.V(1).Info("quota enforcement ACCEPT: PAYG headroom available")
 	QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_payg", "", az, hwVersion)
 	return result, nil
 }

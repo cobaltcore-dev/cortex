@@ -112,7 +112,7 @@ func (s *VMwareBinpackStep) Run(traceLog logr.Logger, request api.ExternalSchedu
 	for host := range result.Activations {
 		utilization, ok := utilizationByHost[host]
 		if !ok {
-			traceLog.Info("no utilization for host, skipping", "host", host)
+			traceLog.V(1).Info("no utilization for host, skipping", "host", host)
 			continue
 		}
 		allocations := s.calcHostAllocation(utilization)
@@ -123,7 +123,7 @@ func (s *VMwareBinpackStep) Run(traceLog logr.Logger, request api.ExternalSchedu
 		for resourceName, weight := range s.Options.ResourceWeights {
 			capacity, ok := capacities[resourceName]
 			if !ok {
-				traceLog.Info("no capacity for resource on host, skipping resource in score calculation",
+				traceLog.V(1).Info("no capacity for resource on host, skipping resource in score calculation",
 					"host", host, "resource", resourceName)
 				continue
 			}
@@ -132,13 +132,13 @@ func (s *VMwareBinpackStep) Run(traceLog logr.Logger, request api.ExternalSchedu
 			}
 			allocation, ok := allocations[resourceName]
 			if !ok {
-				traceLog.Info("no allocation for resource on host, skipping resource in score calculation",
+				traceLog.V(1).Info("no allocation for resource on host, skipping resource in score calculation",
 					"host", host, "resource", resourceName)
 				continue
 			}
 			vmReq, ok := vmResources[resourceName]
 			if !ok {
-				traceLog.Info("no resource request for vm, skipping",
+				traceLog.V(1).Info("no resource request for vm, skipping",
 					"resource", resourceName)
 				continue
 			}
@@ -155,7 +155,7 @@ func (s *VMwareBinpackStep) Run(traceLog logr.Logger, request api.ExternalSchedu
 		}
 		result.Activations[host] = score
 		result.Statistics["binpack score"].Hosts[host] = score
-		traceLog.Info("calculated binpack score for host",
+		traceLog.V(1).Info("calculated binpack score for host",
 			"host", host, "score", score)
 	}
 
