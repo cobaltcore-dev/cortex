@@ -55,13 +55,13 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	recency := knowledge.Spec.Recency.Duration
 	if lastExtracted.Add(recency).After(time.Now()) {
 		waitFor := time.Until(lastExtracted.Add(recency))
-		log.Info("skipping knowledge extraction, not yet time", "name", knowledge.Name, "waitFor", waitFor)
+		log.V(1).Info("skipping knowledge extraction, not yet time", "name", knowledge.Name, "waitFor", waitFor)
 		return ctrl.Result{RequeueAfter: waitFor}, nil
 	}
 
 	extractor, ok := supportedExtractors[knowledge.Spec.Extractor.Name]
 	if !ok {
-		log.Info("skipping knowledge extraction, unsupported extractor", "name", knowledge.Spec.Extractor.Name)
+		log.V(1).Info("skipping knowledge extraction, unsupported extractor", "name", knowledge.Spec.Extractor.Name)
 		old := knowledge.DeepCopy()
 		meta.SetStatusCondition(&knowledge.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.KnowledgeConditionReady,
@@ -231,7 +231,7 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		log.Error(err, "failed to patch knowledge status")
 		return ctrl.Result{}, err
 	}
-	log.Info("successfully extracted knowledge", "name", knowledge.Name)
+	log.V(1).Info("successfully extracted knowledge", "name", knowledge.Name)
 	return ctrl.Result{}, nil
 }
 

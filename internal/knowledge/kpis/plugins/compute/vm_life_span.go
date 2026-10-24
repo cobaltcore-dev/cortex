@@ -76,7 +76,7 @@ func (k *VMLifeSpanKPI) collectVMBuckets(ch chan<- prometheus.Metric, deleted bo
 			continue
 		}
 		if bucket.FlavorName == "" {
-			log.Info("vm_life_span: empty flavor name in bucket", "bucket", bucket)
+			log.V(1).Info("vm_life_span: empty flavor name in bucket", "bucket", bucket)
 			continue
 		}
 		bucketsByFlavor[bucket.FlavorName] = append(bucketsByFlavor[bucket.FlavorName], bucket)
@@ -84,7 +84,7 @@ func (k *VMLifeSpanKPI) collectVMBuckets(ch chan<- prometheus.Metric, deleted bo
 
 	for flavor, flavorBuckets := range bucketsByFlavor {
 		if len(flavorBuckets) == 0 {
-			log.Info("vm_life_span: no buckets for flavor", "flavor", flavor)
+			log.V(1).Info("vm_life_span: no buckets for flavor", "flavor", flavor)
 			continue
 		}
 

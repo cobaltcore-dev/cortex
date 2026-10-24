@@ -68,20 +68,20 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 
 	// Sanity checks.
 	if datasource.Spec.Type != v1alpha1.DatasourceTypePrometheus {
-		log.Info("skipping datasource, not a prometheus datasource", "name", datasource.Name)
+		log.V(1).Info("skipping datasource, not a prometheus datasource", "name", datasource.Name)
 		return ctrl.Result{}, nil
 	}
 	if datasource.Status.NextSyncTime.After(time.Now()) && datasource.Status.NumberOfObjects != nil {
 		if _, seen := r.reconciledOnce.Load(req.NamespacedName); seen {
-			log.Info("skipping datasource sync, not yet time", "name", datasource.Name)
+			log.V(1).Info("skipping datasource sync, not yet time", "name", datasource.Name)
 			return ctrl.Result{RequeueAfter: time.Until(datasource.Status.NextSyncTime.Time)}, nil
 		}
-		log.Info("first reconcile this process lifetime, forcing sync despite timestamp", "name", datasource.Name)
+		log.V(1).Info("first reconcile this process lifetime, forcing sync despite timestamp", "name", datasource.Name)
 	}
 
 	newSyncerFunc, ok := supportedMetricSyncers[datasource.Spec.Prometheus.Type]
 	if !ok {
-		log.Info("skipping datasource, unsupported metric type", "metricType", datasource.Spec.Prometheus.Type)
+		log.V(1).Info("skipping datasource, unsupported metric type", "metricType", datasource.Spec.Prometheus.Type)
 		old := datasource.DeepCopy()
 		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.DatasourceConditionReady,

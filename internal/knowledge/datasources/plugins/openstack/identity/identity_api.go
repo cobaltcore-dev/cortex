@@ -60,7 +60,7 @@ func (api *identityAPI) Init(ctx context.Context) error {
 // Get all the domains from the OpenStack identity service.
 func (api *identityAPI) GetAllDomains(ctx context.Context) ([]Domain, error) {
 	label := Domain{}.TableName()
-	log.Info("fetching identity data", "label", "domains")
+	log.V(1).Info("fetching identity data", "label", "domains")
 	if api.mon.RequestTimer != nil {
 		hist := api.mon.RequestTimer.WithLabelValues(label)
 		timer := prometheus.NewTimer(hist)
@@ -77,14 +77,14 @@ func (api *identityAPI) GetAllDomains(ctx context.Context) ([]Domain, error) {
 	if err := allPages.(domains.DomainPage).ExtractInto(data); err != nil {
 		return nil, err
 	}
-	log.Info("fetched identity data", "label", "domains", "count", len(data.Domains))
+	log.V(1).Info("fetched identity data", "label", "domains", "count", len(data.Domains))
 	return data.Domains, nil
 }
 
 // Get all the projects from the OpenStack identity service.
 func (api *identityAPI) GetAllProjects(ctx context.Context) ([]Project, error) {
 	label := Project{}.TableName()
-	log.Info("fetching identity data", "label", "projects")
+	log.V(1).Info("fetching identity data", "label", "projects")
 	if api.mon.RequestTimer != nil {
 		hist := api.mon.RequestTimer.WithLabelValues(label)
 		timer := prometheus.NewTimer(hist)
@@ -114,6 +114,6 @@ func (api *identityAPI) GetAllProjects(ctx context.Context) ([]Project, error) {
 			Tags:     strings.Join(p.Tags, ","),
 		})
 	}
-	log.Info("fetched identity data", "label", "projects", "count", len(data.Projects))
+	log.V(1).Info("fetched identity data", "label", "projects", "count", len(data.Projects))
 	return result, nil
 }

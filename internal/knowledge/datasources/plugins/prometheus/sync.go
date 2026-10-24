@@ -114,7 +114,7 @@ func (s *syncer[M]) fetch(start, end time.Time) (*prometheusTimelineData[M], err
 	urlStr += "&start=" + strconv.FormatInt(start.Unix(), 10)
 	urlStr += "&end=" + strconv.FormatInt(end.Unix(), 10)
 	urlStr += "&step=" + strconv.Itoa(s.syncResolutionSeconds)
-	log.Info("fetching metrics from", "url", urlStr)
+	log.V(1).Info("fetching metrics from", "url", urlStr)
 
 	ctx := context.Background()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, http.NoBody)
@@ -236,7 +236,7 @@ func (s *syncer[M]) getSyncWindowStart() (time.Time, error) {
 	if latestTimestamp.IsZero() {
 		return time.Time{}, errors.New("latestTimestamp is zero")
 	}
-	log.Info("latest timestamp", "latestTimestamp", latestTimestamp)
+	log.V(1).Info("latest timestamp", "latestTimestamp", latestTimestamp)
 	return latestTimestamp, nil
 }
 
@@ -253,7 +253,7 @@ func (s *syncer[M]) sync(start time.Time) {
 
 	var model M
 	tableName := model.TableName()
-	log.Info(
+	log.V(1).Info(
 		"syncing Prometheus data", "metricAlias", s.alias,
 		"start", start, "end", end, "tableName", tableName,
 	)
@@ -271,7 +271,7 @@ func (s *syncer[M]) sync(start time.Time) {
 		log.Error(err, "failed to get rows affected")
 		return
 	}
-	log.Info("deleted old metrics", "rows", rowsAffected)
+	log.V(1).Info("deleted old metrics", "rows", rowsAffected)
 	// Fetch the metrics from Prometheus.
 	prometheusData, err := s.fetch(start, end)
 	if err != nil {
@@ -282,7 +282,7 @@ func (s *syncer[M]) sync(start time.Time) {
 		log.Error(err, "failed to bulk insert metrics")
 		return
 	}
-	log.Info(
+	log.V(1).Info(
 		"synced Prometheus data", "newMetrics", len(prometheusData.Metrics),
 		"metricAlias", s.alias, "start", start, "end", end,
 	)
@@ -300,7 +300,7 @@ func (s *syncer[M]) Sync(context.Context) (nResults int64, nextSync time.Time, e
 		return 0, time.Time{}, err
 	}
 
-	log.Info("syncing metrics", "metricAlias", s.alias)
+	log.V(1).Info("syncing metrics", "metricAlias", s.alias)
 	// Sync this metric until we are caught up.
 	start, err := s.getSyncWindowStart()
 	if err != nil {

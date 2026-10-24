@@ -62,7 +62,7 @@ func (k *VMwareHostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	for _, host := range hosts {
 		util, ok := utilizations[host.ComputeHost]
 		if !ok {
-			log.Info("vmware_host_capacity: missing utilization for host", "compute_host", host.ComputeHost)
+			log.V(1).Info("vmware_host_capacity: missing utilization for host", "compute_host", host.ComputeHost)
 			continue
 		}
 
@@ -106,7 +106,7 @@ func (k *VMwareHostCapacityKPI) getHostUtilizations() (map[string]compute.HostUt
 	m := make(map[string]compute.HostUtilization, len(utils))
 	for _, u := range utils {
 		if u.TotalVCPUsAllocatable == 0 || u.TotalRAMAllocatableMB == 0 || u.TotalDiskAllocatableGB == 0 {
-			log.Info("vmware_host_capacity: skipping host with zero allocatable resources", "compute_host", u.ComputeHost)
+			log.V(1).Info("vmware_host_capacity: skipping host with zero allocatable resources", "compute_host", u.ComputeHost)
 			continue
 		}
 		m[u.ComputeHost] = u

@@ -20,7 +20,7 @@ type kpilogger struct {
 }
 
 func (l kpilogger) Describe(ch chan<- *prometheus.Desc) {
-	log.Info("kpi: describing", "name", l.kpi.GetName())
+	log.V(1).Info("kpi: describing", "name", l.kpi.GetName())
 	l.kpi.Describe(ch)
 }
 
