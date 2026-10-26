@@ -385,10 +385,10 @@ ones when the count demands it**:
 ```
 candidate order  ──────────────────────────────────────────────────────────────▶
 ┌───────────────────────────────┬───────────────────────────────────────────────┐
-│  already-reserved hosts        │  not-yet-reserved hosts                        │
-│  (this partition), by name     │  by ascending workload (cheapest to empty)     │
+│  already-reserved hosts       │  not-yet-reserved hosts                       │
+│  (this partition), by name    │  by ascending workload (cheapest to empty)    │
 ├───────────────────────────────┼───────────────────────────────────────────────┤
-│  R1   R2   R3        …         │  N1   N2   N3   N4   …                          │
+│  R1   R2   R3        …        │  N1   N2   N3   N4   …                        │
 └───────────────────────────────┴───────────────────────────────────────────────┘
         └──────────── take the first `reserved` of these ────────────┘
                  kept reservations are consumed before any new one is created
