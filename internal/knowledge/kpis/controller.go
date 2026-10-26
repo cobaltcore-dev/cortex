@@ -272,7 +272,7 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 	// If the dependencies are not all ready but the kpi is registered,
 	// unregister it.
 	if dependenciesReadyTotal < dependenciesTotal && registered {
-		log.Info("kpi: unregistering kpi due to unready dependencies", "name", obj.Name)
+		log.V(1).Info("kpi: unregistering kpi due to unready dependencies", "name", obj.Name)
 		metrics.Registry.Unregister(registeredKPI)
 		delete(c.registeredKPIsByResourceName, obj.Name)
 	}
@@ -301,7 +301,7 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 		obj.Status.DependenciesReadyFrac = fmt.Sprintf("%d/%d",
 			dependenciesReadyTotal, dependenciesTotal)
 	}
-	log.Info("kpi: successfully reconciled kpi", "name", obj.Name)
+	log.V(1).Info("kpi: successfully reconciled kpi", "name", obj.Name)
 	return nil
 }
 

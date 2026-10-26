@@ -63,7 +63,7 @@ func (r *TriggerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 		changedResource = knowledge
 	}
-	log.Info(
+	log.V(1).Info(
 		"trigger: resource changed, finding dependents",
 		"resource", changedResource.GetName(),
 		"type", getResourceType(changedResource),
@@ -76,11 +76,11 @@ func (r *TriggerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 	if len(dependentKnowledge) == 0 {
-		log.Info("trigger: no dependent knowledge found")
+		log.V(1).Info("trigger: no dependent knowledge found")
 		return ctrl.Result{}, nil
 	}
 
-	log.Info("trigger: found dependent knowledge", "count", len(dependentKnowledge))
+	log.V(1).Info("trigger: found dependent knowledge", "count", len(dependentKnowledge))
 	// Process each dependent knowledge resource
 	for _, knowledge := range dependentKnowledge {
 		if err := r.triggerKnowledgeReconciliation(ctx, knowledge); err != nil {
@@ -127,7 +127,7 @@ func (r *TriggerReconciler) findDependentKnowledge(ctx context.Context, changedR
 			}
 		}
 		if isDependentOnChanged {
-			log.Info(
+			log.V(1).Info(
 				"trigger: found dependent knowledge",
 				"knowledge", knowledge.Name,
 				"dependsOn", changedResourceName,
@@ -150,7 +150,7 @@ func (r *TriggerReconciler) triggerKnowledgeReconciliation(ctx context.Context, 
 	nextReconciliationTime := lastExtracted.Add(recency)
 	if nextReconciliationTime.Before(now) || nextReconciliationTime.Equal(now) {
 		// Recency threshold already reached - trigger immediate reconciliation
-		log.Info(
+		log.V(1).Info(
 			"trigger: immediate reconciliation needed",
 			"knowledge", knowledge.Name,
 			"lastExtracted", lastExtracted,
@@ -161,7 +161,7 @@ func (r *TriggerReconciler) triggerKnowledgeReconciliation(ctx context.Context, 
 	} else {
 		// Schedule reconciliation for when recency threshold will be reached
 		delay := time.Until(nextReconciliationTime)
-		log.Info(
+		log.V(1).Info(
 			"trigger: scheduling future reconciliation",
 			"knowledge", knowledge.Name,
 			"delay", delay,
@@ -189,7 +189,7 @@ func (r *TriggerReconciler) enqueueKnowledgeReconciliation(ctx context.Context, 
 		log.Error(err, "failed to patch knowledge to trigger reconciliation", "knowledge", knowledge.Name)
 		return err
 	}
-	log.Info(
+	log.V(1).Info(
 		"trigger: enqueued knowledge for reconciliation",
 		"knowledge", knowledge.Name,
 		"delay", delay,

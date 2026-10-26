@@ -96,7 +96,7 @@ func monitorFeatureExtractor[F plugins.FeatureExtractor](label string, f F, m Mo
 
 // Run the wrapped feature extractor and measure the time it takes.
 func (m FeatureExtractorMonitor[F]) Extract() ([]plugins.Feature, error) {
-	log.Info("features: extracting", "extractor", m.label)
+	log.V(1).Info("features: extracting", "extractor", m.label)
 
 	features, err := m.FeatureExtractor.Extract()
 	if err != nil {

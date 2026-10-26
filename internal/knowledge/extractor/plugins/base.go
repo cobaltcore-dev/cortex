@@ -62,6 +62,6 @@ func (e *BaseExtractor[Opts, F]) Extracted(fs []F) ([]Feature, error) {
 	for i, f := range fs {
 		output[i] = f
 	}
-	log.Info("features: extracted", "count", len(output))
+	log.V(1).Info("features: extracted", "count", len(output))
 	return output, nil
 }

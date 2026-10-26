@@ -64,14 +64,14 @@ func (k *VMMigrationStatisticsKPI) Collect(ch chan<- prometheus.Metric) {
 	bucketsByFlavor := make(map[string][]compute.VMHostResidencyHistogramBucket)
 	for _, bucket := range buckets {
 		if bucket.FlavorName == "" {
-			log.Info("vm_host_residency: empty flavor name in bucket", "bucket", bucket)
+			log.V(1).Info("vm_host_residency: empty flavor name in bucket", "bucket", bucket)
 			continue
 		}
 		bucketsByFlavor[bucket.FlavorName] = append(bucketsByFlavor[bucket.FlavorName], bucket)
 	}
 	for flavor, buckets := range bucketsByFlavor {
 		if len(buckets) == 0 {
-			log.Info("vm_host_residency: no buckets for flavor", "flavor", flavor)
+			log.V(1).Info("vm_host_residency: no buckets for flavor", "flavor", flavor)
 			continue
 		}
 		var count uint64
