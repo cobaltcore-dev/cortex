@@ -190,7 +190,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		len(res.Spec.CommittedResourceReservation.Allocations) > 0 &&
 		res.Spec.TargetHost != "" {
 		// mark as ready without calling the placement API
-		logger.Info("detected pre-allocated reservation",
+		logger.V(1).Info("detected pre-allocated reservation",
 			"targetHost", res.Spec.TargetHost,
 			"allocatedVMs", len(res.Spec.CommittedResourceReservation.Allocations))
 
@@ -243,7 +243,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			// Object was deleted, no need to continue
 			return ctrl.Result{}, nil
 		}
-		logger.Info("synced spec to status and marked ready", "host", res.Status.Host)
+		logger.V(1).Info("synced spec to status and marked ready", "host", res.Status.Host)
 		// Return and let next reconcile handle allocation verification
 		return ctrl.Result{}, nil
 	}
@@ -283,7 +283,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: r.Client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
-		logger.Info("flavor knowledge not ready, requeueing",
+		logger.V(1).Info("flavor knowledge not ready, requeueing",
 			"resourceName", resourceName,
 			"error", err)
 		return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalRetry.Duration}, nil
@@ -331,7 +331,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 
 	// Select appropriate pipeline based on flavor group
 	pipelineName := r.getPipelineForFlavorGroup(flavorGroupName, logger)
-	logger.Info("selected pipeline for CR reservation",
+	logger.V(1).Info("selected pipeline for CR reservation",
 		"flavorName", resourceName,
 		"flavorGroup", flavorGroupName,
 		"pipeline", pipelineName,
@@ -464,7 +464,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 				return nil, fmt.Errorf("failed to get hypervisor %s: %w", expectedHost, err)
 			}
 			// Hypervisor not found — treat all post-grace-period VMs as stale.
-			logger.Info("hypervisor CRD not found", "host", expectedHost)
+			logger.V(1).Info("hypervisor CRD not found", "host", expectedHost)
 		} else {
 			// Build set of all VM UUIDs on this hypervisor for O(1) lookup.
 			// Include both active and inactive VMs — stopped/shelved VMs still hold the slot.
@@ -522,20 +522,10 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		allocationAge := now.Sub(allocation.CreationTimestamp.Time)
 		isInGracePeriod := allocationAge < r.Conf.AllocationGracePeriod.Duration
 
-		// Confirmed VMs (already in Status.Allocations) bypass the grace period:
-		// their departure from the HV CRD is authoritative and must be acted on immediately.
-		// Unconfirmed VMs still within the grace period may not yet appear in the HV CRD
-		// (still spawning), so defer verification and requeue with a short interval.
 		_, isConfirmed := existingStatusAllocations[vmUUID]
-		if !isConfirmed && isInGracePeriod {
-			result.HasAllocationsInGracePeriod = true
-			logger.V(1).Info("allocation in grace period, deferring verification",
-				"vm", vmUUID,
-				"allocationAge", allocationAge)
-			continue
-		}
 
-		// Post-grace-period or confirmed VM: use HV CRD as authoritative source.
+		// Always check HV CRD first: if the VM is already present (e.g. a long-running
+		// PayG VM being absorbed), confirm immediately without waiting for the grace period.
 		if hvInstanceSet[vmUUID] {
 			newStatusAllocations[vmUUID] = expectedHost
 			logger.V(1).Info("verified VM allocation via Hypervisor CRD",
@@ -544,8 +534,18 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 			continue
 		}
 
-		// VM not on the expected host. For unconfirmed post-grace VMs this is a clean
-		// stale allocation — remove it without further searching.
+		// VM not yet visible in HV CRD. For unconfirmed VMs still within the grace period
+		// the HV CRD sync may not have caught up yet (newly spawned VM) — defer and requeue.
+		if !isConfirmed && isInGracePeriod {
+			result.HasAllocationsInGracePeriod = true
+			logger.V(1).Info("allocation in grace period, deferring verification",
+				"vm", vmUUID,
+				"allocationAge", allocationAge)
+			continue
+		}
+
+		// VM not on the expected host, past grace period or already confirmed.
+		// For unconfirmed post-grace VMs this is a clean stale allocation — remove it.
 		if !isConfirmed {
 			allocationsToRemove = append(allocationsToRemove, vmUUID)
 			logger.Info("removing stale allocation (VM not found on hypervisor)",
@@ -752,7 +752,7 @@ func (r *CommitmentReservationController) getPipelineForFlavorGroup(flavorGroupN
 		return pipeline
 	}
 
-	logger.Info("no pipeline configured for flavor group, using default", "flavorGroup", flavorGroupName, "defaultPipeline", r.Conf.PipelineDefault)
+	logger.V(1).Info("no pipeline configured for flavor group, using default", "flavorGroup", flavorGroupName, "defaultPipeline", r.Conf.PipelineDefault)
 	return r.Conf.PipelineDefault
 }
 

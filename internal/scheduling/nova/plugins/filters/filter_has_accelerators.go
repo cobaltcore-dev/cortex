@@ -5,7 +5,7 @@ package filters
 
 import (
 	"context"
-	"log/slog"
+	"github.com/go-logr/logr"
 	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -18,17 +18,17 @@ type FilterHasAcceleratorsStep struct {
 }
 
 // If requested, only get hosts with accelerators.
-func (s *FilterHasAcceleratorsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterHasAcceleratorsStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	extraSpecs := request.Spec.Data.Flavor.Data.ExtraSpecs
 	if _, ok := extraSpecs["accel:device_profile"]; !ok {
-		traceLog.Info("no accelerators requested, skipping filter")
+		traceLog.V(1).Info("no accelerators requested, skipping filter")
 		return result, nil
 	}
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
 	hvsWithTrait := make(map[string]struct{})
@@ -44,13 +44,13 @@ func (s *FilterHasAcceleratorsStep) Run(traceLog *slog.Logger, request api.Exter
 		hvsWithTrait[hv.Name] = struct{}{}
 	}
 
-	traceLog.Info("hosts with accelerators", "hosts", hvsWithTrait)
+	traceLog.V(1).Info("hosts with accelerators", "hosts", hvsWithTrait)
 	for host := range result.Activations {
 		if _, ok := hvsWithTrait[host]; ok {
 			continue
 		}
 		delete(result.Activations, host)
-		traceLog.Info("filtering host without accelerators", "host", host)
+		traceLog.V(1).Info("filtering host without accelerators", "host", host)
 	}
 	return result, nil
 }

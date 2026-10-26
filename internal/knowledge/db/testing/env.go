@@ -5,8 +5,7 @@ package db
 
 import (
 	"database/sql"
-	"log"
-	"log/slog"
+	stdlog "log"
 	"os"
 	"testing"
 
@@ -15,7 +14,10 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/sapcc/go-api-declarations/bininfo"
 	"go.xyrillian.de/gg/pgruntime"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("db-testing")
 
 type DBEnv struct {
 	*gorp.DbMap
@@ -26,7 +28,7 @@ func SetupDBEnv(t *testing.T) DBEnv {
 	var env DBEnv
 	// To run tests faster, the default is running with sqlite.
 	if os.Getenv("POSTGRES_CONTAINER") == "1" {
-		slog.Info("Using real postgres container")
+		log.Info("Using real postgres container")
 		container := containers.PostgresContainer{}
 		container.Init(t)
 		target := pgruntime.ConnectionTarget{
@@ -49,7 +51,7 @@ func SetupDBEnv(t *testing.T) DBEnv {
 		env.DbMap = &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
 		env.Close = container.Close
 	} else {
-		slog.Info("Using sqlite")
+		log.Info("Using sqlite")
 		tmpDir := t.TempDir()
 		sqlDB, err := sql.Open("sqlite3", tmpDir+"/test.db")
 		if err != nil {
@@ -58,6 +60,6 @@ func SetupDBEnv(t *testing.T) DBEnv {
 		env.DbMap = &gorp.DbMap{Db: sqlDB, Dialect: gorp.SqliteDialect{}}
 		env.Close = func() {}
 	}
-	env.TraceOn("[gorp]", log.New(os.Stdout, "cortex:", log.Lmicroseconds))
+	env.TraceOn("[gorp]", stdlog.New(os.Stdout, "cortex:", stdlog.Lmicroseconds))
 	return env
 }

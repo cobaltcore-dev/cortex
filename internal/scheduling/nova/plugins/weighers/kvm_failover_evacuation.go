@@ -5,7 +5,8 @@ package weighers
 
 import (
 	"context"
-	"log/slog"
+
+	"github.com/go-logr/logr"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -50,12 +51,12 @@ type KVMFailoverEvacuationStep struct {
 // Run the weigher step.
 // For evacuation requests, hosts matching a failover reservation where the VM is in Allocations get a higher weight.
 // For non-evacuation requests (e.g., live migration, rebuild), this weigher has no effect.
-func (s *KVMFailoverEvacuationStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMFailoverEvacuationStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	intent, err := request.GetIntent()
 	if err != nil || intent != api.EvacuateIntent {
-		traceLog.Info("skipping failover weigher for non-evacuation request")
+		traceLog.V(1).Info("skipping failover weigher for non-evacuation request")
 		return result, nil //nolint:nilerr // intentionally skip weigher on error
 	}
 
@@ -85,7 +86,7 @@ func (s *KVMFailoverEvacuationStep) Run(traceLog *slog.Logger, request api.Exter
 		if reservation.Status.FailoverReservation != nil {
 			if _, ok := reservation.Status.FailoverReservation.Allocations[instanceUUID]; ok {
 				failoverHosts[reservation.Status.Host] = true
-				traceLog.Info("found failover reservation for VM",
+				traceLog.V(1).Info("found failover reservation for VM",
 					"reservation", reservation.Name,
 					"host", reservation.Status.Host,
 					"instanceUUID", instanceUUID)
@@ -99,7 +100,7 @@ func (s *KVMFailoverEvacuationStep) Run(traceLog *slog.Logger, request api.Exter
 	for _, host := range request.Hosts {
 		if failoverHosts[host.ComputeHost] {
 			result.Activations[host.ComputeHost] = failoverWeight
-			traceLog.Info("assigning failover weight to host",
+			traceLog.V(1).Info("assigning failover weight to host",
 				"host", host.ComputeHost,
 				"weight", failoverWeight,
 				"instanceUUID", instanceUUID)

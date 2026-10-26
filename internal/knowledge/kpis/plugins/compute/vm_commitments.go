@@ -5,7 +5,6 @@ package compute
 
 import (
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/limes"
@@ -110,13 +109,13 @@ func (k *VMCommitmentsKPI) Collect(ch chan<- prometheus.Metric) {
         SELECT * FROM `+table+`
         WHERE service_type = 'compute'
     `); err != nil {
-		slog.Error("failed to load commitments", "err", err)
+		log.Error(err, "failed to load commitments")
 		return
 	}
 	var flavors []nova.Flavor
 	table = nova.Flavor{}.TableName()
 	if _, err := k.DB.Select(&flavors, "SELECT * FROM "+table); err != nil {
-		slog.Error("failed to load flavors", "err", err)
+		log.Error(err, "failed to load flavors")
 		return
 	}
 	flavorsByName := make(map[string]nova.Flavor, len(flavors))
@@ -139,7 +138,7 @@ func (k *VMCommitmentsKPI) Collect(ch chan<- prometheus.Metric) {
 			// the demand, not the allocation when placed somewhere.
 			flavor, ok := flavorsByName[commitment.ResourceName[len("instances_"):]]
 			if !ok {
-				slog.Warn("vm_commitments: unknown flavor in commitment", "flavor", commitment.ResourceName)
+				log.V(1).Info("vm_commitments: unknown flavor in commitment", "flavor", commitment.ResourceName)
 				continue
 			}
 			cores, memory := float64(flavor.VCPUs), float64(flavor.RAM)*1024*1024
@@ -156,7 +155,7 @@ func (k *VMCommitmentsKPI) Collect(ch chan<- prometheus.Metric) {
 			var err error
 			memory, err := convertLimesMemory(commitment.Unit)
 			if err != nil {
-				slog.Warn("vm_commitments: failed to convert memory unit", "unit", commitment.Unit, "err", err)
+				log.Error(err, "vm_commitments: failed to convert memory unit", "unit", commitment.Unit)
 				continue
 			}
 			memory *= float64(commitment.Amount)
@@ -164,7 +163,7 @@ func (k *VMCommitmentsKPI) Collect(ch chan<- prometheus.Metric) {
 			statsVMCommitmentsSum[key] += memory // converted to bytes
 			statsCommittedMemory[key] += memory
 		default:
-			slog.Warn("vm_commitments: unknown resource name in commitment", "resource_name", commitment.ResourceName)
+			log.V(1).Info("vm_commitments: unknown resource name in commitment", "resource_name", commitment.ResourceName)
 			continue
 		}
 	}

@@ -89,7 +89,10 @@ local('kubectl wait --namespace cert-manager --for=condition=available deploymen
 
 ########### Dependency CRDs
 # Make sure the local cluster is running if you are running into startup issues here.
-url = 'https://raw.githubusercontent.com/cobaltcore-dev/openstack-hypervisor-operator/c57c5be250635c639c858395c0501aa8c422f4ea/charts/openstack-hypervisor-operator/crds/kvm.cloud.sap_hypervisors.yaml'
+# Pinned SHAs must match the versions in go.mod.
+url = 'https://raw.githubusercontent.com/cobaltcore-dev/openstack-hypervisor-operator/df757ad112ea027f47c198266cb3a323d52ee2fe/charts/openstack-hypervisor-operator/crds/kvm.cloud.sap_hypervisors.yaml'
+local('curl -L ' + url + ' | kubectl apply -f -')
+url = 'https://raw.githubusercontent.com/cobaltcore-dev/vm-operator/66e5e459efeb01bfc599a1cda5921528ab47be19/dist/files/crds/cobaltcore.cloud_virtualmachines.yaml'
 local('curl -L ' + url + ' | kubectl apply -f -')
 
 ########### Cortex Manager & CRDs
@@ -322,10 +325,10 @@ helm_resource(
     labels=['Monitoring'],
     resource_deps=['perses'],
 )
-watch_file('./tools/perses/dashboards')
+watch_file('./dashboards')
 k8s_yaml(local(' '.join([
     'kubectl create configmap cortex-perses-dashboards',
-    '--from-file=./tools/perses/dashboards/',
+    '--from-file=./dashboards/',
     '--dry-run=client -o yaml |',
     'kubectl label --local -f - perses.dev/resource=true --dry-run=client -o yaml',
 ])))

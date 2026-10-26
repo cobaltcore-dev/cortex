@@ -5,7 +5,6 @@ package lib
 
 import (
 	"fmt"
-	"log/slog"
 	"maps"
 	"math"
 	"slices"
@@ -14,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -69,7 +69,7 @@ func monitorStep[RequestType FilterWeigherPipelineRequest](stepName string, m Fi
 
 // Run the step and observe its execution.
 func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
-	traceLog *slog.Logger,
+	traceLog logr.Logger,
 	request RequestType,
 	step FilterWeigherPipelineStep[RequestType],
 ) (*FilterWeigherPipelineStepResult, error) {
@@ -84,7 +84,7 @@ func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
 	if err != nil {
 		return nil, err
 	}
-	traceLog.Info(
+	traceLog.V(1).Info(
 		"scheduler: finished step", "name", s.stepName,
 		"inWeights", inWeights, "outWeights", stepResult.Activations,
 	)
@@ -103,7 +103,7 @@ func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
 				WithLabelValues(s.pipelineName, host, s.stepName).
 				Add(weight)
 			if weight != 0.0 {
-				traceLog.Info(
+				traceLog.V(1).Info(
 					"scheduler: modified host weight",
 					"name", s.stepName, "weight", weight,
 				)
@@ -116,7 +116,7 @@ func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
 	hostsOut := slices.Collect(maps.Keys(stepResult.Activations))
 	nHostsRemoved := len(hostsIn) - len(hostsOut)
 	if nHostsRemoved < 0 {
-		traceLog.Info(
+		traceLog.V(1).Info(
 			"scheduler: removed hosts",
 			"name", s.stepName, "count", nHostsRemoved,
 		)
@@ -147,7 +147,7 @@ func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
 				WithLabelValues(s.pipelineName, s.stepName, strconv.Itoa(idx))
 			o.Observe(float64(originalIdx))
 		}
-		traceLog.Info(
+		traceLog.V(1).Info(
 			"scheduler: reordered host",
 			"name", s.stepName, "host", hostsOut[idx],
 			"originalIdx", originalIdx, "newIdx", idx,
@@ -190,7 +190,7 @@ func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
 			}
 		}
 		after := afterBuilder.String()
-		traceLog.Info(msg, "before", before, "after", after)
+		traceLog.V(1).Info(msg, "before", before, "after", after)
 	}
 
 	// Calculate the impact for each recorded stat.
@@ -200,9 +200,9 @@ func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
 		}
 		impact, err := impact(hostsIn, hostsOut, statData.Hosts, 5)
 		if err != nil {
-			traceLog.Error(
+			traceLog.Error(err,
 				"scheduler: error calculating impact",
-				"name", s.stepName, "stat", statName, "error", err,
+				"name", s.stepName, "stat", statName,
 			)
 			continue
 		}
@@ -211,7 +211,7 @@ func (s *FilterWeigherPipelineStepMonitor[RequestType]) RunWrapped(
 				WithLabelValues(s.pipelineName, s.stepName, statName, statData.Unit)
 			stepImpactObserver.Observe(impact)
 		}
-		traceLog.Info(
+		traceLog.V(1).Info(
 			"scheduler: impact for step",
 			"name", s.stepName, "stat", statName,
 			"unit", statData.Unit, "impact", impact,
@@ -251,7 +251,7 @@ func impact(before, after []string, stats map[string]float64, topK int) (float64
 		subimpact := idxDisplacement * statDifference
 		impact += subimpact
 
-		slog.Debug(
+		pipelineLog.V(1).Info(
 			"scheduler: impact calculation",
 			"host", host,
 			"oldIdx", oldIdx,
@@ -263,7 +263,7 @@ func impact(before, after []string, stats map[string]float64, topK int) (float64
 			"subimpact", subimpact,
 		)
 	}
-	slog.Debug(
+	pipelineLog.V(1).Info(
 		"scheduler: total impact",
 		"impact", impact,
 		"hostsBefore", before,

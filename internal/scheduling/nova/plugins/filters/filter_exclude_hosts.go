@@ -4,7 +4,7 @@
 package filters
 
 import (
-	"log/slog"
+	"github.com/go-logr/logr"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
@@ -28,14 +28,14 @@ type FilterExcludeHostsStepOpts struct {
 func (opts FilterExcludeHostsStepOpts) Validate() error { return nil }
 
 func (s *FilterExcludeHostsStep) Run(
-	traceLog *slog.Logger,
+	traceLog logr.Logger,
 	request api.ExternalSchedulerRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 
 	result := s.IncludeAllHostsFromRequest(request)
 	for _, host := range s.Options.ExcludedHosts {
 		delete(result.Activations, host) // noop if host is not in the map
-		traceLog.Info("filtering out host based on excluded hosts configuration", "host", host)
+		traceLog.V(1).Info("filtering out host based on excluded hosts configuration", "host", host)
 	}
 	return result, nil
 }

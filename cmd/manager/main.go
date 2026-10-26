@@ -8,13 +8,10 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"flag"
-	"fmt"
-	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -142,7 +139,7 @@ func main() {
 			novaChecksConfig := conf.GetConfigOrDie[nova.ChecksConfig]()
 			if len(os.Args) >= 3 {
 				if err := json.Unmarshal([]byte(os.Args[2]), &novaChecksConfig); err != nil {
-					slog.Error("invalid json override for e2e-nova", "err", err)
+					setupLog.Error(err, "invalid json override for e2e-nova")
 					os.Exit(1)
 				}
 			}
@@ -159,14 +156,14 @@ func main() {
 			commitmentsChecksConfig := conf.GetConfigOrDie[commitments.E2EChecksConfig]()
 			if len(os.Args) >= 3 {
 				if err := json.Unmarshal([]byte(os.Args[2]), &commitmentsChecksConfig); err != nil {
-					slog.Error("invalid json override for e2e-commitments", "err", err)
+					setupLog.Error(err, "invalid json override for e2e-commitments")
 					os.Exit(1)
 				}
 			}
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
-						slog.Error("e2e check failed", "reason", r)
+						setupLog.Error(nil, "e2e check failed", "reason", r)
 						os.Exit(1)
 					}
 				}()
@@ -214,35 +211,6 @@ func main() {
 			return monitoring.WrapCoreWithLogMetrics(&logMetricsMonitor, core)
 		})),
 	))
-
-	// Configure slog (used across internal packages) with JSON output and
-	// level control via the LOG_LEVEL environment variable.
-	// Supported values: debug, info (default), warn, error.
-	slogLevel := new(slog.LevelVar)
-	slogLevel.Set(slog.LevelInfo)
-	if lvl := os.Getenv("LOG_LEVEL"); lvl != "" {
-		switch strings.ToLower(lvl) {
-		case "debug":
-			slogLevel.Set(slog.LevelDebug)
-		case "info":
-			slogLevel.Set(slog.LevelInfo)
-		case "warn", "warning":
-			slogLevel.Set(slog.LevelWarn)
-		case "error":
-			slogLevel.Set(slog.LevelError)
-		default:
-			slogLevel.Set(slog.LevelInfo)
-			setupLog.Error(fmt.Errorf("unknown LOG_LEVEL %q, defaulting to info", lvl), "invalid log level",
-				"supported", []string{"debug", "info", "warn", "warning", "error"})
-		}
-	}
-	slog.SetDefault(slog.New(monitoring.NewMetricsSlogHandler(
-		&logMetricsMonitor,
-		slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level: slogLevel,
-		}),
-	)))
-	slog.Info("slog configured", "level", slogLevel.Level().String())
 
 	// Log the main configuration
 	setupLog.Info("loaded main configuration",

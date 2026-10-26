@@ -6,7 +6,6 @@ package manila
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
@@ -16,7 +15,10 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/schedulerstats"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/prometheus/client_golang/prometheus"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("manila")
 
 type ManilaAPI interface {
 	// Init the manila API.
@@ -68,7 +70,7 @@ func (api *manilaAPI) Init(ctx context.Context) error {
 // Get all Manila storage pools.
 func (api *manilaAPI) GetAllStoragePools(ctx context.Context) ([]StoragePool, error) {
 	label := StoragePool{}.TableName()
-	slog.Info("fetching manila data", "label", label)
+	log.V(1).Info("fetching manila data", "label", label)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
 		if api.mon.RequestTimer != nil {
@@ -86,10 +88,10 @@ func (api *manilaAPI) GetAllStoragePools(ctx context.Context) ([]StoragePool, er
 		Pools []StoragePool `json:"pools"`
 	}{}
 	// Log the raw body for debugging purposes.
-	slog.Info("raw response body", "body", pages.(schedulerstats.PoolPage).Body)
+	log.V(1).Info("raw response body", "body", pages.(schedulerstats.PoolPage).Body)
 	if err := pages.(schedulerstats.PoolPage).ExtractInto(data); err != nil {
 		return nil, err
 	}
-	slog.Info("fetched", "label", label, "count", len(data.Pools))
+	log.V(1).Info("fetched", "label", label, "count", len(data.Pools))
 	return data.Pools, nil
 }

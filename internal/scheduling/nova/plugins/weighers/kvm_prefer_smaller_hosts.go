@@ -7,12 +7,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -57,13 +57,13 @@ type KVMPreferSmallerHostsStep struct {
 }
 
 // Run this weigher in the pipeline after filters have been executed.
-func (s *KVMPreferSmallerHostsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMPreferSmallerHostsStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	result.Statistics["small host score"] = s.PrepareStats(request, "float")
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
 	hvsByName := make(map[string]hv1.Hypervisor, len(hvs.Items))
@@ -84,7 +84,7 @@ func (s *KVMPreferSmallerHostsStep) Run(traceLog *slog.Logger, request api.Exter
 			// Effective capacity = capacity * overcommit ratio.
 			capacity, ok := hv.Status.EffectiveCapacity[resourceName]
 			if !ok {
-				traceLog.Warn("hypervisor has no effective capacity for resource, skipping",
+				traceLog.V(1).Info("hypervisor has no effective capacity for resource, skipping",
 					"host", hv.Name, "resource", resourceName)
 				continue
 			}
@@ -100,7 +100,7 @@ func (s *KVMPreferSmallerHostsStep) Run(traceLog *slog.Logger, request api.Exter
 	for host := range result.Activations {
 		hv, ok := hvsByName[host]
 		if !ok {
-			traceLog.Warn("no hv for host, skipping", "host", host)
+			traceLog.V(1).Info("no hv for host, skipping", "host", host)
 			continue
 		}
 
@@ -109,7 +109,7 @@ func (s *KVMPreferSmallerHostsStep) Run(traceLog *slog.Logger, request api.Exter
 		for resourceName, weight := range s.Options.ResourceWeights {
 			capacity, ok := hv.Status.EffectiveCapacity[resourceName]
 			if !ok {
-				traceLog.Warn("hypervisor has no effective capacity for resource, skipping",
+				traceLog.V(1).Info("hypervisor has no effective capacity for resource, skipping",
 					"host", hv.Name, "resource", resourceName)
 				continue
 			}
@@ -118,14 +118,14 @@ func (s *KVMPreferSmallerHostsStep) Run(traceLog *slog.Logger, request api.Exter
 			largestCap := largest[resourceName]
 
 			if smallestCap == nil || largestCap == nil {
-				traceLog.Warn("no effective capacity range found for resource, skipping",
+				traceLog.V(1).Info("no effective capacity range found for resource, skipping",
 					"resource", resourceName)
 				continue
 			}
 
 			// If all hosts have the same effective capacity for this resource, skip it
 			if smallestCap.Cmp(*largestCap) == 0 {
-				traceLog.Info("all hypervisors have the same effective capacity for resource, skipping",
+				traceLog.V(1).Info("all hypervisors have the same effective capacity for resource, skipping",
 					"resource", resourceName)
 				continue
 			}
@@ -147,7 +147,7 @@ func (s *KVMPreferSmallerHostsStep) Run(traceLog *slog.Logger, request api.Exter
 		}
 		result.Activations[host] = score
 		result.Statistics["small host score"].Hosts[host] = score
-		traceLog.Info("calculated small host score for host",
+		traceLog.V(1).Info("calculated small host score for host",
 			"host", host, "score", score)
 	}
 

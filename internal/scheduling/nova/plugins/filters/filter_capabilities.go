@@ -6,7 +6,7 @@ package filters
 import (
 	"context"
 	"fmt"
-	"log/slog"
+	"github.com/go-logr/logr"
 	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -45,11 +45,11 @@ func hvToNovaCapabilities(hv hv1.Hypervisor) (map[string]string, error) {
 
 // Check the capabilities of each host and if they match the extra spec provided
 // in the request spec flavor.
-func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterCapabilitiesStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	extraSpecs := request.Spec.Data.Flavor.Data.ExtraSpecs
 	if len(extraSpecs) == 0 {
-		traceLog.Debug("no flavor extra spec capabilities in request, skipping filter")
+		traceLog.V(1).Info("no flavor extra spec capabilities in request, skipping filter")
 		return result, nil
 	}
 
@@ -62,7 +62,7 @@ func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.External
 		}
 	}
 	if len(requestedCapabilities) == 0 {
-		traceLog.Debug("no capabilities in flavor extra specs, skipping filter")
+		traceLog.V(1).Info("no capabilities in flavor extra specs, skipping filter")
 		return result, nil
 	}
 
@@ -76,7 +76,7 @@ func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.External
 	for key, expr := range requestedCapabilities {
 		for _, op := range unsupportedOps {
 			if strings.Contains(expr, op) {
-				traceLog.Warn(
+				traceLog.V(1).Info(
 					"unsupported extra spec operator in capabilities filter, skipping filter",
 					"key", key, "expr", expr, "flavor", request.Spec.Data.Flavor,
 				)
@@ -87,7 +87,7 @@ func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.External
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
 
@@ -98,7 +98,7 @@ func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.External
 		}
 		caps, err := hvToNovaCapabilities(hv)
 		if err != nil {
-			traceLog.Warn("hypervisor has unknown capabilities, using empty defaults", "host", hv.Name, "error", err)
+			traceLog.Error(err, "hypervisor has unknown capabilities, using empty defaults", "host", hv.Name)
 			result.Events = append(result.Events, lib.FilterWeigherPipelineStepEvent{
 				Name:   "filter_capabilities_unknown_hypervisor_type",
 				Labels: map[string]string{"hypervisor_type": hv.Status.DomainCapabilities.HypervisorType},
@@ -107,20 +107,20 @@ func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.External
 		}
 		hvCaps[hv.Name] = caps
 	}
-	traceLog.Info("looking for capabilities", "capabilities", hvCaps)
+	traceLog.V(1).Info("looking for capabilities", "capabilities", hvCaps)
 
 	// Check which hosts match the requested capabilities.
 	for host := range result.Activations {
 		provided, ok := hvCaps[host]
 		if !ok {
 			delete(result.Activations, host)
-			traceLog.Info("filtering host without provided capabilities", "host", host)
+			traceLog.V(1).Info("filtering host without provided capabilities", "host", host)
 			continue
 		}
 		// Check if the provided capabilities match the requested ones.
 		for keyRequested, valueRequested := range requestedCapabilities {
 			if providedValue, ok := provided[keyRequested]; !ok || providedValue != valueRequested {
-				traceLog.Info(
+				traceLog.V(1).Info(
 					"filtering host with mismatched capabilities", "host", host,
 					"wantKey", keyRequested, "wantValue", valueRequested,
 					"haveKey?", ok, "haveValue", providedValue,
@@ -129,7 +129,7 @@ func (s *FilterCapabilitiesStep) Run(traceLog *slog.Logger, request api.External
 				break
 			}
 		}
-		traceLog.Info("host matches requested capabilities, keeping", "host", host)
+		traceLog.V(1).Info("host matches requested capabilities, keeping", "host", host)
 	}
 	return result, nil
 }

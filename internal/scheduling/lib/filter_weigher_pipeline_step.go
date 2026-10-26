@@ -6,10 +6,10 @@ package lib
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -32,7 +32,7 @@ type FilterWeigherPipelineStep[RequestType FilterWeigherPipelineRequest] interfa
 	// be used to log the step's execution.
 	//
 	// Per-call options are available via request.GetOptions().
-	Run(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error)
+	Run(traceLog logr.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error)
 }
 
 // Common base for all steps that provides some functionality

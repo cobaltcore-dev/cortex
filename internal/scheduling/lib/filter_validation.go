@@ -6,9 +6,9 @@ package lib
 import (
 	"context"
 	"errors"
-	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -20,7 +20,7 @@ type FilterValidator[RequestType FilterWeigherPipelineRequest] struct {
 
 // Initialize the wrapped filter with the database and options.
 func (s *FilterValidator[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.FilterSpec) error {
-	slog.Info("scheduler: init validation for step", "name", step.Name)
+	pipelineLog.V(1).Info("scheduler: init validation for step", "name", step.Name)
 	return s.Filter.Init(ctx, client, step)
 }
 
@@ -35,7 +35,7 @@ func validateFilter[RequestType FilterWeigherPipelineRequest](filter Filter[Requ
 }
 
 // Run the filter and validate what happens.
-func (s *FilterValidator[RequestType]) Run(traceLog *slog.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
+func (s *FilterValidator[RequestType]) Run(traceLog logr.Logger, request RequestType) (*FilterWeigherPipelineStepResult, error) {
 	result, err := s.Filter.Run(traceLog, request)
 	if err != nil {
 		return nil, err

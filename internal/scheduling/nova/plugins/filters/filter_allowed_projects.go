@@ -5,7 +5,7 @@ package filters
 
 import (
 	"context"
-	"log/slog"
+	"github.com/go-logr/logr"
 	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -19,7 +19,7 @@ type FilterAllowedProjectsStep struct {
 
 // Lock certain hosts for certain projects, based on the hypervisor spec.
 // Note that hosts without specified projects are still accessible.
-func (s *FilterAllowedProjectsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterAllowedProjectsStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	// Capacity probe calls are synthetic and not placed on behalf of a tenant
 	// project, so they must ignore tenant pinning. Failover reservations DO respect
@@ -29,13 +29,13 @@ func (s *FilterAllowedProjectsStep) Run(traceLog *slog.Logger, request api.Exter
 		return result, nil
 	}
 	if request.Spec.Data.ProjectID == "" {
-		traceLog.Info("no project ID in request, skipping filter")
+		traceLog.V(1).Info("no project ID in request, skipping filter")
 		return result, nil
 	}
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
 
@@ -45,13 +45,13 @@ func (s *FilterAllowedProjectsStep) Run(traceLog *slog.Logger, request api.Exter
 		}
 		if len(hv.Spec.AllowedProjects) == 0 {
 			// Hypervisor is available for all projects.
-			traceLog.Info("host allows all projects, keeping", "host", hv.Name)
+			traceLog.V(1).Info("host allows all projects, keeping", "host", hv.Name)
 			continue
 		}
 		if !slices.Contains(hv.Spec.AllowedProjects, request.Spec.Data.ProjectID) {
 			// Project is not allowed on this hypervisor, filter it out.
 			delete(result.Activations, hv.Name)
-			traceLog.Info(
+			traceLog.V(1).Info(
 				"filtering host not allowing project",
 				"host", hv.Name,
 				"project", request.Spec.Data.ProjectID,

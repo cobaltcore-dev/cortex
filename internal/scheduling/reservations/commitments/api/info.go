@@ -223,7 +223,7 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 		version = knowledgeCRD.Status.LastContentChange.Unix()
 	}
 
-	logger.Info("built service info",
+	logger.V(1).Info("built service info",
 		"resourceCount", len(resources),
 		"version", version)
 

@@ -52,7 +52,7 @@ func (e *DeschedulingsExecutor) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Currently we only know how to handle deschedulings for nova VMs.
 	if descheduling.Spec.RefType != v1alpha1.DeschedulingSpecVMReferenceNovaServerUUID {
-		log.Info("skipping descheduling, unsupported refType", "refType", descheduling.Spec.RefType)
+		log.V(1).Info("skipping descheduling, unsupported refType", "refType", descheduling.Spec.RefType)
 		old := descheduling.DeepCopy()
 		meta.SetStatusCondition(&descheduling.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.DeschedulingConditionReady,
@@ -70,7 +70,7 @@ func (e *DeschedulingsExecutor) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Currently we only know how to handle deschedulings for nova compute hosts.
 	if descheduling.Spec.PrevHostType != v1alpha1.DeschedulingSpecHostTypeNovaComputeHostName {
-		log.Info("skipping descheduling, unsupported prevHostType", "prevHostType", descheduling.Spec.PrevHostType)
+		log.V(1).Info("skipping descheduling, unsupported prevHostType", "prevHostType", descheduling.Spec.PrevHostType)
 		old := descheduling.DeepCopy()
 		meta.SetStatusCondition(&descheduling.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.DeschedulingConditionReady,
@@ -88,7 +88,7 @@ func (e *DeschedulingsExecutor) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// We need a server uuid to proceed.
 	if descheduling.Spec.Ref == "" {
-		log.Info("skipping descheduling, missing ref")
+		log.V(1).Info("skipping descheduling, missing ref")
 		old := descheduling.DeepCopy()
 		meta.SetStatusCondition(&descheduling.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.DeschedulingConditionReady,
@@ -106,7 +106,7 @@ func (e *DeschedulingsExecutor) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Don't touch processing deschedulings.
 	if meta.IsStatusConditionTrue(descheduling.Status.Conditions, v1alpha1.DeschedulingConditionInProgress) {
-		log.Info("skipping descheduling, already in progress")
+		log.V(1).Info("skipping descheduling, already in progress")
 		return ctrl.Result{}, nil
 	}
 
@@ -157,17 +157,17 @@ func (e *DeschedulingsExecutor) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		return ctrl.Result{}, nil
 	}
-	log.Info(
+	log.V(1).Info(
 		"descheduler: live-migrating virtual machine",
 		"vmId", vmId, "host", server.ComputeHost,
 	)
 
 	if !e.Conf.DisableDeschedulerDryRun {
-		log.Info("descheduler: dry-run enabled, skipping execution", "vmId", vmId)
+		log.V(1).Info("descheduler: dry-run enabled, skipping execution", "vmId", vmId)
 		return ctrl.Result{}, nil
 	}
 
-	log.Info("descheduler: executing migration for VM", "vmId", vmId)
+	log.V(1).Info("descheduler: executing migration for VM", "vmId", vmId)
 	if err := e.NovaClient.LiveMigrate(ctx, vmId); err != nil {
 		log.Error(err, "descheduler: failed to live-migrate VM", "vmId", vmId, "error", err)
 		old := descheduling.DeepCopy()
@@ -228,7 +228,7 @@ func (e *DeschedulingsExecutor) Reconcile(ctx context.Context, req ctrl.Request)
 			}
 			return ctrl.Result{}, nil
 		}
-		log.Info(
+		log.V(1).Info(
 			"descheduler: waiting for live-migration to complete",
 			"vmId", vmId, "status", server.Status,
 		)

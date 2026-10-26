@@ -92,7 +92,7 @@ func (r *CommittedResourceController) Reconcile(ctx context.Context, req ctrl.Re
 // can report the outcome back to Limes. If AllowRejection=false (syncer path), the controller
 // retries with exponential backoff — Limes does not require confirmation for these transitions.
 func (r *CommittedResourceController) reconcilePending(ctx context.Context, logger logr.Logger, cr *v1alpha1.CommittedResource) (ctrl.Result, error) {
-	logger.Info("reconciling pending resource",
+	logger.V(1).Info("reconciling pending resource",
 		"generation", cr.Generation,
 		"az", cr.Spec.AvailabilityZone,
 		"amount", cr.Spec.Amount.String(),
@@ -120,7 +120,7 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 		delay := r.retryDelay(cr)
 		logger.Error(applyErr, "pending commitment placement failed, will retry", "requeueAfter", delay)
 		if setErr := r.setNotReadyRetry(ctx, cr, applyErr.Error()); setErr != nil {
-			logger.Info("status update failed after placement error, will be corrected on next reconcile", "err", setErr)
+			logger.V(1).Info("status update failed after placement error, will be corrected on next reconcile", "err", setErr)
 		}
 		// Return nil so controller-runtime honours RequeueAfter. Returning the status-update
 		// error would cause controller-runtime to ignore RequeueAfter and use exponential backoff.
@@ -146,7 +146,7 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 		delay := r.retryDelay(cr)
 		logger.Info("pending commitment placement failed, will retry", "reason", failReason, "firstSlotReason", firstSlotReason, "slotsReady", readySlots, "slotsTotal", result.TotalSlots, "failedSlots", failedSlots, "requeueAfter", delay)
 		if setErr := r.setNotReadyRetry(ctx, cr, failReason); setErr != nil {
-			logger.Info("status update failed after placement failure, will be corrected on next reconcile", "err", setErr)
+			logger.V(1).Info("status update failed after placement failure, will be corrected on next reconcile", "err", setErr)
 		}
 		// Return nil so controller-runtime honours RequeueAfter. Returning the status-update
 		// error would cause controller-runtime to ignore RequeueAfter and use exponential backoff.
@@ -180,7 +180,7 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 	}
 	if latest.Generation > initialGen {
-		logger.Info("generation advanced during reconcile, requeueing",
+		logger.V(1).Info("generation advanced during reconcile, requeueing",
 			"processedGen", initialGen,
 			"latestGen", latest.Generation,
 		)
@@ -190,7 +190,7 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 }
 
 func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, logger logr.Logger, cr *v1alpha1.CommittedResource) (ctrl.Result, error) {
-	logger.Info("reconciling committed resource",
+	logger.V(1).Info("reconciling committed resource",
 		"generation", cr.Generation,
 		"az", cr.Spec.AvailabilityZone,
 		"amount", cr.Spec.Amount.String(),
@@ -225,7 +225,7 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 						return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 					}
 					if latest.Generation > initialGen {
-						logger.Info("generation advanced during reconcile, requeueing",
+						logger.V(1).Info("generation advanced during reconcile, requeueing",
 							"processedGen", initialGen,
 							"latestGen", latest.Generation,
 						)
@@ -261,7 +261,7 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 		delay := r.retryDelay(cr)
 		logger.Error(applyErr, "committed placement incomplete, will retry", "requeueAfter", delay)
 		if setErr := r.setNotReadyRetry(ctx, cr, applyErr.Error()); setErr != nil {
-			logger.Info("status update failed after placement error, will be corrected on next reconcile", "err", setErr)
+			logger.V(1).Info("status update failed after placement error, will be corrected on next reconcile", "err", setErr)
 		}
 		// Return nil so controller-runtime honours RequeueAfter. Returning the status-update
 		// error would cause controller-runtime to ignore RequeueAfter and use exponential backoff.
@@ -283,7 +283,7 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 		delay := r.retryDelay(cr)
 		logger.Info("committed placement failed, will retry", "reason", failReason, "firstSlotReason", firstSlotReason, "slotsReady", readySlots, "slotsTotal", result.TotalSlots, "failedSlots", failedSlots, "requeueAfter", delay)
 		if setErr := r.setNotReadyRetry(ctx, cr, failReason); setErr != nil {
-			logger.Info("status update failed after placement failure, will be corrected on next reconcile", "err", setErr)
+			logger.V(1).Info("status update failed after placement failure, will be corrected on next reconcile", "err", setErr)
 		}
 		return ctrl.Result{RequeueAfter: delay}, nil
 	}
@@ -318,7 +318,7 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 	}
 	if latest.Generation > initialGen {
-		logger.Info("generation advanced during reconcile, requeueing",
+		logger.V(1).Info("generation advanced during reconcile, requeueing",
 			"processedGen", initialGen,
 			"latestGen", latest.Generation,
 		)
@@ -358,7 +358,7 @@ func (r *CommittedResourceController) reconcileCoresHeadroom(ctx context.Context
 		if cr.Spec.AllowRejection {
 			delay = 1 * time.Second
 		}
-		logger.Info("FlavorGroupCapacity CRD not found, will retry", "requeueAfter", delay)
+		logger.V(1).Info("FlavorGroupCapacity CRD not found, will retry", "requeueAfter", delay)
 		return ctrl.Result{RequeueAfter: delay}, r.setNotReadyRetry(ctx, cr, "waiting for capacity data")
 	}
 
@@ -370,7 +370,7 @@ func (r *CommittedResourceController) reconcileCoresHeadroom(ctx context.Context
 		if cr.Spec.AllowRejection {
 			delay = 1 * time.Second
 		}
-		logger.Info("CPU capacity not yet populated in FlavorGroupCapacity CRD, will retry", "requeueAfter", delay)
+		logger.V(1).Info("CPU capacity not yet populated in FlavorGroupCapacity CRD, will retry", "requeueAfter", delay)
 		return ctrl.Result{RequeueAfter: delay}, r.setNotReadyRetry(ctx, cr, "waiting for CPU capacity data")
 	}
 	// Key present (even if zero): the capacity controller has run and this is the actual capacity.
@@ -403,7 +403,7 @@ func (r *CommittedResourceController) reconcileCoresHeadroom(ctx context.Context
 
 	requestedCores := cr.Spec.Amount.Value()
 	headroom := totalCores - alreadyCommitted
-	logger.Info("cores headroom check",
+	logger.V(1).Info("cores headroom check",
 		"total", totalCores,
 		"committed", alreadyCommitted,
 		"requested", requestedCores,
@@ -432,7 +432,7 @@ func (r *CommittedResourceController) reconcileCoresHeadroom(ctx context.Context
 		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 	}
 	if latest.Generation > initialGen {
-		logger.Info("generation advanced during reconcile, requeueing",
+		logger.V(1).Info("generation advanced during reconcile, requeueing",
 			"processedGen", initialGen,
 			"latestGen", latest.Generation,
 		)
@@ -466,6 +466,7 @@ func (r *CommittedResourceController) applyReservationState(ctx context.Context,
 		EnablePaygPreAllocation: r.Conf.EnablePaygPreAllocation,
 		VMSource:                r.VMSource,
 		NoHostsFoundTTL:         r.Conf.NoHostsFoundTTL.Duration,
+		OwnerObject:             cr,
 	})
 	result, err := mgr.ApplyCommitmentState(ctx, logger, state, flavorGroups, "committed-resource-controller")
 	if err != nil {
@@ -475,7 +476,7 @@ func (r *CommittedResourceController) applyReservationState(ctx context.Context,
 		}
 		return nil, err
 	}
-	logger.Info("commitment state applied", "created", result.Created, "deleted", result.Deleted, "repaired", result.Repaired)
+	logger.V(1).Info("commitment state applied", "created", result.Created, "deleted", result.Deleted, "repaired", result.Repaired)
 	return result, nil
 }
 
@@ -533,7 +534,7 @@ func (r *CommittedResourceController) checkChildReservationStatus(ctx context.Co
 				res.Spec.CommittedResourceReservation != nil &&
 				res.Spec.CommittedResourceReservation.ParentGeneration == cr.Generation {
 				nudgeVal := strconv.FormatInt(cr.Generation, 10) + "-" + strconv.FormatInt(time.Now().UnixMilli(), 10)
-				ctrl.LoggerFrom(ctx).Info("nudging stale reservation: parentGen written to spec but echo pending",
+				ctrl.LoggerFrom(ctx).V(1).Info("nudging stale reservation: parentGen written to spec but echo pending",
 					"slot", res.Name,
 					"crGen", cr.Generation,
 					"obs", obs,
@@ -669,6 +670,7 @@ func (r *CommittedResourceController) rollbackToAccepted(ctx context.Context, lo
 	rollbackMgr := NewReservationManager(r.Client, ReservationManagerConfig{
 		EnablePaygPreAllocation: r.Conf.EnablePaygPreAllocation,
 		VMSource:                r.VMSource,
+		OwnerObject:             cr,
 	})
 	if _, err := rollbackMgr.ApplyCommitmentState(ctx, logger, state, flavorGroups, "committed-resource-controller-rollback"); err != nil {
 		return fmt.Errorf("rollback apply failed: %w", err)

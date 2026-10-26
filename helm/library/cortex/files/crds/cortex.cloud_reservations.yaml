@@ -26,6 +26,7 @@ spec:
       type: string
     - jsonPath: .spec.committedResourceReservation.resourceGroup
       name: ResourceGroup
+      priority: 1
       type: string
     - jsonPath: .spec.failoverReservation.resourceGroup
       name: HA ResourceGroup
@@ -33,9 +34,11 @@ spec:
       type: string
     - jsonPath: .spec.committedResourceReservation.projectID
       name: Project
+      priority: 1
       type: string
     - jsonPath: .spec.availabilityZone
       name: AZ
+      priority: 1
       type: string
     - jsonPath: .spec.startTime
       name: StartTime
@@ -43,6 +46,7 @@ spec:
       type: string
     - jsonPath: .spec.endTime
       name: EndTime
+      priority: 1
       type: string
     - jsonPath: .spec.resources
       name: Resources
@@ -163,10 +167,26 @@ spec:
                 description: EndTime is the time when the reservation expires.
                 format: date-time
                 type: string
+              failoverHostReservation:
+                description: |-
+                  FailoverHostReservation contains fields specific to failover host reservations.
+                  Only used when Type is FailoverHostReservation.
+                properties:
+                  sourceHosts:
+                    description: |-
+                      SourceHosts is a list of hosts inside the same failover partition from
+                      which a failover event towards the target host may originate.
+                      See Spec.TargetHost for the target host of the failover reservation.
+                    items:
+                      type: string
+                    type: array
+                type: object
               failoverReservation:
                 description: |-
                   FailoverReservation contains fields specific to failover reservations.
                   Only used when Type is FailoverReservation.
+
+                  Deprecated: FailoverReservations will be replaced with FailoverHostReservations.
                 properties:
                   resourceGroup:
                     description: ResourceGroup is the group/category of the resource
@@ -229,6 +249,7 @@ spec:
                 - CommittedResourceReservation
                 - FailoverReservation
                 - InFlightReservation
+                - FailoverHostReservation
                 type: string
             required:
             - type
@@ -320,10 +341,23 @@ spec:
                   - type
                   type: object
                 type: array
+              failoverHostReservation:
+                description: |-
+                  FailoverHostReservation contains status fields specific to failover
+                  host reservations. Only used when Type is FailoverHostReservation.
+                properties:
+                  sourceHost:
+                    description: |-
+                      SourceHost is the actual host from which the failover event originates.
+                      Only set when the condition ConditionTypeFailoverHostInUse is True.
+                    type: string
+                type: object
               failoverReservation:
                 description: |-
                   FailoverReservation contains status fields specific to failover reservations.
                   Only used when Type is FailoverReservation.
+
+                  Deprecated: FailoverReservations will be replaced with FailoverHostReservations.
                 properties:
                   acknowledgedAt:
                     description: |-

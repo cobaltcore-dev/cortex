@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"math/rand"
 	"net/http"
 
@@ -18,6 +17,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
 	scheduling "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -104,12 +104,12 @@ func (httpAPI *httpAPI) canRunScheduler(requestData api.ExternalSchedulerRequest
 func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerRequest) (string, error) {
 	hvType, err := requestData.GetHypervisorType()
 	if err != nil {
-		slog.Warn("failed to determine hypervisor type, cannot infer pipeline name", "error", err)
+		schedulerLog.Error(err, "failed to determine hypervisor type, cannot infer pipeline name")
 		return "", errors.New("failed to determine hypervisor type from request data")
 	}
 	flavorType, err := requestData.GetFlavorType()
 	if err != nil {
-		slog.Warn("failed to determine flavor type, cannot infer pipeline name", "error", err)
+		schedulerLog.Error(err, "failed to determine flavor type, cannot infer pipeline name")
 		return "", errors.New("failed to determine flavor type from request data")
 	}
 	switch hvType {
@@ -148,7 +148,7 @@ func shuffleTopHosts(hosts []string, k int) []string {
 	rand.Shuffle(n, func(i, j int) { //nolint:gosec // non-crypto shuffle for load balancing
 		result[i], result[j] = result[j], result[i]
 	})
-	slog.Info("shuffled top hosts for evacuation", "k", n, "hosts", result[:n])
+	schedulerLog.V(1).Info("shuffled top hosts for evacuation", "k", n, "hosts", result[:n])
 	return result
 }
 
@@ -171,7 +171,7 @@ func limitHostsToRequest(request api.ExternalSchedulerRequest, hosts []string) [
 		if hostSet[host] {
 			limited = append(limited, host)
 		} else {
-			slog.Warn("filtering out host from response since it wasn't in the request",
+			schedulerLog.V(1).Info("filtering out host from response since it wasn't in the request",
 				"host", host, "inRequest", request.Hosts)
 		}
 	}
@@ -189,7 +189,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	// Exit early if the request method is not POST.
 	if r.Method != http.MethodPost {
 		internalErr := fmt.Errorf("invalid request method: %s", r.Method)
-		c.Respond(nil, http.StatusMethodNotAllowed, internalErr, "invalid request method")
+		c.Respond(logr.Logger{}, http.StatusMethodNotAllowed, internalErr, "invalid request method")
 		return
 	}
 
@@ -199,7 +199,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	// If configured, log out the complete request body.
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		c.Respond(nil, http.StatusInternalServerError, err, "failed to read request body")
+		c.Respond(logr.Logger{}, http.StatusInternalServerError, err, "failed to read request body")
 		return
 	}
 	raw := runtime.RawExtension{Raw: body}
@@ -208,15 +208,10 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	cp := body
 	reader := bytes.NewReader(cp)
 	if err := json.NewDecoder(reader).Decode(&requestData); err != nil {
-		c.Respond(nil, http.StatusBadRequest, err, "failed to decode request body")
+		c.Respond(logr.Logger{}, http.StatusBadRequest, err, "failed to decode request body")
 		return
 	}
-	traceArgs := requestData.GetTraceLogArgs()
-	traceArgsAny := make([]any, len(traceArgs))
-	for i, a := range traceArgs {
-		traceArgsAny[i] = a
-	}
-	logger := slog.With(traceArgsAny...)
+	logger := schedulerLog.WithValues(requestData.GetTraceLogArgs()...)
 	logger.Info("handling POST request", "url", "/scheduler/nova/external", "body", string(body))
 
 	// Replicate Nova's forced-destination behavior: when the request is forced
@@ -227,7 +222,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	// for forced-destination requests.
 	if httpAPI.config.forcedDestinationEnabled() && requestData.IsForcedDestination() {
 		hosts := requestData.ForcedHosts()
-		logger.Info("forced destination request, skipping filters", "hosts", hosts)
+		logger.V(1).Info("forced destination request, skipping filters", "hosts", hosts)
 		response := api.ExternalSchedulerResponse{Hosts: hosts}
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(response); err != nil {
@@ -252,13 +247,13 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 			c.Respond(logger, http.StatusBadRequest, err, err.Error())
 			return
 		}
-		logger.Info("inferred pipeline name", "pipeline", requestData.Pipeline)
+		logger.V(1).Info("inferred pipeline name", "pipeline", requestData.Pipeline)
 	}
 
 	intent, err := requestData.GetIntent()
 	if err != nil {
 		// Just log this in case the intent cannot be determined, but continue processing.
-		logger.Info("found no request intent (intended for initial placements)")
+		logger.V(1).Info("found no request intent (intended for initial placements)")
 		intent = api.CreateIntent
 	}
 
@@ -297,7 +292,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	hosts := decision.Status.Result.OrderedHosts
 	if httpAPI.config.NovaLimitHostsToRequest {
 		hosts = limitHostsToRequest(requestData, hosts)
-		logger.Info("limited hosts to request",
+		logger.V(1).Info("limited hosts to request",
 			"hosts", hosts, "originalHosts", decision.Status.Result.OrderedHosts)
 	}
 	// This is a hack to address the problem that Nova only uses the first host in hosts for evacuation requests.

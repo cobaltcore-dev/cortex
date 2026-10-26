@@ -70,6 +70,12 @@ linters:
       forbid:
         # ioutil package has been deprecated: https://github.com/golang/go/issues/42026
         - pattern: ^ioutil\..*$
+        # cortex uses the controller-runtime (logr) logger everywhere; log/slog
+        # is intentionally not used in the service so logging stays unified.
+        # Obtain a logger via sigs.k8s.io/controller-runtime/pkg/log (logf.Log /
+        # logf.FromContext / ctrl.LoggerFrom) instead.
+        - pattern: ^slog\..*$
+          msg: use the controller-runtime logr logger (sigs.k8s.io/controller-runtime/pkg/log), not log/slog
         # Using http.DefaultServeMux is discouraged because it's a global variable that some packages silently and magically add handlers to (esp. net/http/pprof).
         # Applications wishing to use http.ServeMux should obtain local instances through http.NewServeMux() instead of using the global default instance.
         - pattern: ^http\.DefaultServeMux$
@@ -160,6 +166,12 @@ linters:
       # Ref: https://go.dev/doc/effective_go#redeclaration
       - path: (.+)\.go$
         text: declaration of "err" shadows declaration at
+      # FailoverReservations are deprecated in favor of FailoverHostReservations,
+      # but remain in active use during the transition. Ignore the deprecation
+      # warning until the old type is fully removed.
+      - linters:
+          - staticcheck
+        text: "SA1019:.*FailoverReservations will be replaced with FailoverHostReservations"
       - linters:
           - goconst
         path: (.+)_test\.go

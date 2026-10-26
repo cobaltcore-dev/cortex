@@ -79,7 +79,7 @@ func (w *PipelineAdmissionWebhook) validatePipeline(
 		return nil, nil
 	}
 
-	log.Info("validating pipeline", "pipelineName", pipeline.Name, "pipelineType", pipeline.Spec.Type)
+	log.V(1).Info("validating pipeline", "pipelineName", pipeline.Name, "pipelineType", pipeline.Spec.Type)
 
 	var errMsgs []string
 

@@ -5,7 +5,6 @@ package compute
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
@@ -51,13 +50,13 @@ func (k *VMwareProjectNoisinessKPI) Collect(ch chan<- prometheus.Metric) {
 		client.ObjectKey{Name: "vmware-project-noisiness"},
 		knowledge,
 	); err != nil {
-		slog.Error("failed to get knowledge vmware-project-noisiness", "err", err)
+		log.Error(err, "failed to get knowledge vmware-project-noisiness")
 		return
 	}
 	features, err := v1alpha1.
 		UnboxFeatureList[compute.VROpsProjectNoisiness](knowledge.Status.Raw)
 	if err != nil {
-		slog.Error("failed to unbox vmware project noisiness", "err", err)
+		log.Error(err, "failed to unbox vmware project noisiness")
 		return
 	}
 	buckets := prometheus.LinearBuckets(0, 5, 20)

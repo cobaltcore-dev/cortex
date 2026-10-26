@@ -6,7 +6,7 @@ package filters
 import (
 	"context"
 	"errors"
-	"log/slog"
+	"github.com/go-logr/logr"
 	"slices"
 	"strings"
 
@@ -34,7 +34,7 @@ type FilterExternalCustomerStep struct {
 
 // Prefix-match the domain name for external customer domains and filter out hosts
 // that are not intended for external customers.
-func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterExternalCustomerStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	// Failover and capacity probe calls are not associated with a user domain;
@@ -45,17 +45,17 @@ func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.Exte
 		api.ReuseFailoverReservationIntent,
 		api.CapacityProbeIntent,
 	}, intent) {
-		traceLog.Info("skipping external customer filter for non-placement intent", "intent", intent)
+		traceLog.V(1).Info("skipping external customer filter for non-placement intent", "intent", intent)
 		return result, nil
 	}
 
 	domainName, err := request.Spec.Data.GetSchedulerHintStr("domain_name")
 	if err != nil {
-		traceLog.Warn("failed to get domain_name scheduler hint, skipping filter", "error", err)
+		traceLog.Error(err, "failed to get domain_name scheduler hint, skipping filter")
 		return result, nil
 	}
 	if slices.Contains(s.Options.CustomerIgnoredDomainNames, domainName) {
-		traceLog.Info("domain is no external customer domain, skipping filter", "domain", domainName)
+		traceLog.V(1).Info("domain is no external customer domain, skipping filter", "domain", domainName)
 		return result, nil
 	}
 	found := false
@@ -66,13 +66,13 @@ func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.Exte
 		}
 	}
 	if !found {
-		traceLog.Info("domain does not match any external customer prefix -- skipping filter", "domain", domainName)
+		traceLog.V(1).Info("domain does not match any external customer prefix -- skipping filter", "domain", domainName)
 		return result, nil
 	}
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
 	hvsWithTrait := make(map[string]struct{})
@@ -88,14 +88,14 @@ func (s *FilterExternalCustomerStep) Run(traceLog *slog.Logger, request api.Exte
 		hvsWithTrait[hv.Name] = struct{}{}
 	}
 
-	traceLog.Info("hosts supporting external customers", "hosts", hvsWithTrait)
+	traceLog.V(1).Info("hosts supporting external customers", "hosts", hvsWithTrait)
 	for host := range result.Activations {
 		if _, ok := hvsWithTrait[host]; ok {
-			traceLog.Info("host supports external customers, keeping", "host", host)
+			traceLog.V(1).Info("host supports external customers, keeping", "host", host)
 			continue
 		}
 		delete(result.Activations, host)
-		traceLog.Info("filtering host not supporting external customers", "host", host)
+		traceLog.V(1).Info("filtering host not supporting external customers", "host", host)
 	}
 	return result, nil
 }

@@ -5,7 +5,7 @@ package filters
 
 import (
 	"context"
-	"log/slog"
+	"github.com/go-logr/logr"
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -641,7 +641,7 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 				},
 			}
 
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(logr.Discard(), tt.request)
 
 			if tt.expectErr {
 				if err == nil {
@@ -728,7 +728,7 @@ func TestFilterLiveMigratableStep_Run_SourceHostNotFound(t *testing.T) {
 		},
 	}
 
-	_, err := step.Run(slog.Default(), request)
+	_, err := step.Run(logr.Discard(), request)
 	if err == nil {
 		t.Errorf("expected error when source host not found, got none")
 	}
@@ -774,7 +774,7 @@ func TestFilterLiveMigratableStep_Run_ClientError(t *testing.T) {
 		},
 	}
 
-	_, err := step.Run(slog.Default(), request)
+	_, err := step.Run(logr.Discard(), request)
 	if err == nil {
 		t.Errorf("expected error when client fails, got none")
 	}

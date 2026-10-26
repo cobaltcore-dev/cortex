@@ -10,19 +10,22 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/manila"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
 	scheduling "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
+
+var log = logf.Log.WithName("manila-scheduler-api")
 
 type HTTPAPIDelegate interface {
 	// Process the decision from the API. Should create and return the updated decision.
@@ -93,7 +96,7 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 	// Exit early if the request method is not POST.
 	if r.Method != http.MethodPost {
 		internalErr := fmt.Errorf("invalid request method: %s", r.Method)
-		c.Respond(nil, http.StatusMethodNotAllowed, internalErr, "invalid request method")
+		c.Respond(logr.Logger{}, http.StatusMethodNotAllowed, internalErr, "invalid request method")
 		return
 	}
 
@@ -103,7 +106,7 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 	// If configured, log out the complete request body.
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		c.Respond(nil, http.StatusInternalServerError, err, "failed to read request body")
+		c.Respond(logr.Logger{}, http.StatusInternalServerError, err, "failed to read request body")
 		return
 	}
 	raw := runtime.RawExtension{Raw: body}
@@ -112,15 +115,10 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 	cp := body
 	reader := bytes.NewReader(cp)
 	if err := json.NewDecoder(reader).Decode(&requestData); err != nil {
-		c.Respond(nil, http.StatusBadRequest, err, "failed to decode request body")
+		c.Respond(logr.Logger{}, http.StatusBadRequest, err, "failed to decode request body")
 		return
 	}
-	traceArgs := requestData.GetTraceLogArgs()
-	traceArgsAny := make([]any, len(traceArgs))
-	for i, a := range traceArgs {
-		traceArgsAny[i] = a
-	}
-	logger := slog.With(traceArgsAny...)
+	logger := log.WithValues(requestData.GetTraceLogArgs()...)
 	logger.Info("handling POST request", "url", "/scheduler/manila/external", "body", string(body))
 
 	if ok, reason := httpAPI.canRunScheduler(requestData); !ok {
@@ -137,7 +135,7 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 			c.Respond(logger, http.StatusBadRequest, err, err.Error())
 			return
 		}
-		logger.Info("inferred pipeline name", "pipeline", requestData.Pipeline)
+		logger.V(1).Info("inferred pipeline name", "pipeline", requestData.Pipeline)
 	}
 
 	// Create the decision object in kubernetes.

@@ -6,8 +6,9 @@ package filters
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"slices"
+
+	"github.com/go-logr/logr"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -62,7 +63,7 @@ type FilterHasEnoughCapacity struct {
 // known at this point.
 //
 // Please also note that disk space is currently not considered by this filter.
-func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	opts := request.GetOptions()
 	result := s.IncludeAllHostsFromRequest(request)
 
@@ -78,7 +79,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 	// and then subtract the actual resource allocation from virtual machines.
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
 	for _, hv := range hvs.Items {
@@ -87,7 +88,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		}
 		var sourceMap map[hv1.ResourceName]resource.Quantity
 		if hv.Status.EffectiveCapacity == nil {
-			traceLog.Warn("hypervisor with nil effective capacity, use capacity instead (overprovisioning not considered)", "host", hv.Name)
+			traceLog.V(1).Info("hypervisor with nil effective capacity, use capacity instead (overprovisioning not considered)", "host", hv.Name)
 			sourceMap = hv.Status.Capacity
 		} else {
 			// Start with the total effective capacity which is capacity * overcommit ratio.
@@ -106,6 +107,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 				free, ok := freeResourcesByHost[hv.Name][resourceName]
 				if !ok {
 					traceLog.Error(
+						nil,
 						"hypervisor with allocation for unknown resource",
 						"host", hv.Name, "resource", resourceName,
 					)
@@ -125,7 +127,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 	for _, reservation := range reservations.Items {
 		// Check if this reservation type should be ignored — applies regardless of ready state.
 		if slices.Contains(ignoredReservationTypes, reservation.Spec.Type) {
-			traceLog.Debug("ignoring reservation type", "type", reservation.Spec.Type, "reservation", reservation.Name)
+			traceLog.V(1).Info("ignoring reservation type", "type", reservation.Spec.Type, "reservation", reservation.Name)
 			continue
 		}
 
@@ -138,7 +140,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			// Block the full slot now to prevent a concurrent scheduling call from picking the
 			// same host. Unlock logic is intentionally skipped — an unconfirmed slot must not
 			// be unlocked for any VM or project.
-			traceLog.Warn("reservation has target host set but is not yet ready — blocking host to prevent double-booking",
+			traceLog.V(1).Info("reservation has target host set but is not yet ready — blocking host to prevent double-booking",
 				"reservation", reservation.Name,
 				"targetHost", reservation.Spec.TargetHost,
 				"statusHost", reservation.Status.Host,
@@ -158,7 +160,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 				intent, err := request.GetIntent()
 				switch {
 				case err == nil && intent == api.ReserveForCommittedResourceIntent:
-					traceLog.Debug("keeping CR reservation locked for CR reservation scheduling",
+					traceLog.V(1).Info("keeping CR reservation locked for CR reservation scheduling",
 						"reservation", reservation.Name,
 						"intent", intent)
 					// Don't continue - fall through to block the resources
@@ -167,7 +169,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 					// 1. Project ID matches
 					// 2. ResourceGroup matches the flavor's hw_version
 					reservation.Spec.CommittedResourceReservation.MatchesGroup(request.Spec.Data.ProjectID, request.Spec.Data.Flavor.Data.ExtraSpecs["quota:hw_version"]):
-					traceLog.Info("unlocking resources reserved by matching committed resource reservation with allocation",
+					traceLog.V(1).Info("unlocking resources reserved by matching committed resource reservation with allocation",
 						"reservation", reservation.Name,
 						"instanceUUID", request.Spec.Data.InstanceUUID,
 						"projectID", request.Spec.Data.ProjectID,
@@ -188,7 +190,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 					case api.EvacuateIntent:
 						if reservation.Status.FailoverReservation != nil {
 							if _, contained := reservation.Status.FailoverReservation.Allocations[request.Spec.Data.InstanceUUID]; contained {
-								traceLog.Info("unlocking resources reserved by failover reservation for VM in allocations (evacuation)",
+								traceLog.V(1).Info("unlocking resources reserved by failover reservation for VM in allocations (evacuation)",
 									"reservation", reservation.Name,
 									"instanceUUID", request.Spec.Data.InstanceUUID)
 								continue
@@ -197,12 +199,12 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 					case api.ReuseFailoverReservationIntent:
 						// Reuse check: the reservation already pre-blocks the right capacity for this VM.
 						// Don't subtract it from free capacity to avoid double-counting.
-						traceLog.Debug("skipping failover reservation block for reuse compatibility check",
+						traceLog.V(1).Info("skipping failover reservation block for reuse compatibility check",
 							"reservation", reservation.Name)
 						continue
 					}
 				}
-				traceLog.Debug("processing failover reservation", "reservation", reservation.Name)
+				traceLog.V(1).Info("processing failover reservation", "reservation", reservation.Name)
 			}
 		}
 
@@ -218,7 +220,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			hostsToBlock[reservation.Status.Host] = struct{}{}
 		}
 		if len(hostsToBlock) == 0 {
-			traceLog.Debug("skipping reservation with no host", "reservation", reservation.Name)
+			traceLog.V(1).Info("skipping reservation with no host", "reservation", reservation.Name)
 			continue
 		}
 
@@ -238,7 +240,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		for host := range hostsToBlock {
 			// Skip hosts that don't have a corresponding Hypervisor resource.
 			if _, hostExists := freeResourcesByHost[host]; !hostExists {
-				traceLog.Debug("skipping reservation for unknown host",
+				traceLog.V(1).Info("skipping reservation for unknown host",
 					"reservation", reservation.Name,
 					"host", host)
 				continue
@@ -247,7 +249,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 				if freeCPU, exists := freeResourcesByHost[host]["cpu"]; exists {
 					freeCPU.Sub(cpu)
 					if freeCPU.Value() < 0 {
-						traceLog.Warn("negative free CPU after blocking reservation",
+						traceLog.V(1).Info("negative free CPU after blocking reservation",
 							"host", host,
 							"reservation", reservation.Name,
 							"reservationType", reservation.Spec.Type,
@@ -262,7 +264,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 				if freeMemory, exists := freeResourcesByHost[host]["memory"]; exists {
 					freeMemory.Sub(memory)
 					if freeMemory.Value() < 0 {
-						traceLog.Warn("negative free memory after blocking reservation",
+						traceLog.V(1).Info("negative free memory after blocking reservation",
 							"host", host,
 							"reservation", reservation.Name,
 							"reservationType", reservation.Spec.Type,
@@ -286,10 +288,11 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		}
 		freeCPU, ok := free["cpu"]
 		if !ok || freeCPU.Value() < 0 {
-			traceLog.Warn(
+			traceLog.V(1).Info(
 				"host with invalid CPU capacity",
 				"host", host, "freeCPU", freeCPU.String(),
 			)
+			delete(result.Activations, host) // host is already overloaded, remove from activations
 			continue
 		}
 		// Calculate how many instances can fit on this host, based on cpu.
@@ -297,7 +300,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		vcpuSlots := uint64(freeCPU.Value()) /
 			request.Spec.Data.Flavor.Data.VCPUs
 		if vcpuSlots < request.Spec.Data.NumInstances {
-			traceLog.Info(
+			traceLog.V(1).Info(
 				"filtering host due to insufficient CPU capacity",
 				"host", host, "requested", request.Spec.Data.Flavor.Data.VCPUs,
 				"available", freeCPU.String(),
@@ -312,10 +315,11 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		}
 		freeMemory, ok := free["memory"]
 		if !ok || freeMemory.Value() < 0 {
-			traceLog.Error(
+			traceLog.V(1).Info(
 				"host with invalid memory capacity",
 				"host", host, "freeMemory", freeMemory.String(),
 			)
+			delete(result.Activations, host) // host is already overloaded, remove from activations
 			continue
 		}
 		// Calculate how many instances can fit on this host, based on memory.
@@ -325,7 +329,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 		memorySlots := uint64(freeMemory.Value()) /
 			(request.Spec.Data.Flavor.Data.MemoryMB * (1 << 20))
 		if memorySlots < request.Spec.Data.NumInstances {
-			traceLog.Info(
+			traceLog.V(1).Info(
 				"filtering host due to insufficient RAM capacity",
 				"host", host, "requested_mb", request.Spec.Data.Flavor.Data.MemoryMB,
 				"available_mb", freeMemory.String(),
@@ -333,7 +337,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 			delete(result.Activations, host)
 			continue
 		}
-		traceLog.Info(
+		traceLog.V(1).Info(
 			"host has enough capacity", "host", host,
 			"requested_cpus", request.Spec.Data.Flavor.Data.VCPUs,
 			"available_cpus", freeCPU.String(),
@@ -346,7 +350,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog *slog.Logger, request api.Externa
 	for host := range result.Activations {
 		if _, ok := hostsEncountered[host]; !ok {
 			delete(result.Activations, host)
-			traceLog.Info(
+			traceLog.V(1).Info(
 				"removing host with unknown capacity",
 				"host", host,
 			)

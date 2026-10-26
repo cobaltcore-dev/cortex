@@ -6,7 +6,7 @@ package filters
 import (
 	"context"
 	"errors"
-	"log/slog"
+	"github.com/go-logr/logr"
 	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -49,7 +49,7 @@ func (s *FilterLiveMigratableStep) checkHasSufficientFeatures(
 
 // Ensure the target host of a live migration can accept the migrating VM.
 func (s *FilterLiveMigratableStep) Run(
-	traceLog *slog.Logger,
+	traceLog logr.Logger,
 	request api.ExternalSchedulerRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 
@@ -57,24 +57,24 @@ func (s *FilterLiveMigratableStep) Run(
 
 	intent, err := request.GetIntent()
 	if err != nil {
-		traceLog.Info("failed to determine request intent, skipping filter", "error", err)
+		traceLog.V(1).Info("failed to determine request intent, skipping filter", "error", err)
 		return result, nil
 	}
 	if intent != api.LiveMigrationIntent {
-		traceLog.Info("not a live migration request, skipping filter")
+		traceLog.V(1).Info("not a live migration request, skipping filter")
 		return result, nil
 	}
 
 	sourceHost, err := request.Spec.Data.GetSchedulerHintStr("source_host")
 	if err != nil || sourceHost == "" {
-		traceLog.Info("no source_host scheduler hint, skipping filter")
+		traceLog.V(1).Info("no source_host scheduler hint, skipping filter")
 		//nolint:nilerr // Not an error we want to fail the scheduling for.
 		return result, nil
 	}
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
 	hvsByName := make(map[string]hv1.Hypervisor)
@@ -85,26 +85,26 @@ func (s *FilterLiveMigratableStep) Run(
 	sourceHV, ok := hvsByName[sourceHost]
 	if !ok {
 		err := errors.New("source host hypervisor not found")
-		traceLog.Error("failed to find source host hypervisor", "host", sourceHost, "error", err)
+		traceLog.Error(err, "failed to find source host hypervisor", "host", sourceHost)
 		return nil, err
 	}
 	for host := range result.Activations {
 		targetHV, ok := hvsByName[host]
 		if !ok {
-			traceLog.Error("hypervisor not found for host", "host", host)
+			traceLog.Error(nil, "hypervisor not found for host", "host", host)
 			delete(result.Activations, host)
 			continue
 		}
 		if err := s.checkHasSufficientFeatures(sourceHV, targetHV); err != nil {
 			delete(result.Activations, host)
-			traceLog.Info(
+			traceLog.V(1).Info(
 				"filtered out host not suitable for live migration",
 				"host", host,
 				"reason", err.Error(),
 			)
 			continue
 		}
-		traceLog.Info("host is suitable for live migration, keeping", "host", host)
+		traceLog.V(1).Info("host is suitable for live migration, keeping", "host", host)
 	}
 	return result, nil
 }

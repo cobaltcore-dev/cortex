@@ -4,7 +4,6 @@
 package infrastructure
 
 import (
-	"log/slog"
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
@@ -67,13 +66,13 @@ func (k *VMwareProjectCommitmentsKPI) Collect(ch chan<- prometheus.Metric) {
 
 	flavorsByName, err := k.getFlavorsByName()
 	if err != nil {
-		slog.Error("vmware_project_commitments: failed to load flavors", "err", err)
+		log.Error(err, "vmware_project_commitments: failed to load flavors")
 		return
 	}
 
 	projects, err := k.getProjectsWithDomains()
 	if err != nil {
-		slog.Error("vmware_project_commitments: failed to load projects with domains", "err", err)
+		log.Error(err, "vmware_project_commitments: failed to load projects with domains")
 		return
 	}
 
@@ -166,12 +165,12 @@ func (k *VMwareProjectCommitmentsKPI) getRunningHanaServers() ([]nova.Server, er
 func (k *VMwareProjectCommitmentsKPI) collectGeneralPurpose(ch chan<- prometheus.Metric, flavorsByName map[string]nova.Flavor, projects map[string]projectWithDomain) {
 	commitments, err := k.getGeneralPurposeCommitments()
 	if err != nil {
-		slog.Error("vmware_project_commitments: failed to load gp commitments", "err", err)
+		log.Error(err, "vmware_project_commitments: failed to load gp commitments")
 		return
 	}
 	servers, err := k.getGeneralPurposeServers()
 	if err != nil {
-		slog.Error("vmware_project_commitments: failed to load gp servers", "err", err)
+		log.Error(err, "vmware_project_commitments: failed to load gp servers")
 		return
 	}
 
@@ -185,7 +184,7 @@ func (k *VMwareProjectCommitmentsKPI) collectGeneralPurpose(ch chan<- prometheus
 		case "ram":
 			bytes, err := bytesFromUnit(float64(c.Amount), c.Unit)
 			if err != nil {
-				slog.Warn("vmware_project_commitments: unknown ram unit", "unit", c.Unit, "err", err)
+				log.Error(err, "vmware_project_commitments: unknown ram unit", "unit", c.Unit)
 				continue
 			}
 			committed[gpKey{c.ProjectID, c.AvailabilityZone, "ram"}] += bytes
@@ -196,7 +195,7 @@ func (k *VMwareProjectCommitmentsKPI) collectGeneralPurpose(ch chan<- prometheus
 	for _, s := range servers {
 		flavor, ok := flavorsByName[s.FlavorName]
 		if !ok {
-			slog.Warn("vmware_project_commitments: gp flavor not found", "flavor", s.FlavorName)
+			log.V(1).Info("vmware_project_commitments: gp flavor not found", "flavor", s.FlavorName)
 			continue
 		}
 		used[gpKey{s.TenantID, s.OSEXTAvailabilityZone, "cpu"}] += float64(flavor.VCPUs)
@@ -224,12 +223,12 @@ func (k *VMwareProjectCommitmentsKPI) collectGeneralPurpose(ch chan<- prometheus
 func (k *VMwareProjectCommitmentsKPI) collectHana(ch chan<- prometheus.Metric, flavorsByName map[string]nova.Flavor, projects map[string]projectWithDomain) {
 	commitments, err := k.getHanaInstanceCommitments()
 	if err != nil {
-		slog.Error("vmware_resource_commitments: failed to load hana commitments", "err", err)
+		log.Error(err, "vmware_resource_commitments: failed to load hana commitments")
 		return
 	}
 	servers, err := k.getRunningHanaServers()
 	if err != nil {
-		slog.Error("vmware_resource_commitments: failed to load hana servers", "err", err)
+		log.Error(err, "vmware_resource_commitments: failed to load hana servers")
 		return
 	}
 
@@ -260,7 +259,7 @@ func (k *VMwareProjectCommitmentsKPI) collectHana(ch chan<- prometheus.Metric, f
 		unused := total - run
 		flavor, ok := flavorsByName[ck.flavorName]
 		if !ok {
-			slog.Warn("vmware_resource_commitments: hana flavor not found", "flavor", ck.flavorName)
+			log.V(1).Info("vmware_resource_commitments: hana flavor not found", "flavor", ck.flavorName)
 			continue
 		}
 		totals[resourceKey{ck.projectID, ck.az, ck.cpuArch, "cpu"}] += float64(unused) * float64(flavor.VCPUs)

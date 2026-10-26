@@ -6,14 +6,16 @@ package keystone
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"net/http"
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("keystone")
 
 // Kubernetes connector which initializes the openstack connection from a secret.
 type Connector struct {
@@ -125,7 +127,7 @@ func (api *keystoneClient) Authenticate(ctx context.Context) error {
 		// Already authenticated.
 		return nil
 	}
-	slog.Info("authenticating against openstack", "url", api.keystoneConf.URL)
+	log.Info("authenticating against openstack", "url", api.keystoneConf.URL)
 	authOptions := gophercloud.AuthOptions{
 		IdentityEndpoint: api.keystoneConf.URL,
 		Username:         api.keystoneConf.OSUsername,
@@ -148,7 +150,7 @@ func (api *keystoneClient) Authenticate(ctx context.Context) error {
 		return err
 	}
 	api.client = provider
-	slog.Info("authenticated against openstack")
+	log.Info("authenticated against openstack")
 	return nil
 }
 

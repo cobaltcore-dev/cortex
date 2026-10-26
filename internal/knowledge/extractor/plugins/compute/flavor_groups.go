@@ -145,14 +145,14 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 		var extraSpecs map[string]string
 		if row.ExtraSpecs != "" {
 			if err := json.Unmarshal([]byte(row.ExtraSpecs), &extraSpecs); err != nil {
-				flavorGroupLog.Info("failed to parse extra_specs for flavor", "flavor", row.Name, "error", err)
+				flavorGroupLog.V(1).Info("failed to parse extra_specs for flavor", "flavor", row.Name, "error", err)
 				continue
 			}
 		}
 
 		hwVersion, exists := extraSpecs["quota:hw_version"]
 		if !exists || hwVersion == "" {
-			flavorGroupLog.Info("flavor missing hw_version extra_spec", "flavor", row.Name)
+			flavorGroupLog.V(1).Info("flavor missing hw_version extra_spec", "flavor", row.Name)
 			continue
 		}
 
@@ -219,7 +219,7 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 			ramCoreRatioMax = &maxRatio
 		}
 
-		flavorGroupLog.Info("identified largest and smallest flavors",
+		flavorGroupLog.V(1).Info("identified largest and smallest flavors",
 			"groupName", groupName,
 			"largestFlavor", largest.Name,
 			"largestMemoryMB", largest.MemoryMB,

@@ -5,12 +5,12 @@ package weighers
 
 import (
 	"context"
-	"log/slog"
 	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"github.com/go-logr/logr"
 )
 
 // This weigher implements the "soft affinity" and "soft anti-affinity" policy
@@ -26,13 +26,13 @@ type KVMInstanceGroupSoftAffinityStep struct {
 	lib.BaseWeigher[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
-func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	result.Statistics["affinity"] = s.PrepareStats(request, "float")
 
 	ig := request.Spec.Data.InstanceGroup
 	if ig == nil {
-		traceLog.Info("no instance group in request, skipping weigher")
+		traceLog.V(1).Info("no instance group in request, skipping weigher")
 		return result, nil
 	}
 	policy := ig.Data.Policy
@@ -43,17 +43,17 @@ func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog *slog.Logger, request ap
 	case "soft-affinity":
 		factor = 1.0
 	default:
-		traceLog.Info("instance group policy is not 'soft-affinity' or 'soft-anti-affinity', skipping weigher", "policy", policy)
+		traceLog.V(1).Info("instance group policy is not 'soft-affinity' or 'soft-anti-affinity', skipping weigher", "policy", policy)
 		return result, nil
 	}
 	if len(ig.Data.Members) == 0 {
-		traceLog.Info("instance group has no members, skipping weigher")
+		traceLog.V(1).Info("instance group has no members, skipping weigher")
 		return result, nil
 	}
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
 	hvsByName := make(map[string]hv1.Hypervisor, len(hvs.Items))
@@ -67,7 +67,7 @@ func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog *slog.Logger, request ap
 	for host := range result.Activations {
 		hv, ok := hvsByName[host]
 		if !ok {
-			traceLog.Info("host not found in hypervisor list, skipping", "host", host)
+			traceLog.V(1).Info("host not found in hypervisor list, skipping", "host", host)
 			continue
 		}
 		count := 0
@@ -79,7 +79,7 @@ func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog *slog.Logger, request ap
 		weight := factor * float64(count)
 		result.Activations[host] = weight
 		result.Statistics["affinity"].Hosts[host] = weight
-		traceLog.Info("calculated affinity weight for host",
+		traceLog.V(1).Info("calculated affinity weight for host",
 			"host", host, "count", count, "weight", weight)
 	}
 	return result, nil

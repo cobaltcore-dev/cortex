@@ -62,17 +62,13 @@ spec:
           {{- if .Values.controllerManager.container.image.pullPolicy }}
           imagePullPolicy: {{ .Values.controllerManager.container.image.pullPolicy }}
           {{- end }}
+          {{- if .Values.controllerManager.container.env }}
           env:
-            {{- if and .Values.controllerManager.container.logLevel (not (and .Values.controllerManager.container.env (hasKey .Values.controllerManager.container.env "LOG_LEVEL"))) }}
-            - name: LOG_LEVEL
-              value: {{ .Values.controllerManager.container.logLevel | quote }}
-            {{- end }}
-            {{- if .Values.controllerManager.container.env }}
             {{- range $key, $value := .Values.controllerManager.container.env }}
             - name: {{ $key }}
               value: {{ $value }}
             {{- end }}
-            {{- end }}
+          {{- end }}
           livenessProbe:
             {{- toYaml .Values.controllerManager.container.livenessProbe | nindent 12 }}
           readinessProbe:

@@ -4,7 +4,7 @@
 package filters
 
 import (
-	"log/slog"
+	"github.com/go-logr/logr"
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -326,7 +326,7 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &FilterInstanceGroupAffinityStep{}
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(logr.Discard(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
@@ -364,7 +364,7 @@ func TestFilterInstanceGroupAffinityStep_SkipsForNonPlacementIntent(t *testing.T
 			request.Spec.Data.SchedulerHints = map[string]any{"_nova_check_type": intent}
 			step := &FilterInstanceGroupAffinityStep{}
 
-			result, err := step.Run(slog.Default(), request)
+			result, err := step.Run(logr.Discard(), request)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

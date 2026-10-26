@@ -5,7 +5,7 @@ package filters
 
 import (
 	"context"
-	"log/slog"
+	"github.com/go-logr/logr"
 	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -19,7 +19,7 @@ type FilterImagePropertiesStep struct {
 }
 
 // Filter hosts based on image properties given in the request spec.
-func (s *FilterImagePropertiesStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterImagePropertiesStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	// Resolve the scheduling intent once and fall back to a readable default
@@ -43,7 +43,7 @@ func (s *FilterImagePropertiesStep) Run(traceLog *slog.Logger, request api.Exter
 			api.CapacityProbeIntent,
 		}
 		if slices.Contains(intentsExpectedToNotHaveImageMeta, intent) {
-			traceLog.Debug("skipping filter: expected to have no image metadata",
+			traceLog.V(1).Info("skipping filter: expected to have no image metadata",
 				"intent", intent)
 			return result, nil
 		}
@@ -55,8 +55,7 @@ func (s *FilterImagePropertiesStep) Run(traceLog *slog.Logger, request api.Exter
 	if err != nil {
 		// Hypervisor type could not be determined. In this case, just
 		// ignore the filter and return all hosts.
-		traceLog.Warn("could not determine hypervisor type from image properties",
-			"error", err)
+		traceLog.Error(err, "could not determine hypervisor type from image properties")
 		// Expose this event through the step monitor to alert on high-frequency
 		// occurrences of this situation. Include the request intent as a dynamic
 		// label so the alert can pinpoint which scheduling intents are affected.
@@ -68,16 +67,16 @@ func (s *FilterImagePropertiesStep) Run(traceLog *slog.Logger, request api.Exter
 	}
 
 	if hvType != api.NovaImageMetaHVTypeKVM {
-		traceLog.Info("filtering out all known kvm hypervisors since image properties indicate a different hypervisor type",
+		traceLog.V(1).Info("filtering out all known kvm hypervisors since image properties indicate a different hypervisor type",
 			"image_hypervisor_type", hvType)
 		hvs := new(hv1.HypervisorList)
 		if err := s.Client.List(context.Background(), hvs); err != nil {
-			traceLog.Error("failed to list hypervisors", "error", err)
+			traceLog.Error(err, "failed to list hypervisors")
 			return nil, err
 		}
 		for _, hv := range hvs.Items {
 			delete(result.Activations, hv.Name)
-			traceLog.Debug("filtering host which is kvm hypervisor", "host", hv.Name)
+			traceLog.V(1).Info("filtering host which is kvm hypervisor", "host", hv.Name)
 		}
 	}
 

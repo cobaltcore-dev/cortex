@@ -5,7 +5,7 @@ package filters
 
 import (
 	"context"
-	"log/slog"
+	"github.com/go-logr/logr"
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -485,7 +485,7 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 			step := &FilterAggregateMetadata{}
 			step.Client = fakeClient
 
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(logr.Discard(), tt.request)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
@@ -537,7 +537,7 @@ func TestFilterAggregateMetadata_Run_ClientError(t *testing.T) {
 	step := &FilterAggregateMetadata{}
 	step.Client = fakeClient
 
-	_, err := step.Run(slog.Default(), request)
+	_, err := step.Run(logr.Discard(), request)
 	if err == nil {
 		t.Errorf("expected error when client fails, got none")
 	}
@@ -584,7 +584,7 @@ func TestFilterAggregateMetadata_SkipsForCapacityProbeIntent(t *testing.T) {
 		},
 		Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
 	}
-	result, err := step.Run(slog.Default(), request)
+	result, err := step.Run(logr.Discard(), request)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -625,7 +625,7 @@ func TestFilterAggregateMetadata_AppliesForFailoverIntents(t *testing.T) {
 				},
 				Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
 			}
-			result, err := step.Run(slog.Default(), request)
+			result, err := step.Run(logr.Discard(), request)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

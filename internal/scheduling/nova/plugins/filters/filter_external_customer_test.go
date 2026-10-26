@@ -4,7 +4,7 @@
 package filters
 
 import (
-	"log/slog"
+	"github.com/go-logr/logr"
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -456,7 +456,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 				Build()
 			step.Options = tt.opts
 
-			result, err := step.Run(slog.Default(), tt.request)
+			result, err := step.Run(logr.Discard(), tt.request)
 			if tt.expectError {
 				if err == nil {
 					t.Errorf("expected error but got none")
@@ -576,7 +576,7 @@ func TestFilterExternalCustomerStep_SkipsForNonPlacementIntent(t *testing.T) {
 				},
 				Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
 			}
-			result, err := step.Run(slog.Default(), request)
+			result, err := step.Run(logr.Discard(), request)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

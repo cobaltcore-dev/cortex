@@ -4,7 +4,7 @@
 package filters
 
 import (
-	"log/slog"
+	"github.com/go-logr/logr"
 	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -18,25 +18,25 @@ type FilterHostInstructionsStep struct {
 // Filter hosts based on instructions given in the request spec. Supported are:
 // - spec.ignore_hosts: Filter out all hosts in this list.
 // - spec.force_hosts: Include only hosts in this list.
-func (s *FilterHostInstructionsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterHostInstructionsStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	if request.Spec.Data.IgnoreHosts != nil {
 		for _, host := range *request.Spec.Data.IgnoreHosts {
 			delete(result.Activations, host)
-			traceLog.Info("filtering host which is ignored", "host", host)
+			traceLog.V(1).Info("filtering host which is ignored", "host", host)
 		}
 	} else {
-		traceLog.Info("no hosts to ignore specified")
+		traceLog.V(1).Info("no hosts to ignore specified")
 	}
 	if request.Spec.Data.ForceHosts != nil {
 		for host := range result.Activations {
 			if !slices.Contains(*request.Spec.Data.ForceHosts, host) {
 				delete(result.Activations, host)
-				traceLog.Info("filtering host which is not forced", "host", host)
+				traceLog.V(1).Info("filtering host which is not forced", "host", host)
 			}
 		}
 	} else {
-		traceLog.Info("no forced hosts specified")
+		traceLog.V(1).Info("no forced hosts specified")
 	}
 	return result, nil
 }

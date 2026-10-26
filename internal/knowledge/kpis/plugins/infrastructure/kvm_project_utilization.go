@@ -5,7 +5,6 @@ package infrastructure
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
@@ -81,20 +80,20 @@ func (k *KVMProjectUtilizationKPI) Describe(ch chan<- *prometheus.Desc) {
 func (k *KVMProjectUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 	hosts, err := k.getKVMHosts()
 	if err != nil {
-		slog.Error("kvm_project_utilization: failed to get KVM hosts", "error", err)
+		log.Error(err, "kvm_project_utilization: failed to get KVM hosts")
 		return
 	}
 
 	// Export project x flavor x compute_host instance count metric
 	projectInstanceCounts, err := k.queryProjectInstanceCount()
 	if err != nil {
-		slog.Error("kvm_project_utilization: Failed to query project instance count for project utilization KPI", "error", err)
+		log.Error(err, "kvm_project_utilization: Failed to query project instance count for project utilization KPI")
 		return
 	}
 	for _, projectInstanceCount := range projectInstanceCounts {
 		host, ok := hosts[projectInstanceCount.ComputeHost]
 		if !ok {
-			slog.Warn("kvm_project_utilization: Compute host not found for project instance count", "compute_host", projectInstanceCount.ComputeHost)
+			log.V(1).Info("kvm_project_utilization: Compute host not found for project instance count", "compute_host", projectInstanceCount.ComputeHost)
 			continue
 		}
 		hostLabels := host.getHostLabels()
@@ -105,13 +104,13 @@ func (k *KVMProjectUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 	// Export project x compute_host x resource capacity usage metric
 	projectCapacityUsages, err := k.queryProjectCapacityUsage()
 	if err != nil {
-		slog.Error("kvm_project_utilization: Failed to query project capacity usage for project utilization KPI", "error", err)
+		log.Error(err, "kvm_project_utilization: Failed to query project capacity usage for project utilization KPI")
 		return
 	}
 	for _, projectCapacityUsage := range projectCapacityUsages {
 		host, ok := hosts[projectCapacityUsage.ComputeHost]
 		if !ok {
-			slog.Warn("kvm_project_utilization: Compute host not found for project capacity usage", "compute_host", projectCapacityUsage.ComputeHost)
+			log.V(1).Info("kvm_project_utilization: Compute host not found for project capacity usage", "compute_host", projectCapacityUsage.ComputeHost)
 			continue
 		}
 		hostLabels := host.getHostLabels()

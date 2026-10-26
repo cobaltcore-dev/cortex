@@ -5,7 +5,7 @@ package filters
 
 import (
 	"context"
-	"log/slog"
+	"github.com/go-logr/logr"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
@@ -20,12 +20,12 @@ type FilterStatusConditionsStep struct {
 
 // Check that all status conditions meet the expected values, for example,
 // that the hypervisor is ready and not disabled.
-func (s *FilterStatusConditionsStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterStatusConditionsStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
 
@@ -50,7 +50,7 @@ func (s *FilterStatusConditionsStep) Run(traceLog *slog.Logger, request api.Exte
 		for conditionType, expectedStatus := range expected {
 			cd := meta.FindStatusCondition(hv.Status.Conditions, conditionType)
 			if cd == nil {
-				traceLog.Info(
+				traceLog.V(1).Info(
 					"hypervisor missing condition, keeping",
 					"host", hv.Name, "condition", conditionType,
 				)
@@ -62,7 +62,7 @@ func (s *FilterStatusConditionsStep) Run(traceLog *slog.Logger, request api.Exte
 				continue // Don't care about this condition
 			}
 			if cd.Status != expectedStatus {
-				traceLog.Info(
+				traceLog.V(1).Info(
 					"hypervisor condition not met, filtering host",
 					"host", hv.Name,
 					"condition", conditionType,
@@ -73,12 +73,12 @@ func (s *FilterStatusConditionsStep) Run(traceLog *slog.Logger, request api.Exte
 			}
 		}
 		if allMet {
-			traceLog.Info("hypervisor meets all status conditions, keeping host", "host", hv.Name)
+			traceLog.V(1).Info("hypervisor meets all status conditions, keeping host", "host", hv.Name)
 			hostsReady[hv.Name] = struct{}{}
 		}
 	}
 
-	traceLog.Info("hosts passing status conditions filter", "hosts", hostsReady)
+	traceLog.V(1).Info("hosts passing status conditions filter", "hosts", hostsReady)
 	for host := range result.Activations {
 		if _, ok := hostsReady[host]; ok {
 			continue

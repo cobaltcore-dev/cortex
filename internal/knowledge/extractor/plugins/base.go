@@ -5,13 +5,15 @@ package plugins
 
 import (
 	"errors"
-	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("plugins")
 
 // Common base for all extractors that provides some functionality
 // that would otherwise be duplicated across all extractors.
@@ -60,6 +62,6 @@ func (e *BaseExtractor[Opts, F]) Extracted(fs []F) ([]Feature, error) {
 	for i, f := range fs {
 		output[i] = f
 	}
-	slog.Info("features: extracted", "count", len(output))
+	log.V(1).Info("features: extracted", "count", len(output))
 	return output, nil
 }

@@ -5,7 +5,6 @@ package nova
 
 import (
 	"context"
-	"log/slog"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -18,9 +17,13 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
+
+// log is the shared package-level logger for the nova scheduler package.
+var schedulerLog = logf.Log.WithName("nova-scheduler")
 
 // The deschedulings pipeline controller is responsible for periodically running
 // the descheduling pipeline and creating descheduling resources based on the
@@ -66,28 +69,28 @@ func (c *DetectorPipelineController) CreateDeschedulingsPeriodically(ctx context
 	for {
 		select {
 		case <-ctx.Done():
-			slog.Info("descheduler shutting down")
+			schedulerLog.Info("descheduler shutting down")
 			return
 		default:
 			// Get the pipeline for the current configuration.
 			p, ok := c.GetPipeline("kvm-descheduler")
 			if !ok {
-				slog.Error("descheduler: pipeline not found or not ready yet")
+				schedulerLog.Error(nil, "descheduler: pipeline not found or not ready yet")
 				time.Sleep(jobloop.DefaultJitter(time.Minute))
 				continue
 			}
 			decisionsByStep := p.Run()
 			if len(decisionsByStep) == 0 {
-				slog.Info("descheduler: no decisions made in this run")
+				schedulerLog.V(1).Info("descheduler: no decisions made in this run")
 				time.Sleep(jobloop.DefaultJitter(time.Minute))
 				continue
 			}
-			slog.Info("descheduler: decisions made", "decisionsByStep", decisionsByStep)
+			schedulerLog.V(1).Info("descheduler: decisions made", "decisionsByStep", decisionsByStep)
 			decisions := p.Combine(decisionsByStep)
 			var err error
 			decisions, err = p.Breaker.Filter(ctx, decisions)
 			if err != nil {
-				slog.Error("descheduler: failed to filter decisions for cycles", "error", err)
+				schedulerLog.Error(err, "descheduler: failed to filter decisions for cycles")
 				time.Sleep(jobloop.DefaultJitter(time.Minute))
 				continue
 			}
@@ -99,7 +102,7 @@ func (c *DetectorPipelineController) CreateDeschedulingsPeriodically(ctx context
 				var existing v1alpha1.Descheduling
 				err := p.Get(ctx, client.ObjectKey{Name: decision.VMID}, &existing)
 				if err == nil {
-					slog.Info("descheduler: descheduling already exists for VM, skipping", "vmId", decision.VMID)
+					schedulerLog.V(1).Info("descheduler: descheduling already exists for VM, skipping", "vmId", decision.VMID)
 					continue
 				}
 
@@ -111,11 +114,11 @@ func (c *DetectorPipelineController) CreateDeschedulingsPeriodically(ctx context
 				descheduling.Spec.PrevHost = decision.Host
 				descheduling.Spec.Reason = decision.Reason
 				if err := p.Create(ctx, descheduling); err != nil {
-					slog.Error("descheduler: failed to create descheduling", "error", err)
+					schedulerLog.Error(err, "descheduler: failed to create descheduling")
 					time.Sleep(jobloop.DefaultJitter(time.Minute))
 					continue
 				}
-				slog.Info("descheduler: created descheduling", "vmId", decision.VMID, "host", decision.Host, "reason", decision.Reason)
+				schedulerLog.Info("descheduler: created descheduling", "vmId", decision.VMID, "host", decision.Host, "reason", decision.Reason)
 			}
 
 			time.Sleep(jobloop.DefaultJitter(time.Minute))

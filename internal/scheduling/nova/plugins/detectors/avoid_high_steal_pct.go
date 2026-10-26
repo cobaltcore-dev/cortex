@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
@@ -15,7 +14,10 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("detectors")
 
 type AvoidHighStealPctStepOpts struct {
 	// Max steal pct threshold above which VMs should be descheduled.
@@ -48,7 +50,7 @@ func (s *AvoidHighStealPctStep) Init(ctx context.Context, client client.Client, 
 
 func (s *AvoidHighStealPctStep) Run() ([]plugins.VMDetection, error) {
 	if s.Options.MaxStealPctOverObservedTimeSpan <= 0 {
-		slog.Info("skipping step because maxStealPctOverObservedTimeSpan is not set or <= 0")
+		log.V(1).Info("skipping step because maxStealPctOverObservedTimeSpan is not set or <= 0")
 		return nil, nil
 	}
 	// Get VMs matching the MaxStealPctOverObservedTimeSpan option.
@@ -73,7 +75,7 @@ func (s *AvoidHighStealPctStep) Run() ([]plugins.VMDetection, error) {
 				Reason: fmt.Sprintf("kvm monitoring indicates cpu steal pct %.2f%% which is above %.2f%% threshold", f.MaxStealTimePct, s.Options.MaxStealPctOverObservedTimeSpan),
 				Host:   f.Host,
 			})
-			slog.Info("vm marked for descheduling due to high cpu steal pct",
+			log.V(1).Info("vm marked for descheduling due to high cpu steal pct",
 				"instanceUUID", f.InstanceUUID,
 				"maxStealTimePct", f.MaxStealTimePct,
 			)

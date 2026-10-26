@@ -7,7 +7,6 @@ import (
 	"context"
 	_ "embed"
 	"errors"
-	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
@@ -73,7 +72,7 @@ func (e *VROpsHostsystemContentionShortTermExtractor) Extract() ([]plugins.Featu
 	for _, ur := range unresolved {
 		computeHost, ok := hostsystemToComputeHost[ur.Hostsystem]
 		if !ok {
-			slog.Warn("skipping unresolved hostsystem", "hostsystem", ur.Hostsystem)
+			log.V(1).Info("skipping unresolved hostsystem", "hostsystem", ur.Hostsystem)
 			continue
 		}
 		avgsByComputeHost[computeHost] = append(avgsByComputeHost[computeHost], ur.AvgCPUContention)
@@ -83,7 +82,7 @@ func (e *VROpsHostsystemContentionShortTermExtractor) Extract() ([]plugins.Featu
 	var features []VROpsHostsystemContentionShortTerm
 	for computeHost, avgContentions := range avgsByComputeHost {
 		if len(avgContentions) == 0 {
-			slog.Warn("no avg cpu contentions for compute host", "compute_host", computeHost)
+			log.V(1).Info("no avg cpu contentions for compute host", "compute_host", computeHost)
 			continue
 		}
 		var sumContentions float64 = 0

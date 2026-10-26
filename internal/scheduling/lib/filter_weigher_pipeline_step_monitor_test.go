@@ -4,11 +4,10 @@
 package lib
 
 import (
-	"log/slog"
-	"os"
 	"strings"
 	"testing"
 
+	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
@@ -32,7 +31,7 @@ func TestStepMonitorRun(t *testing.T) {
 		removedHostsObserver: removedHostsObserver,
 	}
 	step := &mockWeigher[mockFilterWeigherPipelineRequest]{
-		RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+		RunFunc: func(traceLog logr.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
 			return &FilterWeigherPipelineStepResult{
 				Activations: map[string]float64{"host1": 0.1, "host2": 1.0, "host3": 0.0},
 			}, nil
@@ -42,7 +41,7 @@ func TestStepMonitorRun(t *testing.T) {
 		Hosts:   []string{"host1", "host2", "host3"},
 		Weights: map[string]float64{"host1": 0.2, "host2": 0.1, "host3": 0.0},
 	}
-	if _, err := monitor.RunWrapped(slog.Default(), request, step); err != nil {
+	if _, err := monitor.RunWrapped(logr.Discard(), request, step); err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
 	if len(removedHostsObserver.Observations) != 1 {
@@ -67,7 +66,7 @@ func TestStepMonitorRunEvents(t *testing.T) {
 		stepEventCollector: stepEventCollector,
 	}
 	step := &mockWeigher[mockFilterWeigherPipelineRequest]{
-		RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+		RunFunc: func(traceLog logr.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
 			return &FilterWeigherPipelineStepResult{
 				Activations: map[string]float64{"host1": 0.0},
 				Events: []FilterWeigherPipelineStepEvent{
@@ -80,7 +79,7 @@ func TestStepMonitorRunEvents(t *testing.T) {
 		Hosts:   []string{"host1"},
 		Weights: map[string]float64{"host1": 0.0},
 	}
-	if _, err := monitor.RunWrapped(slog.Default(), request, step); err != nil {
+	if _, err := monitor.RunWrapped(logr.Discard(), request, step); err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
 	if got := len(stepEventCollector.counts); got != 1 {
@@ -101,7 +100,7 @@ func TestStepMonitorRunEventsWithDynamicLabels(t *testing.T) {
 		stepEventCollector: stepEventCollector,
 	}
 	step := &mockWeigher[mockFilterWeigherPipelineRequest]{
-		RunFunc: func(traceLog *slog.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
+		RunFunc: func(traceLog logr.Logger, request mockFilterWeigherPipelineRequest) (*FilterWeigherPipelineStepResult, error) {
 			return &FilterWeigherPipelineStepResult{
 				Activations: map[string]float64{"host1": 0.0},
 				Events: []FilterWeigherPipelineStepEvent{
@@ -117,7 +116,7 @@ func TestStepMonitorRunEventsWithDynamicLabels(t *testing.T) {
 		Hosts:   []string{"host1"},
 		Weights: map[string]float64{"host1": 0.0},
 	}
-	if _, err := monitor.RunWrapped(slog.Default(), request, step); err != nil {
+	if _, err := monitor.RunWrapped(logr.Discard(), request, step); err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
 	registry := prometheus.NewRegistry()
@@ -208,9 +207,6 @@ func TestImpact(t *testing.T) {
 		},
 	}
 
-	opts := &slog.HandlerOptions{Level: slog.LevelDebug}
-	handler := slog.NewTextHandler(os.Stdout, opts)
-	slog.SetDefault(slog.New(handler))
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			impactValue, err := impact(tc.before, tc.after, tc.stats, 5)

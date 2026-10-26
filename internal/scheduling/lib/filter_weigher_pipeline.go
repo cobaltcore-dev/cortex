@@ -6,7 +6,6 @@ package lib
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"maps"
 	"math"
 	"slices"
@@ -14,8 +13,12 @@ import (
 	"sync"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var pipelineLog = logf.Log.WithName("scheduler-pipeline")
 
 type FilterWeigherPipeline[RequestType FilterWeigherPipelineRequest] interface {
 	// Run the scheduling pipeline with the given request.
@@ -62,11 +65,11 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 	filterErrors := make(map[string]error)
 	unknownFilters := []string{}
 	for _, filterConfig := range confedFilters {
-		slog.Info("scheduler: configuring filter", "name", filterConfig.Name)
-		slog.Info("supported:", "filters", slices.Sorted(maps.Keys(supportedFilters)))
+		pipelineLog.V(1).Info("scheduler: configuring filter", "name", filterConfig.Name)
+		pipelineLog.V(1).Info("supported:", "filters", slices.Sorted(maps.Keys(supportedFilters)))
 		makeFilter, ok := supportedFilters[filterConfig.Name]
 		if !ok {
-			slog.Error("scheduler: unsupported filter", "name", filterConfig.Name)
+			pipelineLog.Error(nil, "scheduler: unsupported filter", "name", filterConfig.Name)
 			unknownFilters = append(unknownFilters, filterConfig.Name)
 			continue
 		}
@@ -74,13 +77,13 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 		filter = validateFilter(filter)
 		filter = monitorFilter(filter, filterConfig.Name, pipelineMonitor)
 		if err := filter.Init(ctx, client, filterConfig); err != nil {
-			slog.Warn("scheduler: failed to initialize filter", "name", filterConfig.Name, "error", err)
+			pipelineLog.Error(err, "scheduler: failed to initialize filter", "name", filterConfig.Name)
 			filterErrors[filterConfig.Name] = errors.New("failed to initialize filter: " + err.Error())
 			continue
 		}
 		filtersByName[filterConfig.Name] = filter
 		filtersOrder = append(filtersOrder, filterConfig.Name)
-		slog.Info("scheduler: added filter", "name", filterConfig.Name)
+		pipelineLog.V(1).Info("scheduler: added filter", "name", filterConfig.Name)
 	}
 
 	// Load all weighers from the configuration.
@@ -90,11 +93,11 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 	weigherErrors := make(map[string]error)
 	unknownWeighers := []string{}
 	for _, weigherConfig := range confedWeighers {
-		slog.Info("scheduler: configuring weigher", "name", weigherConfig.Name)
-		slog.Info("supported:", "weighers", slices.Sorted(maps.Keys(supportedWeighers)))
+		pipelineLog.V(1).Info("scheduler: configuring weigher", "name", weigherConfig.Name)
+		pipelineLog.V(1).Info("supported:", "weighers", slices.Sorted(maps.Keys(supportedWeighers)))
 		makeWeigher, ok := supportedWeighers[weigherConfig.Name]
 		if !ok {
-			slog.Error("scheduler: unsupported weigher", "name", weigherConfig.Name)
+			pipelineLog.Error(nil, "scheduler: unsupported weigher", "name", weigherConfig.Name)
 			unknownWeighers = append(unknownWeighers, weigherConfig.Name)
 			continue
 		}
@@ -103,7 +106,7 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 		weigher = validateWeigher(weigher)
 		weigher = monitorWeigher(weigher, weigherConfig.Name, pipelineMonitor)
 		if err := weigher.Init(ctx, client, weigherConfig); err != nil {
-			slog.Warn("scheduler: failed to initialize weigher", "name", weigherConfig.Name, "error", err)
+			pipelineLog.Error(err, "scheduler: failed to initialize weigher", "name", weigherConfig.Name)
 			weigherErrors[weigherConfig.Name] = errors.New("failed to initialize weigher: " + err.Error())
 			continue
 		}
@@ -114,7 +117,7 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 		} else {
 			weighersMultipliers[weigherConfig.Name] = *weigherConfig.Multiplier
 		}
-		slog.Info("scheduler: added weigher", "name", weigherConfig.Name)
+		pipelineLog.V(1).Info("scheduler: added weigher", "name", weigherConfig.Name)
 	}
 
 	return PipelineInitResult[FilterWeigherPipeline[RequestType]]{
@@ -137,25 +140,25 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 // During this process, the request is mutated to only include the
 // remaining hosts.
 func (p *filterWeigherPipeline[RequestType]) runFilters(
-	log *slog.Logger,
+	traceLog logr.Logger,
 	request RequestType,
 ) (filteredRequest RequestType, stepResults []v1alpha1.StepResult) {
 
 	filteredRequest = request
 	for _, filterName := range p.filtersOrder {
 		filter := p.filters[filterName]
-		stepLog := log.With("filter", filterName)
-		stepLog.Info("scheduler: running filter")
+		stepLog := traceLog.WithValues("filter", filterName)
+		stepLog.V(1).Info("scheduler: running filter")
 		result, err := filter.Run(stepLog, filteredRequest)
 		if errors.Is(err, ErrStepSkipped) {
-			stepLog.Info("scheduler: filter skipped")
+			stepLog.V(1).Info("scheduler: filter skipped")
 			continue
 		}
 		if err != nil {
-			stepLog.Error("scheduler: failed to run filter", "error", err)
+			stepLog.Error(err, "scheduler: failed to run filter")
 			continue
 		}
-		stepLog.Info("scheduler: finished filter")
+		stepLog.V(1).Info("scheduler: finished filter")
 		stepResults = append(stepResults, v1alpha1.StepResult{
 			StepName:    filterName,
 			Activations: result.Activations,
@@ -169,7 +172,7 @@ func (p *filterWeigherPipeline[RequestType]) runFilters(
 
 // Execute weighers and collect their activations by step name.
 func (p *filterWeigherPipeline[RequestType]) runWeighers(
-	log *slog.Logger,
+	traceLog logr.Logger,
 	filteredRequest RequestType,
 ) map[string]map[string]float64 {
 
@@ -180,18 +183,18 @@ func (p *filterWeigherPipeline[RequestType]) runWeighers(
 	for _, weigherName := range p.weighersOrder {
 		weigher := p.weighers[weigherName]
 		wg.Go(func() {
-			stepLog := log.With("weigher", weigherName)
-			stepLog.Info("scheduler: running weigher")
+			stepLog := traceLog.WithValues("weigher", weigherName)
+			stepLog.V(1).Info("scheduler: running weigher")
 			result, err := weigher.Run(stepLog, filteredRequest)
 			if errors.Is(err, ErrStepSkipped) {
-				stepLog.Info("scheduler: weigher skipped")
+				stepLog.V(1).Info("scheduler: weigher skipped")
 				return
 			}
 			if err != nil {
-				stepLog.Error("scheduler: failed to run weigher", "error", err)
+				stepLog.Error(err, "scheduler: failed to run weigher")
 				return
 			}
-			stepLog.Info("scheduler: finished weigher")
+			stepLog.V(1).Info("scheduler: finished weigher")
 			lock.Lock()
 			defer lock.Unlock()
 			activationsByStep[weigherName] = result.Activations
@@ -218,7 +221,7 @@ func (p *filterWeigherPipeline[RequestType]) normalizeInputWeights(weights map[s
 
 // Apply the step weights to the input weights.
 func (p *filterWeigherPipeline[RequestType]) applyWeights(
-	traceLog *slog.Logger,
+	traceLog logr.Logger,
 	stepWeights map[string]map[string]float64,
 	inWeights map[string]float64,
 ) map[string]float64 {
@@ -240,11 +243,11 @@ func (p *filterWeigherPipeline[RequestType]) applyWeights(
 		// This logging will help us validate the weigher multipliers are configured
 		// and applied correctly, as well as debug any issues with the weighers outputs.
 		if multiplier == 0 {
-			traceLog.Info("weigher multiplier is zero, won't have any effect",
+			traceLog.V(1).Info("weigher multiplier is zero, won't have any effect",
 				"weigher", weigherName, "multiplier", multiplier)
 		}
 		if multiplier < 0 {
-			traceLog.Info("weigher multiplier is negative, inverting weigher behavior",
+			traceLog.V(1).Info("weigher multiplier is negative, inverting weigher behavior",
 				"weigher", weigherName, "multiplier", multiplier)
 		}
 		outWeights = p.Apply(outWeights, weigherActivations, multiplier)
@@ -271,15 +274,10 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 	if err := opts.Validate(); err != nil {
 		return v1alpha1.DecisionResult{}, err
 	}
-	slogArgs := request.GetTraceLogArgs()
-	slogArgsAny := make([]any, 0, len(slogArgs))
-	for _, arg := range slogArgs {
-		slogArgsAny = append(slogArgsAny, arg)
-	}
-	traceLog := slog.With(slogArgsAny...)
+	traceLog := pipelineLog.WithValues(request.GetTraceLogArgs()...)
 
 	hostsIn := request.GetHosts()
-	traceLog.Info("scheduler: starting pipeline", "hosts", hostsIn)
+	traceLog.V(1).Info("scheduler: starting pipeline", "hosts", hostsIn)
 
 	// Normalize the input weights so we can apply step weights meaningfully.
 	// Only do this if there are weighers to combine with: tanh saturates large
@@ -292,12 +290,12 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 	} else {
 		inWeights = maps.Clone(request.GetWeights())
 	}
-	traceLog.Info("scheduler: input weights", "weights", inWeights)
+	traceLog.V(1).Info("scheduler: input weights", "weights", inWeights)
 
 	// Run filters first to reduce the number of hosts.
 	// Any weights assigned to filtered out hosts are ignored.
 	filteredRequest, filterStepResults := p.runFilters(traceLog, request)
-	traceLog.Info(
+	traceLog.V(1).Info(
 		"scheduler: finished filters",
 		"remainingHosts", filteredRequest.GetHosts(),
 	)
@@ -309,15 +307,15 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 	}
 	stepWeights := p.runWeighers(traceLog, filteredRequest)
 	outWeights := p.applyWeights(traceLog, stepWeights, remainingWeights)
-	traceLog.Info("scheduler: output weights", "weights", outWeights)
+	traceLog.V(1).Info("scheduler: output weights", "weights", outWeights)
 
 	hosts := p.sortHostsByWeights(outWeights)
-	traceLog.Info("scheduler: sorted hosts", "hosts", hosts)
+	traceLog.V(1).Info("scheduler: sorted hosts", "hosts", hosts)
 
 	if opts.MaxCandidates > 0 && len(hosts) > opts.MaxCandidates {
 		trimmed := hosts[opts.MaxCandidates:]
 		hosts = hosts[:opts.MaxCandidates]
-		traceLog.Info("scheduler: trimmed candidate list to max",
+		traceLog.V(1).Info("scheduler: trimmed candidate list to max",
 			"maxCandidates", opts.MaxCandidates,
 			"kept", hosts,
 			"trimmed", trimmed)

@@ -5,7 +5,6 @@ package cinder
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
@@ -14,7 +13,10 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/schedulerstats"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/prometheus/client_golang/prometheus"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("cinder")
 
 type CinderAPI interface {
 	// Int the cinder API.
@@ -55,7 +57,7 @@ func (api *cinderAPI) Init(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	slog.Info("using cinder endpoint", "url", url)
+	log.Info("using cinder endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
 		ProviderClient: provider,
 		Endpoint:       url,
@@ -67,7 +69,7 @@ func (api *cinderAPI) Init(ctx context.Context) error {
 
 func (api *cinderAPI) GetAllStoragePools(ctx context.Context) ([]StoragePool, error) {
 	label := StoragePool{}.TableName()
-	slog.Info("fetching cinder data", "label", label)
+	log.V(1).Info("fetching cinder data", "label", label)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
 		if api.mon.RequestTimer != nil {
@@ -87,6 +89,6 @@ func (api *cinderAPI) GetAllStoragePools(ctx context.Context) ([]StoragePool, er
 	if err := pages.(schedulerstats.StoragePoolPage).ExtractInto(data); err != nil {
 		return nil, err
 	}
-	slog.Info("fetched", "label", label, "count", len(data.Pools))
+	log.V(1).Info("fetched", "label", label, "count", len(data.Pools))
 	return data.Pools, nil
 }

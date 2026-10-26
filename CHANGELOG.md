@@ -1,5 +1,71 @@
 # Changelog
 
+## Release PR [#1427](https://github.com/cobaltcore-dev/cortex/pull/1427) — 2026-10-26
+
+### Bumped Versions
+
+| Package | Previous | New |
+|---|---|---|
+| cortex | 0.7.1 | 0.7.2 |
+| cortex-postgres | 0.6.28 | 0.6.29 |
+| cortex-shim | 0.1.33 | 0.1.34 |
+| bundles | 0.0.108 | 0.0.109 |
+| cortex-placement-shim | 0.1.33 | 0.1.34 |
+
+### ⚠️ Deprecation
+
+- **`FailoverReservation` CRD deprecated:** The existing `FailoverReservation` type is now deprecated in favor of the new `FailoverHostReservation` subtype. Migrate any tooling referencing `FailoverReservation` to `FailoverHostReservation`.
+
+### Features
+
+- **Failover Host Reservation CRD subtype** ([#1408](https://github.com/cobaltcore-dev/cortex/pull/1408)) — A new `FailoverHostReservation` reservation type supports reserving entire hosts for failover, enabling gang-scheduling of all VMs onto a designated host during evacuation events. Includes a full lifecycle model (Designated → Active → In Use → Used/Revoked/Failed), new spec (`FailoverHostReservationSpec`) with `sourceHosts` field, new status (`FailoverHostReservationStatus`) with `sourceHost` field, three new condition types (`FailoverHostDesignated`, `FailoverHostActive`, `FailoverHostInUse`), and CRD enum validation and kubebuilder print columns updated.
+
+- **New KVM Overview Perses dashboard** — Added `cortex-compute-kvm-overview.json` with rich visualizations for KVM compute infrastructure.
+
+### Bug Fixes
+
+- **Filter out overloaded hosts** ([#1416](https://github.com/cobaltcore-dev/cortex/pull/1416)) — The capacity filter now correctly excludes hosts with negative free CPU or memory (allocation > effective capacity), which were previously silently passed through.
+
+- **Owner ref for CR reservations** ([#1403](https://github.com/cobaltcore-dev/cortex/pull/1403)) — Fixed setting owner references on committed-resource reservations.
+
+- **Confirm CR reservation allocations immediately** ([#1424](https://github.com/cobaltcore-dev/cortex/pull/1424)) — When a VM is already on the target hypervisor, reservation allocations are now confirmed immediately rather than waiting for a subsequent reconciliation cycle.
+
+- **Consistent error log level for overloaded hosts** ([#1421](https://github.com/cobaltcore-dev/cortex/pull/1421)) — Aligned CPU overload log to `traceLog.Error` to match memory overload log (was inconsistently using `traceLog.Info`).
+
+- **VM CRD added to Tilt** ([#1426](https://github.com/cobaltcore-dev/cortex/pull/1426)) — Added the `cobaltcore.cloud_virtualmachines` CRD to the Tiltfile for local development.
+
+### Chores & Refactoring
+
+- **Logging unification — slog → controller-runtime/logr** ([#1400](https://github.com/cobaltcore-dev/cortex/pull/1400), [#1401](https://github.com/cobaltcore-dev/cortex/pull/1401), [#1404](https://github.com/cobaltcore-dev/cortex/pull/1404), [#1407](https://github.com/cobaltcore-dev/cortex/pull/1407)) — Completely removed `log/slog` from the codebase, unifying all logging under controller-runtime's logr (zap-backed). Translation rules: `slog.Info/Warn` → `log.Info`, `slog.Debug` → `log.V(1).Info`, `slog.Error(msg, "error", err)` → `log.Error(err, msg)`. Key interface changes: `Run` now takes `logr.Logger` instead of `*slog.Logger`; `GetTraceLogArgs()` returns `[]any` instead of `[]slog.Attr`; `APIMonitor.Respond` takes `logr.Logger`. The dead `LOG_LEVEL` env var was removed from the Helm template and a **forbidigo lint rule** banning `slog.*` prevents re-introduction.
+
+- **Logging level reduction** ([#1409](https://github.com/cobaltcore-dev/cortex/pull/1409), [#1410](https://github.com/cobaltcore-dev/cortex/pull/1410), [#1412](https://github.com/cobaltcore-dev/cortex/pull/1412), [#1413](https://github.com/cobaltcore-dev/cortex/pull/1413)) — Reduced verbosity across commitments, failover reservations, knowledge, and scheduling modules by downgrading non-essential log lines.
+
+- **Dashboard reorganization** ([#1399](https://github.com/cobaltcore-dev/cortex/pull/1399)) — Perses dashboards moved to a top-level `dashboards/` directory. The KVM details dashboard was renamed and updated with new color overrides, instant queries, an OS version pie chart, and a "Ready" column in the host table.
+
+### Documentation
+
+- **Fix stale dashboard paths** ([#1422](https://github.com/cobaltcore-dev/cortex/pull/1422)) — Updated three docs files to reference `dashboards/` instead of the old `tools/perses/dashboards/` path; listed all 10 current dashboard filenames.
+
+### Dependency Updates
+
+| Dependency | Old | New | PR |
+|---|---|---|---|
+| `debian:trixie-slim` | `a29215f` | `62bd423` (digest) | [#1398](https://github.com/cobaltcore-dev/cortex/pull/1398) |
+| `vm-operator` | v0.2.9 | v0.2.10 | [#1397](https://github.com/cobaltcore-dev/cortex/pull/1397) |
+| `kube-prometheus-stack` | 92.10.1 | 92.13.1 | [#1397](https://github.com/cobaltcore-dev/cortex/pull/1397), [#1420](https://github.com/cobaltcore-dev/cortex/pull/1420) |
+| `openstack-hypervisor-operator` | v1.2.3 | v1.3.0 | [#1414](https://github.com/cobaltcore-dev/cortex/pull/1414) |
+| `actions/setup-python` | v7.0.0 | v7.1.0 | [#1414](https://github.com/cobaltcore-dev/cortex/pull/1414) |
+| `sapcc/go-bits` | `416f3ad` | `568ad9d` (2 digest bumps) | [#1418](https://github.com/cobaltcore-dev/cortex/pull/1418), [#1419](https://github.com/cobaltcore-dev/cortex/pull/1419) |
+
+### ⚠️ Notes
+
+- **`openstack-hypervisor-operator` v1.3.0** brings parallel VM migrations during drains, safe eviction completion (incoming migrations must settle), hardened offboarding with `AgentPodsEvicted` gating, and node termination detection via `deletionTimestamp`. Review drain behavior in staging before rollout.
+- **slog removal:** Any out-of-tree code importing cortex packages that used `*slog.Logger` in `Run` or `GetTraceLogArgs` signatures must update to `logr.Logger` / `[]any`.
+
+**Contributors:** @PhilippMatthes, @SoWieMarkus, @mblos, @renovate[bot], @cortex-ai-agents[bot], Claude Opus 4.7
+
+**PR:** [#1427](https://github.com/cobaltcore-dev/cortex/pull/1427) | **Commits:** 22 | **Files changed:** 95
+
 ## Release PR [#1393](https://github.com/cobaltcore-dev/cortex/pull/1393)
 
 ### Versions

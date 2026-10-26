@@ -5,7 +5,7 @@ package filters
 
 import (
 	"context"
-	"log/slog"
+	"github.com/go-logr/logr"
 	"slices"
 	"strings"
 
@@ -20,7 +20,7 @@ type FilterAggregateMetadata struct {
 
 // Restrict hosts to specific projects if they are in an aggregate that has
 // the "filter_tenant_id" metadata key set.
-func (s *FilterAggregateMetadata) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterAggregateMetadata) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	// Capacity probe calls are synthetic and not placed on behalf of a tenant
 	// project, so they must ignore tenant pinning. Failover reservations DO respect
@@ -32,7 +32,7 @@ func (s *FilterAggregateMetadata) Run(traceLog *slog.Logger, request api.Externa
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
 
@@ -60,11 +60,11 @@ func (s *FilterAggregateMetadata) Run(traceLog *slog.Logger, request api.Externa
 					}
 					restrictedProjectsByHost[hv.Name] = append(restrictedProjectsByHost[hv.Name], projectID)
 				}
-				traceLog.Info("host is in aggregate with filter_tenant_id, adding restriction",
+				traceLog.V(1).Info("host is in aggregate with filter_tenant_id, adding restriction",
 					"host", hv.Name, "aggregate", aggregate.Name, "key", key, "tenant_id", value)
 			}
 			if !foundFilter {
-				traceLog.Info("aggregate does not have filter_tenant_id metadata, skipping",
+				traceLog.V(1).Info("aggregate does not have filter_tenant_id metadata, skipping",
 					"aggregate", aggregate.Name)
 			}
 		}
@@ -74,14 +74,14 @@ func (s *FilterAggregateMetadata) Run(traceLog *slog.Logger, request api.Externa
 		if !slices.Contains(restrictedProjects, request.Spec.Data.ProjectID) {
 			// Project is not allowed on this hypervisor, filter it out.
 			delete(result.Activations, host)
-			traceLog.Info(
+			traceLog.V(1).Info(
 				"filtering host not allowing project based on aggregate metadata",
 				"host", host,
 				"project", request.Spec.Data.ProjectID,
 				"restricted_projects", restrictedProjects,
 			)
 		} else {
-			traceLog.Info(
+			traceLog.V(1).Info(
 				"host allows project based on aggregate metadata, keeping",
 				"host", host,
 				"project", request.Spec.Data.ProjectID,

@@ -5,7 +5,7 @@ package filters
 
 import (
 	"context"
-	"log/slog"
+	"github.com/go-logr/logr"
 	"slices"
 	"strings"
 
@@ -25,7 +25,7 @@ type FilterRequestedDestinationStep struct {
 // OR logic, meaning the host only needs to match ONE of the UUIDs in that group.
 // Example: ["agg1", "agg2,agg3"] means host must be in agg1 AND (agg2 OR agg3).
 func (s *FilterRequestedDestinationStep) processRequestedAggregates(
-	traceLog *slog.Logger,
+	traceLog logr.Logger,
 	aggregates []string,
 	hvsByName map[string]hv1.Hypervisor,
 	activations map[string]float64,
@@ -38,7 +38,7 @@ func (s *FilterRequestedDestinationStep) processRequestedAggregates(
 		hv, exists := hvsByName[host]
 		if !exists {
 			delete(activations, host)
-			traceLog.Info("filtered out host not in requested_destination aggregates (unknown host)", "host", host)
+			traceLog.V(1).Info("filtered out host not in requested_destination aggregates (unknown host)", "host", host)
 			continue
 		}
 		hvAggregateUUIDs := make([]string, 0, len(hv.Status.Aggregates))
@@ -64,36 +64,36 @@ func (s *FilterRequestedDestinationStep) processRequestedAggregates(
 		}
 		if !allMatch {
 			delete(activations, host)
-			traceLog.Info(
+			traceLog.V(1).Info(
 				"filtered out host not in requested_destination aggregates",
 				"host", host, "hostAggregates", hvAggregateUUIDs,
 				"requestedAggregates", aggregates,
 			)
 			continue
 		}
-		traceLog.Info("host is in requested_destination aggregates, keeping", "host", host)
+		traceLog.V(1).Info("host is in requested_destination aggregates, keeping", "host", host)
 	}
 }
 
 // processRequestedHost filters hosts based on the requested specific host.
 // It removes all hosts except the one matching the requested hostname.
 func (s *FilterRequestedDestinationStep) processRequestedHost(
-	traceLog *slog.Logger,
+	traceLog logr.Logger,
 	host string,
 	activations map[string]float64,
 ) {
 
 	if host == "" {
-		traceLog.Info("no specific host in requested_destination, skipping host filtering")
+		traceLog.V(1).Info("no specific host in requested_destination, skipping host filtering")
 		return
 	}
 	for h := range activations {
 		if h != host {
 			delete(activations, h)
-			traceLog.Info("filtered out host not matching requested_destination host", "host", h)
+			traceLog.V(1).Info("filtered out host not matching requested_destination host", "host", h)
 			continue
 		}
-		traceLog.Info("host matches requested_destination host, keeping", "host", h)
+		traceLog.V(1).Info("host matches requested_destination host, keeping", "host", h)
 	}
 }
 
@@ -101,7 +101,7 @@ func (s *FilterRequestedDestinationStep) processRequestedHost(
 // The requested destination can include a specific host, aggregates, or both.
 // When both are specified, aggregate filtering is applied first, followed by
 // host filtering.
-func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterRequestedDestinationStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	// The requested_destination hint is only set by Nova for user-directed placement;
 	if intent, err := request.GetIntent(); err == nil && slices.Contains([]v1alpha1.SchedulingIntent{
@@ -114,16 +114,16 @@ func (s *FilterRequestedDestinationStep) Run(traceLog *slog.Logger, request api.
 	}
 	rd := request.Spec.Data.RequestedDestination
 	if rd == nil {
-		traceLog.Info("no requested_destination in request, skipping filter")
+		traceLog.V(1).Info("no requested_destination in request, skipping filter")
 		return result, nil
 	}
 	if len(rd.Data.Aggregates) == 0 && rd.Data.Host == "" {
-		traceLog.Info("requested_destination has no host or aggregates, skipping filter")
+		traceLog.V(1).Info("requested_destination has no host or aggregates, skipping filter")
 		return result, nil
 	}
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
-		traceLog.Error("failed to list hypervisors", "error", err)
+		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
 	hvsByName := make(map[string]hv1.Hypervisor)

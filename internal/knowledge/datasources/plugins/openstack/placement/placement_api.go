@@ -6,7 +6,6 @@ package placement
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"sync"
 	"time"
 
@@ -17,7 +16,10 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/placement/v1/resourceproviders"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/prometheus/client_golang/prometheus"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("placement")
 
 type PlacementAPI interface {
 	// Init the placement API.
@@ -62,7 +64,7 @@ func (api *placementAPI) Init(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	slog.Info("using placement endpoint", "url", url)
+	log.Info("using placement endpoint", "url", url)
 	api.sc = &gophercloud.ServiceClient{
 		ProviderClient: provider,
 		Endpoint:       url,
@@ -76,7 +78,7 @@ func (api *placementAPI) Init(ctx context.Context) error {
 // Fetch all resource providers from the placement API.
 func (api *placementAPI) GetAllResourceProviders(ctx context.Context) ([]ResourceProvider, error) {
 	label := ResourceProvider{}.TableName()
-	slog.Info("fetching placement data", "label", label)
+	log.V(1).Info("fetching placement data", "label", label)
 	// Fetch all pages.
 	pages, err := func() (pagination.Page, error) {
 		if api.mon.RequestTimer != nil {
@@ -96,7 +98,7 @@ func (api *placementAPI) GetAllResourceProviders(ctx context.Context) ([]Resourc
 	if err := pages.(resourceproviders.ResourceProvidersPage).ExtractInto(data); err != nil {
 		return nil, err
 	}
-	slog.Info("fetched placement data", "label", label, "count", len(data.ResourceProviders))
+	log.V(1).Info("fetched placement data", "label", label, "count", len(data.ResourceProviders))
 	return data.ResourceProviders, nil
 }
 
@@ -104,7 +106,7 @@ func (api *placementAPI) GetAllResourceProviders(ctx context.Context) ([]Resourc
 // This function fetches the traits for each resource provider in parallel.
 func (api *placementAPI) GetAllTraits(ctx context.Context, providers []ResourceProvider) ([]Trait, error) {
 	label := Trait{}.TableName()
-	slog.Info("fetching placement data", "label", label)
+	log.V(1).Info("fetching placement data", "label", label)
 	if api.mon.RequestTimer != nil {
 		hist := api.mon.RequestTimer.WithLabelValues(label)
 		timer := prometheus.NewTimer(hist)
@@ -144,7 +146,7 @@ func (api *placementAPI) GetAllTraits(ctx context.Context, providers []ResourceP
 	// Return the first error encountered, if any.
 	for err := range errChan {
 		if err != nil {
-			slog.Error("failed to resolve traits", "error", err)
+			log.Error(err, "failed to resolve traits")
 			return nil, err
 		}
 	}
@@ -178,7 +180,7 @@ func (api *placementAPI) getTraits(ctx context.Context, provider ResourceProvide
 // This function fetches the data for each resource provider in parallel.
 func (api *placementAPI) GetAllInventoryUsages(ctx context.Context, providers []ResourceProvider) ([]InventoryUsage, error) {
 	label := InventoryUsage{}.TableName()
-	slog.Info("fetching placement data", "label", label)
+	log.V(1).Info("fetching placement data", "label", label)
 	if api.mon.RequestTimer != nil {
 		hist := api.mon.RequestTimer.WithLabelValues(label)
 		timer := prometheus.NewTimer(hist)
@@ -218,7 +220,7 @@ func (api *placementAPI) GetAllInventoryUsages(ctx context.Context, providers []
 	// Return the first error encountered, if any.
 	for err := range errChan {
 		if err != nil {
-			slog.Error("failed to resolve inventory usages", "error", err)
+			log.Error(err, "failed to resolve inventory usages")
 			return nil, err
 		}
 	}

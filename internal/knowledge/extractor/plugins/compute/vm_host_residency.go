@@ -6,13 +6,15 @@ package compute
 import (
 	_ "embed"
 	"errors"
-	"log/slog"
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/math"
 	"github.com/prometheus/client_golang/prometheus"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("compute")
 
 // Feature that describes how long a vm was running on a host until it needed
 // to move out, and the reason for the move (i.e., who forced it to move).
@@ -73,7 +75,7 @@ func (e *VMHostResidencyExtractor) Extract() ([]plugins.Feature, error) {
 	for key, hist := range hists {
 		labels := strings.Split(key, ",")
 		if len(labels) != 1 {
-			slog.Warn("vm_host_residency: unexpected comma in flavor name")
+			log.V(1).Info("vm_host_residency: unexpected comma in flavor name")
 			continue
 		}
 		for bucket, value := range hist {

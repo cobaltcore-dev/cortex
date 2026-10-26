@@ -121,5 +121,5 @@ func (k *DatasourceStateKPI) Collect(ch chan<- prometheus.Metric) {
 			)
 		}
 	}
-	datasourceStateKPILogger.Info("Collected datasource state metrics", "count", len(datasources))
+	datasourceStateKPILogger.V(1).Info("Collected datasource state metrics", "count", len(datasources))
 }
