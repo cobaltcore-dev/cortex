@@ -21,9 +21,10 @@ spec:
   schedulingDomain: nova
   impl: failover_partition_graph_kpi
   description: |
-    This KPI exposes the failover partition graph derived from failover host
-    reservations: nodes (cortex_failover_partition_graph_node) are the reserved
-    failover hosts, edges (cortex_failover_partition_graph_edge) are the
+    This KPI exposes the failover partition graph derived from the hypervisors
+    and failover host reservations: nodes (cortex_failover_partition_graph_node)
+    are the hypervisors (value 1 when the hypervisor has a failover path, 0 when
+    it has none), edges (cortex_failover_partition_graph_edge) are the
     source->target evacuation paths within each partition.
 ---
 apiVersion: cortex.cloud/v1alpha1

@@ -11,25 +11,33 @@ import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func failoverHostReservation(name, target, az string, sources ...string) v1alpha1.Reservation {
+func failoverHostReservation(name, target string, sources ...string) v1alpha1.Reservation {
 	return v1alpha1.Reservation{
 		ObjectMeta: v1.ObjectMeta{Name: name},
 		Spec: v1alpha1.ReservationSpec{
 			Type:             v1alpha1.ReservationTypeFailoverHost,
 			SchedulingDomain: "nova",
-			AvailabilityZone: az,
 			TargetHost:       target,
-			Resources: map[hv1.ResourceName]resource.Quantity{
-				hv1.ResourceMemory: resource.MustParse("256Gi"),
-				hv1.ResourceCPU:    resource.MustParse("64"),
-			},
 			FailoverHostReservation: &v1alpha1.FailoverHostReservationSpec{
 				SourceHosts: sources,
+			},
+		},
+	}
+}
+
+func hypervisor(name, az string) hv1.Hypervisor {
+	return hv1.Hypervisor{
+		ObjectMeta: v1.ObjectMeta{Name: name, Labels: map[string]string{corev1.LabelTopologyZone: az}},
+		Status: hv1.HypervisorStatus{
+			Capacity: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceMemory: resource.MustParse("256Gi"),
+				hv1.ResourceCPU:    resource.MustParse("64"),
 			},
 		},
 	}
@@ -64,12 +72,15 @@ func TestFailoverPartitionGraphKPI_Collect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
+	if err := hv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
 
-	// Two failover-host reservations sharing source host h1 (so the node for h1
-	// is emitted once, but its edges to both targets are), plus a non-failover
-	// reservation that must be ignored.
-	resA := failoverHostReservation("failover-host-t1", "t1", "az-a", "h1", "h2")
-	resB := failoverHostReservation("failover-host-t2", "t2", "az-b", "h1", "h3")
+	// Two failover-host reservations sharing source host h1 (so the edge for h1
+	// is emitted to both targets), plus a non-failover reservation that must be
+	// ignored.
+	resA := failoverHostReservation("failover-host-t1", "t1", "h1", "h2")
+	resB := failoverHostReservation("failover-host-t2", "t2", "h1", "h3")
 	other := v1alpha1.Reservation{
 		ObjectMeta: v1.ObjectMeta{Name: "r-other"},
 		Spec: v1alpha1.ReservationSpec{
@@ -78,21 +89,30 @@ func TestFailoverPartitionGraphKPI_Collect(t *testing.T) {
 			TargetHost:       "ignored",
 		},
 	}
+	// The hypervisors backing the graph. h-idle takes part in no reservation, so
+	// its node is reported with value 0.
+	t1 := hypervisor("t1", "az-a")
+	t2 := hypervisor("t2", "az-b")
+	h1 := hypervisor("h1", "az-a")
+	h2 := hypervisor("h2", "az-a")
+	h3 := hypervisor("h3", "az-b")
+	idle := hypervisor("h-idle", "az-a")
 
 	client := fake.NewClientBuilder().WithScheme(scheme).
-		WithObjects(&resA, &resB, &other).Build()
+		WithObjects(&resA, &resB, &other, &t1, &t2, &h1, &h2, &h3, &idle).Build()
 
 	kpi := &FailoverPartitionGraphKPI{}
 	if err := kpi.Init(nil, client, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	ch := make(chan prometheus.Metric, 16)
+	ch := make(chan prometheus.Metric, 32)
 	kpi.Collect(ch)
 	close(ch)
 
 	var nodes, edges int
 	nodeAZ := map[string]string{}
+	nodeValue := map[string]float64{}
 	edgeSet := map[string]bool{}
 	for m := range ch {
 		var metric dto.Metric
@@ -107,6 +127,7 @@ func TestFailoverPartitionGraphKPI_Collect(t *testing.T) {
 		case kpi.node.String():
 			nodes++
 			nodeAZ[labels["host"]] = labels["az"]
+			nodeValue[labels["host"]] = metric.GetGauge().GetValue()
 			if labels["memory"] != "256Gi" || labels["cpu"] != "64" {
 				t.Errorf("node %s: unexpected resources memory=%q cpu=%q", labels["host"], labels["memory"], labels["cpu"])
 			}
@@ -118,18 +139,24 @@ func TestFailoverPartitionGraphKPI_Collect(t *testing.T) {
 		}
 	}
 
-	// Nodes: the two target hosts (t1, t2) plus the three distinct source hosts
-	// (h1, h2, h3). Source hosts inherit the az and capacity of their target.
-	if nodes != 5 {
-		t.Errorf("expected 5 node metrics, got %d", nodes)
+	// Nodes: one per hypervisor, including the idle one.
+	if nodes != 6 {
+		t.Errorf("expected 6 node metrics, got %d", nodes)
 	}
-	// h1 and h2 fail over onto t1 (az-a); h3 fails over onto t2 (az-b). h1 is
-	// shared but first seen via resA, so it inherits az-a.
-	wantAZ := map[string]string{"t1": "az-a", "t2": "az-b", "h1": "az-a", "h2": "az-a", "h3": "az-b"}
+	wantAZ := map[string]string{"t1": "az-a", "t2": "az-b", "h1": "az-a", "h2": "az-a", "h3": "az-b", "h-idle": "az-a"}
 	for host, az := range wantAZ {
 		if nodeAZ[host] != az {
 			t.Errorf("node %s: expected az %q, got %q", host, az, nodeAZ[host])
 		}
+	}
+	// Every hypervisor with a failover path reports 1; the idle one reports 0.
+	for _, host := range []string{"t1", "t2", "h1", "h2", "h3"} {
+		if nodeValue[host] != 1 {
+			t.Errorf("node %s: expected value 1, got %v", host, nodeValue[host])
+		}
+	}
+	if nodeValue["h-idle"] != 0 {
+		t.Errorf("node h-idle: expected value 0, got %v", nodeValue["h-idle"])
 	}
 	// Edges: h1->t1, h2->t1, h1->t2, h3->t2.
 	if edges != 4 {
