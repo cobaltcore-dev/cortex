@@ -1029,5 +1029,107 @@ spec:
           controller logs (filter on "periodic reconciliation completed" and
           "processed VM failover reservations") to identify the affected VMs and the reason
           their reservations cannot be created.
+    - alert: CortexNovaFailoverHostCalculationStalled
+      # The failover host controller recomputes its desired reservations on a
+      # periodic calculation loop. runs_total only increments when a pass
+      # completes, so increase()==0 over a window several times the loop interval
+      # means the loop is wedged, panicking, or every pass is aborting before it
+      # completes — in all cases the failover host reservations are no longer
+      # being maintained and will silently drift from the cluster. A pod that is
+      # down is covered by CortexNovaSchedulingDown, so require the series to
+      # still be exported (the metric is present but flat).
+      expr: |
+        increase(cortex_failover_host_calculation_runs_total{service="cortex-nova-metrics"}[30m]) == 0
+      for: 30m
+      labels:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
+{{- end }}
+        context: failover-hosts
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: ""
+      annotations:
+        summary: "Failover host calculation loop is not completing passes"
+        description: >
+          The failover host controller has not completed a calculation-loop pass in
+          the last 30 minutes. Its failover host reservations are no longer being
+          recomputed and will drift from the actual cluster state. Check the
+          failover-host-controller logs for a stuck loop or repeated aborts.
+    - alert: CortexNovaFailoverHostCalculationAborting
+      # Each calculation pass aborts (without touching the desired state) when the
+      # cluster snapshot is inconsistent (reason="collect") or the external
+      # scheduler lookup fails (reason="pathfinding"). A sustained abort rate means
+      # no pass is producing a fresh desired state, so reservations go stale.
+      expr: rate(cortex_failover_host_calculation_aborts_total{service="cortex-nova-metrics"}[15m]) > 0
+      for: 30m
+      labels:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
+{{- end }}
+        context: failover-hosts
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: ""
+      annotations:
+        summary: "Failover host calculation loop keeps aborting (reason=`{{ "{{" }} $labels.reason {{ "}}" }}`)"
+        description: >
+          The failover host calculation loop has been aborting before producing a
+          desired state for over 30 minutes (reason=`{{ "{{" }} $labels.reason {{ "}}" }}`).
+          reason="collect" means the cluster snapshot was inconsistent (e.g. a VM on an
+          unknown hypervisor, or a hypervisor without an availability zone);
+          reason="pathfinding" means the external scheduler lookup failed. Failover host
+          reservations are not being refreshed while this persists.
+    - alert: CortexNovaFailoverHostReconcileErrors
+      # The reconciler failed to create, update or delete failover host
+      # reservations. A sustained error rate means the desired reservations
+      # computed by the loop cannot be applied to the cluster.
+      expr: rate(cortex_failover_host_reservations_errors_total{service="cortex-nova-metrics"}[15m]) > 0
+      for: 30m
+      labels:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
+{{- end }}
+        context: failover-hosts
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: ""
+      annotations:
+        summary: "Failover host reservations cannot be reconciled (op=`{{ "{{" }} $labels.op {{ "}}" }}`)"
+        description: >
+          The failover host reconciler has been failing to {{ "{{" }} $labels.op {{ "}}" }}
+          reservations for over 30 minutes. The desired failover host reservations computed
+          by the calculation loop are not being applied, so actual reservations drift from
+          the desired set. Check the failover-host-controller-reconcile logs and the
+          Reservation objects for the affected hosts.
+    - alert: CortexNovaFailoverHostSchedulerErrors
+      # The path finder asks the external scheduler, per VM, where each host's
+      # workload could evacuate. A high fraction of failed requests (transport
+      # errors or non-2xx) makes every calculation pass abort, so this is the root
+      # cause behind a persistent CortexNovaFailoverHostCalculationAborting with
+      # reason="pathfinding".
+      expr: |
+        (sum(rate(cortex_failover_host_scheduler_requests_total{service="cortex-nova-metrics",status!~"2.."}[15m])))
+        / (sum(rate(cortex_failover_host_scheduler_requests_total{service="cortex-nova-metrics"}[15m]))) > 0.1
+      for: 15m
+      labels:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
+{{- end }}
+        context: failover-hosts
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: ""
+      annotations:
+        summary: "Failover host path finder scheduler error rate >10%"
+        description: >
+          More than 10% of the external scheduler requests issued by the failover host
+          path finder are failing (transport errors or non-2xx responses). The path finder
+          cannot determine valid evacuation targets, so failover partitions and reservations
+          cannot be recomputed. Check that the external scheduler is reachable and healthy.
     {{- end }}
 {{- end }}

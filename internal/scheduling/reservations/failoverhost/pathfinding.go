@@ -11,6 +11,7 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strconv"
 	"time"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -57,6 +58,8 @@ type evacuationPathFinder struct {
 	httpClient *http.Client
 	// schedulerURL is the external cortex scheduler endpoint to POST to.
 	schedulerURL string
+	// monitor records scheduler request metrics. May be nil (e.g. in tests).
+	monitor *Monitor
 }
 
 // FindPaths implements PathFinder.
@@ -266,10 +269,12 @@ func (f *evacuationPathFinder) fetchEvacuationCandidates(ctx context.Context, vm
 	response, err := f.httpClient.Do(httpReq)
 	duration := time.Since(startTime)
 	if err != nil {
+		f.monitor.RecordSchedulerRequest("error", duration)
 		log.Error(err, "failed to send external scheduler request")
 		return nil, fmt.Errorf("failed to send external scheduler request: %w", err)
 	}
 	defer response.Body.Close()
+	f.monitor.RecordSchedulerRequest(strconv.Itoa(response.StatusCode), duration)
 	log.V(1).Info("external scheduler request sent",
 		"duration", duration, "status", response.StatusCode)
 

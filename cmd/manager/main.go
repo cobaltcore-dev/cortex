@@ -795,9 +795,15 @@ func main() {
 	if slices.Contains(mainConfig.EnabledControllers, "failover-host-reservations-controller") {
 		setupLog.Info("enabling controller", "controller", "failover-host-reservations-controller")
 		failoverHostConfig := conf.GetConfigOrDie[failoverhost.Config]().Failover.Hosts
+		failoverHostMonitor := failoverhost.NewMonitor()
+		if err := metrics.Registry.Register(failoverHostMonitor); err != nil {
+			setupLog.Error(err, "failed to register failover host monitor metrics, continuing without metrics")
+			failoverHostMonitor = nil
+		}
 		controller := &failoverhost.Controller{
-			Client: multiclusterClient,
-			Config: failoverHostConfig,
+			Client:  multiclusterClient,
+			Config:  failoverHostConfig,
+			Monitor: failoverHostMonitor,
 		}
 		if err := controller.SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller",

@@ -136,6 +136,10 @@ type Controller struct {
 
 	Config ControllerConfig
 
+	// Monitor records Prometheus metrics for the calculation loop and the
+	// reconciler. It may be nil (e.g. in tests); every call site nil-guards it.
+	Monitor *Monitor
+
 	// desiredReservations is the desired state computed by the latest loop
 	// pass: the failover host reservations that should exist right now, keyed
 	// by their object reference (name only; reservations are cluster-scoped).
@@ -209,9 +213,11 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				return ctrl.Result{}, nil
 			}
 			log.Error(err, "failed to delete stale reservation")
+			c.Monitor.RecordReservationError("delete")
 			return ctrl.Result{}, err
 		}
 		log.Info("deleted stale failover host reservation", "host", actual.Spec.TargetHost)
+		c.Monitor.RecordReservationDeleted()
 		return ctrl.Result{}, nil
 
 	case desiredExists && !actualExists:
@@ -222,9 +228,11 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				return ctrl.Result{}, nil
 			}
 			log.Error(err, "failed to create failover host reservation")
+			c.Monitor.RecordReservationError("create")
 			return ctrl.Result{}, err
 		}
 		log.Info("created failover host reservation", "host", desired.Spec.TargetHost)
+		c.Monitor.RecordReservationCreated()
 		return ctrl.Result{}, nil
 
 	default:
@@ -243,9 +251,11 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		actual.Labels = maps.Clone(desired.Labels)
 		if err := c.Update(ctx, actual); err != nil {
 			log.Error(err, "failed to update failover host reservation")
+			c.Monitor.RecordReservationError("update")
 			return ctrl.Result{}, err
 		}
 		log.Info("updated failover host reservation", "host", desired.Spec.TargetHost)
+		c.Monitor.RecordReservationUpdated()
 		return ctrl.Result{}, nil
 	}
 }
@@ -312,6 +322,7 @@ func (c *Controller) SetupWithManager(mgr ctrl.Manager) error {
 			// Timeout so a hung scheduler can't stall the calculation loop.
 			httpClient:   &http.Client{Timeout: 30 * time.Second},
 			schedulerURL: c.Config.ExternalSchedulerURL,
+			monitor:      c.Monitor,
 		}
 	}
 	if c.partitionBuilder == nil {
@@ -371,14 +382,18 @@ func (c *Controller) loop(ctx context.Context) {
 	log := logf.FromContext(ctx).WithName("failoverhost-controller-calculation-loop")
 	log.Info("recalculating failover host reservations")
 
+	start := time.Now()
+
 	topo, ok := c.collect(ctx)
 	if !ok {
+		c.Monitor.RecordCalculationAbort("collect")
 		return // collect already logged the reason.
 	}
 
 	paths, err := c.pathFinder.FindPaths(ctx, topo)
 	if err != nil {
 		log.Error(err, "failed to find failover paths")
+		c.Monitor.RecordCalculationAbort("pathfinding")
 		return
 	}
 
@@ -456,6 +471,12 @@ func (c *Controller) loop(ctx context.Context) {
 	log.Info("generated desired failover host reservations",
 		"partitions", len(partitions), "desiredReservations", len(desired),
 		"existingReservations", len(topo.existing))
+	c.Monitor.RecordCalculation(calculationSummary{
+		duration:             time.Since(start),
+		partitions:           len(partitions),
+		desiredReservations:  len(desired),
+		existingReservations: len(topo.existing),
+	})
 
 	c.publish(ctx, topo, desired)
 }

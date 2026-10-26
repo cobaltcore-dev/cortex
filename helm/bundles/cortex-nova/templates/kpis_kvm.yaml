@@ -16,6 +16,19 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
+  name: failover-partition-graph
+spec:
+  schedulingDomain: nova
+  impl: failover_partition_graph_kpi
+  description: |
+    This KPI exposes the failover partition graph derived from failover host
+    reservations: nodes (cortex_failover_partition_graph_node) are the reserved
+    failover hosts, edges (cortex_failover_partition_graph_edge) are the
+    source->target evacuation paths within each partition.
+---
+apiVersion: cortex.cloud/v1alpha1
+kind: KPI
+metadata:
   name: kvm-project-utilization
 spec:
   schedulingDomain: nova
