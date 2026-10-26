@@ -6,6 +6,7 @@ package compute
 import (
 	"context"
 	"maps"
+	"strconv"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -13,6 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	vmv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -25,11 +27,12 @@ var failoverPartitionGraphKPILogger = ctrl.Log.WithName("failover-partition-grap
 // KPI exposing the failover partition graph derived from the hypervisors and
 // failover host reservations present in the cluster. The graph has two series:
 //
-//   - cortex_failover_partition_graph_node{host,az,memory,cpu} — one per
+//   - cortex_failover_partition_graph_node{host,az,memory,cpu,vms} — one per
 //     hypervisor, whether or not it participates in any failover reservation,
-//     carrying the hypervisor's availability zone and total capacity. The value
-//     is 1 when the hypervisor has at least one failover path (it is the source
-//     or target of an edge) and 0 when it has none.
+//     carrying the hypervisor's availability zone, total capacity and the number
+//     of vms currently running on it. The value is 1 when the hypervisor has at
+//     least one failover path (it is the source or target of an edge) and 0 when
+//     it has none.
 //   - cortex_failover_partition_graph_edge{source,target} 1 — one per directed
 //     evacuation path: every SourceHost of a failover host reservation may fail
 //     over onto the reservation's TargetHost.
@@ -51,7 +54,7 @@ func (k *FailoverPartitionGraphKPI) Init(db *db.DB, client client.Client, opts c
 	k.node = prometheus.NewDesc(
 		"cortex_failover_partition_graph_node",
 		"A hypervisor in the failover partition graph",
-		[]string{"host", "az", "memory", "cpu"},
+		[]string{"host", "az", "memory", "cpu", "vms"},
 		nil,
 	)
 	k.edge = prometheus.NewDesc(
@@ -115,6 +118,21 @@ func (k *FailoverPartitionGraphKPI) Collect(ch chan<- prometheus.Metric) {
 		failoverPartitionGraphKPILogger.Error(err, "Failed to list hypervisors")
 		return
 	}
+	// Count the vms running on each host so the node series can expose it. A vm
+	// Nova hasn't placed yet has no host and is skipped (it also nil-panics on
+	// Status.Nova otherwise).
+	vmList := &vmv1alpha1.VirtualMachineList{}
+	if err := k.Client.List(ctx, vmList); err != nil {
+		failoverPartitionGraphKPILogger.Error(err, "Failed to list virtual machines")
+		return
+	}
+	vmsByHost := map[string]int{}
+	for _, vm := range vmList.Items {
+		if vm.Status.Nova == nil || vm.Status.Nova.Host == "" {
+			continue
+		}
+		vmsByHost[vm.Status.Nova.Host]++
+	}
 	for _, hv := range hypervisorList.Items {
 		capacity := map[hv1.ResourceName]resource.Quantity{}
 		maps.Copy(capacity, hv.Status.Capacity) // base capacity
@@ -127,7 +145,8 @@ func (k *FailoverPartitionGraphKPI) Collect(ch chan<- prometheus.Metric) {
 		}
 		ch <- prometheus.MustNewConstMetric(
 			k.node, prometheus.GaugeValue, value,
-			hv.Name, hv.Labels[corev1.LabelTopologyZone], memory.String(), cpu.String(),
+			hv.Name, hv.Labels[corev1.LabelTopologyZone],
+			memory.String(), cpu.String(), strconv.Itoa(vmsByHost[hv.Name]),
 		)
 	}
 }

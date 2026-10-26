@@ -9,6 +9,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	vmv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	corev1 "k8s.io/api/core/v1"
@@ -40,6 +41,14 @@ func hypervisor(name, az string) hv1.Hypervisor {
 				hv1.ResourceCPU:    resource.MustParse("64"),
 			},
 		},
+	}
+}
+
+// virtualMachine builds a vm Nova reports as placed on the given host.
+func virtualMachine(name, host string) vmv1alpha1.VirtualMachine {
+	return vmv1alpha1.VirtualMachine{
+		ObjectMeta: v1.ObjectMeta{Name: name},
+		Status:     vmv1alpha1.VMStatus{Nova: &vmv1alpha1.NovaStatus{Host: host}},
 	}
 }
 
@@ -75,6 +84,9 @@ func TestFailoverPartitionGraphKPI_Collect(t *testing.T) {
 	if err := hv1.AddToScheme(scheme); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
+	if err := vmv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
 
 	// Two failover-host reservations sharing source host h1 (so the edge for h1
 	// is emitted to both targets), plus a non-failover reservation that must be
@@ -98,8 +110,16 @@ func TestFailoverPartitionGraphKPI_Collect(t *testing.T) {
 	h3 := hypervisor("h3", "az-b")
 	idle := hypervisor("h-idle", "az-a")
 
+	// Two vms on h1 and one on t2; every other host (incl. idle) has none, and an
+	// unplaced vm must not be counted.
+	vm1 := virtualMachine("vm1", "h1")
+	vm2 := virtualMachine("vm2", "h1")
+	vm3 := virtualMachine("vm3", "t2")
+	vmUnplaced := virtualMachine("vm-unplaced", "")
+
 	client := fake.NewClientBuilder().WithScheme(scheme).
-		WithObjects(&resA, &resB, &other, &t1, &t2, &h1, &h2, &h3, &idle).Build()
+		WithObjects(&resA, &resB, &other, &t1, &t2, &h1, &h2, &h3, &idle,
+			&vm1, &vm2, &vm3, &vmUnplaced).Build()
 
 	kpi := &FailoverPartitionGraphKPI{}
 	if err := kpi.Init(nil, client, conf.NewRawOpts("{}")); err != nil {
@@ -113,6 +133,7 @@ func TestFailoverPartitionGraphKPI_Collect(t *testing.T) {
 	var nodes, edges int
 	nodeAZ := map[string]string{}
 	nodeValue := map[string]float64{}
+	nodeVMs := map[string]string{}
 	edgeSet := map[string]bool{}
 	for m := range ch {
 		var metric dto.Metric
@@ -128,6 +149,7 @@ func TestFailoverPartitionGraphKPI_Collect(t *testing.T) {
 			nodes++
 			nodeAZ[labels["host"]] = labels["az"]
 			nodeValue[labels["host"]] = metric.GetGauge().GetValue()
+			nodeVMs[labels["host"]] = labels["vms"]
 			if labels["memory"] != "256Gi" || labels["cpu"] != "64" {
 				t.Errorf("node %s: unexpected resources memory=%q cpu=%q", labels["host"], labels["memory"], labels["cpu"])
 			}
@@ -157,6 +179,14 @@ func TestFailoverPartitionGraphKPI_Collect(t *testing.T) {
 	}
 	if nodeValue["h-idle"] != 0 {
 		t.Errorf("node h-idle: expected value 0, got %v", nodeValue["h-idle"])
+	}
+	// The vms label counts placed vms per host: h1 has two, t2 has one, the rest
+	// zero. The unplaced vm is not counted anywhere.
+	wantVMs := map[string]string{"h1": "2", "t2": "1", "t1": "0", "h2": "0", "h3": "0", "h-idle": "0"}
+	for host, want := range wantVMs {
+		if nodeVMs[host] != want {
+			t.Errorf("node %s: expected vms %q, got %q", host, want, nodeVMs[host])
+		}
 	}
 	// Edges: h1->t1, h2->t1, h1->t2, h3->t2.
 	if edges != 4 {
