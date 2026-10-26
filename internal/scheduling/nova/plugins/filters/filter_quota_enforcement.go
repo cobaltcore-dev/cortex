@@ -92,7 +92,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 			traceLog.V(1).Info("skipping quota enforcement for non-consuming intent", "intent", intent)
 			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_intent_migration", "", "", "")
 			return result, nil
-		case api.ReserveForFailoverIntent, api.ReuseFailoverReservationIntent:
+		case api.ReserveForFailoverIntent, api.ReuseFailoverReservationIntent, api.ValidateFailoverReservationIntent:
 			traceLog.V(1).Info("skipping quota enforcement for failover reservation intent")
 			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_intent_internal", "", "", "")
 			return result, nil
