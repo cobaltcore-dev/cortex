@@ -61,10 +61,11 @@
 
 - **`openstack-hypervisor-operator` v1.3.0** brings parallel VM migrations during drains, safe eviction completion (incoming migrations must settle), hardened offboarding with `AgentPodsEvicted` gating, and node termination detection via `deletionTimestamp`. Review drain behavior in staging before rollout.
 - **slog removal:** Any out-of-tree code importing cortex packages that used `*slog.Logger` in `Run` or `GetTraceLogArgs` signatures must update to `logr.Logger` / `[]any`.
+- **`FailoverReservation` deprecation:** Migrate any tooling or automation referencing `FailoverReservation` to the new `FailoverHostReservation` subtype.
 
 **Contributors:** @PhilippMatthes, @SoWieMarkus, @mblos, @renovate[bot], @cortex-ai-agents[bot], Claude Opus 4.7
 
-**PR:** [#1427](https://github.com/cobaltcore-dev/cortex/pull/1427) | **Commits:** 22 | **Files changed:** 95
+**PR:** [#1427](https://github.com/cobaltcore-dev/cortex/pull/1427) | **Commits:** 24 | **Files changed:** 100
 
 ## Release PR [#1393](https://github.com/cobaltcore-dev/cortex/pull/1393)
 
