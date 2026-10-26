@@ -266,9 +266,14 @@ is expected here; Step 3 resolves it.
 
 **Empty hosts get folded in.** A host with no VMs (or one already reserved) has nothing to evacuate and so has
 no rescue links of its own — it would otherwise be a group of one. Such a host is **recruited** into a partition
-as long as **every** member of that partition can rescue onto it. The check is one-directional on purpose: an
-empty host runs nothing, so it is assumed able to evacuate anywhere; only the inbound direction
-(`member → empty host`) is verified. If even one member can't reach it, the empty host stays on its own:
+as long as **every** member of that partition can rescue onto it *and* the empty host is the same effective size
+as those members. The reachability check is one-directional on purpose: an empty host runs nothing, so it is
+assumed able to evacuate anywhere; only the inbound direction (`member → empty host`) is verified. But the empty
+host also becomes a *source* of the partition's eventual failover target, so it must itself be rescuable by its
+new peers. With no VMs it has no rescue links to prove this, so Cortex falls back to the same whole-host fit rule
+used in Step 1 and requires equal capacity (memory then CPU, rounded to GiB): an empty host larger than the
+partition could never be evacuated onto a smaller reserved target, so it is **not** recruited. If even one member
+can't reach it, or the sizes differ, the empty host stays on its own:
 
 This recruitment mechanism has a consequence worth calling out: **a partition is only ever discovered if at
 least one of its hosts runs a valid, placeable VM.** Rescue links are derived *from* running VMs (Step 1), so

@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 // PartitionBuilder is the second pipeline stage. It clusters the directed
@@ -166,12 +167,29 @@ func (cliquePartitionBuilder) BuildPartitions(paths [][2]hv1.Hypervisor) [][]hv1
 	})
 	slices.Sort(emptyHosts)
 
+	// effectiveCapacity returns a host's gang-fit capacity: its base capacity with
+	// effectiveCapacity overlaid on top (fallback = capacity), matching how the
+	// PathFinder sizes hosts. Copied into a fresh map so we never mutate Status.
+	effectiveCapacity := func(name string) map[hv1.ResourceName]resource.Quantity {
+		capa := map[hv1.ResourceName]resource.Quantity{}
+		maps.Copy(capa, hvsByName[name].Status.Capacity)
+		maps.Copy(capa, hvsByName[name].Status.EffectiveCapacity)
+		return capa
+	}
 	for _, empty := range emptyHosts {
+		emptyCapa := effectiveCapacity(empty)
 		recruited := false
 		for i, clique := range cliques {
 			allReach := len(clique) > 0
 			for _, member := range clique {
-				if !outgoing[member][empty] {
+				// Every member must reach the empty host (member can evacuate onto
+				// it), and the empty host must be the same effective size as the
+				// member. The empty host has no vms, so Step 1 never produced an
+				// empty->member edge to prove it can rescue its peers; we fall back
+				// to the same gang-fit rule and require equal capacity. A larger
+				// empty host would be recorded as a source of a smaller reserved
+				// target it could never actually evacuate onto.
+				if !outgoing[member][empty] || cmpResources(emptyCapa, effectiveCapacity(member)) != 0 {
 					allReach = false
 					break
 				}

@@ -9,12 +9,28 @@ import (
 	"testing"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // hv builds a minimal hypervisor identified only by its name.
 func hv(name string) hv1.Hypervisor {
 	return hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: name}}
+}
+
+// hvWithMemory builds a hypervisor with the given name and memory capacity in GiB.
+func hvWithMemory(name string, memGiB int64) hv1.Hypervisor {
+	h := hv(name)
+	h.Status.Capacity = map[hv1.ResourceName]resource.Quantity{
+		hv1.ResourceMemory: *resource.NewQuantity(memGiB*(1<<30), resource.BinarySI),
+	}
+	return h
+}
+
+// edgesHV turns directed hypervisor pairs into failover paths, preserving the
+// hypervisors' capacity (unlike edges, which rebuilds bare hosts from names).
+func edgesHV(pairs ...[2]hv1.Hypervisor) [][2]hv1.Hypervisor {
+	return pairs
 }
 
 // edges turns a list of directed name pairs into failover paths.
@@ -106,6 +122,28 @@ func TestBuildPartitions(t *testing.T) {
 				[2]string{"a", "e"},
 			),
 			want: [][]string{{"a", "b"}, {"e"}},
+		},
+		{
+			name: "larger empty host is not recruited",
+			paths: edgesHV(
+				[2]hv1.Hypervisor{hvWithMemory("a", 1), hvWithMemory("b", 1)},
+				[2]hv1.Hypervisor{hvWithMemory("b", 1), hvWithMemory("a", 1)},
+				// a and b reach the empty host e, but e is larger than they are,
+				// so they could never evacuate onto it and it stays alone.
+				[2]hv1.Hypervisor{hvWithMemory("a", 1), hvWithMemory("e", 4)},
+				[2]hv1.Hypervisor{hvWithMemory("b", 1), hvWithMemory("e", 4)},
+			),
+			want: [][]string{{"a", "b"}, {"e"}},
+		},
+		{
+			name: "equal-sized empty host is recruited",
+			paths: edgesHV(
+				[2]hv1.Hypervisor{hvWithMemory("a", 4), hvWithMemory("b", 4)},
+				[2]hv1.Hypervisor{hvWithMemory("b", 4), hvWithMemory("a", 4)},
+				[2]hv1.Hypervisor{hvWithMemory("a", 4), hvWithMemory("e", 4)},
+				[2]hv1.Hypervisor{hvWithMemory("b", 4), hvWithMemory("e", 4)},
+			),
+			want: [][]string{{"a", "b", "e"}},
 		},
 	}
 
