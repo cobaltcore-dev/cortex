@@ -60,11 +60,11 @@ func (s *FilterAggregateMetadata) Run(traceLog logr.Logger, request api.External
 					}
 					restrictedProjectsByHost[hv.Name] = append(restrictedProjectsByHost[hv.Name], projectID)
 				}
-				traceLog.Info("host is in aggregate with filter_tenant_id, adding restriction",
+				traceLog.V(1).Info("host is in aggregate with filter_tenant_id, adding restriction",
 					"host", hv.Name, "aggregate", aggregate.Name, "key", key, "tenant_id", value)
 			}
 			if !foundFilter {
-				traceLog.Info("aggregate does not have filter_tenant_id metadata, skipping",
+				traceLog.V(1).Info("aggregate does not have filter_tenant_id metadata, skipping",
 					"aggregate", aggregate.Name)
 			}
 		}
@@ -74,14 +74,14 @@ func (s *FilterAggregateMetadata) Run(traceLog logr.Logger, request api.External
 		if !slices.Contains(restrictedProjects, request.Spec.Data.ProjectID) {
 			// Project is not allowed on this hypervisor, filter it out.
 			delete(result.Activations, host)
-			traceLog.Info(
+			traceLog.V(1).Info(
 				"filtering host not allowing project based on aggregate metadata",
 				"host", host,
 				"project", request.Spec.Data.ProjectID,
 				"restricted_projects", restrictedProjects,
 			)
 		} else {
-			traceLog.Info(
+			traceLog.V(1).Info(
 				"host allows project based on aggregate metadata, keeping",
 				"host", host,
 				"project", request.Spec.Data.ProjectID,

@@ -135,7 +135,7 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 			c.Respond(logger, http.StatusBadRequest, err, err.Error())
 			return
 		}
-		logger.Info("inferred pipeline name", "pipeline", requestData.Pipeline)
+		logger.V(1).Info("inferred pipeline name", "pipeline", requestData.Pipeline)
 	}
 
 	// Create the decision object in kubernetes.

@@ -93,7 +93,7 @@ func (k *KVMProjectUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 	for _, projectInstanceCount := range projectInstanceCounts {
 		host, ok := hosts[projectInstanceCount.ComputeHost]
 		if !ok {
-			log.Info("kvm_project_utilization: Compute host not found for project instance count", "compute_host", projectInstanceCount.ComputeHost)
+			log.V(1).Info("kvm_project_utilization: Compute host not found for project instance count", "compute_host", projectInstanceCount.ComputeHost)
 			continue
 		}
 		hostLabels := host.getHostLabels()
@@ -110,7 +110,7 @@ func (k *KVMProjectUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 	for _, projectCapacityUsage := range projectCapacityUsages {
 		host, ok := hosts[projectCapacityUsage.ComputeHost]
 		if !ok {
-			log.Info("kvm_project_utilization: Compute host not found for project capacity usage", "compute_host", projectCapacityUsage.ComputeHost)
+			log.V(1).Info("kvm_project_utilization: Compute host not found for project capacity usage", "compute_host", projectCapacityUsage.ComputeHost)
 			continue
 		}
 		hostLabels := host.getHostLabels()

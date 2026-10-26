@@ -84,7 +84,7 @@ func (s *KVMPreferSmallerHostsStep) Run(traceLog logr.Logger, request api.Extern
 			// Effective capacity = capacity * overcommit ratio.
 			capacity, ok := hv.Status.EffectiveCapacity[resourceName]
 			if !ok {
-				traceLog.Info("hypervisor has no effective capacity for resource, skipping",
+				traceLog.V(1).Info("hypervisor has no effective capacity for resource, skipping",
 					"host", hv.Name, "resource", resourceName)
 				continue
 			}
@@ -100,7 +100,7 @@ func (s *KVMPreferSmallerHostsStep) Run(traceLog logr.Logger, request api.Extern
 	for host := range result.Activations {
 		hv, ok := hvsByName[host]
 		if !ok {
-			traceLog.Info("no hv for host, skipping", "host", host)
+			traceLog.V(1).Info("no hv for host, skipping", "host", host)
 			continue
 		}
 
@@ -109,7 +109,7 @@ func (s *KVMPreferSmallerHostsStep) Run(traceLog logr.Logger, request api.Extern
 		for resourceName, weight := range s.Options.ResourceWeights {
 			capacity, ok := hv.Status.EffectiveCapacity[resourceName]
 			if !ok {
-				traceLog.Info("hypervisor has no effective capacity for resource, skipping",
+				traceLog.V(1).Info("hypervisor has no effective capacity for resource, skipping",
 					"host", hv.Name, "resource", resourceName)
 				continue
 			}
@@ -118,14 +118,14 @@ func (s *KVMPreferSmallerHostsStep) Run(traceLog logr.Logger, request api.Extern
 			largestCap := largest[resourceName]
 
 			if smallestCap == nil || largestCap == nil {
-				traceLog.Info("no effective capacity range found for resource, skipping",
+				traceLog.V(1).Info("no effective capacity range found for resource, skipping",
 					"resource", resourceName)
 				continue
 			}
 
 			// If all hosts have the same effective capacity for this resource, skip it
 			if smallestCap.Cmp(*largestCap) == 0 {
-				traceLog.Info("all hypervisors have the same effective capacity for resource, skipping",
+				traceLog.V(1).Info("all hypervisors have the same effective capacity for resource, skipping",
 					"resource", resourceName)
 				continue
 			}
@@ -147,7 +147,7 @@ func (s *KVMPreferSmallerHostsStep) Run(traceLog logr.Logger, request api.Extern
 		}
 		result.Activations[host] = score
 		result.Statistics["small host score"].Hosts[host] = score
-		traceLog.Info("calculated small host score for host",
+		traceLog.V(1).Info("calculated small host score for host",
 			"host", host, "score", score)
 	}
 

@@ -57,17 +57,17 @@ func (s *FilterLiveMigratableStep) Run(
 
 	intent, err := request.GetIntent()
 	if err != nil {
-		traceLog.Info("failed to determine request intent, skipping filter", "error", err)
+		traceLog.V(1).Info("failed to determine request intent, skipping filter", "error", err)
 		return result, nil
 	}
 	if intent != api.LiveMigrationIntent {
-		traceLog.Info("not a live migration request, skipping filter")
+		traceLog.V(1).Info("not a live migration request, skipping filter")
 		return result, nil
 	}
 
 	sourceHost, err := request.Spec.Data.GetSchedulerHintStr("source_host")
 	if err != nil || sourceHost == "" {
-		traceLog.Info("no source_host scheduler hint, skipping filter")
+		traceLog.V(1).Info("no source_host scheduler hint, skipping filter")
 		//nolint:nilerr // Not an error we want to fail the scheduling for.
 		return result, nil
 	}
@@ -97,14 +97,14 @@ func (s *FilterLiveMigratableStep) Run(
 		}
 		if err := s.checkHasSufficientFeatures(sourceHV, targetHV); err != nil {
 			delete(result.Activations, host)
-			traceLog.Info(
+			traceLog.V(1).Info(
 				"filtered out host not suitable for live migration",
 				"host", host,
 				"reason", err.Error(),
 			)
 			continue
 		}
-		traceLog.Info("host is suitable for live migration, keeping", "host", host)
+		traceLog.V(1).Info("host is suitable for live migration, keeping", "host", host)
 	}
 	return result, nil
 }

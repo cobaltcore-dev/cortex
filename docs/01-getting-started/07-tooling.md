@@ -8,10 +8,10 @@
 
 The `tools/` directory holds standalone developer and operator utilities — not shipped in the Helm
 charts, run by hand during development, debugging, or dashboard work. Each is a small Go program you
-run with `go run` from the repository root (except the two dashboard directories, which hold static
-definitions). This page documents each one in turn, with an illustrative slice of its output where the
-tool prints a report. The example outputs are hand-authored to show the shape of what each tool prints;
-they are not captured from a live run.
+run with `go run` from the repository root (except `tools/perses`, which holds Helm values rather than
+a runnable program). This page documents each one in turn, with an illustrative slice of its output
+where the tool prints a report. The example outputs are hand-authored to show the shape of what each
+tool prints; they are not captured from a live run.
 
 ## `tools/spawner` — synthetic workload generator
 
@@ -200,10 +200,10 @@ Output of pipeline : host-a, host-b
 Final output     : host-a, host-b
 ```
 
-## `tools/perses` — dashboard definitions
+## `tools/perses` — Perses Helm values
 
-This is **not** a runnable Go program. `tools/perses` holds Perses dashboard definitions (JSON) rendered by a
-Perses instance. They are covered in
+`tools/perses` holds Perses Helm values (`values.yaml`). The Perses dashboard definitions (JSON) have
+moved to the repo-root `dashboards/` directory and are covered in
 [The infrastructure dashboard](../04-knowledge-database/05-infrastructure-dashboard.md).
 
 These utilities sit beside Cortex rather than inside it: none is shipped in the Helm charts, and each

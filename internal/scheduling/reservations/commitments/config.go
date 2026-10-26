@@ -194,7 +194,7 @@ func LogFlavorGroupResourceConfig(log logr.Logger, cfg map[string]FlavorGroupRes
 			log.Info("WARNING: ramUnitGiB not configured for flavor group, defaulting to 1 GiB",
 				"flavorGroup", groupName)
 		} else {
-			log.Info("flavor group RAM unit",
+			log.V(1).Info("flavor group RAM unit",
 				"flavorGroup", groupName, "ramUnitGiB", resCfg.RAM.RAMUnitGiB)
 		}
 	}

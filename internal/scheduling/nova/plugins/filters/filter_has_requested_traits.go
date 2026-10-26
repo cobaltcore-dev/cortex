@@ -26,29 +26,29 @@ func (s *FilterHasRequestedTraits) Run(traceLog logr.Logger, request api.Externa
 	var requiredTraits, forbiddenTraits []string
 	for key, value := range request.Spec.Data.Flavor.Data.ExtraSpecs {
 		if !strings.HasPrefix(key, "trait:") {
-			traceLog.Info("ignoring extra spec that does not start with trait:", "key", key)
+			traceLog.V(1).Info("ignoring extra spec that does not start with trait:", "key", key)
 			continue
 		}
 		traitName := strings.TrimPrefix(key, "trait:")
 		switch value {
 		case "forbidden":
 			forbiddenTraits = append(forbiddenTraits, traitName)
-			traceLog.Info("trait marked forbidden, will filter out hosts with this trait",
+			traceLog.V(1).Info("trait marked forbidden, will filter out hosts with this trait",
 				"trait", traitName)
 		case "required":
 			requiredTraits = append(requiredTraits, traitName)
-			traceLog.Info("trait marked required, will filter out hosts without this trait",
+			traceLog.V(1).Info("trait marked required, will filter out hosts without this trait",
 				"trait", traitName)
 		default:
-			traceLog.Info("ignoring trait with unsupported value",
+			traceLog.V(1).Info("ignoring trait with unsupported value",
 				"trait", traitName, "value", value)
 		}
 	}
 	if len(requiredTraits) == 0 && len(forbiddenTraits) == 0 {
-		traceLog.Info("no traits requested, skipping filter")
+		traceLog.V(1).Info("no traits requested, skipping filter")
 		return result, nil
 	}
-	traceLog.Info(
+	traceLog.V(1).Info(
 		"filtering hosts based on requested traits",
 		"required", requiredTraits,
 		"forbidden", forbiddenTraits,
@@ -88,11 +88,11 @@ func (s *FilterHasRequestedTraits) Run(traceLog logr.Logger, request api.Externa
 
 	for host := range result.Activations {
 		if _, ok := hostsMatchingAllTraits[host]; ok {
-			traceLog.Info("host matches requested traits, keeping", "host", host)
+			traceLog.V(1).Info("host matches requested traits, keeping", "host", host)
 			continue
 		}
 		delete(result.Activations, host)
-		traceLog.Info("filtering host not matching requested traits", "host", host)
+		traceLog.V(1).Info("filtering host not matching requested traits", "host", host)
 	}
 	return result, nil
 }

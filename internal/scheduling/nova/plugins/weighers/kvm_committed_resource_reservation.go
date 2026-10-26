@@ -58,7 +58,7 @@ func (s *KVMCommittedResourceReservationStep) Run(traceLog logr.Logger, request 
 	// Skip for failover reservation scheduling — CR reservations should not influence
 	// where failover capacity is placed.
 	if intent, err := request.GetIntent(); err == nil && intent == api.ReserveForFailoverIntent {
-		traceLog.Info("skipping committed resource reservation weigher for failover reservation intent")
+		traceLog.V(1).Info("skipping committed resource reservation weigher for failover reservation intent")
 		return result, nil
 	}
 
@@ -66,7 +66,7 @@ func (s *KVMCommittedResourceReservationStep) Run(traceLog logr.Logger, request 
 	az := request.Spec.Data.AvailabilityZone
 	resourceGroup, err := request.Spec.Data.GetSchedulerHintStr(api.HintKeyResourceGroup)
 	if err != nil || resourceGroup == "" {
-		traceLog.Info("skipping committed resource reservation weigher: no resource group in request")
+		traceLog.V(1).Info("skipping committed resource reservation weigher: no resource group in request")
 		return result, nil //nolint:nilerr
 	}
 
@@ -103,7 +103,7 @@ func (s *KVMCommittedResourceReservationStep) Run(traceLog logr.Logger, request 
 		}
 		if freeMemoryBytes(res) >= flavorMemoryBytes {
 			reservationHosts[res.Status.Host] = true
-			traceLog.Info("found committed resource reservation with free capacity",
+			traceLog.V(1).Info("found committed resource reservation with free capacity",
 				"reservation", res.Name,
 				"host", res.Status.Host,
 				"project", projectID,

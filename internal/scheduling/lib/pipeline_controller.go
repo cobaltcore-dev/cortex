@@ -71,7 +71,7 @@ func (c *BasePipelineController[PipelineType]) InitAllPipelines(ctx context.Cont
 		if pipelineConf.Spec.Type != c.Initializer.PipelineType() {
 			continue
 		}
-		log.Info("initializing existing pipeline", "pipelineName", pipelineConf.Name)
+		log.V(1).Info("initializing existing pipeline", "pipelineName", pipelineConf.Name)
 		c.handlePipelineChange(ctx, &pipelineConf, nil)
 	}
 	return nil
@@ -248,7 +248,7 @@ func (c *BasePipelineController[PipelineType]) handleKnowledgeChange(
 		return
 	}
 	log := ctrl.LoggerFrom(ctx)
-	log.Info("knowledge changed, re-evaluating all pipelines", "knowledgeName", obj.Name)
+	log.V(1).Info("knowledge changed, re-evaluating all pipelines", "knowledgeName", obj.Name)
 	// Find all pipelines depending on this knowledge and re-evaluate them.
 	var pipelines v1alpha1.PipelineList
 	if err := c.List(ctx, &pipelines); err != nil {

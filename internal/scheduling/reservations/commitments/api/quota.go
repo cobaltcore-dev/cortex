@@ -51,7 +51,7 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Request-ID", requestID)
 
 	log := apiLog.WithValues("requestID", requestID, "endpoint", "quota")
-	log.Info("received quota request", "method", r.Method, "path", r.URL.Path)
+	log.V(1).Info("received quota request", "method", r.Method, "path", r.URL.Path)
 
 	if r.Method != http.MethodPut {
 		api.quotaError(w, http.StatusMethodNotAllowed, "Method not allowed", startTime)

@@ -138,7 +138,7 @@ func (k *VMCommitmentsKPI) Collect(ch chan<- prometheus.Metric) {
 			// the demand, not the allocation when placed somewhere.
 			flavor, ok := flavorsByName[commitment.ResourceName[len("instances_"):]]
 			if !ok {
-				log.Info("vm_commitments: unknown flavor in commitment", "flavor", commitment.ResourceName)
+				log.V(1).Info("vm_commitments: unknown flavor in commitment", "flavor", commitment.ResourceName)
 				continue
 			}
 			cores, memory := float64(flavor.VCPUs), float64(flavor.RAM)*1024*1024
@@ -163,7 +163,7 @@ func (k *VMCommitmentsKPI) Collect(ch chan<- prometheus.Metric) {
 			statsVMCommitmentsSum[key] += memory // converted to bytes
 			statsCommittedMemory[key] += memory
 		default:
-			log.Info("vm_commitments: unknown resource name in commitment", "resource_name", commitment.ResourceName)
+			log.V(1).Info("vm_commitments: unknown resource name in commitment", "resource_name", commitment.ResourceName)
 			continue
 		}
 	}

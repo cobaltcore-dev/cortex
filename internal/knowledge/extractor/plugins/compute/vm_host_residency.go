@@ -75,7 +75,7 @@ func (e *VMHostResidencyExtractor) Extract() ([]plugins.Feature, error) {
 	for key, hist := range hists {
 		labels := strings.Split(key, ",")
 		if len(labels) != 1 {
-			log.Info("vm_host_residency: unexpected comma in flavor name")
+			log.V(1).Info("vm_host_residency: unexpected comma in flavor name")
 			continue
 		}
 		for bucket, value := range hist {

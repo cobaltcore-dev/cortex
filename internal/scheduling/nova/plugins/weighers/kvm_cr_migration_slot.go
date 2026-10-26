@@ -70,7 +70,7 @@ func (s *KVMCRMigrationSlotStep) Run(
 
 	intent, err := request.GetIntent()
 	if err != nil || intent != api.LiveMigrationIntent {
-		traceLog.Info("not a live migration, skipping CR migration slot weigher")
+		traceLog.V(1).Info("not a live migration, skipping CR migration slot weigher")
 		return result, nil //nolint:nilerr
 	}
 
@@ -101,14 +101,14 @@ func (s *KVMCRMigrationSlotStep) Run(
 	}
 
 	if sourceSlot == nil {
-		traceLog.Info("migrating VM has no confirmed CR reservation slot, skipping slot weigher",
+		traceLog.V(1).Info("migrating VM has no confirmed CR reservation slot, skipping slot weigher",
 			"instanceUUID", instanceUUID)
 		return result, nil
 	}
 
 	slotMemoryBytes := sourceSlot.Spec.Resources[hv1.ResourceMemory]
 	if slotMemoryBytes.IsZero() {
-		traceLog.Info("source CR slot has no memory resource, skipping slot weigher",
+		traceLog.V(1).Info("source CR slot has no memory resource, skipping slot weigher",
 			"instanceUUID", instanceUUID,
 			"reservation", sourceSlot.Name)
 		return result, nil
@@ -116,7 +116,7 @@ func (s *KVMCRMigrationSlotStep) Run(
 
 	resourceGroup := sourceSlot.Spec.CommittedResourceReservation.ResourceGroup
 
-	traceLog.Info("found source CR reservation slot for migrating VM",
+	traceLog.V(1).Info("found source CR reservation slot for migrating VM",
 		"instanceUUID", instanceUUID,
 		"reservation", sourceSlot.Name,
 		"slotMemoryBytes", slotMemoryBytes.Value(),
@@ -137,15 +137,15 @@ func (s *KVMCRMigrationSlotStep) Run(
 		switch {
 		case hasSlot:
 			result.Activations[host] = slotHostWeight
-			traceLog.Info("host has existing CR slot for migration, boosting weight",
+			traceLog.V(1).Info("host has existing CR slot for migration, boosting weight",
 				"host", host, "weight", slotHostWeight)
 		case canFit:
 			result.Activations[host] = slotHostWeight
-			traceLog.Info("host can accommodate slot via reconciler, boosting weight",
+			traceLog.V(1).Info("host can accommodate slot via reconciler, boosting weight",
 				"host", host, "weight", slotHostWeight)
 		default:
 			result.Activations[host] = defaultHostWeight
-			traceLog.Info("host cannot accommodate CR slot, applying low weight",
+			traceLog.V(1).Info("host cannot accommodate CR slot, applying low weight",
 				"host", host, "weight", defaultHostWeight)
 		}
 	}

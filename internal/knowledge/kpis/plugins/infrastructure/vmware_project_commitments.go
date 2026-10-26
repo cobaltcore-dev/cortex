@@ -195,7 +195,7 @@ func (k *VMwareProjectCommitmentsKPI) collectGeneralPurpose(ch chan<- prometheus
 	for _, s := range servers {
 		flavor, ok := flavorsByName[s.FlavorName]
 		if !ok {
-			log.Info("vmware_project_commitments: gp flavor not found", "flavor", s.FlavorName)
+			log.V(1).Info("vmware_project_commitments: gp flavor not found", "flavor", s.FlavorName)
 			continue
 		}
 		used[gpKey{s.TenantID, s.OSEXTAvailabilityZone, "cpu"}] += float64(flavor.VCPUs)
@@ -259,7 +259,7 @@ func (k *VMwareProjectCommitmentsKPI) collectHana(ch chan<- prometheus.Metric, f
 		unused := total - run
 		flavor, ok := flavorsByName[ck.flavorName]
 		if !ok {
-			log.Info("vmware_resource_commitments: hana flavor not found", "flavor", ck.flavorName)
+			log.V(1).Info("vmware_resource_commitments: hana flavor not found", "flavor", ck.flavorName)
 			continue
 		}
 		totals[resourceKey{ck.projectID, ck.az, ck.cpuArch, "cpu"}] += float64(unused) * float64(flavor.VCPUs)
