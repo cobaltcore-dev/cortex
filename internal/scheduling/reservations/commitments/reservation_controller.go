@@ -522,20 +522,10 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		allocationAge := now.Sub(allocation.CreationTimestamp.Time)
 		isInGracePeriod := allocationAge < r.Conf.AllocationGracePeriod.Duration
 
-		// Confirmed VMs (already in Status.Allocations) bypass the grace period:
-		// their departure from the HV CRD is authoritative and must be acted on immediately.
-		// Unconfirmed VMs still within the grace period may not yet appear in the HV CRD
-		// (still spawning), so defer verification and requeue with a short interval.
 		_, isConfirmed := existingStatusAllocations[vmUUID]
-		if !isConfirmed && isInGracePeriod {
-			result.HasAllocationsInGracePeriod = true
-			logger.V(1).Info("allocation in grace period, deferring verification",
-				"vm", vmUUID,
-				"allocationAge", allocationAge)
-			continue
-		}
 
-		// Post-grace-period or confirmed VM: use HV CRD as authoritative source.
+		// Always check HV CRD first: if the VM is already present (e.g. a long-running
+		// PayG VM being absorbed), confirm immediately without waiting for the grace period.
 		if hvInstanceSet[vmUUID] {
 			newStatusAllocations[vmUUID] = expectedHost
 			logger.V(1).Info("verified VM allocation via Hypervisor CRD",
@@ -544,8 +534,18 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 			continue
 		}
 
-		// VM not on the expected host. For unconfirmed post-grace VMs this is a clean
-		// stale allocation — remove it without further searching.
+		// VM not yet visible in HV CRD. For unconfirmed VMs still within the grace period
+		// the HV CRD sync may not have caught up yet (newly spawned VM) — defer and requeue.
+		if !isConfirmed && isInGracePeriod {
+			result.HasAllocationsInGracePeriod = true
+			logger.V(1).Info("allocation in grace period, deferring verification",
+				"vm", vmUUID,
+				"allocationAge", allocationAge)
+			continue
+		}
+
+		// VM not on the expected host, past grace period or already confirmed.
+		// For unconfirmed post-grace VMs this is a clean stale allocation — remove it.
 		if !isConfirmed {
 			allocationsToRemove = append(allocationsToRemove, vmUUID)
 			logger.Info("removing stale allocation (VM not found on hypervisor)",
