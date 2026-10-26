@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 -->
 
-# Failover *host* reservations
+# Failover host reservations
 
 The previous page reserved **headroom** — a shared pool of free capacity spread across the fleet, sized to
 absorb `m` host failures. This page describes a different, coarser-grained mechanism that is replacing it:
@@ -16,29 +16,9 @@ all the host's VMs moved together, in one placement decision, rather than one at
 > Failover host reservations **supersede** the slot-based failover reservations described on the
 > [previous page](03-failover-reservations.md). The older system is deprecated and will be removed. New
 > deployments should enable the failover-host reservations controller; the old slot-based controller is
-> retained only for migration.
-
-## Why whole hosts instead of shared slots
-
-The slot-based model reserves headroom *cheaply* — a fraction of the fleet, shared across every protected
-workload — but it pays for that with complexity and fragility at evacuation time:
-
-- The reserved space is **scattered** across many hosts. Evacuating a failed host means fanning its VMs out
-  across whatever slots happen to be free, which is exactly the placement problem the scheduler is slow and
-  contended at precisely when a host has just died.
-- Whether the headroom is actually *usable* for a given failure depends on the shape of the dead host's
-  workload matching the shape of the scattered free space. The model reasons about *aggregate* capacity, not
-  about whether any one host's workload truly fits.
-
-Failover *host* reservations trade a little more idle capacity for a much simpler, more predictable
-evacuation: each reserved host is a known-good, whole-host landing zone for exactly one source host's
-workload, moved as a gang. There is no re-solving of placement under pressure — the target was pre-validated
-by the scheduler while everything was calm.
-
-```
-Slot-based (previous):  reserve m hosts' worth of capacity, scattered as slots, shared across the fleet.
-Host-based (this page): keep a ratio of whole hosts empty per partition; evacuate one host onto one host.
-```
+> retained only for migration. The key reason for the switch: whole-host reservations trade a little more
+> idle capacity for a pre-validated, gang-evacuable landing zone, so no placement has to be re-solved under
+> pressure the moment a host dies.
 
 ## Partitions: hosts are not interchangeable
 
@@ -51,6 +31,20 @@ Cortex therefore groups hosts into **failover partitions**: sets of hosts within
 evacuated onto every other host. Crucially, these groups are **not configured by hand**. They are *discovered*
 from the scheduler's own placement decisions, so the grouping always reflects the live filters, weights and
 constraints — a partition can never contain a target the scheduler would in fact reject.
+
+One could imagine solving this differently: hand-craft the partitions from the hypervisors directly — write
+rules that read each host's flavors, image properties, aggregates and availability zone and group the
+"compatible" ones together. But those are exactly the constraints the VM scheduling pipeline *already*
+encodes. Re-expressing them here would mean re-implementing a second, parallel copy of the placement logic,
+which then has to be kept in lock-step with the real one forever; the moment a filter changes in the pipeline
+and not in the failover rules, the partitions quietly diverge from what the scheduler would actually accept,
+and a "failover target" may reject the very workload it was reserved for.
+
+So Cortex takes a **self-partitioning approach at the VM level** instead. Rather than restating the rules, it
+asks the real scheduler — per VM — where each VM could go, and lets the partitions *fall out* of those
+answers (the next section works through how). The compatibility rules are never duplicated: whatever the
+pipeline does, the partitions inherit, automatically and for free, including every future change to the
+filters and weighers.
 
 Everything on this page is a continuous background process: Cortex periodically re-derives the partitions and
 the set of reserved hosts from the current state of the fleet, and nudges the actual reservations toward that
@@ -79,6 +73,12 @@ Because the planner republishes the **whole** desired picture each pass (rather 
 reconciler gets pruning for free: any reservation that exists in the fleet but is absent from the latest
 picture is simply one the planner no longer wants, and is removed.
 
+A corollary matters for safety: the planner only ever publishes a picture it computed from a *complete*
+snapshot. If anything goes wrong while gathering the inputs — the fleet snapshot can't be collected, or a
+scheduler probe fails — the whole pass is aborted and the previously published picture is left untouched; the
+planner simply retries on the next cycle. The reconciler therefore never acts on a half-gathered view, and
+reservations are never recomputed from partial data.
+
 ```mermaid
 stateDiagram-v2
     direction LR
@@ -102,21 +102,44 @@ The important thing to understand is that the graph is **narrowed in several ste
 candidates for a *different* reason. Keeping those reasons straight is the whole algorithm, because the single
 most common question — *"why does this host have no failover target?"* — has a different answer at each step:
 
-```mermaid
-flowchart TB
-    A["ask the scheduler, per VM:<br/>which hosts would accept this VM?"]
-    A -->|"intersect across all VMs on a host"| B["candidate targets for the whole host<br/><i>drop: the host's own VMs disagree ⇒ none</i>"]
-    B -->|"is the target big enough for the whole host?"| C["one-way rescue links  source → target<br/><i>drop: target smaller than source</i>"]
-    C -->|"keep a link only if it works both ways"| D["mutual rescue pairs"]
-    D -->|"group into partitions, then make them disjoint"| E["failover partitions<br/><i>drop: a host shared by two groups goes to one;<br/>a group left with one host is discarded</i>"]
-    style B fill:#fff3e0,stroke:#e65100
-    style C fill:#fff3e0,stroke:#e65100
-    style D fill:#fff3e0,stroke:#e65100
-    style E fill:#fff3e0,stroke:#e65100
-```
+1. **Discover who can rescue whom** (Step 1 below). Ask the scheduler, per VM, which hosts would accept it,
+   intersect across all VMs on a host, then check the target is big enough for the whole host — yielding
+   one-way rescue links `source → target`. *A host drops out if its own VMs disagree (empty intersection), or
+   a target drops out if it is smaller than the source.*
+2. **Group into partitions** (Step 2). Keep only links that work *both* ways, then cluster those mutual pairs
+   into groups where everyone can rescue everyone. *A one-way link leaves no trace in the partitions.*
+3. **Make the partitions disjoint** (Step 3). A host can land in two overlapping groups; assign it to one.
+   *A group left with a single host is then discarded.*
+4. **Pick the failover hosts** (Step 4). Reserve a fraction of each partition as empty landing zones.
 
-Each orange box is an edge case, worked through below. A [troubleshooting table](#why-does-this-host-have-no-failover-target)
-at the end maps each symptom back to the step that caused it.
+Each emphasised clause is an edge case, worked through below. A
+[troubleshooting table](#why-does-this-host-have-no-failover-target) at the end maps each symptom back to the
+step that caused it.
+
+### Why Bron-Kerbosch for the partitioning
+
+Step 2 reduces to a classic graph question: in the undirected graph of mutual rescue pairs, a failover
+partition is a set of hosts that are *all pairwise* connected — a **maximal clique**. Cortex enumerates those
+cliques with the **Bron-Kerbosch** algorithm, and the choice is deliberate:
+
+- **The problem is literally maximal-clique enumeration, not something weaker.** "Every host can evacuate onto
+  every other host" is the definition of a clique. Cheaper alternatives solve a *different* problem and would
+  silently admit invalid partitions: connected components or a union-find grouping would lump together hosts
+  linked only transitively (`a`↔`b`, `b`↔`c` but not `a`↔`c`), producing a "partition" in which `a` cannot
+  actually rescue `c`. A greedy "grow a group while everyone stays connected" heuristic avoids that but picks
+  an arbitrary clique and misses overlapping ones, so some hosts would lose a partition they genuinely belong
+  to.
+- **We need *all maximal* cliques, including overlapping ones.** A host can legitimately belong to more than
+  one partition (it is Step 3's own job to resolve that overlap afterwards). Bron-Kerbosch is the standard,
+  well-understood algorithm that enumerates *exactly* the maximal cliques — no duplicates, nothing missed —
+  which is what makes the downstream overlap-resolution well-defined.
+- **The fleet is partitioned by construction, so the worst case never bites.** Maximal-clique enumeration is
+  exponential in the general case, which sounds alarming. But the mutual-rescue graph is not a general graph:
+  it is already almost-disconnected into compatibility islands (HANA, general-purpose, external-customer, …),
+  and cliques only form *within* an island. Each clique-search therefore runs over a small, dense subgraph,
+  not the whole fleet, which keeps it comfortably fast in practice.
+
+With that settled, the four steps in detail:
 
 ### Step 1 — Discover who can rescue whom
 
@@ -166,7 +189,11 @@ flowchart TB
 ```
 
 This is a deliberate limitation: Cortex does not (yet) split one host's workload across several targets, so a
-host whose own VMs cannot share a single landing zone simply waits until its workload mix changes.
+host whose own VMs cannot share a single landing zone simply waits until its workload mix changes. The
+failover controller will not solve this on its own — it only reserves whole-host landing zones. Spreading a
+single host's VMs across *several* targets is instead a job for Cortex's broader scheduling components, which
+will in future be able to steer placement so that a host's workload stays jointly evacuable (or to plan a
+multi-target evacuation directly), removing the "one host, one landing zone" constraint assumed here.
 
 Two things keep this probing faithful and safe:
 
@@ -181,8 +208,18 @@ Finally, a hard **whole-host fit** check discards any target that is smaller tha
 then CPU). An evacuation moves *all* of the source's VMs onto the target at once, so the target must be at least
 as large as the source.
 
-If a single VM's lookup fails, it is skipped rather than aborting — one unschedulable VM shouldn't erase a whole
-host's rescue links. Only an error broad enough to invalidate the entire pass stops it.
+Two outcomes of a per-VM lookup must not be confused, because they are handled oppositely — and the
+distinction is exactly what upholds the "consistent picture or nothing" rule:
+
+- **The scheduler answers that a VM has nowhere to go** (an empty candidate set, no error). This is a valid
+  answer, not a failure. That VM simply contributes nothing to the intersection; if it empties the
+  intersection, its host goes unprotected this pass, but the pass continues normally.
+- **The lookup itself fails** (the scheduler is unreachable, times out, or returns a non-200). This is an
+  infrastructure failure, not an answer — on a partial view Cortex cannot assert anything about the failover
+  graph, so it **aborts the entire pass** and leaves the last published picture untouched, retrying next
+  cycle. Swallowing the error and skipping just that VM would collapse the affected host's rescue links and
+  prune reservations that are in fact still valid, so a single transient blip must never be allowed to erase
+  coverage.
 
 ### Step 2 — Group hosts into partitions
 
@@ -191,6 +228,14 @@ to hold, rescue must work in *both* directions between any two members: `a` can 
 rescue `a`. So Step 2 first keeps only the **mutual** links — the one-way links from Step 1 are discarded here.
 
 **One-way links are dropped.** This is why a link can exist in Step 1 yet leave no trace in the partitions:
+
+The reason mutuality is required — not just a convenient graph property — is that a failover must be
+*reversible*. A VM evacuated onto a target host should not be **locked in** there once the original host
+recovers. If rescue only worked one way (`source → target` but not back), the evacuated workload could land on
+the target and then have nowhere to return to, stranding it. Insisting the link work in *both* directions
+guarantees the partition can be restored: after the evacuation, the VMs can fail back off the target just as
+they failed onto it, so the partition returns to a fully failover-able state rather than degrading with each
+event.
 
 ```mermaid
 flowchart LR
@@ -225,6 +270,15 @@ as long as **every** member of that partition can rescue onto it. The check is o
 empty host runs nothing, so it is assumed able to evacuate anywhere; only the inbound direction
 (`member → empty host`) is verified. If even one member can't reach it, the empty host stays on its own:
 
+This recruitment mechanism has a consequence worth calling out: **a partition is only ever discovered if at
+least one of its hosts runs a valid, placeable VM.** Rescue links are derived *from* running VMs (Step 1), so
+a group of hosts with no VMs at all produces no links, forms no clique, and recruits no empty hosts — it is
+invisible to the planner. Concretely, a HANA partition in which no HANA VM is currently running yields no
+rescue links, so no clique forms and no failover host is reserved for it. This is not a problem: a partition
+with no workload has nothing to evacuate, so there is no failover host to find and none is needed. The moment
+a VM lands on one of those hosts, the links reappear and the partition (with its empty peers recruited) comes
+back into existence.
+
 ```mermaid
 flowchart TB
     subgraph ok["empty host E is recruited"]
@@ -250,8 +304,14 @@ time, so reservations don't flap between passes for no reason.
 Step 2 can leave a host in **two** partitions at once (like `b` above). But a host can only be reserved for one
 partition — reserving it for two would produce conflicting records about who it's meant to rescue, and one would
 silently overwrite the other. So before planning, Cortex forces the partitions apart: each shared host is kept
-in exactly **one** partition — the **largest** one it belongs to, since that's where it can rescue the most
-peers (ties broken deterministically).
+in exactly **one** partition — the **smallest** one it belongs to (ties broken deterministically by the
+partition's first host name).
+
+Keeping the shared host in the *smallest* partition is what preserves coverage for as many partitions as
+possible. A small partition only survives if it keeps its shared hosts — losing one can drop it below the
+two-host minimum and collapse it entirely. A large partition, by contrast, usually stays well above that
+minimum even after giving a host up. So assigning the shared host to the smaller group lets *both* groups
+survive, whereas assigning it to the larger one would often strand the smaller group:
 
 ```mermaid
 flowchart TB
@@ -259,19 +319,25 @@ flowchart TB
         p1["{a, b, c, d}  (4 hosts)"]
         p2["{c, e}        (2 hosts)"]
     end
-    before ==>|"shared host c stays with the LARGER group"| after
-    subgraph after["disjoint partitions"]
-        q1["{a, b, c, d}  ✓ keeps c"]
-        q2["{e} → now alone → discarded<br/>(no peer to rescue it)"]
+    before ==>|"shared host c stays with the SMALLER group"| after
+    subgraph after["disjoint partitions — both survive"]
+        q1["{a, b, d}  ✓ shrank by one, still ≥ 2"]
+        q2["{c, e}    ✓ keeps c, stays a valid pair"]
     end
-    style q2 fill:#ffebee,stroke:#c62828
+    style q1 fill:#e8f5e9,stroke:#2e7d32
+    style q2 fill:#e8f5e9,stroke:#2e7d32
 ```
 
-**Edge case — a host can silently lose coverage here.** When pulling a shared host out of the smaller group
-leaves that group with only one host, the group is discarded (a lone host has no peer to fail over from). Above,
-`e`'s only partner was `c`; once `c` stays with the larger group, `{e}` collapses to a single host and
-disappears, leaving `e` unprotected this pass. Nothing about `e` itself changed — it lost its partition purely
-from how the overlap was resolved. This is the subtlest way a host ends up with no failover target.
+Had `c` instead been kept with the larger `{a, b, c, d}`, the pair `{c, e}` would have collapsed to the lone
+host `{e}` and been discarded (a lone host has no peer to fail over from), leaving `e` unprotected this pass
+for no reason other than how the overlap was resolved. Preferring the smaller partition removes that failure
+mode wherever the larger partition can spare the host — which, being larger, it usually can.
+
+**Edge case — coverage can still be lost when neither partition can spare the host.** The smallest-first rule
+does not make the problem vanish entirely: if a host is shared between two partitions that are *both* size two,
+whichever one loses it collapses to a lone host and is discarded. There is no assignment that saves both — the
+host is the only peer each has — so one partition is unavoidably stranded, and the deterministic tiebreak
+decides which. This is now the only way the disjoint step costs a host its failover target.
 
 ### Step 4 — Pick the failover hosts in each partition
 
@@ -298,22 +364,40 @@ Worked through for the defaults, the interplay is easier to see than to state:
 The floor dominates small partitions; the ratio only starts to matter once a partition is large enough that
 10 % of it exceeds 1 (here, around 20 hosts).
 
-**Which** hosts become the targets follows two preferences:
+**Which** hosts become the targets comes down to the *order* in which the partition's hosts are considered.
+Cortex builds one ordered slice of candidates and then simply takes the first `reserved`-many from it. The
+order is what encodes the policy — and it is built to **retain existing reservations first and only create new
+ones when the count demands it**:
 
-```mermaid
-flowchart LR
-    E["hosts already reserved<br/>in this partition"] --> LIST
-    F["otherwise, the hosts<br/>cheapest to empty out<br/>(least workload on them)"] --> LIST
-    LIST["ordered shortlist"] --> TAKE["take as many as the count above"]
-    TAKE --> RES["these hosts are reserved whole"]
+```
+candidate order  ──────────────────────────────────────────────────────────────▶
+┌───────────────────────────────┬───────────────────────────────────────────────┐
+│  already-reserved hosts        │  not-yet-reserved hosts                        │
+│  (this partition), by name     │  by ascending workload (cheapest to empty)     │
+├───────────────────────────────┼───────────────────────────────────────────────┤
+│  R1   R2   R3        …         │  N1   N2   N3   N4   …                          │
+└───────────────────────────────┴───────────────────────────────────────────────┘
+        └──────────── take the first `reserved` of these ────────────┘
+                 kept reservations are consumed before any new one is created
 ```
 
-- **Already-reserved hosts stay reserved.** A host being prepared as a failover target may have VMs mid-way
-  through being moved off it; flipping the designation each pass would throw that work away. If there are more
-  already-reserved hosts than needed, the surplus is released back into normal service.
-- **New targets are the cheapest to empty.** When a fresh target is needed, Cortex picks the host carrying the
-  least workload, so draining it is as quick and cheap as possible. Each chosen host is then reserved in full,
-  recording the other partition members as the hosts it stands ready to rescue.
+Reading the slice left to right:
+
+- **Already-reserved hosts come first, so they stay reserved.** A host being prepared as a failover target may
+  have VMs mid-way through being moved off it; flipping the designation each pass would throw that work away.
+  Because they sit at the front, the planner only reaches a *new* host once every existing reservation has
+  already been re-chosen. If there are *more* already-reserved hosts than the count needs, the surplus falls
+  past the cut-off and is released back into normal service; if there are fewer, the remainder is filled from
+  the new hosts.
+- **New targets, when needed, are the cheapest to empty.** The not-yet-reserved hosts are ordered by ascending
+  workload, so the first new host the planner reaches is the one whose VMs are cheapest to migrate away.
+
+So in the common steady state where the right number of hosts is already reserved, the cut-off lands exactly
+at the boundary between the two groups: every existing reservation is retained and no new one is created. New
+reservations only appear when the count grows or an existing target leaves the partition.
+
+Each chosen host is then reserved in full, recording the other partition members as the hosts it stands ready
+to rescue.
 
 ## The reservation lifecycle
 
@@ -388,7 +472,7 @@ table maps the symptom back to the step that caused it:
 | a target was discarded | it's smaller than the source host | 1 · Discover rescue links |
 | a link doesn't lead to a partition | it only works one way, not both | 2 · Group into partitions |
 | an empty host is left on its own | not *every* member of a partition can reach it | 2 · Group into partitions |
-| a host loses its partition | it was shared, kept by the larger group, and its old group collapsed | 3 · Make partitions disjoint |
+| a host loses its partition | it was shared between two size-two partitions, and the one that lost it collapsed | 3 · Make partitions disjoint |
 | a partition reserves nothing | it has fewer than two hosts | 4 · Pick failover hosts |
 
 The controller logs each of these decisions as it makes them, so a host's fate through the steps can be traced

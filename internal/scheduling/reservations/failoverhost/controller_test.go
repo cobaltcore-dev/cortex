@@ -293,3 +293,63 @@ func TestLoopDeduplicatesSharedHost(t *testing.T) {
 		t.Errorf("hvA source hosts = %v, want [hvB]", got)
 	}
 }
+
+// TestLoopSharedHostKeptInSmallestPartition checks that when a shared host sits
+// in partitions of different sizes, loop assigns it to the smallest one, keeping
+// the most partitions alive. Here hvC is shared between {hvA,hvB,hvC} (size 3)
+// and {hvC,hvD} (size 2). Keeping hvC in the smaller {hvC,hvD} lets that
+// partition survive, while {hvA,hvB,hvC} merely shrinks to {hvA,hvB} and stays
+// above the two-host minimum — so both partitions retain a failover target.
+// Keeping hvC in the larger partition instead would collapse {hvC,hvD} to a lone
+// host and leave hvD unprotected.
+func TestLoopSharedHostKeptInSmallestPartition(t *testing.T) {
+	hvA := buildHV("hvA", 64, 32)
+	hvB := buildHV("hvB", 64, 32)
+	hvC := buildHV("hvC", 64, 32)
+	hvD := buildHV("hvD", 64, 32)
+	vmA := buildVM("vmA", "hvA")
+	vmB := buildVM("vmB", "hvB")
+	vmC := buildVM("vmC", "hvC")
+	vmD := buildVM("vmD", "hvD")
+
+	finder, server := stubScheduler(t, map[string][]string{
+		"vmA": {"hvB"}, "vmB": {"hvA"}, "vmC": {"hvD"}, "vmD": {"hvC"},
+	}, nil)
+	defer server.Close()
+
+	c := &Controller{
+		Client:      newTestClient(t, hvA, hvB, hvC, hvD, vmA, vmB, vmC, vmD),
+		Config:      ControllerConfig{Ratio: 0.5, Minimum: 1},
+		reconcileCh: make(chan event.GenericEvent, 16),
+		pathFinder:  finder,
+		partitionBuilder: fakePartitionBuilder{partitions: [][]hv1.Hypervisor{
+			{*hvA, *hvB, *hvC}, {*hvC, *hvD},
+		}},
+		reservationPlanner: ratioReservationPlanner{ratio: 0.5, minimum: 1},
+	}
+	c.loop(context.Background())
+
+	c.desiredReservationsMu.Lock()
+	defer c.desiredReservationsMu.Unlock()
+	// Both partitions survive: {hvC,hvD} keeps the shared hvC and {hvA,hvB,hvC}
+	// shrinks to {hvA,hvB}. Each reserves one target, so the shared host did not
+	// cost either partition its coverage.
+	if len(c.desiredReservations) != 2 {
+		t.Fatalf("desired reservations = %d, want 2", len(c.desiredReservations))
+	}
+	// {hvC,hvD} must still exist, proving hvC stayed in the smaller partition.
+	// Whichever of hvC/hvD is reserved, its sole source host is the other.
+	cdReserved := false
+	for name, r := range c.desiredReservations {
+		sources := r.Spec.FailoverHostReservation.SourceHosts
+		if name.Name == "failover-host-hvC" && len(sources) == 1 && sources[0] == "hvD" {
+			cdReserved = true
+		}
+		if name.Name == "failover-host-hvD" && len(sources) == 1 && sources[0] == "hvC" {
+			cdReserved = true
+		}
+	}
+	if !cdReserved {
+		t.Errorf("expected a {hvC,hvD} reservation, got %v", c.desiredReservations)
+	}
+}

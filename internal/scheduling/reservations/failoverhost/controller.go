@@ -369,7 +369,7 @@ type topology struct {
 //  3. BuildPartitions — cluster those edges into failover partitions: maximal
 //     sets of hosts that can all fail over onto one another. These cliques can
 //     overlap, so loop then assigns each shared host to exactly one partition
-//     (the largest) to keep the planner input disjoint.
+//     (the smallest) to keep the planner input disjoint.
 //  4. PlanReservations — per partition, pick which hosts become failover
 //     targets, honouring the configured ratio/minimum and keeping existing
 //     reservations stable.
@@ -411,12 +411,15 @@ func (c *Controller) loop(ctx context.Context) {
 	// the same name but conflicting SourceHosts, and whichever is written last to
 	// the desired map wins — silently dropping the other partition's coverage. To
 	// keep the planner input disjoint we assign each shared host to exactly one
-	// partition: the largest it belongs to (most peers can fail over onto it, so
-	// it is most useful there), ties broken by the partition's first host name so
-	// the choice is deterministic. Partitions are already sorted by their first
-	// member, so a stable sort by descending size keeps that tiebreak order.
+	// partition: the smallest it belongs to. Assigning to the smallest keeps the
+	// most partitions alive — a small partition only survives if it retains its
+	// shared hosts, whereas a large one usually stays above the two-host minimum
+	// even after giving one up — so failover space reaches as many partitions as
+	// possible. Ties are broken by the partition's first host name so the choice
+	// is deterministic. Partitions are already sorted by their first member, so a
+	// stable sort by ascending size keeps that tiebreak order.
 	sort.SliceStable(partitions, func(i, j int) bool {
-		return len(partitions[i]) > len(partitions[j])
+		return len(partitions[i]) < len(partitions[j])
 	})
 	assigned := map[string]bool{}
 	deduped := make([][]hv1.Hypervisor, 0, len(partitions))
