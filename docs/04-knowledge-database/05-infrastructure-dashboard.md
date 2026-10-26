@@ -9,7 +9,7 @@
 The `infrastructure` KPI family exists for a specific audience: capacity planners and operators who need to
 *see* the fleet — where headroom is, how projects stack up, whether HANA workloads are placed the way policy
 wants. This page covers those KPIs and the dashboards that render them, which — unlike most Cortex config —
-live in `tools/`, not in the Helm charts.
+live in `dashboards/`, not in the Helm charts.
 
 ## Infrastructure KPIs: fleet-level planning signals
 
@@ -30,21 +30,23 @@ convention (KVM compute, VMware compute, VMware Ironic) so the metrics carry the
 Being ordinary Prometheus metrics on the manager `/metrics` endpoint ([previous page](04-kpis-and-metrics-api.md)),
 they need no special plumbing to reach a dashboard.
 
-## Dashboards live in `tools/`, not in Helm
+## Dashboards live in `dashboards/`, not in Helm
 
 The dashboard definitions are development/operations tooling, deliberately kept out of the deployable charts:
 
-- **Perses** — `tools/perses/dashboards/`, including `cortex-compute-kvm-overview.json` (the compute KVM
-  overview), `cortex-placement-shim-status.json` (the
-  [shim](../03-reservations-and-inventory/05-placement-api-shim.md) status board), `cortex-status.json`,
-  the compute VMware boards (`cortex-compute-vmware-overview.json`, `cortex-compute-vmware-details.json`),
-  and `project.json`.
+- **Perses** — `dashboards/`, including `cortex-compute-kvm-overview.json` and
+  `cortex-compute-kvm-details.json` (the compute KVM boards),
+  `cortex-compute-vmware-overview.json` and `cortex-compute-vmware-details.json` (the compute VMware
+  boards), `cortex-global-compute-capacity.json`, `cortex-placement-shim-status.json` (the
+  [shim](../03-reservations-and-inventory/05-placement-api-shim.md) status board),
+  `cortex-project-flavor-usage.json`, `cortex-status-global.json`, `cortex-status.json`, and
+  `project.json`.
 
 > [!NOTE]
 > There are no dashboard JSON files under `helm/`. The only `dashboard:` strings in the charts are
-> alert-rule annotations pointing at dashboards by name — the definitions themselves ship in `tools/`. To
-> use one, import it into your own Perses instance; Cortex does not deploy a dashboard server for
-> you.
+> alert-rule annotations pointing at dashboards by name — the definitions themselves ship in
+> `dashboards/`. To use one, import it into your own Perses instance; Cortex does not deploy a
+> dashboard server for you.
 
 This page is the visual read-out of the whole [knowledge flow](01-knowledge-flow-overview.md): datasources
 cache the world, extractors derive features, the `infrastructure` KPIs turn those features into fleet-level
