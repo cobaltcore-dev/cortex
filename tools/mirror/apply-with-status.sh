@@ -35,6 +35,12 @@
 #
 #     ./apply-with-status.sh
 #
+#   By default the standard kubectl config (the KUBECONFIG env var, else
+#   ~/.kube/config) and its current context are used. Override them for a
+#   single run via environment variables:
+#
+#     MIRROR_KUBECONFIG=target.yaml MIRROR_CONTEXT=kind-cluster-a ./apply-with-status.sh
+#
 #   Adjust the FILES array below to match the snapshots you want to replay.
 #
 # REQUIREMENTS
@@ -49,6 +55,22 @@ FILES=(hvs.yaml.out vms.yaml.out)
 # Seconds to wait between the apply pass and the status-patch pass, giving the
 # API server a moment to persist all created objects.
 SETTLE_SECONDS=3
+
+# Optional kubeconfig path and context for the target cluster. When empty,
+# kubectl falls back to its default config (KUBECONFIG env var, else
+# ~/.kube/config) and current context.
+MIRROR_KUBECONFIG="${MIRROR_KUBECONFIG:-}"
+MIRROR_CONTEXT="${MIRROR_CONTEXT:-}"
+
+# Assemble the kubectl flags for the chosen config/context. Empty when neither
+# is set, so kubectl uses its own defaults.
+kubectl_args=()
+if [ -n "$MIRROR_KUBECONFIG" ]; then
+  kubectl_args+=(--kubeconfig "$MIRROR_KUBECONFIG")
+fi
+if [ -n "$MIRROR_CONTEXT" ]; then
+  kubectl_args+=(--context "$MIRROR_CONTEXT")
+fi
 
 for bin in kubectl yq; do
   if ! command -v "$bin" >/dev/null 2>&1; then
@@ -73,7 +95,7 @@ for f in "${FILES[@]}"; do
   clean="$tmp/$(basename "$f").clean"
   yq "(.items[]) |= ($sanitize)" "$f" > "$clean"
   echo ">>> applying specs from $f"
-  kubectl apply --server-side --force-conflicts -f "$clean"
+  kubectl ${kubectl_args[@]+"${kubectl_args[@]}"} apply --server-side --force-conflicts -f "$clean"
 done
 
 # Give the API server a moment to persist all created objects.
@@ -94,6 +116,6 @@ for f in "${FILES[@]}"; do
       continue
     fi
     yq '{"status": .status}' "$obj" > "$st"
-    kubectl patch "$kind" "$name" --subresource=status --type=merge --patch-file="$st"
+    kubectl ${kubectl_args[@]+"${kubectl_args[@]}"} patch "$kind" "$name" --subresource=status --type=merge --patch-file="$st"
   done
 done
