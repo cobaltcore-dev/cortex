@@ -71,7 +71,7 @@ func (k *KVMHanaStackingKPI) Collect(ch chan<- prometheus.Metric) {
 	for _, row := range rows {
 		host, ok := hosts[row.ComputeHost]
 		if !ok {
-			log.Info("kvm_hana_stacking: compute host not found", "compute_host", row.ComputeHost)
+			log.V(1).Info("kvm_hana_stacking: compute host not found", "compute_host", row.ComputeHost)
 			continue
 		}
 		hostLabels := host.getHostLabels()

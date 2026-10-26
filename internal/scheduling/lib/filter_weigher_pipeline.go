@@ -65,8 +65,8 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 	filterErrors := make(map[string]error)
 	unknownFilters := []string{}
 	for _, filterConfig := range confedFilters {
-		pipelineLog.Info("scheduler: configuring filter", "name", filterConfig.Name)
-		pipelineLog.Info("supported:", "filters", slices.Sorted(maps.Keys(supportedFilters)))
+		pipelineLog.V(1).Info("scheduler: configuring filter", "name", filterConfig.Name)
+		pipelineLog.V(1).Info("supported:", "filters", slices.Sorted(maps.Keys(supportedFilters)))
 		makeFilter, ok := supportedFilters[filterConfig.Name]
 		if !ok {
 			pipelineLog.Error(nil, "scheduler: unsupported filter", "name", filterConfig.Name)
@@ -83,7 +83,7 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 		}
 		filtersByName[filterConfig.Name] = filter
 		filtersOrder = append(filtersOrder, filterConfig.Name)
-		pipelineLog.Info("scheduler: added filter", "name", filterConfig.Name)
+		pipelineLog.V(1).Info("scheduler: added filter", "name", filterConfig.Name)
 	}
 
 	// Load all weighers from the configuration.
@@ -93,8 +93,8 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 	weigherErrors := make(map[string]error)
 	unknownWeighers := []string{}
 	for _, weigherConfig := range confedWeighers {
-		pipelineLog.Info("scheduler: configuring weigher", "name", weigherConfig.Name)
-		pipelineLog.Info("supported:", "weighers", slices.Sorted(maps.Keys(supportedWeighers)))
+		pipelineLog.V(1).Info("scheduler: configuring weigher", "name", weigherConfig.Name)
+		pipelineLog.V(1).Info("supported:", "weighers", slices.Sorted(maps.Keys(supportedWeighers)))
 		makeWeigher, ok := supportedWeighers[weigherConfig.Name]
 		if !ok {
 			pipelineLog.Error(nil, "scheduler: unsupported weigher", "name", weigherConfig.Name)
@@ -117,7 +117,7 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 		} else {
 			weighersMultipliers[weigherConfig.Name] = *weigherConfig.Multiplier
 		}
-		pipelineLog.Info("scheduler: added weigher", "name", weigherConfig.Name)
+		pipelineLog.V(1).Info("scheduler: added weigher", "name", weigherConfig.Name)
 	}
 
 	return PipelineInitResult[FilterWeigherPipeline[RequestType]]{
@@ -148,17 +148,17 @@ func (p *filterWeigherPipeline[RequestType]) runFilters(
 	for _, filterName := range p.filtersOrder {
 		filter := p.filters[filterName]
 		stepLog := traceLog.WithValues("filter", filterName)
-		stepLog.Info("scheduler: running filter")
+		stepLog.V(1).Info("scheduler: running filter")
 		result, err := filter.Run(stepLog, filteredRequest)
 		if errors.Is(err, ErrStepSkipped) {
-			stepLog.Info("scheduler: filter skipped")
+			stepLog.V(1).Info("scheduler: filter skipped")
 			continue
 		}
 		if err != nil {
 			stepLog.Error(err, "scheduler: failed to run filter")
 			continue
 		}
-		stepLog.Info("scheduler: finished filter")
+		stepLog.V(1).Info("scheduler: finished filter")
 		stepResults = append(stepResults, v1alpha1.StepResult{
 			StepName:    filterName,
 			Activations: result.Activations,
@@ -184,17 +184,17 @@ func (p *filterWeigherPipeline[RequestType]) runWeighers(
 		weigher := p.weighers[weigherName]
 		wg.Go(func() {
 			stepLog := traceLog.WithValues("weigher", weigherName)
-			stepLog.Info("scheduler: running weigher")
+			stepLog.V(1).Info("scheduler: running weigher")
 			result, err := weigher.Run(stepLog, filteredRequest)
 			if errors.Is(err, ErrStepSkipped) {
-				stepLog.Info("scheduler: weigher skipped")
+				stepLog.V(1).Info("scheduler: weigher skipped")
 				return
 			}
 			if err != nil {
 				stepLog.Error(err, "scheduler: failed to run weigher")
 				return
 			}
-			stepLog.Info("scheduler: finished weigher")
+			stepLog.V(1).Info("scheduler: finished weigher")
 			lock.Lock()
 			defer lock.Unlock()
 			activationsByStep[weigherName] = result.Activations
@@ -243,11 +243,11 @@ func (p *filterWeigherPipeline[RequestType]) applyWeights(
 		// This logging will help us validate the weigher multipliers are configured
 		// and applied correctly, as well as debug any issues with the weighers outputs.
 		if multiplier == 0 {
-			traceLog.Info("weigher multiplier is zero, won't have any effect",
+			traceLog.V(1).Info("weigher multiplier is zero, won't have any effect",
 				"weigher", weigherName, "multiplier", multiplier)
 		}
 		if multiplier < 0 {
-			traceLog.Info("weigher multiplier is negative, inverting weigher behavior",
+			traceLog.V(1).Info("weigher multiplier is negative, inverting weigher behavior",
 				"weigher", weigherName, "multiplier", multiplier)
 		}
 		outWeights = p.Apply(outWeights, weigherActivations, multiplier)
@@ -277,7 +277,7 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 	traceLog := pipelineLog.WithValues(request.GetTraceLogArgs()...)
 
 	hostsIn := request.GetHosts()
-	traceLog.Info("scheduler: starting pipeline", "hosts", hostsIn)
+	traceLog.V(1).Info("scheduler: starting pipeline", "hosts", hostsIn)
 
 	// Normalize the input weights so we can apply step weights meaningfully.
 	// Only do this if there are weighers to combine with: tanh saturates large
@@ -290,12 +290,12 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 	} else {
 		inWeights = maps.Clone(request.GetWeights())
 	}
-	traceLog.Info("scheduler: input weights", "weights", inWeights)
+	traceLog.V(1).Info("scheduler: input weights", "weights", inWeights)
 
 	// Run filters first to reduce the number of hosts.
 	// Any weights assigned to filtered out hosts are ignored.
 	filteredRequest, filterStepResults := p.runFilters(traceLog, request)
-	traceLog.Info(
+	traceLog.V(1).Info(
 		"scheduler: finished filters",
 		"remainingHosts", filteredRequest.GetHosts(),
 	)
@@ -307,15 +307,15 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 	}
 	stepWeights := p.runWeighers(traceLog, filteredRequest)
 	outWeights := p.applyWeights(traceLog, stepWeights, remainingWeights)
-	traceLog.Info("scheduler: output weights", "weights", outWeights)
+	traceLog.V(1).Info("scheduler: output weights", "weights", outWeights)
 
 	hosts := p.sortHostsByWeights(outWeights)
-	traceLog.Info("scheduler: sorted hosts", "hosts", hosts)
+	traceLog.V(1).Info("scheduler: sorted hosts", "hosts", hosts)
 
 	if opts.MaxCandidates > 0 && len(hosts) > opts.MaxCandidates {
 		trimmed := hosts[opts.MaxCandidates:]
 		hosts = hosts[:opts.MaxCandidates]
-		traceLog.Info("scheduler: trimmed candidate list to max",
+		traceLog.V(1).Info("scheduler: trimmed candidate list to max",
 			"maxCandidates", opts.MaxCandidates,
 			"kept", hosts,
 			"trimmed", trimmed)

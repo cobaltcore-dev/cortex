@@ -72,7 +72,7 @@ func (e *VROpsHostsystemContentionLongTermExtractor) Extract() ([]plugins.Featur
 	for _, ur := range unresolved {
 		computeHost, ok := hostsystemToComputeHost[ur.Hostsystem]
 		if !ok {
-			log.Info("skipping unresolved hostsystem", "hostsystem", ur.Hostsystem)
+			log.V(1).Info("skipping unresolved hostsystem", "hostsystem", ur.Hostsystem)
 			continue
 		}
 		avgsByComputeHost[computeHost] = append(avgsByComputeHost[computeHost], ur.AvgCPUContention)
@@ -82,7 +82,7 @@ func (e *VROpsHostsystemContentionLongTermExtractor) Extract() ([]plugins.Featur
 	var features []VROpsHostsystemContentionLongTerm
 	for computeHost, avgContentions := range avgsByComputeHost {
 		if len(avgContentions) == 0 {
-			log.Info("no avg cpu contentions for compute host", "compute_host", computeHost)
+			log.V(1).Info("no avg cpu contentions for compute host", "compute_host", computeHost)
 			continue
 		}
 		var sumContentions float64 = 0

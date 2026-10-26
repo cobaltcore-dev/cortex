@@ -20,7 +20,7 @@ type FilterValidator[RequestType FilterWeigherPipelineRequest] struct {
 
 // Initialize the wrapped filter with the database and options.
 func (s *FilterValidator[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.FilterSpec) error {
-	pipelineLog.Info("scheduler: init validation for step", "name", step.Name)
+	pipelineLog.V(1).Info("scheduler: init validation for step", "name", step.Name)
 	return s.Filter.Init(ctx, client, step)
 }
 

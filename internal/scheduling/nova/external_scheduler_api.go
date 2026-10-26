@@ -148,7 +148,7 @@ func shuffleTopHosts(hosts []string, k int) []string {
 	rand.Shuffle(n, func(i, j int) { //nolint:gosec // non-crypto shuffle for load balancing
 		result[i], result[j] = result[j], result[i]
 	})
-	schedulerLog.Info("shuffled top hosts for evacuation", "k", n, "hosts", result[:n])
+	schedulerLog.V(1).Info("shuffled top hosts for evacuation", "k", n, "hosts", result[:n])
 	return result
 }
 
@@ -171,7 +171,7 @@ func limitHostsToRequest(request api.ExternalSchedulerRequest, hosts []string) [
 		if hostSet[host] {
 			limited = append(limited, host)
 		} else {
-			schedulerLog.Info("filtering out host from response since it wasn't in the request",
+			schedulerLog.V(1).Info("filtering out host from response since it wasn't in the request",
 				"host", host, "inRequest", request.Hosts)
 		}
 	}
@@ -222,7 +222,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	// for forced-destination requests.
 	if httpAPI.config.forcedDestinationEnabled() && requestData.IsForcedDestination() {
 		hosts := requestData.ForcedHosts()
-		logger.Info("forced destination request, skipping filters", "hosts", hosts)
+		logger.V(1).Info("forced destination request, skipping filters", "hosts", hosts)
 		response := api.ExternalSchedulerResponse{Hosts: hosts}
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(response); err != nil {
@@ -247,13 +247,13 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 			c.Respond(logger, http.StatusBadRequest, err, err.Error())
 			return
 		}
-		logger.Info("inferred pipeline name", "pipeline", requestData.Pipeline)
+		logger.V(1).Info("inferred pipeline name", "pipeline", requestData.Pipeline)
 	}
 
 	intent, err := requestData.GetIntent()
 	if err != nil {
 		// Just log this in case the intent cannot be determined, but continue processing.
-		logger.Info("found no request intent (intended for initial placements)")
+		logger.V(1).Info("found no request intent (intended for initial placements)")
 		intent = api.CreateIntent
 	}
 
@@ -292,7 +292,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	hosts := decision.Status.Result.OrderedHosts
 	if httpAPI.config.NovaLimitHostsToRequest {
 		hosts = limitHostsToRequest(requestData, hosts)
-		logger.Info("limited hosts to request",
+		logger.V(1).Info("limited hosts to request",
 			"hosts", hosts, "originalHosts", decision.Status.Result.OrderedHosts)
 	}
 	// This is a hack to address the problem that Nova only uses the first host in hosts for evacuation requests.

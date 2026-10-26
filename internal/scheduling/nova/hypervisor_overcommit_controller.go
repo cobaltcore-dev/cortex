@@ -117,7 +117,7 @@ func (c *HypervisorOvercommitController) Reconcile(ctx context.Context, req ctrl
 		if apierrors.IsNotFound(err) {
 			// If the custom resource is not found then it usually means
 			// that it was deleted or not created.
-			log.Info("Resource not found. Ignoring since object must be deleted")
+			log.V(1).Info("Resource not found. Ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
