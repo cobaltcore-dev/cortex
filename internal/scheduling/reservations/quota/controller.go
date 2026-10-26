@@ -84,7 +84,7 @@ func (c *QuotaController) ReconcilePeriodic(ctx context.Context) error {
 
 	// Build flavorName → flavorGroup lookup
 	flavorToGroup := buildFlavorToGroupMap(flavorGroups)
-	logger.Info("flavor group knowledge loaded",
+	logger.V(1).Info("flavor group knowledge loaded",
 		"flavorGroups", len(flavorGroups),
 		"totalFlavorsInMap", len(flavorToGroup))
 
@@ -106,7 +106,7 @@ func (c *QuotaController) ReconcilePeriodic(ctx context.Context) error {
 			mappedVMs++
 		}
 	}
-	logger.Info("VM flavor mapping complete",
+	logger.V(1).Info("VM flavor mapping complete",
 		"totalVMs", len(vms), "mappedVMs", mappedVMs, "unmappedVMs", len(vms)-mappedVMs,
 		"projectsWithUsage", len(totalUsageByProject))
 
@@ -201,7 +201,7 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	var totalUsage map[string]map[string]int64
 	if specChanged {
 		// Spec changed (new CRD or quota update) — recompute TotalUsage from Postgres
-		logger.Info("spec changed, recomputing TotalUsage from Postgres",
+		logger.V(1).Info("spec changed, recomputing TotalUsage from Postgres",
 			"generation", pq.Generation, "observedGeneration", pq.Status.ObservedGeneration)
 		var err error
 		totalUsage, err = c.computeTotalUsageForProject(ctx, projectID)
@@ -217,7 +217,7 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			totalUsage = expandAZSlice(pq.Status.TotalUsage, pq.Spec.AvailabilityZone)
 		} else {
 			// Safety fallback: TotalUsage should always be set after first spec reconcile
-			logger.Info("no TotalUsage persisted, computing as fallback")
+			logger.V(1).Info("no TotalUsage persisted, computing as fallback")
 			var err error
 			totalUsage, err = c.computeTotalUsageForProject(ctx, projectID)
 			if err != nil {

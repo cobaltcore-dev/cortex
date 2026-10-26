@@ -289,7 +289,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 					}
 					return result, fmt.Errorf("failed to create PAYG reservation slot %d: %w", nextSlotIndex, err)
 				}
-				log.Info("created PAYG pre-allocated reservation slot",
+				log.V(1).Info("created PAYG pre-allocated reservation slot",
 					"slot", reservation.Name,
 					"host", candidate.HVName,
 					"vm", candidate.VMID,
@@ -309,7 +309,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 				}
 			}
 		}
-		log.Info("PAYG remapping done", "slotsCreated", result.Created, "durationMs", time.Since(scanStart).Milliseconds())
+		log.V(1).Info("PAYG remapping done", "slotsCreated", result.Created, "durationMs", time.Since(scanStart).Milliseconds())
 	} else {
 		log.V(1).Info("PAYG pre-allocation skipped",
 			"enabled", m.cfg.EnablePaygPreAllocation,
@@ -325,7 +325,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 		if m.cfg.MaxSlots > 0 && newSlots > m.cfg.MaxSlots {
 			return nil, &SlotLimitExceededError{NewSlots: newSlots, Limit: m.cfg.MaxSlots}
 		}
-		log.Info("creating reservation slots",
+		log.V(1).Info("creating reservation slots",
 			"commitmentUUID", desiredState.CommitmentUUID,
 			"slots", newSlots,
 			"slotCreationDelay", m.cfg.SlotCreationDelay,

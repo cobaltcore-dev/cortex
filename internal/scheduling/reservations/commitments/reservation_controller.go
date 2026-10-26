@@ -190,7 +190,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		len(res.Spec.CommittedResourceReservation.Allocations) > 0 &&
 		res.Spec.TargetHost != "" {
 		// mark as ready without calling the placement API
-		logger.Info("detected pre-allocated reservation",
+		logger.V(1).Info("detected pre-allocated reservation",
 			"targetHost", res.Spec.TargetHost,
 			"allocatedVMs", len(res.Spec.CommittedResourceReservation.Allocations))
 
@@ -243,7 +243,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			// Object was deleted, no need to continue
 			return ctrl.Result{}, nil
 		}
-		logger.Info("synced spec to status and marked ready", "host", res.Status.Host)
+		logger.V(1).Info("synced spec to status and marked ready", "host", res.Status.Host)
 		// Return and let next reconcile handle allocation verification
 		return ctrl.Result{}, nil
 	}
@@ -283,7 +283,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: r.Client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
-		logger.Info("flavor knowledge not ready, requeueing",
+		logger.V(1).Info("flavor knowledge not ready, requeueing",
 			"resourceName", resourceName,
 			"error", err)
 		return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalRetry.Duration}, nil
@@ -331,7 +331,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 
 	// Select appropriate pipeline based on flavor group
 	pipelineName := r.getPipelineForFlavorGroup(flavorGroupName, logger)
-	logger.Info("selected pipeline for CR reservation",
+	logger.V(1).Info("selected pipeline for CR reservation",
 		"flavorName", resourceName,
 		"flavorGroup", flavorGroupName,
 		"pipeline", pipelineName,
@@ -464,7 +464,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 				return nil, fmt.Errorf("failed to get hypervisor %s: %w", expectedHost, err)
 			}
 			// Hypervisor not found — treat all post-grace-period VMs as stale.
-			logger.Info("hypervisor CRD not found", "host", expectedHost)
+			logger.V(1).Info("hypervisor CRD not found", "host", expectedHost)
 		} else {
 			// Build set of all VM UUIDs on this hypervisor for O(1) lookup.
 			// Include both active and inactive VMs — stopped/shelved VMs still hold the slot.
@@ -752,7 +752,7 @@ func (r *CommitmentReservationController) getPipelineForFlavorGroup(flavorGroupN
 		return pipeline
 	}
 
-	logger.Info("no pipeline configured for flavor group, using default", "flavorGroup", flavorGroupName, "defaultPipeline", r.Conf.PipelineDefault)
+	logger.V(1).Info("no pipeline configured for flavor group, using default", "flavorGroup", flavorGroupName, "defaultPipeline", r.Conf.PipelineDefault)
 	return r.Conf.PipelineDefault
 }
 
