@@ -381,6 +381,27 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			filteredHosts: []string{},
 		},
 		{
+			name: "ValidateFailoverReservationIntent - skips filter, all hosts pass (no domain_name hint)",
+			opts: FilterExternalCustomerStepOpts{
+				CustomerDomainNamePrefixes: []string{"ext-"},
+			},
+			request: api.ExternalSchedulerRequest{
+				Spec: api.NovaObject[api.NovaSpec]{
+					Data: api.NovaSpec{
+						SchedulerHints: map[string]any{
+							"_nova_check_type": string(api.ValidateFailoverReservationIntent),
+						},
+					},
+				},
+				Hosts: []api.ExternalSchedulerHost{
+					{ComputeHost: "host1"},
+					{ComputeHost: "host3"},
+				},
+			},
+			expectedHosts: []string{"host1", "host3"},
+			filteredHosts: []string{},
+		},
+		{
 			name: "ReserveForCommittedResourceIntent - domain filter applies (no domain_name hint → all hosts pass)",
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},

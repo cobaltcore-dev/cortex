@@ -43,6 +43,7 @@ func (s *FilterExternalCustomerStep) Run(traceLog logr.Logger, request api.Exter
 	if intent, err := request.GetIntent(); err == nil && slices.Contains([]v1alpha1.SchedulingIntent{
 		api.ReserveForFailoverIntent,
 		api.ReuseFailoverReservationIntent,
+		api.ValidateFailoverReservationIntent,
 		api.CapacityProbeIntent,
 	}, intent) {
 		traceLog.V(1).Info("skipping external customer filter for non-placement intent", "intent", intent)
