@@ -315,8 +315,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 		}
 		freeMemory, ok := free["memory"]
 		if !ok || freeMemory.Value() < 0 {
-			traceLog.Error(
-				nil,
+			traceLog.V(1).Info(
 				"host with invalid memory capacity",
 				"host", host, "freeMemory", freeMemory.String(),
 			)
