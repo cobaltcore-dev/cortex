@@ -9,13 +9,14 @@
 The previous page reserved **headroom** — a shared pool of free capacity spread across the fleet, sized to
 absorb `m` host failures. This page describes a different, coarser-grained mechanism that is replacing it:
 instead of reserving scattered slots, Cortex keeps a fraction of **whole hosts** empty, so that when a host
-dies its *entire* workload can be gang-evacuated onto one reserved host in a single move.
+dies its *entire* workload can be gang-evacuated onto one reserved host in a single move (*gang-evacuated*:
+all the host's VMs moved together, in one placement decision, rather than one at a time).
 
 > [!IMPORTANT]
-> Failover host reservations (`FailoverHostReservation`) **supersede** the slot-based failover reservations
-> (`FailoverReservation`) described on the [previous page](03-failover-reservations.md). The older system is
-> deprecated and will be removed. New deployments should enable the `failover-host-reservations-controller`;
-> the `failover-reservations-controller` is retained only for migration.
+> Failover host reservations **supersede** the slot-based failover reservations described on the
+> [previous page](03-failover-reservations.md). The older system is deprecated and will be removed. New
+> deployments should enable the failover-host reservations controller; the old slot-based controller is
+> retained only for migration.
 
 ## Why whole hosts instead of shared slots
 
@@ -46,233 +47,312 @@ host each carry scheduling constraints — flavors, image properties, aggregates
 matching hosts satisfy. A failover target is only useful if the dead host's VMs would actually be *accepted*
 there.
 
-Cortex therefore groups hosts into **failover partitions**: maximal sets of hosts within which every host can
-be evacuated onto every other host. Crucially, these groups are **not configured by hand**. They are
-*discovered* from the scheduler's own placement decisions, so the grouping always reflects the live filters,
-weighers and constraints — a partition can never contain a target the scheduler would in fact reject.
+Cortex therefore groups hosts into **failover partitions**: sets of hosts within which every host can be
+evacuated onto every other host. Crucially, these groups are **not configured by hand**. They are *discovered*
+from the scheduler's own placement decisions, so the grouping always reflects the live filters, weights and
+constraints — a partition can never contain a target the scheduler would in fact reject.
 
-## The controller: a producer and a consumer
+Everything on this page is a continuous background process: Cortex periodically re-derives the partitions and
+the set of reserved hosts from the current state of the fleet, and nudges the actual reservations toward that
+freshly computed target. Nothing here is a one-time setup step; the picture re-settles every few minutes as
+the fleet changes.
 
-The `failover-host-reservations-controller` has two cooperating halves that communicate through an in-memory
-*desired state* map:
+## How a reservation is kept up to date
+
+The mechanism has two cooperating halves:
+
+- A **planner** runs on a fixed interval (default every `5m`). It looks at the current fleet, works out which
+  hosts *should* be reserved as failover targets, and publishes that as the desired picture. This is the
+  expensive part — it talks to the scheduler — so it runs on a slow cadence, never on every event.
+- A **reconciler** continuously nudges reality toward that desired picture: it creates reservations that
+  should exist, removes ones that no longer should, and updates ones that have drifted. It is cheap, and it
+  does nothing clever — it just closes the gap.
 
 ```mermaid
 flowchart LR
-    subgraph loop["Calculation loop (producer, periodic)"]
-        direction TB
-        COLLECT["collect: snapshot cluster"] --> PATHS["FindPaths"]
-        PATHS --> PARTS["BuildPartitions"]
-        PARTS --> PLAN["PlanReservations"]
-    end
-    PLAN -->|"desiredReservations (wholesale swap)"| STORE[("desired state map")]
-    loop -->|"wake-up signal"| RECON
-    STORE -.->|"read"| RECON["Reconcile (consumer, event-driven)"]
-    RECON -->|"create / update / prune"| CRD[("Reservation CRDs")]
+    PLAN["Planner (periodic)<br/>decides which hosts to reserve"] -->|"publishes desired picture"| STORE[("desired picture")]
+    STORE -.->|"read"| RECON["Reconciler (continuous)<br/>makes reality match"]
+    RECON -->|"create / update / remove"| REAL[("actual reservations")]
 ```
 
-- The **calculation loop** (`Start` → `loop`) recomputes the desired set of failover host reservations from
-  current cluster state on a fixed interval (`generationInterval`, default `5m`) and stores it. It is the
-  single writer of the desired-state map. It is deliberately the *only* place the expensive, external-call-heavy
-  computation runs — never the reconcile path.
-- The **reconciler** (`Reconcile`) is woken by the loop and drives the actual `Reservation` objects toward the
-  stored desired set. It is level-triggered and idempotent: each call reads actual and desired state and makes
-  at most one write.
-
-Because the loop swaps the desired-state map **wholesale** each pass (rather than mutating it), the reconciler
-can detect staleness for free: anything present in the cluster but absent from the new map is pruned.
+Because the planner republishes the **whole** desired picture each pass (rather than editing it in place), the
+reconciler gets pruning for free: any reservation that exists in the fleet but is absent from the latest
+picture is simply one the planner no longer wants, and is removed.
 
 ```mermaid
 stateDiagram-v2
     direction LR
-    [*] --> check
-    check --> create: desired, not present
-    check --> prune: present, not desired
-    check --> update: both, spec/labels drifted
-    check --> noop: both in sync / neither
+    [*] --> compare
+    compare --> create: wanted, missing
+    compare --> remove: present, no longer wanted
+    compare --> update: present but drifted
+    compare --> noop: already matches
     create --> [*]
-    prune --> [*]
+    remove --> [*]
     update --> [*]
     noop --> [*]
 ```
 
-## The calculation pipeline
+## How the planner decides: building the failover graph
 
-Each pass of the loop runs a three-stage pipeline, each stage a small interface so it can be understood,
-tested and swapped in isolation.
+The planner's job — "which hosts should be reserved?" — comes down to building a graph of who can rescue whom,
+grouping that graph into partitions, and then reserving a fraction of each partition.
+
+The important thing to understand is that the graph is **narrowed in several steps**, and each step throws out
+candidates for a *different* reason. Keeping those reasons straight is the whole algorithm, because the single
+most common question — *"why does this host have no failover target?"* — has a different answer at each step:
 
 ```mermaid
 flowchart TB
-    CLUSTER["Cluster snapshot<br/>(hypervisors + placed VMs)"] --> PF
-    PF["1 · PathFinder<br/><i>evacuationPathFinder</i>"] -->|"directed failover edges<br/>source → target"| PB
-    PB["2 · PartitionBuilder<br/><i>cliquePartitionBuilder</i>"] -->|"failover partitions<br/>(mutually-evacuable host sets)"| RP
-    RP["3 · ReservationPlanner<br/><i>ratioReservationPlanner</i>"] -->|"desired reservations"| OUT["desired state"]
+    A["ask the scheduler, per VM:<br/>which hosts would accept this VM?"]
+    A -->|"intersect across all VMs on a host"| B["candidate targets for the whole host<br/><i>drop: the host's own VMs disagree ⇒ none</i>"]
+    B -->|"is the target big enough for the whole host?"| C["one-way rescue links  source → target<br/><i>drop: target smaller than source</i>"]
+    C -->|"keep a link only if it works both ways"| D["mutual rescue pairs"]
+    D -->|"group into partitions, then make them disjoint"| E["failover partitions<br/><i>drop: a host shared by two groups goes to one;<br/>a group left with one host is discarded</i>"]
+    style B fill:#fff3e0,stroke:#e65100
+    style C fill:#fff3e0,stroke:#e65100
+    style D fill:#fff3e0,stroke:#e65100
+    style E fill:#fff3e0,stroke:#e65100
 ```
 
-### Stage 1 — PathFinder: discover the failover edges
+Each orange box is an edge case, worked through below. A [troubleshooting table](#why-does-this-host-have-no-failover-target)
+at the end maps each symptom back to the step that caused it.
 
-For every occupied host, the `PathFinder` finds the hosts that host's *entire* workload could be
-gang-evacuated onto. It produces the **directed edges** of a failover graph:
+### Step 1 — Discover who can rescue whom
 
-> An edge `source → target` means *"every VM on `source` can be evacuated onto `target`, and `target` is big
+For every occupied host, Cortex finds the hosts that host's *entire* workload could be gang-evacuated onto.
+The result is a set of directed **rescue links**:
+
+> A link `source → target` means *"every VM on `source` would be accepted on `target`, and `target` is big
 > enough to hold them all at once."*
 
-The direction matters: `source → target` does **not** imply `target → source`. `target` might be too small for
-`source`'s workload even if the reverse fits.
+Direction matters: `source → target` does **not** imply `target → source`. The target might simply be too
+small to take the source's workload even when the reverse would fit.
 
-Rather than reimplementing placement, the `evacuationPathFinder` **asks the real external scheduler**, per VM,
-where that VM could be evacuated to. This guarantees failover paths obey exactly the same filters, weighers and
-constraints as ordinary placement. A target host for `source` is valid only if it is accepted for **every** VM
-on `source` — so the finder keeps the running **intersection** of per-VM candidate sets:
+Rather than reimplementing placement logic, Cortex **asks the real scheduler**, for each VM, where that VM
+could go. This guarantees the rescue links obey exactly the same rules as ordinary placement. A host is a valid
+target for a source only if it is accepted for **every** VM on that source — so Cortex intersects the
+per-VM answers:
 
 ```mermaid
 flowchart TB
     subgraph src["Source host S (vm1, vm2, vm3)"]
-        VM1["vm1 → ask scheduler → {A, B, C}"]
-        VM2["vm2 → ask scheduler → {B, C, D}"]
-        VM3["vm3 → ask scheduler → {A, C}"]
+        VM1["vm1 → scheduler says: {A, B, C}"]
+        VM2["vm2 → scheduler says: {B, C, D}"]
+        VM3["vm3 → scheduler says: {A, C}"]
     end
     VM1 --> INT
     VM2 --> INT
-    VM3 --> INT["intersection = {C}"]
-    INT --> FIT{"C ≥ S capacity?<br/>(gang-level fit)"}
-    FIT -->|yes| EDGE["emit edge S → C"]
-    FIT -->|no| DROP["drop"]
+    VM3 --> INT["only host accepted by ALL three = C"]
+    INT --> FIT{"is C big enough<br/>for all of S at once?"}
+    FIT -->|yes| EDGE["rescue link S → C"]
+    FIT -->|no| DROP["discard"]
 ```
 
-Two details make the probe faithful and safe:
-
-- **The scheduler request mirrors a real evacuation** — it carries the VM's owner, AZ, flavor and image, sets
-  the evacuate scheduler hint, offers every known host as a candidate, and ignores the VM's current host as a
-  target.
-- **The probe is read-only.** It sets `ReadOnly` (plus the `SkipInflight` and `SkipCommittedResourceTracking`
-  flags that a read-only run requires), so probing never mutates shared scheduling state. It also sets
-  `IgnoredReservationTypes = FailoverHost`, so existing failover host reservations don't hide the very hosts
-  being reasoned about — otherwise a reserved host would be invisible to its own partition and the clustering
-  would fragment.
-
-Finally, a hard **gang-level fit** check drops any target smaller than its source (comparing memory first, then
-CPU): an evacuation moves *all* of `source`'s VMs onto `target` at once, so `target` must be at least as large.
-
-A failed lookup for a single VM is logged and skipped so one unschedulable VM doesn't erase a whole host's
-paths; only an error that invalidates the entire pass aborts it.
-
-### Stage 2 — PartitionBuilder: cluster edges into partitions
-
-A **failover partition is a maximal set of hosts in which every host can be evacuated onto every other host.**
-Formally, this is a **maximal clique** in the *undirected* graph of **mutual** failover edges — an undirected
-edge `a—b` exists only if **both** `a → b` and `b → a` are valid paths, because failover requires that the
-hosts can evacuate onto each other.
-
-The `cliquePartitionBuilder` works in four steps:
+**Edge case — the host's own VMs disagree.** If the VMs on a host pull in different directions (say a HANA VM
+and a GPU VM that no single host accepts together), the intersection is empty and the host gets **no rescue
+links at all** — it goes unprotected this pass, even though it is running work:
 
 ```mermaid
 flowchart TB
-    S1["1 · Build directed adjacency from edges.<br/>Note hosts with no outgoing edge (empty hosts)."]
-    S2["2 · Keep only mutual edges (a—b iff a→b and b→a).<br/>Run Bron–Kerbosch → every maximal clique = one partition.<br/>Non-empty hosts with no mutual edge become single-host partitions."]
-    S3["3 · Recruit each empty host into the first partition<br/>all of whose members can reach it."]
-    S4["4 · Translate names back to hypervisors; sort for determinism."]
-    S1 --> S2 --> S3 --> S4
+    subgraph src2["Source host S — VMs want incompatible things"]
+        V1["vm1 (HANA flavor) → {A, B}"]
+        V2["vm2 (GPU flavor)  → {C, D}"]
+    end
+    V1 --> X["no host accepted by both = none"]
+    V2 --> X
+    X --> R["S has no failover target this pass"]
+    style R fill:#ffebee,stroke:#c62828
 ```
 
-**Why mutual edges and cliques?** Consider three hosts where `a—b` and `b—c` are mutual but `a—c` is not.
-`a` and `c` cannot fail over onto each other, so `{a, b, c}` is *not* a valid partition. The two maximal
-cliques `{a, b}` and `{b, c}` are — `b` legitimately belongs to both.
+This is a deliberate limitation: Cortex does not (yet) split one host's workload across several targets, so a
+host whose own VMs cannot share a single landing zone simply waits until its workload mix changes.
+
+Two things keep this probing faithful and safe:
+
+- **Each probe mirrors a real evacuation** — it carries the VM's owner, availability zone, flavor and image, and
+  tells the scheduler to treat it as an evacuation, so exactly the same filters apply as in a genuine failure.
+- **The probing never changes anything.** It is strictly read-only, so asking "where could this VM go?"
+  thousands of times never disturbs live scheduling. It also tells the scheduler to *ignore* existing failover
+  host reservations — otherwise a host already reserved for failover would look occupied and vanish from its own
+  partition, fragmenting the grouping.
+
+Finally, a hard **whole-host fit** check discards any target that is smaller than its source (memory first,
+then CPU). An evacuation moves *all* of the source's VMs onto the target at once, so the target must be at least
+as large as the source.
+
+If a single VM's lookup fails, it is skipped rather than aborting — one unschedulable VM shouldn't erase a whole
+host's rescue links. Only an error broad enough to invalidate the entire pass stops it.
+
+### Step 2 — Group hosts into partitions
+
+A **failover partition is a set of hosts in which every host can be evacuated onto every other host.** For that
+to hold, rescue must work in *both* directions between any two members: `a` can rescue `b` **and** `b` can
+rescue `a`. So Step 2 first keeps only the **mutual** links — the one-way links from Step 1 are discarded here.
+
+**One-way links are dropped.** This is why a link can exist in Step 1 yet leave no trace in the partitions:
 
 ```mermaid
 flowchart LR
-    a((a)) --- b((b))
-    b --- c((c))
-    classDef clique fill:#e3f2fd,stroke:#1976d2
-    class a,b,c clique
-    note["No a—c edge ⇒ two cliques: {a,b} and {b,c}, sharing b"]
+    subgraph dir["rescue links from Step 1"]
+        direction LR
+        a1((a)) --> b1((b))
+        b1 --> a1
+        b1 --> c1((c))
+        c1 -. "no c→b<br/>(c too small for b)" .-> b1
+    end
+    dir ==> mut
+    subgraph mut["only mutual pairs survive"]
+        direction LR
+        a2((a)) --- b2((b))
+        b2 -. "dropped:<br/>works one way only" .- c2((c))
+    end
+    style c2 fill:#ffebee,stroke:#c62828
 ```
 
-Bron–Kerbosch recursively grows a candidate clique `R`, trying each still-eligible vertex in the candidate set
-`P`, intersecting `P` and the already-seen set `X` with that vertex's neighbours; a clique is **maximal** when
-both `P` and `X` are empty.
+Within the mutual graph, a partition is a group where **everyone can rescue everyone**. Finding the largest
+such groups is a classic graph problem (finding *cliques*), and that is exactly what Cortex does — no hand
+tuning, the groups fall straight out of the mutual links.
 
-**Empty hosts** (hosts with no outgoing edge — e.g. because they host no VMs, or are already reserved) fall out
-as single-element cliques. They are *recruited* into an existing partition whose members can **all** reach the
-empty host (`member → empty` for every member), since the reverse direction is then assumed possible. An empty
-host that no partition fully reaches stays on its own.
+**Why groups, and why they can overlap.** Consider three hosts where `a`↔`b` and `b`↔`c` are mutual but `a`
+and `c` cannot rescue each other. Then `{a, b, c}` is *not* a valid partition — `a` and `c` don't fit the "all
+rescue all" rule. Instead there are two valid groups, `{a, b}` and `{b, c}`, and `b` sits in both. That overlap
+is expected here; Step 3 resolves it.
 
-Because every step iterates Go maps (random order), the builder **sorts before recruiting and before emitting**,
-so the output is fully deterministic regardless of edge order — a reachable empty host is always recruited into
-the same partition.
+**Empty hosts get folded in.** A host with no VMs (or one already reserved) has nothing to evacuate and so has
+no rescue links of its own — it would otherwise be a group of one. Such a host is **recruited** into a partition
+as long as **every** member of that partition can rescue onto it. The check is one-directional on purpose: an
+empty host runs nothing, so it is assumed able to evacuate anywhere; only the inbound direction
+(`member → empty host`) is verified. If even one member can't reach it, the empty host stays on its own:
 
-Each partition can be *characterized* (for logging) by `characterizePartitions`, which intersects the serialized
-hypervisor fields down to the leaves shared by every member, then keeps only those that are *not* shared by every
-other partition — the fields that set this partition apart (a common AZ, aggregate, or hypervisor type) without
-hard-coding which fields matter. Each partition gets a compact `key=value key=value` label for at-a-glance logging.
-
-### Stage 3 — ReservationPlanner: pick the failover hosts
-
-For a single partition the `ratioReservationPlanner` decides which hosts become failover targets. It does
-**not** reserve a fixed number: too few leaves no landing space, too many wastes capacity. The count scales
-with the partition:
-
+```mermaid
+flowchart TB
+    subgraph ok["empty host E is recruited"]
+        direction LR
+        a3((a)) -->|reaches| e1((E))
+        b3((b)) -->|reaches| e1
+        okr["every member of {a, b} reaches E<br/>⇒ partition becomes {a, b, E}"]
+    end
+    subgraph no["empty host F stays alone"]
+        direction LR
+        a4((a)) -->|reaches| f1((F))
+        b4((b)) -. "b does NOT reach F" .-> f1
+        nor["not every member reaches F<br/>⇒ F is left on its own"]
+    end
+    style nor fill:#ffebee,stroke:#c62828
 ```
-desiredCount = clamp( max( floor(len(partition) × ratio), minimum ),  upper = len(partition) − 1 )
+
+The whole grouping is computed deterministically: given the same fleet, the same partitions come out every
+time, so reservations don't flap between passes for no reason.
+
+### Step 3 — Make the partitions disjoint
+
+Step 2 can leave a host in **two** partitions at once (like `b` above). But a host can only be reserved for one
+partition — reserving it for two would produce conflicting records about who it's meant to rescue, and one would
+silently overwrite the other. So before planning, Cortex forces the partitions apart: each shared host is kept
+in exactly **one** partition — the **largest** one it belongs to, since that's where it can rescue the most
+peers (ties broken deterministically).
+
+```mermaid
+flowchart TB
+    subgraph before["overlapping groups from Step 2"]
+        p1["{a, b, c, d}  (4 hosts)"]
+        p2["{c, e}        (2 hosts)"]
+    end
+    before ==>|"shared host c stays with the LARGER group"| after
+    subgraph after["disjoint partitions"]
+        q1["{a, b, c, d}  ✓ keeps c"]
+        q2["{e} → now alone → discarded<br/>(no peer to rescue it)"]
+    end
+    style q2 fill:#ffebee,stroke:#c62828
 ```
 
-- `ratio` (default `0.1`) — the fraction of a partition's hosts to reserve, rounded **down**.
-- `minimum` (default `1`) — a floor, so even small partitions keep some headroom.
-- The upper clamp `len(partition) − 1` guarantees at least one **source** host is always left to run
-  workload — a partition is never fully reserved.
-- A partition of **fewer than two hosts** reserves nothing: there is no peer for a reserved host to receive an
-  evacuation from.
+**Edge case — a host can silently lose coverage here.** When pulling a shared host out of the smaller group
+leaves that group with only one host, the group is discarded (a lone host has no peer to fail over from). Above,
+`e`'s only partner was `c`; once `c` stays with the larger group, `{e}` collapses to a single host and
+disappears, leaving `e` unprotected this pass. Nothing about `e` itself changed — it lost its partition purely
+from how the overlap was resolved. This is the subtlest way a host ends up with no failover target.
 
-The planner builds an ordered candidate list and takes the first `desiredCount`:
+### Step 4 — Pick the failover hosts in each partition
+
+For each partition, Cortex decides how many hosts to reserve as failover targets. It deliberately does **not**
+pick a fixed number: too few leaves no room to evacuate into, too many wastes capacity. The count scales with
+the partition size, under three rules:
+
+- **A ratio of the partition** (default `10%`), rounded **down**.
+- **A floor** (default `1`), so even a small partition keeps at least one target.
+- **Never all of them** — at least one host must be left to actually run workload, so a partition is never
+  fully reserved. And a partition of fewer than two hosts reserves nothing at all: there would be no peer for a
+  reserved host to rescue.
+
+Worked through for the defaults, the interplay is easier to see than to state:
+
+| partition size | 10 %, rounded down | after the floor of 1 | after "leave ≥ 1 running" | **reserved** |
+|---:|---:|---:|---:|---:|
+| 1  | — | — | — | **0** (no peer) |
+| 2  | 0 | 1 | 1  | **1** |
+| 10 | 1 | 1 | 9  | **1** |
+| 15 | 1 | 1 | 14 | **1** |
+| 25 | 2 | 2 | 24 | **2** |
+
+The floor dominates small partitions; the ratio only starts to matter once a partition is large enough that
+10 % of it exceeds 1 (here, around 20 hosts).
+
+**Which** hosts become the targets follows two preferences:
 
 ```mermaid
 flowchart LR
-    E["Existing reservations<br/>in this partition<br/>(sorted by host name)"] --> LIST
-    F["Fresh candidates<br/>(sorted by ascending<br/>allocated capacity)"] --> LIST
-    LIST["candidates = [existing…, cheapest-fresh…]"] --> TAKE["take first desiredCount"]
-    TAKE --> RES["desired reservations<br/>(each reserves a whole host)"]
+    E["hosts already reserved<br/>in this partition"] --> LIST
+    F["otherwise, the hosts<br/>cheapest to empty out<br/>(least workload on them)"] --> LIST
+    LIST["ordered shortlist"] --> TAKE["take as many as the count above"]
+    TAKE --> RES["these hosts are reserved whole"]
 ```
 
-- **Existing reservations come first**, so a host that is already a failover target *stays* one. This stability
-  matters: a designated failover host may have VMs being live-migrated off it, and flipping the designation
-  each pass would waste that work. A surplus of existing reservations beyond `desiredCount` is left out and
-  pruned by the reconciler, freeing the host back into service.
-- **Fresh candidates come next, cheapest first** — ordered by ascending allocated capacity — so a newly
-  designated target is the host whose VMs are cheapest to migrate away. Each fresh reservation allocates the
-  host's **full** capacity and records the other partition members as its `SourceHosts`.
+- **Already-reserved hosts stay reserved.** A host being prepared as a failover target may have VMs mid-way
+  through being moved off it; flipping the designation each pass would throw that work away. If there are more
+  already-reserved hosts than needed, the surplus is released back into normal service.
+- **New targets are the cheapest to empty.** When a fresh target is needed, Cortex picks the host carrying the
+  least workload, so draining it is as quick and cheap as possible. Each chosen host is then reserved in full,
+  recording the other partition members as the hosts it stands ready to rescue.
 
 ## The reservation lifecycle
 
-A `FailoverHostReservation` blocks its target host from receiving ordinary placements so it stays available as
-a landing zone. Its lifecycle (documented on the `ReservationTypeFailoverHost` constant in
-`api/v1alpha1/reservation_types.go`):
+A failover host reservation blocks its target host from receiving ordinary placements, so the host stays empty
+and available as a landing zone. Over its life a reservation moves through these stages:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Designated: controller creates reservation on host
-    Designated --> Active: all VMs migrated away
-    Designated --> Failed: descheduling fails / too slow
-    Failed --> Designated: cooldown elapsed
-    Active --> InUse: gang evacuation begins
+    [*] --> Designated: host chosen as a failover target
+    Designated --> Active: all VMs moved away, host now empty
+    Designated --> Failed: draining fails or takes too long
+    Failed --> Designated: cooldown elapses, eligible again
+    Active --> InUse: a gang evacuation lands here
     InUse --> Used: evacuation complete → host returns to service
-    Active --> Revoked: no longer matches any partition
-    Designated --> Revoked: no longer matches any partition
+    Active --> Revoked: no longer part of any partition
+    Designated --> Revoked: no longer part of any partition
     Used --> [*]
     Revoked --> [*]
 ```
 
-- **Designated** — created on a host; VMs may still need live-migrating off it. The pipeline places no *new*
-  VMs here. Stays until the host is empty.
+- **Designated** — the host has been chosen as a target but may still have VMs that need draining off it. No
+  *new* VMs are placed here. It stays in this stage until the host is empty.
 - **Active** — the host is empty and ready to absorb an evacuation.
-- **Failed** — descheduling failed repeatedly or took too long; the host is held off from re-designation for a
-  cooldown.
-- **In Use** — a gang evacuation onto this host is underway (reused by subsequent failover events until
-  complete).
-- **Revoked** (= deleted) — no longer matches any partition (e.g. the host became unschedulable).
-- **Used** (= deleted) — the failover event completed; the host becomes a regular host again.
+- **Failed** — draining failed repeatedly or took too long; the host is held back from being re-chosen for a
+  cooldown period.
+- **In Use** — a gang evacuation onto this host is underway (and may absorb further failures until it
+  completes).
+- **Revoked** — the host no longer belongs to any partition (for example it became unschedulable), so the
+  reservation is dropped.
+- **Used** — the failover event finished; the host becomes a regular host again.
+
+> [!NOTE]
+> Treat this diagram as the *intended progression*, not a strict state machine. The stages are tracked
+> independently rather than as a single current-state field, so the arrows show the normal path rather than the
+> only possible transitions.
 
 ## Configuration
 
-Enable the controller in `enabledControllers` and configure it under the nested `failover.hosts` key:
+Enable the controller and configure it under the nested `failover.hosts` key:
 
 ```yaml
 enabledControllers:
@@ -282,20 +362,37 @@ failover:
   hosts:
     ratio: 0.1                 # fraction of each partition to reserve (0, 1]
     minimum: 1                 # floor per partition, > 0
-    generationInterval: 5m     # recompute cadence, ≥ 1m
+    generationInterval: 5m     # how often to recompute, ≥ 1m
     externalSchedulerURL: "http://localhost:8080/scheduler/nova/external"
 ```
 
 > [!NOTE]
-> The settings live under `failover.hosts` as a deliberate role model for grouping a controller's config under
-> its own key, rather than adding more flat top-level keys. This is independent of the (deprecated) flavor-based
-> `failover-reservations-controller` configured alongside it. The controller validates its config on startup
-> and fails fast on a bad `ratio`, `minimum` or interval.
+> The settings live under `failover.hosts` as a deliberate example of grouping a controller's config under its
+> own key rather than adding more flat top-level keys. This is independent of the (deprecated) slot-based
+> failover controller configured alongside it. Bad values for `ratio`, `minimum`, or the interval are rejected
+> at startup.
 
 Like the other reservation kinds, failover host reservations make a host look fuller to the pipeline than its
 raw capacity suggests — here by reserving the host **entirely**. The next page turns from the *kinds* of
 reserved capacity to the concurrency problem all of them share: how the scheduler keeps parallel requests from
 double-spending the same slot.
+
+## Why does this host have no failover target?
+
+Because the graph is narrowed in several steps, a host can end up unprotected for quite different reasons. This
+table maps the symptom back to the step that caused it:
+
+| Symptom | Why | Step |
+|---|---|---|
+| host produces no rescue links | its own VMs can't share any single target | 1 · Discover rescue links |
+| a target was discarded | it's smaller than the source host | 1 · Discover rescue links |
+| a link doesn't lead to a partition | it only works one way, not both | 2 · Group into partitions |
+| an empty host is left on its own | not *every* member of a partition can reach it | 2 · Group into partitions |
+| a host loses its partition | it was shared, kept by the larger group, and its old group collapsed | 3 · Make partitions disjoint |
+| a partition reserves nothing | it has fewer than two hosts | 4 · Pick failover hosts |
+
+The controller logs each of these decisions as it makes them, so a host's fate through the steps can be traced
+pass by pass.
 
 ## Next
 
