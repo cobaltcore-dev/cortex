@@ -84,7 +84,7 @@ func (s *KVMFailoverReservationConsolidationStep) Run(traceLog logr.Logger, requ
 
 	intent, err := request.GetIntent()
 	if err != nil || intent != api.ReserveForFailoverIntent {
-		traceLog.Info("skipping failover reservation consolidation weigher for non-failover-reservation request")
+		traceLog.V(1).Info("skipping failover reservation consolidation weigher for non-failover-reservation request")
 		return result, nil //nolint:nilerr // intentionally skip weigher on error
 	}
 
@@ -130,7 +130,7 @@ func (s *KVMFailoverReservationConsolidationStep) Run(traceLog logr.Logger, requ
 
 	// If there are no failover reservations, the weigher has no information to act on.
 	if totalReservations == 0 {
-		traceLog.Info("no active failover reservations found, skipping consolidation weigher")
+		traceLog.V(1).Info("no active failover reservations found, skipping consolidation weigher")
 		return result, nil
 	}
 
@@ -146,7 +146,7 @@ func (s *KVMFailoverReservationConsolidationStep) Run(traceLog logr.Logger, requ
 		score := (totalCountWeight/t)*hostTotal - (sameSpecPenalty/t)*hostSameGroup
 
 		result.Activations[host.ComputeHost] = score
-		traceLog.Info("calculated failover consolidation score for host",
+		traceLog.V(1).Info("calculated failover consolidation score for host",
 			"host", host.ComputeHost,
 			"totalOnHost", hostTotal,
 			"sameGroupOnHost", hostSameGroup,

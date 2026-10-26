@@ -35,7 +35,7 @@ func checkCinderSchedulerReturnsValidHosts(
 		Weights: map[string]float64{},
 	}
 	apiURL := "http://localhost:8080/scheduler/cinder/external"
-	log.Info("sending request to external scheduler", "apiURL", apiURL)
+	log.V(1).Info("sending request to external scheduler", "apiURL", apiURL)
 
 	requestBody := must.Return(json.Marshal(request))
 	buf := bytes.NewBuffer(requestBody)

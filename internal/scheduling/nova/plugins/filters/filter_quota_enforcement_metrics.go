@@ -90,7 +90,7 @@ var recordDecisionNilOnce = &sync.Once{}
 func (m *QuotaEnforcementMetrics) RecordDecision(mode, decision, resource, az, flavorGroup string) {
 	if m == nil || m.Decisions == nil {
 		recordDecisionNilOnce.Do(func() {
-			log.Info("QuotaEnforcementMetrics is nil; decision metric not recorded "+
+			log.V(1).Info("QuotaEnforcementMetrics is nil; decision metric not recorded "+
 				"(is QuotaEnforcementMetricsSingleton initialized in cmd/manager?)",
 				"mode", mode,
 				"decision", decision,

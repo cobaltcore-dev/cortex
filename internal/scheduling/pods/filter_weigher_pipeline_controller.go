@@ -134,7 +134,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		return err
 	}
 	if pod.Spec.NodeName != "" {
-		log.Info("pod is already assigned to a node", "node", pod.Spec.NodeName)
+		log.V(1).Info("pod is already assigned to a node", "node", pod.Spec.NodeName)
 		return nil
 	}
 

@@ -56,7 +56,7 @@ func (s *KVMFailoverEvacuationStep) Run(traceLog logr.Logger, request api.Extern
 
 	intent, err := request.GetIntent()
 	if err != nil || intent != api.EvacuateIntent {
-		traceLog.Info("skipping failover weigher for non-evacuation request")
+		traceLog.V(1).Info("skipping failover weigher for non-evacuation request")
 		return result, nil //nolint:nilerr // intentionally skip weigher on error
 	}
 
@@ -86,7 +86,7 @@ func (s *KVMFailoverEvacuationStep) Run(traceLog logr.Logger, request api.Extern
 		if reservation.Status.FailoverReservation != nil {
 			if _, ok := reservation.Status.FailoverReservation.Allocations[instanceUUID]; ok {
 				failoverHosts[reservation.Status.Host] = true
-				traceLog.Info("found failover reservation for VM",
+				traceLog.V(1).Info("found failover reservation for VM",
 					"reservation", reservation.Name,
 					"host", reservation.Status.Host,
 					"instanceUUID", instanceUUID)
@@ -100,7 +100,7 @@ func (s *KVMFailoverEvacuationStep) Run(traceLog logr.Logger, request api.Extern
 	for _, host := range request.Hosts {
 		if failoverHosts[host.ComputeHost] {
 			result.Activations[host.ComputeHost] = failoverWeight
-			traceLog.Info("assigning failover weight to host",
+			traceLog.V(1).Info("assigning failover weight to host",
 				"host", host.ComputeHost,
 				"weight", failoverWeight,
 				"instanceUUID", instanceUUID)

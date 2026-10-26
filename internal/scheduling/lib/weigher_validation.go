@@ -20,7 +20,7 @@ type WeigherValidator[RequestType FilterWeigherPipelineRequest] struct {
 
 // Initialize the wrapped weigher with the database and options.
 func (s *WeigherValidator[RequestType]) Init(ctx context.Context, client client.Client, step v1alpha1.WeigherSpec) error {
-	pipelineLog.Info("scheduler: init validation for step", "name", step.Name)
+	pipelineLog.V(1).Info("scheduler: init validation for step", "name", step.Name)
 	return s.Weigher.Init(ctx, client, step)
 }
 
@@ -48,7 +48,7 @@ func (s *WeigherValidator[RequestType]) Run(traceLog logr.Logger, request Reques
 	// nothing meaningful for the weigher to do, and running it would only
 	// produce a misleading "no hosts remain" safety error below.
 	if len(deduplicated) == 0 {
-		traceLog.Info("scheduler: skipping weigher, no hosts to weigh")
+		traceLog.V(1).Info("scheduler: skipping weigher, no hosts to weigh")
 		return nil, ErrStepSkipped
 	}
 	result, err := s.Weigher.Run(traceLog, request)

@@ -76,7 +76,7 @@ func (s *FilterCapabilitiesStep) Run(traceLog logr.Logger, request api.ExternalS
 	for key, expr := range requestedCapabilities {
 		for _, op := range unsupportedOps {
 			if strings.Contains(expr, op) {
-				traceLog.Info(
+				traceLog.V(1).Info(
 					"unsupported extra spec operator in capabilities filter, skipping filter",
 					"key", key, "expr", expr, "flavor", request.Spec.Data.Flavor,
 				)
@@ -107,20 +107,20 @@ func (s *FilterCapabilitiesStep) Run(traceLog logr.Logger, request api.ExternalS
 		}
 		hvCaps[hv.Name] = caps
 	}
-	traceLog.Info("looking for capabilities", "capabilities", hvCaps)
+	traceLog.V(1).Info("looking for capabilities", "capabilities", hvCaps)
 
 	// Check which hosts match the requested capabilities.
 	for host := range result.Activations {
 		provided, ok := hvCaps[host]
 		if !ok {
 			delete(result.Activations, host)
-			traceLog.Info("filtering host without provided capabilities", "host", host)
+			traceLog.V(1).Info("filtering host without provided capabilities", "host", host)
 			continue
 		}
 		// Check if the provided capabilities match the requested ones.
 		for keyRequested, valueRequested := range requestedCapabilities {
 			if providedValue, ok := provided[keyRequested]; !ok || providedValue != valueRequested {
-				traceLog.Info(
+				traceLog.V(1).Info(
 					"filtering host with mismatched capabilities", "host", host,
 					"wantKey", keyRequested, "wantValue", valueRequested,
 					"haveKey?", ok, "haveValue", providedValue,
@@ -129,7 +129,7 @@ func (s *FilterCapabilitiesStep) Run(traceLog logr.Logger, request api.ExternalS
 				break
 			}
 		}
-		traceLog.Info("host matches requested capabilities, keeping", "host", host)
+		traceLog.V(1).Info("host matches requested capabilities, keeping", "host", host)
 	}
 	return result, nil
 }
