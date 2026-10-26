@@ -288,7 +288,8 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 		}
 		freeCPU, ok := free["cpu"]
 		if !ok || freeCPU.Value() < 0 {
-			traceLog.Info(
+			traceLog.Error(
+				nil,
 				"host with invalid CPU capacity",
 				"host", host, "freeCPU", freeCPU.String(),
 			)
