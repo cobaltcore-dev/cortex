@@ -164,7 +164,7 @@ func (f *evacuationPathFinder) FindPaths(ctx context.Context, topo topology) ([]
 // carries the vm's owner, availability zone, flavor and image so the same
 // filters apply, offers every known host as a candidate (Hosts) so the scheduler
 // has a host set to filter over, sets the evacuate scheduler hint, and ignores
-// the vm's current host as an evacuation target. Three options matter:
+// the vm's current host as an evacuation target. Four options matter:
 //
 //   - ReadOnly, so probing placements never mutate shared scheduling state.
 //   - SkipInflight and SkipCommittedResourceTracking, which ReadOnly runs must
@@ -175,6 +175,16 @@ func (f *evacuationPathFinder) FindPaths(ctx context.Context, topo topology) ([]
 //     reservations don't block the very hosts we are reasoning about — otherwise
 //     a reserved host would be hidden from its own partition and the clustering
 //     would fragment.
+//   - AssumeEmptyHosts, so candidates are judged by their total capacity rather
+//     than their current free capacity. A failover target is reserved *empty*, so
+//     what matters for partitioning is whether a host could hold the workload once
+//     cleared, not whether it has room right now. Without this a busy host never
+//     accepts anyone, gets no inbound links, forms no mutual edge, and stays
+//     orphaned — even though reserving it would drain it. Compatibility
+//     (flavors, traits, AZ) is thus occupancy-independent; which host is actually
+//     cheapest to empty is left to the planner's candidate ordering. The hard
+//     whole-host fit check in FindPaths still compares *total* capacities, so an
+//     undersized target is dropped regardless of this option.
 func (f *evacuationPathFinder) fetchEvacuationCandidates(ctx context.Context, vm vmv1alpha1.VirtualMachine, hvsByName map[string]hv1.Hypervisor) ([]hv1.Hypervisor, error) {
 	log := logf.FromContext(ctx)
 
@@ -214,6 +224,11 @@ func (f *evacuationPathFinder) fetchEvacuationCandidates(ctx context.Context, vm
 			ReadOnly:                      true,
 			SkipInflight:                  true,
 			SkipCommittedResourceTracking: true,
+			// Judge candidates by total capacity, not current free capacity: a
+			// failover target is reserved empty, so a busy host that would fit the
+			// workload once cleared must still be a valid candidate. Without this,
+			// occupied hosts never accept anyone and stay orphaned.
+			AssumeEmptyHosts: true,
 			// Ignore existing failover host reservations, otherwise they would
 			// block these hosts, separate them from their failover partition and
 			// break the clustering.

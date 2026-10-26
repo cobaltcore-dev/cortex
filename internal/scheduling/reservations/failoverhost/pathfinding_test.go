@@ -31,6 +31,11 @@ func stubScheduler(t *testing.T, candidatesByVM map[string][]string, errVMs map[
 		if err := req.Options.Validate(); err != nil {
 			t.Errorf("invalid scheduling options: %v", err)
 		}
+		if !req.Options.AssumeEmptyHosts {
+			// A failover target is reserved empty, so candidates must be judged by
+			// total capacity. Dropping this would orphan every busy host.
+			t.Errorf("request for vm %q must set AssumeEmptyHosts", req.Spec.Data.InstanceUUID)
+		}
 		if len(req.Hosts) == 0 {
 			t.Errorf("request for vm %q has no candidate hosts", req.Spec.Data.InstanceUUID)
 		}

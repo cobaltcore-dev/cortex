@@ -195,10 +195,17 @@ single host's VMs across *several* targets is instead a job for Cortex's broader
 will in future be able to steer placement so that a host's workload stays jointly evacuable (or to plan a
 multi-target evacuation directly), removing the "one host, one landing zone" constraint assumed here.
 
-Two things keep this probing faithful and safe:
+Three things keep this probing faithful and safe:
 
 - **Each probe mirrors a real evacuation** — it carries the VM's owner, availability zone, flavor and image, and
   tells the scheduler to treat it as an evacuation, so exactly the same filters apply as in a genuine failure.
+- **Candidates are judged as if empty.** The probe tells the scheduler to measure each candidate against its
+  *total* capacity, ignoring whatever VMs currently run there. This is deliberate: a failover target is reserved
+  **empty**, so the right question is "could this host hold the workload once cleared?", not "does it have room
+  right now?". Were the probe to measure live free capacity instead, a busy host would accept no one, gain no
+  inbound rescue link, form no mutual edge, and stay orphaned — even though reserving it would drain it. Whether
+  two hosts are *compatible* is thus independent of how full they happen to be; which host is cheapest to
+  actually empty is decided later, in Step 4.
 - **The probing never changes anything.** It is strictly read-only, so asking "where could this VM go?"
   thousands of times never disturbs live scheduling. It also tells the scheduler to *ignore* existing failover
   host reservations — otherwise a host already reserved for failover would look occupied and vanish from its own
@@ -206,7 +213,8 @@ Two things keep this probing faithful and safe:
 
 Finally, a hard **whole-host fit** check discards any target that is smaller than its source (memory first,
 then CPU). An evacuation moves *all* of the source's VMs onto the target at once, so the target must be at least
-as large as the source.
+as large as the source. This check compares *total* capacities, independent of the empty-host probing above, so
+an undersized target is dropped whether or not it currently runs anything.
 
 Two outcomes of a per-VM lookup must not be confused, because they are handled oppositely — and the
 distinction is exactly what upholds the "consistent picture or nothing" rule:
