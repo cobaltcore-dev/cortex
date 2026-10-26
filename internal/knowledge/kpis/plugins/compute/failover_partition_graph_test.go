@@ -66,7 +66,7 @@ func TestFailoverPartitionGraphKPI_Collect(t *testing.T) {
 	}
 
 	// Two failover-host reservations sharing source host h1 (so the node for h1
-	// is never emitted, but its edges to both targets are), plus a non-failover
+	// is emitted once, but its edges to both targets are), plus a non-failover
 	// reservation that must be ignored.
 	resA := failoverHostReservation("failover-host-t1", "t1", "az-a", "h1", "h2")
 	resB := failoverHostReservation("failover-host-t2", "t2", "az-b", "h1", "h3")
@@ -118,12 +118,18 @@ func TestFailoverPartitionGraphKPI_Collect(t *testing.T) {
 		}
 	}
 
-	// Nodes: only the two target hosts (t1, t2). Source-only hosts are not nodes.
-	if nodes != 2 {
-		t.Errorf("expected 2 node metrics, got %d", nodes)
+	// Nodes: the two target hosts (t1, t2) plus the three distinct source hosts
+	// (h1, h2, h3). Source hosts inherit the az and capacity of their target.
+	if nodes != 5 {
+		t.Errorf("expected 5 node metrics, got %d", nodes)
 	}
-	if nodeAZ["t1"] != "az-a" || nodeAZ["t2"] != "az-b" {
-		t.Errorf("unexpected node AZs: %v", nodeAZ)
+	// h1 and h2 fail over onto t1 (az-a); h3 fails over onto t2 (az-b). h1 is
+	// shared but first seen via resA, so it inherits az-a.
+	wantAZ := map[string]string{"t1": "az-a", "t2": "az-b", "h1": "az-a", "h2": "az-a", "h3": "az-b"}
+	for host, az := range wantAZ {
+		if nodeAZ[host] != az {
+			t.Errorf("node %s: expected az %q, got %q", host, az, nodeAZ[host])
+		}
 	}
 	// Edges: h1->t1, h2->t1, h1->t2, h3->t2.
 	if edges != 4 {

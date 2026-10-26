@@ -22,9 +22,11 @@ var failoverPartitionGraphKPILogger = ctrl.Log.WithName("failover-partition-grap
 // KPI exposing the failover partition graph derived from failover host
 // reservations. The graph has two series:
 //
-//   - cortex_failover_partition_graph_node{host,az,memory,cpu} 1 — one per
-//     reserved failover host (the TargetHost of a failover host reservation),
-//     carrying the host's availability zone and reserved capacity.
+//   - cortex_failover_partition_graph_node{host,az,memory,cpu} 1 — one per host
+//     participating in the graph: every reserved failover host (the TargetHost
+//     of a failover host reservation) and every SourceHost that may fail over
+//     onto it. Source hosts carry the same availability zone and reserved
+//     capacity as the target they fail over onto.
 //   - cortex_failover_partition_graph_edge{source,target} 1 — one per directed
 //     evacuation path: every SourceHost of a reservation may fail over onto the
 //     reservation's TargetHost.
@@ -83,9 +85,16 @@ func (k *FailoverPartitionGraphKPI) Collect(ch chan<- prometheus.Metric) {
 	// Dedup nodes and edges across reservations: a target host appears once, and
 	// a (source,target) pair could in principle repeat. Prometheus rejects
 	// duplicate series within a single scrape, so collapse them into sets first.
-	emittedNodes := map[string]struct{}{}
+	// Every host participating in the graph is a node. Source hosts carry the
+	// same az and reserved capacity as the target they fail over onto, but a host
+	// that is itself a target must keep its own target metadata. We therefore
+	// emit all target nodes and edges first, recording each source's inherited
+	// metadata, then emit the source hosts that are not targets.
+	targets := map[string]struct{}{}
 	type edge struct{ source, target string }
 	emittedEdges := map[edge]struct{}{}
+	type nodeMeta struct{ az, memory, cpu string }
+	sources := map[string]nodeMeta{}
 	for _, r := range reservationList.Items {
 		if r.Spec.Type != v1alpha1.ReservationTypeFailoverHost {
 			continue
@@ -94,10 +103,10 @@ func (k *FailoverPartitionGraphKPI) Collect(ch chan<- prometheus.Metric) {
 		if target == "" {
 			continue
 		}
-		if _, ok := emittedNodes[target]; !ok {
-			emittedNodes[target] = struct{}{}
-			memory := r.Spec.Resources[hv1.ResourceMemory]
-			cpu := r.Spec.Resources[hv1.ResourceCPU]
+		memory := r.Spec.Resources[hv1.ResourceMemory]
+		cpu := r.Spec.Resources[hv1.ResourceCPU]
+		if _, ok := targets[target]; !ok {
+			targets[target] = struct{}{}
 			ch <- prometheus.MustNewConstMetric(
 				k.node, prometheus.GaugeValue, 1,
 				target, r.Spec.AvailabilityZone, memory.String(), cpu.String(),
@@ -107,6 +116,9 @@ func (k *FailoverPartitionGraphKPI) Collect(ch chan<- prometheus.Metric) {
 			continue
 		}
 		for _, source := range r.Spec.FailoverHostReservation.SourceHosts {
+			if _, ok := sources[source]; !ok {
+				sources[source] = nodeMeta{r.Spec.AvailabilityZone, memory.String(), cpu.String()}
+			}
 			e := edge{source: source, target: target}
 			if _, ok := emittedEdges[e]; ok {
 				continue
@@ -116,5 +128,15 @@ func (k *FailoverPartitionGraphKPI) Collect(ch chan<- prometheus.Metric) {
 				k.edge, prometheus.GaugeValue, 1, source, target,
 			)
 		}
+	}
+	// Source hosts that are not themselves targets become nodes carrying the
+	// az and capacity of the failover target they belong to.
+	for source, meta := range sources {
+		if _, ok := targets[source]; ok {
+			continue
+		}
+		ch <- prometheus.MustNewConstMetric(
+			k.node, prometheus.GaugeValue, 1, source, meta.az, meta.memory, meta.cpu,
+		)
 	}
 }
