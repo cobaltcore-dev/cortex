@@ -66,6 +66,7 @@ import (
 	"errors"
 	"maps"
 	"net/http"
+	"sort"
 	"sync"
 	"time"
 
@@ -355,7 +356,9 @@ type topology struct {
 //  2. FindPaths — for each occupied host, find the hosts its whole workload
 //     could be gang-evacuated onto (the directed edges of the failover graph).
 //  3. BuildPartitions — cluster those edges into failover partitions: maximal
-//     sets of hosts that can all fail over onto one another.
+//     sets of hosts that can all fail over onto one another. These cliques can
+//     overlap, so loop then assigns each shared host to exactly one partition
+//     (the largest) to keep the planner input disjoint.
 //  4. PlanReservations — per partition, pick which hosts become failover
 //     targets, honouring the configured ratio/minimum and keeping existing
 //     reservations stable.
@@ -385,6 +388,44 @@ func (c *Controller) loop(ctx context.Context) {
 	partitions := c.partitionBuilder.BuildPartitions(paths)
 	log.V(1).Info("clustered failover paths into partitions",
 		"paths", len(paths), "partitions", len(partitions))
+
+	// Maximal cliques overlap: a host with a mutual edge into two otherwise
+	// disjoint cliques (a—b, b—c but not a—c) appears in both. The planner keys
+	// reservations by target host name ("failover-host-"+host), so a host picked
+	// as a failover target by two partitions would yield two reservations with
+	// the same name but conflicting SourceHosts, and whichever is written last to
+	// the desired map wins — silently dropping the other partition's coverage. To
+	// keep the planner input disjoint we assign each shared host to exactly one
+	// partition: the largest it belongs to (most peers can fail over onto it, so
+	// it is most useful there), ties broken by the partition's first host name so
+	// the choice is deterministic. Partitions are already sorted by their first
+	// member, so a stable sort by descending size keeps that tiebreak order.
+	sort.SliceStable(partitions, func(i, j int) bool {
+		return len(partitions[i]) > len(partitions[j])
+	})
+	assigned := map[string]bool{}
+	deduped := make([][]hv1.Hypervisor, 0, len(partitions))
+	for _, partition := range partitions {
+		kept := make([]hv1.Hypervisor, 0, len(partition))
+		for _, hv := range partition {
+			if assigned[hv.Name] {
+				continue
+			}
+			assigned[hv.Name] = true
+			kept = append(kept, hv)
+		}
+		// Drop a partition emptied out by the dedupe, and one reduced below two
+		// hosts: a lone host offers no failover peer (see PlanReservations).
+		if len(kept) >= 2 {
+			deduped = append(deduped, kept)
+		}
+	}
+	// Restore the deterministic ordering the builder produced (by first host
+	// name), which the size sort above disturbed.
+	sort.SliceStable(deduped, func(i, j int) bool {
+		return deduped[i][0].Name < deduped[j][0].Name
+	})
+	partitions = deduped
 	labels := characterizePartitions(partitions)
 	for i, partition := range partitions {
 		// Describe what sets this partition apart from the others: the shared

@@ -149,14 +149,14 @@ func TestReconcileNoopWhenInSync(t *testing.T) {
 	}
 }
 
-// buildHV builds a hypervisor with an availability-zone label and the given
-// memory (GiB) and cpu capacity, so collect accepts it and the planner can
+// buildHV builds a hypervisor in az1 with an availability-zone label and the
+// given memory (GiB) and cpu capacity, so collect accepts it and the planner can
 // order hosts by cost.
-func buildHV(name, az string, memGi, cpu int64) *hv1.Hypervisor {
+func buildHV(name string, memGi, cpu int64) *hv1.Hypervisor {
 	return &hv1.Hypervisor{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   name,
-			Labels: map[string]string{corev1.LabelTopologyZone: az},
+			Labels: map[string]string{corev1.LabelTopologyZone: "az1"},
 		},
 		Status: hv1.HypervisorStatus{
 			Capacity: map[hv1.ResourceName]resource.Quantity{
@@ -167,13 +167,13 @@ func buildHV(name, az string, memGi, cpu int64) *hv1.Hypervisor {
 	}
 }
 
-// buildVM builds a virtual machine that Nova reports as placed on the given
+// buildVM builds an az1 virtual machine that Nova reports as placed on the given
 // host, so collect indexes it under that host rather than skipping it.
-func buildVM(name, host, az string) *vmv1alpha1.VirtualMachine {
+func buildVM(name, host string) *vmv1alpha1.VirtualMachine {
 	return &vmv1alpha1.VirtualMachine{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Spec: vmv1alpha1.VMSpec{
-			AZ: az,
+			AZ: "az1",
 			Resources: map[vmv1alpha1.ResourceName]resource.Quantity{
 				vmv1alpha1.ResourceMemory: *resource.NewQuantity(2*1024*1024*1024, resource.BinarySI),
 				vmv1alpha1.ResourceCPU:    *resource.NewQuantity(1, resource.DecimalSI),
@@ -192,10 +192,10 @@ func buildVM(name, host, az string) *vmv1alpha1.VirtualMachine {
 func TestLoopGeneratesReservations(t *testing.T) {
 	// Two equally-sized hosts each running one vm. The external scheduler says
 	// each vm can evacuate onto the other host, so they form one partition.
-	hvA := buildHV("hvA", "az1", 64, 32)
-	hvB := buildHV("hvB", "az1", 64, 32)
-	vmA := buildVM("vmA", "hvA", "az1")
-	vmB := buildVM("vmB", "hvB", "az1")
+	hvA := buildHV("hvA", 64, 32)
+	hvB := buildHV("hvB", 64, 32)
+	vmA := buildVM("vmA", "hvA")
+	vmB := buildVM("vmB", "hvB")
 
 	// Stub scheduler: answer each evacuation query with the other host, so the
 	// path finder discovers the mutual edges hvA<->hvB.
@@ -229,5 +229,67 @@ func TestLoopGeneratesReservations(t *testing.T) {
 		if r.Spec.AvailabilityZone != "az1" {
 			t.Errorf("availability zone = %q, want az1", r.Spec.AvailabilityZone)
 		}
+	}
+}
+
+// fakePartitionBuilder returns a fixed set of partitions regardless of input, so
+// a test can drive loop with overlapping cliques the real builder would produce.
+type fakePartitionBuilder struct{ partitions [][]hv1.Hypervisor }
+
+func (f fakePartitionBuilder) BuildPartitions([][2]hv1.Hypervisor) [][]hv1.Hypervisor {
+	return f.partitions
+}
+
+// TestLoopDeduplicatesSharedHost checks that when overlapping maximal cliques
+// share a host (hvB in both {hvA,hvB} and {hvB,hvC}), loop assigns that host to
+// exactly one partition before planning, so planning never sees hvB in two
+// partitions and cannot emit two reservations with the same name. The two
+// partitions are equal size, so the deterministic tiebreak keeps hvB in the one
+// with the smaller first host name ({hvA,hvB}); the other shrinks to the single
+// host hvC, too small to reserve. The surviving {hvA,hvB} partition reserves one
+// target (hvA, the first equal-cost host), whose only source host is hvB — proof
+// hvB was planned once, as a source, not as a conflicting second target.
+func TestLoopDeduplicatesSharedHost(t *testing.T) {
+	hvA := buildHV("hvA", 64, 32)
+	hvB := buildHV("hvB", 64, 32)
+	hvC := buildHV("hvC", 64, 32)
+	vmA := buildVM("vmA", "hvA")
+	vmB := buildVM("vmB", "hvB")
+	vmC := buildVM("vmC", "hvC")
+
+	// The path finder's edges are irrelevant here: the fake builder ignores them
+	// and hands loop the overlapping cliques directly. The stub still needs an
+	// answer per vm so FindPaths succeeds.
+	finder, server := stubScheduler(t, map[string][]string{
+		"vmA": {"hvB"}, "vmB": {"hvA", "hvC"}, "vmC": {"hvB"},
+	}, nil)
+	defer server.Close()
+
+	c := &Controller{
+		Client:      newTestClient(t, hvA, hvB, hvC, vmA, vmB, vmC),
+		Config:      ControllerConfig{Ratio: 0.5, Minimum: 1},
+		reconcileCh: make(chan event.GenericEvent, 16),
+		pathFinder:  finder,
+		partitionBuilder: fakePartitionBuilder{partitions: [][]hv1.Hypervisor{
+			{*hvA, *hvB}, {*hvB, *hvC},
+		}},
+		reservationPlanner: ratioReservationPlanner{ratio: 0.5, minimum: 1},
+	}
+	c.loop(context.Background())
+
+	c.desiredReservationsMu.Lock()
+	defer c.desiredReservationsMu.Unlock()
+	// Exactly one reservation survives: {hvA,hvB} reserves hvA, whose source host
+	// is the deduped hvB. {hvB,hvC} lost hvB and shrank to lone hvC, reserving
+	// nothing.
+	if len(c.desiredReservations) != 1 {
+		t.Fatalf("desired reservations = %d, want 1", len(c.desiredReservations))
+	}
+	aRes, ok := c.desiredReservations[corev1.ObjectReference{Name: "failover-host-hvA"}]
+	if !ok {
+		t.Fatalf("expected a reservation targeting hvA")
+	}
+	if got := aRes.Spec.FailoverHostReservation.SourceHosts; len(got) != 1 || got[0] != "hvB" {
+		t.Errorf("hvA source hosts = %v, want [hvB]", got)
 	}
 }

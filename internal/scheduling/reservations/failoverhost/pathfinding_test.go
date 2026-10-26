@@ -63,12 +63,12 @@ func pathNames(paths [][2]hv1.Hypervisor) []string {
 func topoWith(hostMemGi map[string]int64, vmsByHost map[string][]string) topology {
 	hypervisors := map[string]hv1.Hypervisor{}
 	for name, memGi := range hostMemGi {
-		hypervisors[name] = *buildHV(name, "az1", memGi, 1)
+		hypervisors[name] = *buildHV(name, memGi, 1)
 	}
 	vms := map[string][]vmv1alpha1.VirtualMachine{}
 	for host, vmNames := range vmsByHost {
 		for _, name := range vmNames {
-			vms[host] = append(vms[host], *buildVM(name, host, "az1"))
+			vms[host] = append(vms[host], *buildVM(name, host))
 		}
 	}
 	return topology{hypervisors: hypervisors, vmsByHost: vms}
