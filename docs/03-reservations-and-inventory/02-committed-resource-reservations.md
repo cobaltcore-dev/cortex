@@ -110,6 +110,24 @@ the `CortexNovaHostReservationsOversubscribed` alert fires; the controller may e
 (`cortex_committed_resource_host_oversubscribed_evicted_reservations_total`). Investigate capacity before
 commitments are lost.
 
+### Age-based reservation pruning
+
+Reservation slots drift from their VM mapping over time and can settle on hosts whose labels no
+longer match. The syncer prunes the oldest committed-resource Reservation CRDs past a configurable
+age before upserting `CommittedResource` CRDs, so the reconciler re-creates fresh slots in their
+place.
+
+Two keys in the syncer config (bundle `values.yaml`) control this behaviour:
+
+| Key | Default | Effect |
+|---|---|---|
+| `staleReservationMaxAge` | `168h` | Age at which a committed-resource Reservation is eligible for pruning. |
+| `maxReservationDeletesPerRun` | `20` | Maximum Reservations pruned per syncer run, oldest first. |
+
+A zero value for either key disables age-based pruning entirely.
+
+Pruning is tracked by the counter `cortex_committed_resource_syncer_reservation_prunes_total`.
+
 ## The supporting controllers: capacity and quota
 
 A commitment guarantees a customer *quota* — permission to consume so much — but quota alone cannot
