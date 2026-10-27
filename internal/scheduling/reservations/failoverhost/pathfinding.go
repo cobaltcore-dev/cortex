@@ -11,6 +11,7 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"sort"
 	"strconv"
 	"time"
 
@@ -18,44 +19,47 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
-	vmv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // PathFinder is the first pipeline stage. It discovers the directed edges of the
-// failover graph: for every occupied host it reports the hosts that host's
-// entire workload could be gang-drained onto. An edge source->target means
-// "all vms on source can be live-migrated onto target, and target is large
-// enough to hold them all at once".
+// failover graph: for every host it reports the hosts that host's workload could
+// be gang-evacuated onto. An edge source->target means "a host's whole workload
+// can be evacuated onto target, and target is large enough to hold it".
 //
-// We probe with live-migration intent rather than evacuation intent even though
-// a failover ultimately evacuates (cold-migrates) the workload. The reason is
-// the drain that happens *before* a reservation goes active: a failover target
-// must be reserved empty, so cortex live-migrates its current workload away
-// first. A host that can only be evacuated-to but not live-migrated-from cannot
-// be drained, so admitting it as a target would block that drain and break
-// partitioning. Live migration is the stricter requirement (it adds CPU/feature
-// compatibility checks on top of capacity), so we assume that anything which can
-// be live-migrated can also be cold-migrated/evacuated.
+// Edges are no longer derived from the vms that happen to run on a host. Instead
+// we probe with flavor seeds (see Seeder): for every (flavor, availability zone)
+// permutation we ask the scheduler which hosts would accept it, and treat the
+// hosts that co-accept a seed as mutually compatible under that flavor. This
+// escapes two blind spots of vm-seeding — partitions whose hosts run no vms, and
+// a single exotic vm vetoing a host from its partition — both documented on Seed.
+//
+// We probe with evacuation intent: a failover ultimately cold-migrates
+// (evacuates) a dead host's workload, and evacuation is the weaker check — it
+// does not verify the CPU/feature compatibility that live migration does. We
+// deliberately do not probe live-migratability here even though a freshly
+// reserved host is drained by live migration before its reservation goes active:
+// we assume a partition holds enough peers to absorb that drain, which later
+// draining code arranges, rather than proving it per host at partition time.
 //
 // The direction matters. source->target does not imply target->source: target
 // might be too small for source's workload even if the reverse fits. The
 // PartitionBuilder later keeps only the mutual edges, so this stage is free to
 // report one-directional possibilities.
 type PathFinder interface {
-	// FindPaths returns the failover edges as [source, target] hypervisor pairs.
-	// A vm that the scheduler has no target for yields an empty candidate set and
-	// is not an error; it just can't contribute a path. Any lookup error, by
-	// contrast, is an infrastructure failure (scheduler unreachable/timed out/
-	// non-200) that invalidates the pass, so it is returned to abort it rather
-	// than silently collapsing the whole failover graph.
-	FindPaths(ctx context.Context, topo topology) ([][2]hv1.Hypervisor, error)
+	// FindPaths returns the failover edges as [source, target] hypervisor pairs,
+	// discovered by probing the scheduler with the given seeds. A seed the
+	// scheduler accepts on fewer than two hosts yields no edge and is not an
+	// error. Any lookup error, by contrast, is an infrastructure failure
+	// (scheduler unreachable/timed out/non-200) that invalidates the pass, so it
+	// is returned to abort it rather than silently collapsing the failover graph.
+	FindPaths(ctx context.Context, topo topology, seeds []Seed) ([][2]hv1.Hypervisor, error)
 }
 
 // evacuationPathFinder finds failover paths by asking the external cortex
-// scheduler, per vm, where that vm could be live-migrated to, then intersecting
-// the answers across all vms on a host and filtering by gang-level fit.
+// scheduler, per seed, which hosts would accept that flavor, then pairing up the
+// co-accepting hosts subject to gang-level fit.
 //
 // Asking the real scheduler (rather than reimplementing placement here) is
 // deliberate: it means failover paths are computed with exactly the same
@@ -74,116 +78,110 @@ type evacuationPathFinder struct {
 
 // FindPaths implements PathFinder.
 //
-// For a source host S, a target host T is a valid failover target only if every
-// vm on S can be live-migrated onto T. We therefore query the scheduler per vm
-// and keep the running intersection of the candidate sets: a target survives
-// only if it appears for every vm on the host. (If the intersection comes out
-// empty — e.g. because vms on S carry conflicting scheduling constraints — then
-// S has no failover target for now. In the future we may relax this to tolerate
-// single vms that don't fit the same partition as the rest.)
+// For each seed we ask the scheduler which hosts would accept that flavor in
+// that availability zone. Every pair of hosts that co-accept a seed is mutually
+// compatible under that flavor, so for each such pair (a, b) we emit the directed
+// edge a->b whenever b is at least as large as a. The direction encodes the hard,
+// gang-level fit constraint: a drain/evacuation moves a whole host's workload
+// onto the target at once, so the target must be at least as large as the source.
+// Equal-sized co-accepting hosts therefore yield edges both ways, which the
+// PartitionBuilder turns into a mutual edge and hence a clique; an undersized
+// target only ever appears as a source, never a target, so it is never chosen as
+// a landing zone for a larger peer.
 //
-// Finally we apply the hard, gang-level constraint: a drain/evacuation moves all
-// of S's vms onto T at once, so T must be at least as large as S. We drop every
-// target smaller than its source before emitting the edge. Capacity is compared
-// on a fresh copy of the hypervisor's capacity maps so we never mutate the
-// shared Status.Capacity.
-func (f *evacuationPathFinder) FindPaths(ctx context.Context, topo topology) ([][2]hv1.Hypervisor, error) {
+// Edges are deduplicated: the same pair can be co-accepted by many seeds (e.g.
+// every flavor a pair of identical hosts both run), but the graph only needs each
+// directed edge once. Capacity is compared on fresh copies of the hypervisors'
+// capacity maps so we never mutate the shared Status.Capacity.
+func (f *evacuationPathFinder) FindPaths(ctx context.Context, topo topology, seeds []Seed) ([][2]hv1.Hypervisor, error) {
 	log := logf.FromContext(ctx)
 
-	paths := [][2]hv1.Hypervisor{}
-	for sourceHost, vms := range topo.vmsByHost {
-		// targetHosts is the running intersection of candidate targets across
-		// all vms on this source host. initialized tracks whether we've seeded it
-		// with the first vm's candidates yet.
-		targetHosts := []hv1.Hypervisor{}
-		initialized := false
-		for _, vm := range vms {
-			vmTargetHosts, err := f.fetchLiveMigrationCandidates(ctx, vm, topo.hypervisors)
-			if err != nil {
-				// A lookup error is an infrastructure failure (the scheduler is
-				// unreachable, timed out, or returned a non-200) — not an answer
-				// that this vm has no candidates, which comes back as an empty
-				// slice with a nil error. We cannot assert anything about the
-				// failover graph on a partial view, so abort the whole pass. The
-				// caller leaves the desired state untouched and retries next
-				// cycle; swallowing the error here would instead collapse every
-				// host's paths and prune all still-valid reservations.
-				return nil, fmt.Errorf(
-					"failed to fetch live migration candidates for vm %q on host %q: %w",
-					vm.Name, sourceHost, err)
-			}
-			// Log out the target hosts for this vm.
-			vmTargetHostNames := make([]string, len(vmTargetHosts))
-			for i, host := range vmTargetHosts {
-				vmTargetHostNames[i] = host.Name
-			}
-			log.V(1).Info("fetched live migration candidates for vm",
-				"sourceHost", sourceHost, "vm", vm.Name, "targetHosts", vmTargetHostNames)
-			if !initialized {
-				targetHosts = vmTargetHosts // Seed with the first vm's candidates.
-				initialized = true
-				continue
-			}
-			if len(targetHosts) == 0 {
-				break // Intersection already empty, nothing can survive.
-			}
-			intersection := []hv1.Hypervisor{}
-			for _, vmTargetHost := range vmTargetHosts {
-				for _, targetHost := range targetHosts {
-					if vmTargetHost.Name == targetHost.Name {
-						intersection = append(intersection, targetHost)
-					}
-				}
-			}
-			targetHosts = intersection
+	// edges[src][dst] records a discovered directed edge, deduplicating across
+	// seeds. We materialize it into the [source, target] slice at the end.
+	edges := map[string]map[string]bool{}
+	for _, seed := range seeds {
+		accepting, err := f.fetchSeedCandidates(ctx, seed, topo.hypervisors)
+		if err != nil {
+			// A lookup error is an infrastructure failure (the scheduler is
+			// unreachable, timed out, or returned a non-200) — not an answer that
+			// this seed has no candidates, which comes back as a short slice with a
+			// nil error. We cannot assert anything about the failover graph on a
+			// partial view, so abort the whole pass. The caller leaves the desired
+			// state untouched and retries next cycle; swallowing the error here
+			// would instead collapse every host's paths and prune all still-valid
+			// reservations.
+			return nil, fmt.Errorf(
+				"failed to fetch candidates for flavor %q in az %q: %w",
+				seed.Flavor.Name, seed.AvailabilityZone, err)
 		}
-		// Note: if the intersection is empty because some vms on this host have
-		// conflicting scheduling constraints, then this host has no target host
-		// for now. In the future, we may tolerate this if single vms don't fit
-		// into the same failover partition.
-		for _, targetHv := range targetHosts {
-			sourceHv := topo.hypervisors[sourceHost]
-			// Apply the hard, gang-level constraint: drop results where the
-			// target host is smaller than the source host, so that once we
-			// gang-schedule all vms during an evacuation they all fit the
-			// target. We copy into fresh maps so we don't mutate the shared
-			// hypervisor Status.Capacity.
-			sourceHvCapa := map[hv1.ResourceName]resource.Quantity{}
-			maps.Copy(sourceHvCapa, sourceHv.Status.Capacity) // base capacity
-			maps.Copy(sourceHvCapa, sourceHv.Status.EffectiveCapacity)
-			targetHvCapa := map[hv1.ResourceName]resource.Quantity{}
-			maps.Copy(targetHvCapa, targetHv.Status.Capacity)
-			maps.Copy(targetHvCapa, targetHv.Status.EffectiveCapacity)
-			if cmpResources(sourceHvCapa, targetHvCapa) > 0 {
-				log.V(1).Info("dropping failover path, target smaller than source",
-					"sourceHost", sourceHv.Name, "targetHost", targetHv.Name)
-				continue
+		// Fewer than two accepting hosts can form no pair, so contribute no edge.
+		if len(accepting) < 2 {
+			continue
+		}
+		acceptingNames := make([]string, len(accepting))
+		for i, hv := range accepting {
+			acceptingNames[i] = hv.Name
+		}
+		log.V(1).Info("fetched candidates for seed",
+			"flavor", seed.Flavor.Name, "az", seed.AvailabilityZone, "hosts", acceptingNames)
+		// Pair up every co-accepting host, emitting source->target when the target
+		// is at least as large as the source (the gang-fit constraint).
+		for _, src := range accepting {
+			for _, dst := range accepting {
+				if src.Name == dst.Name {
+					continue
+				}
+				if cmpResources(hvCapacity(src), hvCapacity(dst)) > 0 {
+					continue // Target smaller than source: it cannot hold the gang.
+				}
+				if edges[src.Name] == nil {
+					edges[src.Name] = map[string]bool{}
+				}
+				edges[src.Name][dst.Name] = true
 			}
-			paths = append(paths, [2]hv1.Hypervisor{sourceHv, targetHv})
-			log.V(1).Info("added failover path",
-				"sourceHost", sourceHv.Name, "targetHost", targetHv.Name)
+		}
+	}
+
+	// Materialize the deduplicated edges into [source, target] pairs, sorted so
+	// the output is deterministic despite the map iteration above.
+	paths := [][2]hv1.Hypervisor{}
+	srcNames := make([]string, 0, len(edges))
+	for src := range edges {
+		srcNames = append(srcNames, src)
+	}
+	sort.Strings(srcNames)
+	for _, src := range srcNames {
+		dstNames := make([]string, 0, len(edges[src]))
+		for dst := range edges[src] {
+			dstNames = append(dstNames, dst)
+		}
+		sort.Strings(dstNames)
+		for _, dst := range dstNames {
+			paths = append(paths, [2]hv1.Hypervisor{topo.hypervisors[src], topo.hypervisors[dst]})
+			log.V(1).Info("added failover path", "sourceHost", src, "targetHost", dst)
 		}
 	}
 	return paths, nil
 }
 
-// fetchLiveMigrationCandidates asks the external cortex scheduler where a single
-// vm could be live-migrated to, and returns the subset of known hypervisors it
-// accepts.
+// hvCapacity returns a hypervisor's gang-fit capacity: its base capacity with
+// effectiveCapacity overlaid on top. Copied into a fresh map so we never mutate
+// the shared Status.
+func hvCapacity(hv hv1.Hypervisor) map[hv1.ResourceName]resource.Quantity {
+	capa := map[hv1.ResourceName]resource.Quantity{}
+	maps.Copy(capa, hv.Status.Capacity)
+	maps.Copy(capa, hv.Status.EffectiveCapacity)
+	return capa
+}
+
+// fetchSeedCandidates asks the external cortex scheduler which of the known
+// hypervisors would accept the seed's flavor in its availability zone, and
+// returns that subset.
 //
-// We probe with live-migration intent even though a failover ultimately
-// evacuates: a failover target must first be drained via live migration before
-// its reservation goes active, so a target a vm cannot be live-migrated onto is
-// useless regardless of whether it could be evacuated onto. Live migration is
-// also the stricter check (it adds CPU/feature compatibility on top of
-// capacity), so we treat "can live-migrate" as implying "can evacuate".
-//
-// The request is shaped to mirror a real live migration as closely as possible:
-// it carries the vm's owner, availability zone, flavor and image so the same
-// filters apply, offers every known host as a candidate (Hosts) so the scheduler
-// has a host set to filter over, sets the live_migrate scheduler hint plus
-// source_host (so filter_live_migratable runs its feature-compatibility checks),
-// and ignores the vm's current host as a target. Four options matter:
+// The request is shaped to mirror a real evacuation as closely as possible: it
+// carries the seed's availability zone, flavor and a KVM image hypervisor type so
+// the same filters apply, and offers every known host as a candidate (Hosts) so
+// the scheduler has a host set to filter over. Four options matter:
 //
 //   - ReadOnly, so probing placements never mutate shared scheduling state.
 //   - SkipInflight and SkipCommittedResourceTracking, which ReadOnly runs must
@@ -199,37 +197,26 @@ func (f *evacuationPathFinder) FindPaths(ctx context.Context, topo topology) ([]
 //     what matters for partitioning is whether a host could hold the workload once
 //     cleared, not whether it has room right now. Without this a busy host never
 //     accepts anyone, gets no inbound links, forms no mutual edge, and stays
-//     orphaned — even though reserving it would drain it. Compatibility
-//     (flavors, traits, AZ) is thus occupancy-independent; which host is actually
-//     cheapest to empty is left to the planner's candidate ordering. The hard
-//     whole-host fit check in FindPaths still compares *total* capacities, so an
-//     undersized target is dropped regardless of this option.
-func (f *evacuationPathFinder) fetchLiveMigrationCandidates(ctx context.Context, vm vmv1alpha1.VirtualMachine, hvsByName map[string]hv1.Hypervisor) ([]hv1.Hypervisor, error) {
+//     orphaned — even though reserving it would drain it. Compatibility (flavors,
+//     traits, AZ) is thus occupancy-independent; which host is actually cheapest
+//     to empty is left to the planner's candidate ordering. The hard whole-host
+//     fit check in FindPaths still compares *total* capacities, so an undersized
+//     target is dropped regardless of this option.
+//
+// We probe with evacuation intent (the "evacuate" _nova_check_type, which maps to
+// EvacuateIntent in GetIntent) and set no source_host: a failover evacuates (cold
+// migrates) the workload, and evacuation does not run the live-migratability
+// feature check, so there is no source host to anchor it to. This is weaker than
+// the old live-migration probe, which is intentional — see the PathFinder doc.
+func (f *evacuationPathFinder) fetchSeedCandidates(ctx context.Context, seed Seed, hvsByName map[string]hv1.Hypervisor) ([]hv1.Hypervisor, error) {
 	log := logf.FromContext(ctx)
 
-	resMemoryMB, resVCPUs := uint64(0), uint64(0)
-	if resMemory, ok := vm.Spec.Resources[vmv1alpha1.ResourceMemory]; ok {
-		// Flavors are specified in Mebibytes, even if they declare "MB".
-		if v := resMemory.Value(); v > 0 {
-			resMemoryMB = uint64(v) / 1024 / 1024
-		}
+	// Build valid image properties. We set the image hypervisor type explicitly so
+	// the filter that checks flavor/image compatibility can evaluate it. Since we
+	// only handle KVM virtual machines, we set it to KVM.
+	imageProps := map[string]any{
+		"img_hv_type": string(api.NovaImageMetaHVTypeKVM),
 	}
-	if resCPU, ok := vm.Spec.Resources[vmv1alpha1.ResourceCPU]; ok {
-		if v := resCPU.Value(); v > 0 {
-			resVCPUs = uint64(v)
-		}
-	}
-	// Build valid image properties. Note: may not include uuid or other metadata keys.
-	imageProps := map[string]any{}
-	for k, v := range vm.Spec.Nova.Image.Properties {
-		imageProps[k] = v // Note: may not include uuid or other metadata keys.
-	}
-	// We also include a proper image hypervisor type so the filter which checks
-	// that the flavor is compatible with the image can properly evaluate the
-	// hypervisor type. We set it explicitly here to ensure the filter has the
-	// necessary information. Note: since we only handle KVM virtual machines,
-	// we set it to KVM explicitly.
-	imageProps["img_hv_type"] = string(api.NovaImageMetaHVTypeKVM)
 	// Offer every known host as a candidate. The scheduler filters/weighs over
 	// exactly this host set — it does not gather the cluster itself — so leaving
 	// Hosts empty would make it return no candidates. Each host also needs a
@@ -264,37 +251,27 @@ func (f *evacuationPathFinder) fetchLiveMigrationCandidates(ctx context.Context,
 		},
 		Spec: api.NovaObject[api.NovaSpec]{
 			Data: api.NovaSpec{
-				InstanceUUID:     vm.Name,
 				NumInstances:     1,
-				UserID:           vm.Spec.Nova.Ownership.User,
-				ProjectID:        vm.Spec.Nova.Ownership.Project,
-				AvailabilityZone: vm.Spec.AZ,
-				// Avoid migrating to the same host as the current VM.
-				IgnoreHosts: new([]string{vm.Status.Nova.Host}),
-				// Probe with live-migration intent rather than evacuation. Draining a
-				// host before its reservation goes active relies on live migration, so
-				// a target that can only be evacuated-to but not live-migrated-from
-				// would break partitioning (see fetchLiveMigrationCandidates). We
-				// assume that a host which accepts a live migration also accepts the
-				// weaker cold migration (evacuation). The source_host hint lets
-				// filter_live_migratable run its feature-compatibility checks; the
-				// check type must be the literal "live_migrate" nova uses, which maps
-				// to LiveMigrationIntent in GetIntent.
+				AvailabilityZone: seed.AvailabilityZone,
+				// Probe with evacuation intent. A failover cold-migrates (evacuates)
+				// the workload, and evacuation does not run the live-migratability
+				// feature check, so no source_host is needed. The check type must be
+				// the literal "evacuate" nova uses, which maps to EvacuateIntent in
+				// GetIntent. See the PathFinder doc for why this is deliberately
+				// weaker than a live-migration probe.
 				SchedulerHints: map[string]any{
-					"_nova_check_type": "live_migrate",
-					"source_host":      vm.Status.Nova.Host,
+					"_nova_check_type": "evacuate",
 				},
 				Flavor: api.NovaObject[api.NovaFlavor]{
 					Data: api.NovaFlavor{
-						Name:       vm.Spec.Nova.Flavor.Name,
-						ExtraSpecs: vm.Spec.Nova.Flavor.ExtraSpecs,
-						MemoryMB:   resMemoryMB,
-						VCPUs:      resVCPUs,
+						Name:       seed.Flavor.Name,
+						ExtraSpecs: seed.Flavor.ExtraSpecs,
+						MemoryMB:   seed.Flavor.MemoryMB,
+						VCPUs:      seed.Flavor.VCPUs,
 					},
 				},
 				Image: api.NovaObject[api.NovaImageMeta]{
 					Data: api.NovaImageMeta{
-						ID: vm.Spec.Nova.Image.UUID,
 						Properties: api.NovaObject[map[string]any]{
 							Data: imageProps,
 						},

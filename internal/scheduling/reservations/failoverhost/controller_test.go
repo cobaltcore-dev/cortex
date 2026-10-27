@@ -5,7 +5,6 @@ package failoverhost
 
 import (
 	"context"
-	"slices"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -168,56 +167,35 @@ func buildHV(name string, memGi, cpu int64) *hv1.Hypervisor {
 	}
 }
 
-// buildVM builds an az1 virtual machine that Nova reports as placed on the given
-// host, so collect indexes it under that host rather than skipping it. It carries
-// a QEMU hypervisor type, the kind collect handles, so it isn't filtered out.
-func buildVM(name, host string) *vmv1alpha1.VirtualMachine {
-	return &vmv1alpha1.VirtualMachine{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
-		Spec: vmv1alpha1.VMSpec{
-			AZ: "az1",
-			Resources: map[vmv1alpha1.ResourceName]resource.Quantity{
-				vmv1alpha1.ResourceMemory: *resource.NewQuantity(2*1024*1024*1024, resource.BinarySI),
-				vmv1alpha1.ResourceCPU:    *resource.NewQuantity(1, resource.DecimalSI),
-			},
-			Nova: vmv1alpha1.NovaSpec{
-				Flavor: vmv1alpha1.Flavor{
-					ExtraSpecs: map[string]string{"capabilities:hypervisor_type": "QEMU"},
-				},
-			},
-		},
-		Status: vmv1alpha1.VMStatus{
-			Nova: &vmv1alpha1.NovaStatus{Host: host},
-		},
-	}
-}
+// fakeSeeder returns a fixed set of seeds, so loop tests drive the pipeline
+// without a Nova client.
+type fakeSeeder struct{ seeds []Seed }
+
+func (f fakeSeeder) Seeds(context.Context, topology) ([]Seed, error) { return f.seeds, nil }
 
 // TestLoopGeneratesReservations exercises the whole pipeline end-to-end against
-// a fake cluster and a stub external scheduler: collect -> FindPaths (via HTTP)
-// -> BuildPartitions -> PlanReservations -> publish. It asserts the loop turns a
-// pair of mutually-evacuable hosts into a desired failover host reservation.
+// a fake cluster and a stub external scheduler: collect -> Seeds -> FindPaths
+// (via HTTP) -> BuildPartitions -> PlanReservations -> publish. It asserts the
+// loop turns a pair of mutually-evacuable hosts into a desired failover host
+// reservation.
 func TestLoopGeneratesReservations(t *testing.T) {
-	// Two equally-sized hosts each running one vm. The external scheduler says
-	// each vm can evacuate onto the other host, so they form one partition.
+	// Two equally-sized hosts. A single flavor seed is accepted on both, so the
+	// path finder discovers the mutual edges hvA<->hvB and they form one partition.
 	hvA := buildHV("hvA", 64, 32)
 	hvB := buildHV("hvB", 64, 32)
-	vmA := buildVM("vmA", "hvA")
-	vmB := buildVM("vmB", "hvB")
 
-	// Stub scheduler: answer each evacuation query with the other host, so the
-	// path finder discovers the mutual edges hvA<->hvB.
 	finder, server := stubScheduler(t, map[string][]string{
-		"vmA": {"hvB"},
-		"vmB": {"hvA"},
+		"flavor": {"hvA", "hvB"},
 	}, nil)
 	defer server.Close()
 
 	// Wire the pipeline stages explicitly (loop is driven directly here, not via
-	// SetupWithManager), using the stub path finder.
+	// SetupWithManager), using the fake seeder and stub path finder.
 	c := &Controller{
-		Client:             newTestClient(t, hvA, hvB, vmA, vmB),
+		Client:             newTestClient(t, hvA, hvB),
 		Config:             ControllerConfig{Ratio: 0.5, Minimum: 1},
 		reconcileCh:        make(chan event.GenericEvent, 16),
+		seeder:             fakeSeeder{seeds: []Seed{seed("flavor")}},
 		pathFinder:         finder,
 		partitionBuilder:   cliquePartitionBuilder{},
 		reservationPlanner: ratioReservationPlanner{ratio: 0.5, minimum: 1},
@@ -236,40 +214,6 @@ func TestLoopGeneratesReservations(t *testing.T) {
 		if r.Spec.AvailabilityZone != "az1" {
 			t.Errorf("availability zone = %q, want az1", r.Spec.AvailabilityZone)
 		}
-	}
-}
-
-// TestCollectFiltersByHypervisorType checks that collect only indexes vms whose
-// flavor declares a KVM hypervisor type (QEMU or CH, case-insensitively). A vm
-// with no hypervisor type or a non-KVM one is dropped, so the failoverhost
-// controller never plans failover paths for workloads it doesn't handle.
-func TestCollectFiltersByHypervisorType(t *testing.T) {
-	hv := buildHV("hv", 64, 32)
-	// kvm and ch are handled; the lowercase "qemu" proves the match is
-	// case-insensitive. none (no extra spec) and vmware are dropped.
-	kvm := buildVM("kvm", "hv")
-	lower := buildVM("lower", "hv")
-	lower.Spec.Nova.Flavor.ExtraSpecs["capabilities:hypervisor_type"] = "qemu"
-	ch := buildVM("ch", "hv")
-	ch.Spec.Nova.Flavor.ExtraSpecs["capabilities:hypervisor_type"] = "CH"
-	vmware := buildVM("vmware", "hv")
-	vmware.Spec.Nova.Flavor.ExtraSpecs["capabilities:hypervisor_type"] = "vmware"
-	none := buildVM("none", "hv")
-	none.Spec.Nova.Flavor.ExtraSpecs = nil
-
-	c := &Controller{Client: newTestClient(t, hv, kvm, lower, ch, vmware, none)}
-	topo, ok := c.collect(context.Background())
-	if !ok {
-		t.Fatal("collect: expected success, got ok=false")
-	}
-
-	got := make([]string, 0)
-	for _, vm := range topo.vmsByHost["hv"] {
-		got = append(got, vm.Name)
-	}
-	slices.Sort(got)
-	if want := []string{"ch", "kvm", "lower"}; !slices.Equal(got, want) {
-		t.Errorf("indexed vms = %v, want %v", got, want)
 	}
 }
 
@@ -294,22 +238,20 @@ func TestLoopDeduplicatesSharedHost(t *testing.T) {
 	hvA := buildHV("hvA", 64, 32)
 	hvB := buildHV("hvB", 64, 32)
 	hvC := buildHV("hvC", 64, 32)
-	vmA := buildVM("vmA", "hvA")
-	vmB := buildVM("vmB", "hvB")
-	vmC := buildVM("vmC", "hvC")
 
 	// The path finder's edges are irrelevant here: the fake builder ignores them
 	// and hands loop the overlapping cliques directly. The stub still needs an
-	// answer per vm so FindPaths succeeds.
+	// answer so FindPaths succeeds; one seed accepted on all three suffices.
 	finder, server := stubScheduler(t, map[string][]string{
-		"vmA": {"hvB"}, "vmB": {"hvA", "hvC"}, "vmC": {"hvB"},
+		"flavor": {"hvA", "hvB", "hvC"},
 	}, nil)
 	defer server.Close()
 
 	c := &Controller{
-		Client:      newTestClient(t, hvA, hvB, hvC, vmA, vmB, vmC),
+		Client:      newTestClient(t, hvA, hvB, hvC),
 		Config:      ControllerConfig{Ratio: 0.5, Minimum: 1},
 		reconcileCh: make(chan event.GenericEvent, 16),
+		seeder:      fakeSeeder{seeds: []Seed{seed("flavor")}},
 		pathFinder:  finder,
 		partitionBuilder: fakePartitionBuilder{partitions: [][]hv1.Hypervisor{
 			{*hvA, *hvB}, {*hvB, *hvC},
@@ -348,20 +290,17 @@ func TestLoopSharedHostKeptInSmallestPartition(t *testing.T) {
 	hvB := buildHV("hvB", 64, 32)
 	hvC := buildHV("hvC", 64, 32)
 	hvD := buildHV("hvD", 64, 32)
-	vmA := buildVM("vmA", "hvA")
-	vmB := buildVM("vmB", "hvB")
-	vmC := buildVM("vmC", "hvC")
-	vmD := buildVM("vmD", "hvD")
 
 	finder, server := stubScheduler(t, map[string][]string{
-		"vmA": {"hvB"}, "vmB": {"hvA"}, "vmC": {"hvD"}, "vmD": {"hvC"},
+		"flavor": {"hvA", "hvB", "hvC", "hvD"},
 	}, nil)
 	defer server.Close()
 
 	c := &Controller{
-		Client:      newTestClient(t, hvA, hvB, hvC, hvD, vmA, vmB, vmC, vmD),
+		Client:      newTestClient(t, hvA, hvB, hvC, hvD),
 		Config:      ControllerConfig{Ratio: 0.5, Minimum: 1},
 		reconcileCh: make(chan event.GenericEvent, 16),
+		seeder:      fakeSeeder{seeds: []Seed{seed("flavor")}},
 		pathFinder:  finder,
 		partitionBuilder: fakePartitionBuilder{partitions: [][]hv1.Hypervisor{
 			{*hvA, *hvB, *hvC}, {*hvC, *hvD},

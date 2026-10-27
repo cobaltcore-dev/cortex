@@ -40,11 +40,23 @@ which then has to be kept in lock-step with the real one forever; the moment a f
 and not in the failover rules, the partitions quietly diverge from what the scheduler would actually accept,
 and a "failover target" may reject the very workload it was reserved for.
 
-So Cortex takes a **self-partitioning approach at the VM level** instead. Rather than restating the rules, it
-asks the real scheduler — per VM — where each VM could go, and lets the partitions *fall out* of those
+So Cortex takes a **self-partitioning approach** instead. Rather than restating the rules, it asks the real
+scheduler — per **flavor** — which hosts would accept that flavor, and lets the partitions *fall out* of those
 answers (the next section works through how). The compatibility rules are never duplicated: whatever the
 pipeline does, the partitions inherit, automatically and for free, including every future change to the
 filters and weighers.
+
+The probes are seeded from the **flavor catalogue**, not from the VMs that happen to be running. For every
+flavor Nova knows about — crossed with every availability zone in the fleet — Cortex asks the scheduler which
+hosts would accept it. These `(flavor, availability zone)` permutations are the **seeds** of the partitioning.
+Seeding from flavors rather than running VMs closes two blind spots the VM-based approach had:
+
+- **A group of hosts running no VMs is still discovered.** Flavor seeds exist whether or not anything is
+  currently scheduled, so a partition is found up front rather than only once a VM happens to land on one of its
+  hosts.
+- **One "exotic" VM can no longer veto a host.** Because seeds carry no host affiliation, a single VM whose
+  scheduling constraints no peer satisfies can never keep its host out of the partition it matches under every
+  other flavor.
 
 Everything on this page is a continuous background process: Cortex periodically re-derives the partitions and
 the set of reserved hosts from the current state of the fleet, and nudges the actual reservations toward that
@@ -102,10 +114,10 @@ The important thing to understand is that the graph is **narrowed in several ste
 candidates for a *different* reason. Keeping those reasons straight is the whole algorithm, because the single
 most common question — *"why does this host have no failover target?"* — has a different answer at each step:
 
-1. **Discover who can rescue whom** (Step 1 below). Ask the scheduler, per VM, which hosts would accept it,
-   intersect across all VMs on a host, then check the target is big enough for the whole host — yielding
-   one-way rescue links `source → target`. *A host drops out if its own VMs disagree (empty intersection), or
-   a target drops out if it is smaller than the source.*
+1. **Discover who can rescue whom** (Step 1 below). For every flavor seed, ask the scheduler which hosts would
+   accept it, then pair up the hosts that co-accept a seed and keep the pair only if the target is big enough
+   for the whole source host — yielding one-way rescue links `source → target`. *A target drops out if it is
+   smaller than the source.*
 2. **Group into partitions** (Step 2). Keep only links that work *both* ways, then cluster those mutual pairs
    into groups where everyone can rescue everyone. *A one-way link leaves no trace in the partitions.*
 3. **Make the partitions disjoint** (Step 3). A host can land in two overlapping groups; assign it to one.
@@ -143,72 +155,52 @@ With that settled, the four steps in detail:
 
 ### Step 1 — Discover who can rescue whom
 
-For every occupied host, Cortex finds the hosts that host's *entire* workload could be gang-evacuated onto.
-The result is a set of directed **rescue links**:
+Cortex finds, for every host, the hosts that host's *entire* workload could be gang-evacuated onto. The result
+is a set of directed **rescue links**:
 
-> A link `source → target` means *"every VM on `source` would be accepted on `target`, and `target` is big
-> enough to hold them all at once."*
+> A link `source → target` means *"`source`'s whole workload would be accepted on `target`, and `target` is big
+> enough to hold it at once."*
 
 Direction matters: `source → target` does **not** imply `target → source`. The target might simply be too
 small to take the source's workload even when the reverse would fit.
 
-Rather than reimplementing placement logic, Cortex **asks the real scheduler**, for each VM, where that VM
-could go. This guarantees the rescue links obey exactly the same rules as ordinary placement. A host is a valid
-target for a source only if it is accepted for **every** VM on that source — so Cortex intersects the
-per-VM answers:
+Rather than reimplementing placement logic, Cortex **asks the real scheduler** — once per **flavor seed** —
+which hosts would accept that flavor in that availability zone. This guarantees the rescue links obey exactly
+the same rules as ordinary placement. The hosts that *co-accept* a seed are mutually compatible under that
+flavor, so Cortex pairs them up: for every ordered pair `(a, b)` of hosts that both accept a seed it emits the
+link `a → b`, subject to the whole-host fit check below.
 
 ```mermaid
 flowchart TB
-    subgraph src["Source host S (vm1, vm2, vm3)"]
-        VM1["vm1 → scheduler says: {A, B, C}"]
-        VM2["vm2 → scheduler says: {B, C, D}"]
-        VM3["vm3 → scheduler says: {A, C}"]
-    end
-    VM1 --> INT
-    VM2 --> INT
-    VM3 --> INT["only host accepted by ALL three = C"]
-    INT --> FIT{"is C big enough<br/>for all of S at once?"}
-    FIT -->|yes| EDGE["rescue link S → C"]
-    FIT -->|no| DROP["discard"]
+    SEED["seed: flavor F in az1"] --> SCHED["scheduler accepts: {A, B, C}"]
+    SCHED --> PAIR["pair up co-accepting hosts:<br/>A↔B, A↔C, B↔C"]
+    PAIR --> FIT{"for each pair (a, b):<br/>is b big enough for all of a?"}
+    FIT -->|yes| EDGE["rescue link a → b"]
+    FIT -->|no| DROP["discard that direction"]
 ```
 
-**Edge case — the host's own VMs disagree.** If the VMs on a host pull in different directions (say a HANA VM
-and a GPU VM that no single host accepts together), the intersection is empty and the host gets **no rescue
-links at all** — it goes unprotected this pass, even though it is running work:
+Because the seeds come from the flavor catalogue rather than the running VMs, two failure modes of the old
+VM-based discovery simply disappear:
 
-```mermaid
-flowchart TB
-    subgraph src2["Source host S — VMs want incompatible things"]
-        V1["vm1 (HANA flavor) → {A, B}"]
-        V2["vm2 (GPU flavor)  → {C, D}"]
-    end
-    V1 --> X["no host accepted by both = none"]
-    V2 --> X
-    X --> R["S has no failover target this pass"]
-    style R fill:#ffebee,stroke:#c62828
-```
-
-This is a deliberate limitation: Cortex does not (yet) split one host's workload across several targets, so a
-host whose own VMs cannot share a single landing zone simply waits until its workload mix changes. The
-failover controller will not solve this on its own — it only reserves whole-host landing zones. Spreading a
-single host's VMs across *several* targets is instead a job for Cortex's broader scheduling components, which
-will in future be able to steer placement so that a host's workload stays jointly evacuable (or to plan a
-multi-target evacuation directly), removing the "one host, one landing zone" constraint assumed here.
+- **A group of hosts running no VMs is still discovered.** A flavor seed exists regardless of what is currently
+  scheduled, so such a group produces rescue links and forms its partition up front — no VM has to land on it
+  first.
+- **One "exotic" VM can no longer veto a host.** Discovery no longer intersects the answers for a *host's own*
+  VMs, so a single VM whose constraints no peer satisfies can never empty that intersection and keep its host
+  out of the partition it matches under every other flavor.
 
 Three things keep this probing faithful and safe:
 
-- **Each probe mirrors a real migration** — it carries the VM's owner, availability zone, flavor and image, and
-  tells the scheduler to treat it as a **live migration** (not an evacuation), so exactly the same filters apply
-  as in a genuine move. The choice of *live migration* over *evacuation* is deliberate and matters for
-  correctness. A failover target is reserved **empty**, which means that before its reservation can go active,
-  Cortex must first **drain** whatever currently runs on it — and draining a live host is done by *live*
-  migration, not evacuation. A host that a VM could only be *evacuated* onto (cold migration, VM powered off)
-  but not *live-migrated* onto therefore cannot actually be emptied, so admitting it as a target would block
-  the drain and break partitioning. Live migration is also the stricter test — on top of capacity it checks CPU
-  architecture, CPU modes, hypervisor features and emulated devices between source and target — so Cortex
-  assumes that any host which accepts a live migration also accepts the weaker cold migration (evacuation) a
-  real failover performs. Probing with the stricter requirement keeps every discovered partition genuinely
-  drainable.
+- **Each probe mirrors a real evacuation** — it carries the flavor, its availability zone and a KVM image
+  hypervisor type, so exactly the same filters apply as in a genuine move, and tells the scheduler to treat it
+  as an **evacuation** (a cold migration). The choice of *evacuation* over *live migration* is deliberate. A
+  failover ultimately *evacuates* a dead host's workload — a cold migration, which is the **weaker** check: it
+  does not verify the CPU architecture, CPU modes, hypervisor features and emulated devices that live migration
+  does. A failover target is still reserved **empty**, so before its reservation goes active Cortex must drain
+  whatever runs on it; that drain uses live migration. But rather than prove per host that every peer is
+  live-migratable at partition time, Cortex assumes a partition holds enough peers to absorb that drain and
+  leaves arranging it to the draining code. Probing with the evacuation (cold-migration) requirement is what
+  lets a partition form even across hosts that are not pairwise live-migratable.
 - **Candidates are judged as if empty.** The probe tells the scheduler to measure each candidate against its
   *total* capacity, ignoring whatever VMs currently run there. This is deliberate: a failover target is reserved
   **empty**, so the right question is "could this host hold the workload once cleared?", not "does it have room
@@ -216,28 +208,30 @@ Three things keep this probing faithful and safe:
   inbound rescue link, form no mutual edge, and stay orphaned — even though reserving it would drain it. Whether
   two hosts are *compatible* is thus independent of how full they happen to be; which host is cheapest to
   actually empty is decided later, in Step 4.
-- **The probing never changes anything.** It is strictly read-only, so asking "where could this VM go?"
-  thousands of times never disturbs live scheduling. It also tells the scheduler to *ignore* existing failover
-  host reservations — otherwise a host already reserved for failover would look occupied and vanish from its own
+- **The probing never changes anything.** It is strictly read-only, so asking "where could this flavor go?" for
+  every seed never disturbs live scheduling. It also tells the scheduler to *ignore* existing failover host
+  reservations — otherwise a host already reserved for failover would look occupied and vanish from its own
   partition, fragmenting the grouping.
 
-Finally, a hard **whole-host fit** check discards any target that is smaller than its source (memory first,
-then CPU). An evacuation moves *all* of the source's VMs onto the target at once, so the target must be at least
-as large as the source. This check compares *total* capacities, independent of the empty-host probing above, so
-an undersized target is dropped whether or not it currently runs anything.
+A hard **whole-host fit** check discards any target that is smaller than its source (memory first, then CPU).
+An evacuation moves *all* of the source's workload onto the target at once, so the target must be at least as
+large as the source. This check compares *total* capacities, independent of the empty-host probing above, so an
+undersized target is dropped whether or not it currently runs anything. Equal-sized co-accepting hosts
+therefore produce links in *both* directions, which Step 2 turns into a partition; an undersized host only ever
+appears as a source, never as a landing-zone target for a larger peer.
 
-Two outcomes of a per-VM lookup must not be confused, because they are handled oppositely — and the
-distinction is exactly what upholds the "consistent picture or nothing" rule:
+Two outcomes of a seed lookup must not be confused, because they are handled oppositely — and the distinction
+is exactly what upholds the "consistent picture or nothing" rule:
 
-- **The scheduler answers that a VM has nowhere to go** (an empty candidate set, no error). This is a valid
-  answer, not a failure. That VM simply contributes nothing to the intersection; if it empties the
-  intersection, its host goes unprotected this pass, but the pass continues normally.
-- **The lookup itself fails** (the scheduler is unreachable, times out, or returns a non-200). This is an
-  infrastructure failure, not an answer — on a partial view Cortex cannot assert anything about the failover
-  graph, so it **aborts the entire pass** and leaves the last published picture untouched, retrying next
-  cycle. Swallowing the error and skipping just that VM would collapse the affected host's rescue links and
-  prune reservations that are in fact still valid, so a single transient blip must never be allowed to erase
-  coverage.
+- **The scheduler accepts the seed on fewer than two hosts** (one host, or none — a short candidate set, no
+  error). This is a valid answer, not a failure. A seed accepted on fewer than two hosts can form no pair, so it
+  simply contributes no link, and the pass continues normally.
+- **The lookup itself fails** (the scheduler is unreachable, times out, or returns a non-200) — or the seed set
+  itself cannot be gathered, because Nova is unreachable. This is an infrastructure failure, not an answer — on
+  a partial view Cortex cannot assert anything about the failover graph, so it **aborts the entire pass** and
+  leaves the last published picture untouched, retrying next cycle. Swallowing the error and skipping just that
+  seed would collapse rescue links and prune reservations that are in fact still valid, so a single transient
+  blip must never be allowed to erase coverage.
 
 ### Step 2 — Group hosts into partitions
 
@@ -282,35 +276,35 @@ and `c` cannot rescue each other. Then `{a, b, c}` is *not* a valid partition �
 rescue all" rule. Instead there are two valid groups, `{a, b}` and `{b, c}`, and `b` sits in both. That overlap
 is expected here; Step 3 resolves it.
 
-**Empty hosts get folded in.** A host with no VMs (or one already reserved) has nothing to evacuate and so has
-no rescue links of its own — it would otherwise be a group of one. Such a host is **recruited** into a partition
-as long as **every** member of that partition can rescue onto it *and* the empty host is the same effective size
-as those members. The reachability check is one-directional on purpose: an empty host runs nothing, so it is
-assumed able to evacuate anywhere; only the inbound direction (`member → empty host`) is verified. But the empty
-host also becomes a *source* of the partition's eventual failover target, so it must itself be rescuable by its
-new peers. With no VMs it has no rescue links to prove this, so Cortex falls back to the same whole-host fit rule
-used in Step 1 and requires equal capacity (memory then CPU, rounded to GiB): an empty host larger than the
-partition could never be evacuated onto a smaller reserved target, so it is **not** recruited. If even one member
-can't reach it, or the sizes differ, the empty host stays on its own:
+**Hosts that accept no seed get folded in.** Because discovery now probes flavor seeds rather than running VMs,
+a host with no VMs on it is probed exactly like any other and, as long as it *accepts some seed*, forms rescue
+links and joins a clique directly — no special handling needed. The one case left over is a host that accepts
+**no seed at all** (for example an unschedulable host that every filter rejects): it has no rescue links of its
+own and would otherwise be a group of one. Such a host is **recruited** into a partition as long as **every**
+member of that partition can rescue onto it *and* it is the same effective size as those members. The
+reachability check is one-directional on purpose: the host would be reserved empty, so it is assumed able to
+evacuate anywhere; only the inbound direction (`member → host`) is verified. But the host also becomes a
+*source* of the partition's eventual failover target, so it must itself be rescuable by its new peers. Having no
+rescue links to prove this, Cortex falls back to the same whole-host fit rule used in Step 1 and requires equal
+capacity (memory then CPU, rounded to GiB): a host larger than the partition could never be evacuated onto a
+smaller reserved target, so it is **not** recruited. If even one member can't reach it, or the sizes differ, the
+host stays on its own:
 
-This recruitment mechanism has a consequence worth calling out: **a partition is only ever discovered if at
-least one of its hosts runs a valid, placeable VM.** Rescue links are derived *from* running VMs (Step 1), so
-a group of hosts with no VMs at all produces no links, forms no clique, and recruits no empty hosts — it is
-invisible to the planner. Concretely, a HANA partition in which no HANA VM is currently running yields no
-rescue links, so no clique forms and no failover host is reserved for it. This is not a problem: a partition
-with no workload has nothing to evacuate, so there is no failover host to find and none is needed. The moment
-a VM lands on one of those hosts, the links reappear and the partition (with its empty peers recruited) comes
-back into existence.
+Flavor seeding also removes a blind spot the old VM-based discovery had: **a partition no longer needs a running
+VM to be discovered.** Rescue links used to be derived *from* running VMs, so a group of hosts with no VMs at
+all produced no links, formed no clique, and stayed invisible — a HANA partition with no HANA VM running simply
+did not exist until one landed. With flavor seeds the HANA flavor is probed whether or not anything runs, so the
+partition is found up front and a failover host can be reserved before the first VM ever arrives.
 
 ```mermaid
 flowchart TB
-    subgraph ok["empty host E is recruited"]
+    subgraph ok["host E (accepts no seed) is recruited"]
         direction LR
         a3((a)) -->|reaches| e1((E))
         b3((b)) -->|reaches| e1
         okr["every member of {a, b} reaches E<br/>⇒ partition becomes {a, b, E}"]
     end
-    subgraph no["empty host F stays alone"]
+    subgraph no["host F stays alone"]
         direction LR
         a4((a)) -->|reaches| f1((F))
         b4((b)) -. "b does NOT reach F" .-> f1
@@ -471,7 +465,16 @@ failover:
     minimum: 1                 # floor per partition, > 0
     generationInterval: 5m     # how often to recompute, ≥ 1m
     externalSchedulerURL: "http://localhost:8080/scheduler/nova/external"
+    nova:                      # credentials for listing the flavors to seed with
+      keystoneSecretRef:
+        name: cortex-openstack
+        namespace: cortex
+      # ssoSecretRef: { name: ..., namespace: ... }   # optional SSO client cert
 ```
+
+The `nova` block points at the OpenStack credentials the controller uses to list the Nova flavor catalogue —
+the seeds the partitioning is built from (see [Step 1](#step-1--discover-who-can-rescue-whom)). It reuses the
+same keystone (and optional SSO) secret shape as the other OpenStack-facing reservation controllers.
 
 > [!NOTE]
 > The settings live under `failover.hosts` as a deliberate example of grouping a controller's config under its
@@ -491,10 +494,10 @@ table maps the symptom back to the step that caused it:
 
 | Symptom | Why | Step |
 |---|---|---|
-| host produces no rescue links | its own VMs can't share any single target | 1 · Discover rescue links |
+| a host accepts no seed, gets no rescue links | every filter rejects it (e.g. it is unschedulable) | 1 · Discover rescue links |
 | a target was discarded | it's smaller than the source host | 1 · Discover rescue links |
 | a link doesn't lead to a partition | it only works one way, not both | 2 · Group into partitions |
-| an empty host is left on its own | not *every* member of a partition can reach it | 2 · Group into partitions |
+| a host that accepts no seed is left on its own | not *every* member of a partition can reach it | 2 · Group into partitions |
 | a host loses its partition | it was shared between two size-two partitions, and the one that lost it collapsed | 3 · Make partitions disjoint |
 | a partition reserves nothing | it has fewer than two hosts | 4 · Pick failover hosts |
 

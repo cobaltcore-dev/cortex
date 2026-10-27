@@ -47,15 +47,21 @@
 //
 // # The calculation pipeline
 //
-// Each pass of the loop runs a three-stage pipeline, each stage a small
-// interface so it can be understood, tested and swapped in isolation:
+// Each pass of the loop runs a four-stage pipeline, each stage a small interface
+// so it can be understood, tested and swapped in isolation:
 //
-//  1. PathFinder (paths.go) turns the cluster into the directed edges of a
-//     failover graph: source -> target means "every vm on source can be
-//     evacuated onto target, and target is big enough to hold them all at once".
-//  2. PartitionBuilder (partitions.go) clusters those edges into partitions
+//  1. Seeder (seeding.go) enumerates the hypothetical placements to probe with:
+//     every Nova flavor crossed with every availability zone in the fleet. These
+//     flavor "seeds" replace the running vms the pipeline used to derive paths
+//     from, so a partition is found even when its hosts run no vms and no single
+//     exotic vm can veto a host from its partition.
+//  2. PathFinder (paths.go) probes the scheduler per seed and turns the answers
+//     into the directed edges of a failover graph: source -> target means "a
+//     host's whole workload can be evacuated onto target, and target is big
+//     enough to hold it".
+//  3. PartitionBuilder (partitions.go) clusters those edges into partitions
 //     (maximal sets of mutually-evacuable hosts).
-//  3. ReservationPlanner (reservations.go) decides, per partition, which hosts
+//  4. ReservationPlanner (reservations.go) decides, per partition, which hosts
 //     become failover targets, honouring the configured ratio and minimum.
 //
 // loop.go wires these together and documents the end-to-end flow.
@@ -67,7 +73,6 @@ import (
 	"maps"
 	"net/http"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -78,7 +83,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
-	vmv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -119,6 +123,11 @@ type ControllerConfig struct {
 	// ExternalSchedulerURL is the URL of the external scheduler service that
 	// will be used to request failover host placements.
 	ExternalSchedulerURL string `json:"externalSchedulerURL"`
+
+	// Nova configures the client used to list the flavors the seeder permutes
+	// into scheduler probes. Its credentials are resolved from the cluster at
+	// startup.
+	Nova NovaFlavorClientConfig `json:"nova"`
 }
 
 // Controller keeps the cluster's failover host reservations in sync with the
@@ -159,10 +168,11 @@ type Controller struct {
 	// reservation; the reconciler reads desiredReservations itself.
 	reconcileCh chan event.GenericEvent
 
-	// The three stages of the calculation pipeline run by loop. They are
-	// defaulted to the production implementations in SetupWithManager but can be
-	// set beforehand to substitute fakes in tests. See loop for how they fit
-	// together, and paths.go / partitions.go / reservations.go for each stage.
+	// The pipeline stages run by loop. They are defaulted to the production
+	// implementations in SetupWithManager but can be set beforehand to substitute
+	// fakes in tests. See loop for how they fit together, and seeding.go /
+	// paths.go / partitions.go / reservations.go for each stage.
+	seeder             Seeder
 	pathFinder         PathFinder
 	partitionBuilder   PartitionBuilder
 	reservationPlanner ReservationPlanner
@@ -318,6 +328,9 @@ func (c *Controller) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	// Default the pipeline stages. Tests may set these before calling Setup to
 	// substitute fakes; here we wire the production implementations.
+	if c.seeder == nil {
+		c.seeder = &novaSeeder{flavorClient: NewNovaFlavorClient(c.Config.Nova), k8s: c.Client}
+	}
 	if c.pathFinder == nil {
 		c.pathFinder = &evacuationPathFinder{
 			// Timeout so a hung scheduler can't stall the calculation loop.
@@ -347,16 +360,13 @@ func (c *Controller) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(c)
 }
 
-// topology is the host/vm layout a single calculation pass reasons over: which
-// vms sit on which hypervisor, and which failover host reservations exist right
-// now. It is a consistent snapshot built once per loop by collect, so every
-// pipeline stage reasons over the same view of the cluster.
+// topology is the host layout a single calculation pass reasons over: every
+// known hypervisor and the failover host reservations that exist right now. It
+// is a consistent snapshot built once per loop by collect, so every pipeline
+// stage reasons over the same view of the cluster.
 type topology struct {
 	// hypervisors indexes every known hypervisor by its name.
 	hypervisors map[string]hv1.Hypervisor
-	// vmsByHost groups the placed virtual machines by the hypervisor they run
-	// on. Unplaced vms are excluded, so every key is a populated host.
-	vmsByHost map[string][]vmv1alpha1.VirtualMachine
 	// existing holds the failover host reservations currently in the cluster,
 	// keyed by their object reference. The planner prefers to keep these stable.
 	existing map[corev1.ObjectReference]v1alpha1.Reservation
@@ -365,16 +375,18 @@ type topology struct {
 // loop runs one calculation pass of the failover host pipeline:
 //
 //  1. collect   — snapshot the cluster into a consistent topology.
-//  2. FindPaths — for each occupied host, find the hosts its whole workload
-//     could be gang-evacuated onto (the directed edges of the failover graph).
-//  3. BuildPartitions — cluster those edges into failover partitions: maximal
+//  2. Seeds     — enumerate the flavor × availability-zone permutations to probe.
+//  3. FindPaths — probe the scheduler per seed and find, for each host, the hosts
+//     its whole workload could be gang-evacuated onto (the directed edges of the
+//     failover graph).
+//  4. BuildPartitions — cluster those edges into failover partitions: maximal
 //     sets of hosts that can all fail over onto one another. These cliques can
 //     overlap, so loop then assigns each shared host to exactly one partition
 //     (the smallest) to keep the planner input disjoint.
-//  4. PlanReservations — per partition, pick which hosts become failover
+//  5. PlanReservations — per partition, pick which hosts become failover
 //     targets, honouring the configured ratio/minimum and keeping existing
 //     reservations stable.
-//  5. publish   — store the result as the desired state and wake the reconciler.
+//  6. publish   — store the result as the desired state and wake the reconciler.
 //
 // Any error or inconsistency aborts the whole pass without touching the desired
 // state: a partial recalculation is worse than a slightly stale one, as it could
@@ -391,7 +403,18 @@ func (c *Controller) loop(ctx context.Context) {
 		return // collect already logged the reason.
 	}
 
-	paths, err := c.pathFinder.FindPaths(ctx, topo)
+	// Enumerate the seeds (flavor × availability-zone permutations) to probe
+	// with. A seeding failure (Nova unreachable, auth expired) is an
+	// infrastructure error on a partial view, so abort the pass and keep the last
+	// published picture rather than recomputing from a shrunken seed set.
+	seeds, err := c.seeder.Seeds(ctx, topo)
+	if err != nil {
+		log.Error(err, "failed to generate failover seeds")
+		c.Monitor.RecordCalculationAbort("seeding")
+		return
+	}
+
+	paths, err := c.pathFinder.FindPaths(ctx, topo, seeds)
 	if err != nil {
 		log.Error(err, "failed to find failover paths")
 		c.Monitor.RecordCalculationAbort("pathfinding")
@@ -486,9 +509,8 @@ func (c *Controller) loop(ctx context.Context) {
 }
 
 // collect snapshots the current cluster into a topology. It returns ok=false if
-// the snapshot is inconsistent (e.g. a vm sits on an unknown hypervisor, or a
-// hypervisor lacks an availability zone), in which case the loop must abort
-// rather than compute on a partial view.
+// the snapshot is inconsistent (e.g. a hypervisor lacks an availability zone),
+// in which case the loop must abort rather than compute on a partial view.
 func (c *Controller) collect(ctx context.Context) (topology, bool) {
 	log := logf.FromContext(ctx).WithName("failoverhost-controller-calculation-loop")
 
@@ -501,46 +523,15 @@ func (c *Controller) collect(ctx context.Context) (topology, bool) {
 	for i := range hvs.Items {
 		hvsByName[hvs.Items[i].Name] = hvs.Items[i]
 	}
+	log.V(1).Info("listed cluster state", "hypervisors", len(hvsByName))
 
-	vms := &vmv1alpha1.VirtualMachineList{}
-	if err := c.List(ctx, vms); err != nil {
-		log.Error(err, "failed to list virtual machines")
-		return topology{}, false
-	}
-	vmsByHost := make(map[string][]vmv1alpha1.VirtualMachine)
-	for i := range vms.Items {
-		vm := vms.Items[i]
-		// Skip vms that Nova hasn't placed on a host yet. They can't contribute
-		// a failover path and would otherwise nil-panic on Status.Nova below.
-		if vm.Status.Nova == nil || vm.Status.Nova.Host == "" {
-			log.V(1).Info("skipping unplaced vm", "vm", vm.Name)
-			continue
-		}
-		// Skip vms that don't have a valid hypervisor type specified in their flavor.
-		hvType, ok := vm.Spec.Nova.Flavor.ExtraSpecs["capabilities:hypervisor_type"]
-		if !ok {
-			log.V(1).Info("skipping vm with no hypervisor type", "vm", vm.Name)
-			continue
-		}
-		// Only KVM virtual machines are handled by the failoverhost controller.
-		if !strings.EqualFold(hvType, "QEMU") && !strings.EqualFold(hvType, "CH") {
-			log.V(1).Info("skipping vm with invalid hypervisor type", "vm", vm.Name, "hvType", hvType)
-			continue
-		}
-		vmsByHost[vm.Status.Nova.Host] = append(vmsByHost[vm.Status.Nova.Host], vm)
-	}
-	log.V(1).Info("listed cluster state", "hypervisors", len(hvsByName), "virtualMachines", len(vms.Items))
-
-	// Ensure that all vms are on known hypervisors with an availability zone,
-	// otherwise abort to avoid calculating on an inconsistent set of hosts.
-	for host := range vmsByHost {
-		hv, ok := hvsByName[host]
-		if !ok {
-			log.Error(nil, "vm is on unknown hypervisor, aborting", "host", host)
-			return topology{}, false
-		}
+	// Every hypervisor must carry an availability zone: the seeder permutes
+	// flavors across these AZs, and the planner stamps each reservation with its
+	// host's AZ. A hypervisor missing its AZ label is a torn snapshot, so abort
+	// rather than seed or plan from an inconsistent set of hosts.
+	for name, hv := range hvsByName {
 		if _, ok := hv.Labels[corev1.LabelTopologyZone]; !ok {
-			log.Error(nil, "hypervisor has no availability zone, aborting", "host", host)
+			log.Error(nil, "hypervisor has no availability zone, aborting", "host", name)
 			return topology{}, false
 		}
 	}
@@ -557,7 +548,7 @@ func (c *Controller) collect(ctx context.Context) (topology, bool) {
 		}
 	}
 
-	return topology{hypervisors: hvsByName, vmsByHost: vmsByHost, existing: existing}, true
+	return topology{hypervisors: hvsByName, existing: existing}, true
 }
 
 // publish wakes the reconciler for every reservation that is either desired now

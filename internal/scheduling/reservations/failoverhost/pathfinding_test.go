@@ -13,16 +13,15 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
-	vmv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
 )
 
-// stubScheduler returns a path finder wired to an httptest server whose per-vm
-// answers come from candidatesByVM (keyed by vm name / InstanceUUID); a vm in
-// errVMs gets an HTTP 500. The handler asserts the request carries valid options,
-// a non-empty host set, and a kvm img_hv_type, mirroring what the real scheduler
-// requires — so a regression that drops any of them is caught here. The caller
-// closes the server.
-func stubScheduler(t *testing.T, candidatesByVM map[string][]string, errVMs map[string]bool) (*evacuationPathFinder, *httptest.Server) {
+// stubScheduler returns a path finder wired to an httptest server whose
+// per-flavor answers come from candidatesByFlavor (keyed by the seed's flavor
+// name); a flavor in errFlavors gets an HTTP 500. The handler asserts the request
+// carries valid options, a non-empty host set, a kvm img_hv_type, and evacuation
+// intent with no source_host — mirroring what the new seeded probe sends, so a
+// regression that drops any of them is caught here. The caller closes the server.
+func stubScheduler(t *testing.T, candidatesByFlavor map[string][]string, errFlavors map[string]bool) (*evacuationPathFinder, *httptest.Server) {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req api.ExternalSchedulerRequest
@@ -35,22 +34,32 @@ func stubScheduler(t *testing.T, candidatesByVM map[string][]string, errVMs map[
 		if !req.Options.AssumeEmptyHosts {
 			// A failover target is reserved empty, so candidates must be judged by
 			// total capacity. Dropping this would orphan every busy host.
-			t.Errorf("request for vm %q must set AssumeEmptyHosts", req.Spec.Data.InstanceUUID)
+			t.Errorf("request for flavor %q must set AssumeEmptyHosts", req.Spec.Data.Flavor.Data.Name)
 		}
 		if len(req.Hosts) == 0 {
-			t.Errorf("request for vm %q has no candidate hosts", req.Spec.Data.InstanceUUID)
+			t.Errorf("request for flavor %q has no candidate hosts", req.Spec.Data.Flavor.Data.Name)
 		}
 		if got := req.Spec.Data.Image.Data.Properties.Data["img_hv_type"]; got != string(api.NovaImageMetaHVTypeKVM) {
 			// The hypervisor-type filter needs img_hv_type to judge flavor/image
 			// compatibility; dropping it would make that filter misbehave.
-			t.Errorf("request for vm %q must set img_hv_type=%q, got %q", req.Spec.Data.InstanceUUID, api.NovaImageMetaHVTypeKVM, got)
+			t.Errorf("request for flavor %q must set img_hv_type=%q, got %q", req.Spec.Data.Flavor.Data.Name, api.NovaImageMetaHVTypeKVM, got)
 		}
-		if errVMs[req.Spec.Data.InstanceUUID] {
+		// The probe uses evacuation intent (cold migration) and sets no source_host:
+		// a failover evacuates rather than live-migrates, so the live-migratability
+		// feature check is deliberately skipped. Catch a regression to the stricter
+		// live-migration probe here.
+		if intent, err := req.GetIntent(); err != nil || intent != api.EvacuateIntent {
+			t.Errorf("request for flavor %q must use evacuate intent, got %v (err=%v)", req.Spec.Data.Flavor.Data.Name, intent, err)
+		}
+		if src, _ := req.Spec.Data.GetSchedulerHintStr("source_host"); src != "" {
+			t.Errorf("request for flavor %q must not set source_host, got %q", req.Spec.Data.Flavor.Data.Name, src)
+		}
+		flavor := req.Spec.Data.Flavor.Data.Name
+		if errFlavors[flavor] {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		hosts := candidatesByVM[req.Spec.Data.InstanceUUID]
-		if err := json.NewEncoder(w).Encode(api.ExternalSchedulerResponse{Hosts: hosts}); err != nil {
+		if err := json.NewEncoder(w).Encode(api.ExternalSchedulerResponse{Hosts: candidatesByFlavor[flavor]}); err != nil {
 			t.Errorf("encode response: %v", err)
 		}
 	}))
@@ -69,106 +78,114 @@ func pathNames(paths [][2]hv1.Hypervisor) []string {
 	return out
 }
 
-// topoWith builds a topology of the named hosts (each sized memGi GiB) and the
-// vms placed on them, so FindPaths can be exercised without a k8s client.
-func topoWith(hostMemGi map[string]int64, vmsByHost map[string][]string) topology {
+// hostTopo builds a topology of the named hosts (each sized memGi GiB), so
+// FindPaths can be exercised without a k8s client. Hosts carry az1 so a seed in
+// az1 lines up with them.
+func hostTopo(hostMemGi map[string]int64) topology {
 	hypervisors := map[string]hv1.Hypervisor{}
 	for name, memGi := range hostMemGi {
 		hypervisors[name] = *buildHV(name, memGi, 1)
 	}
-	vms := map[string][]vmv1alpha1.VirtualMachine{}
-	for host, vmNames := range vmsByHost {
-		for _, name := range vmNames {
-			vms[host] = append(vms[host], *buildVM(name, host))
-		}
-	}
-	return topology{hypervisors: hypervisors, vmsByHost: vms}
+	return topology{hypervisors: hypervisors}
+}
+
+// seed is a tiny constructor for a flavor seed named name in az1.
+func seed(name string) Seed {
+	return Seed{Flavor: Flavor{Name: name}, AvailabilityZone: "az1"}
 }
 
 func TestFindPathsErrorsOnLookupFailure(t *testing.T) {
-	// A source host runs two vms. One vm's lookup fails with a scheduler error.
-	// That's an infrastructure failure, not an answer, so FindPaths must return
-	// an error to abort the pass rather than silently dropping paths — otherwise
-	// the caller would publish an empty desired state and prune valid
+	// A seed's lookup fails with a scheduler error. That's an infrastructure
+	// failure, not an answer that the seed has no candidates, so FindPaths must
+	// return an error to abort the pass rather than silently dropping paths —
+	// otherwise the caller would publish an empty desired state and prune valid
 	// reservations.
 	finder, server := stubScheduler(t,
-		map[string][]string{"vmGood": {"b"}},
-		map[string]bool{"vmBad": true},
+		map[string][]string{"good": {"a", "b"}},
+		map[string]bool{"bad": true},
 	)
 	defer server.Close()
 
-	// vmBad is listed first so the error hits the seeding vm, exactly the case
-	// the old index-based seeding mishandled.
-	topo := topoWith(
-		map[string]int64{"src": 32, "b": 32},
-		map[string][]string{"src": {"vmBad", "vmGood"}},
-	)
-	if _, err := finder.FindPaths(context.Background(), topo); err == nil {
+	// "bad" is probed and errors; the pass must abort regardless of "good".
+	topo := hostTopo(map[string]int64{"a": 32, "b": 32})
+	if _, err := finder.FindPaths(context.Background(), topo, []Seed{seed("bad"), seed("good")}); err == nil {
 		t.Fatal("FindPaths: expected error on scheduler lookup failure, got nil")
 	}
 }
 
-func TestFindPathsIntersectsCandidatesAcrossVMs(t *testing.T) {
-	// Host "src" runs two vms. vm1 can go to {a,b}, vm2 can go to {b,c}. Only
-	// "b" is a valid target for the whole host, so only src->b is a path.
+func TestFindPathsPairsCoAcceptingHosts(t *testing.T) {
+	// A single seed accepted on a, b and c makes all three mutually compatible.
+	// Equal-sized hosts yield edges both ways between every pair.
 	finder, server := stubScheduler(t, map[string][]string{
-		"vm1": {"a", "b"},
-		"vm2": {"b", "c"},
+		"flavor": {"a", "b", "c"},
 	}, nil)
 	defer server.Close()
 
-	topo := topoWith(
-		map[string]int64{"src": 32, "a": 32, "b": 32, "c": 32},
-		map[string][]string{"src": {"vm1", "vm2"}},
-	)
-	got, err := finder.FindPaths(context.Background(), topo)
+	topo := hostTopo(map[string]int64{"a": 32, "b": 32, "c": 32})
+	got, err := finder.FindPaths(context.Background(), topo, []Seed{seed("flavor")})
 	if err != nil {
 		t.Fatalf("FindPaths: %v", err)
 	}
-	if want := []string{"src->b"}; !slices.Equal(pathNames(got), want) {
+	want := []string{"a->b", "a->c", "b->a", "b->c", "c->a", "c->b"}
+	if !slices.Equal(pathNames(got), want) {
 		t.Errorf("paths = %v, want %v", pathNames(got), want)
 	}
 }
 
 func TestFindPathsDropsTargetSmallerThanSource(t *testing.T) {
-	// "big" (64Gi) runs one vm that can evacuate to "small" (16Gi) and "equal"
-	// (64Gi). The gang-fit filter drops "small", keeping only big->equal.
+	// A seed is accepted on "big" (64Gi), "small" (16Gi) and "equal" (64Gi). The
+	// gang-fit constraint keeps an edge only toward a target at least as large as
+	// the source, so no edge points at "small", and big<->equal are mutual.
 	finder, server := stubScheduler(t, map[string][]string{
-		"vm1": {"small", "equal"},
+		"flavor": {"big", "small", "equal"},
 	}, nil)
 	defer server.Close()
 
-	topo := topoWith(
-		map[string]int64{"big": 64, "small": 16, "equal": 64},
-		map[string][]string{"big": {"vm1"}},
-	)
-	got, err := finder.FindPaths(context.Background(), topo)
+	topo := hostTopo(map[string]int64{"big": 64, "small": 16, "equal": 64})
+	got, err := finder.FindPaths(context.Background(), topo, []Seed{seed("flavor")})
 	if err != nil {
 		t.Fatalf("FindPaths: %v", err)
 	}
-	if want := []string{"big->equal"}; !slices.Equal(pathNames(got), want) {
+	// small can reach the larger big/equal (and vice versa is dropped); big and
+	// equal are mutual. Nothing points at small.
+	want := []string{"big->equal", "equal->big", "small->big", "small->equal"}
+	if !slices.Equal(pathNames(got), want) {
 		t.Errorf("paths = %v, want %v", pathNames(got), want)
 	}
 }
 
-func TestFindPathsAreMutualForEquallySizedPeers(t *testing.T) {
-	// Two equal hosts whose single vm can evacuate onto the other yield both
-	// directions, which the partition builder later turns into one partition.
+func TestFindPathsDeduplicatesAcrossSeeds(t *testing.T) {
+	// Two seeds both accepted on the same pair of equal hosts. Each directed edge
+	// must appear once, not once per seed.
 	finder, server := stubScheduler(t, map[string][]string{
-		"vmA": {"hvB"},
-		"vmB": {"hvA"},
+		"flavorA": {"hvA", "hvB"},
+		"flavorB": {"hvA", "hvB"},
 	}, nil)
 	defer server.Close()
 
-	topo := topoWith(
-		map[string]int64{"hvA": 64, "hvB": 64},
-		map[string][]string{"hvA": {"vmA"}, "hvB": {"vmB"}},
-	)
-	got, err := finder.FindPaths(context.Background(), topo)
+	topo := hostTopo(map[string]int64{"hvA": 64, "hvB": 64})
+	got, err := finder.FindPaths(context.Background(), topo, []Seed{seed("flavorA"), seed("flavorB")})
 	if err != nil {
 		t.Fatalf("FindPaths: %v", err)
 	}
 	if want := []string{"hvA->hvB", "hvB->hvA"}; !slices.Equal(pathNames(got), want) {
 		t.Errorf("paths = %v, want %v", pathNames(got), want)
+	}
+}
+
+func TestFindPathsSingleCandidateYieldsNoEdge(t *testing.T) {
+	// A seed accepted on only one host can form no pair, so contributes no edge.
+	finder, server := stubScheduler(t, map[string][]string{
+		"flavor": {"only"},
+	}, nil)
+	defer server.Close()
+
+	topo := hostTopo(map[string]int64{"only": 64, "other": 64})
+	got, err := finder.FindPaths(context.Background(), topo, []Seed{seed("flavor")})
+	if err != nil {
+		t.Fatalf("FindPaths: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("paths = %v, want none", pathNames(got))
 	}
 }
