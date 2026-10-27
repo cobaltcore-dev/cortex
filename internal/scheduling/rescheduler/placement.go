@@ -11,8 +11,10 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 )
 
-// PlacementRequest asks initial placement for candidate hosts. Its fields mirror
-// what initial placement needs today (see reservations.ScheduleReservationRequest).
+// PlacementRequest asks the placement pipeline to discover or reserve candidate
+// hosts. Options distinguishes the read-only discovery pass from the fresh,
+// constrained reservation pass. Its fields mirror what placement needs today
+// (see reservations.ScheduleReservationRequest).
 // The concrete type is expected to change once placement moves in-process, so it
 // is kept local to the rescheduler and is not api.ExternalSchedulerRequest.
 type PlacementRequest struct {
@@ -24,23 +26,25 @@ type PlacementRequest struct {
 	VCPUs            uint64
 	EligibleHosts    []api.ExternalSchedulerHost
 	IgnoreHosts      []string
+	AllowedHosts     []string `json:"allowed_hosts,omitempty"`
 	Pipeline         string
 	AvailabilityZone string
 	SchedulerHints   map[string]any
 	ImageProperties  map[string]any
+	Options          scheduling.Options
 }
 
-// PlacementResult is the outcome of an initial-placement request: an ordered
-// list of candidate hosts (best first), or an error.
+// PlacementResult is the outcome of a placement request: an ordered list of
+// candidate hosts (best first), or an error.
 type PlacementResult struct {
-	Hosts []string
-	Err   error
+	Candidates []string
+	Err        error
 }
 
-// PlacementBackend computes initial placement. It is the seam behind the
-// scheduler's placement channel: today an HTTP call to the external scheduler
-// API, later an in-process call to the scheduling pipeline. Swapping the backend
-// does not change the channel wiring or the scheduler.
+// PlacementBackend computes candidate discovery and reservation-time placement.
+// It is the seam behind the scheduler's placement channel: today an HTTP call
+// to the external scheduler API, later an in-process call to the scheduling
+// pipeline. Swapping the backend does not change the channel wiring or scheduler.
 type PlacementBackend interface {
 	Schedule(ctx context.Context, req PlacementRequest) PlacementResult
 }
@@ -57,7 +61,7 @@ func (b StubPlacementBackend) Schedule(_ context.Context, _ PlacementRequest) Pl
 	if host == "" {
 		host = "stub-host"
 	}
-	return PlacementResult{Hosts: []string{host}}
+	return PlacementResult{Candidates: []string{host}}
 }
 
 // HTTPPlacementBackend computes placement by calling the external scheduler API
@@ -88,9 +92,9 @@ func (b *HTTPPlacementBackend) Schedule(ctx context.Context, req PlacementReques
 		AvailabilityZone: req.AvailabilityZone,
 		SchedulerHints:   req.SchedulerHints,
 		ImageProperties:  req.ImageProperties,
-	}, scheduling.Options{})
+	}, req.Options)
 	if err != nil {
 		return PlacementResult{Err: err}
 	}
-	return PlacementResult{Hosts: resp.Hosts}
+	return PlacementResult{Candidates: resp.Hosts}
 }
