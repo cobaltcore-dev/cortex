@@ -52,6 +52,7 @@ spec:
     gvks:
       - cortex.cloud/v1alpha1/ReservationList
       - cortex.cloud/v1alpha1/CommittedResourceList
+      - cortex.cloud/v1alpha1/CommittedResourceTransactionList
       - kvm.cloud.sap/v1/HypervisorList
       - cobaltcore.cloud/v1alpha1/VirtualMachineList
   description: |
