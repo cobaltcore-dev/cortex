@@ -51,8 +51,8 @@ func stubScheduler(t *testing.T, candidatesByFlavor map[string][]string, errFlav
 		if intent, err := req.GetIntent(); err != nil || intent != api.EvacuateIntent {
 			t.Errorf("request for flavor %q must use evacuate intent, got %v (err=%v)", req.Spec.Data.Flavor.Data.Name, intent, err)
 		}
-		if src, _ := req.Spec.Data.GetSchedulerHintStr("source_host"); src != "" {
-			t.Errorf("request for flavor %q must not set source_host, got %q", req.Spec.Data.Flavor.Data.Name, src)
+		if _, ok := req.Spec.Data.SchedulerHints["source_host"]; ok {
+			t.Errorf("request for flavor %q must not set source_host", req.Spec.Data.Flavor.Data.Name)
 		}
 		flavor := req.Spec.Data.Flavor.Data.Name
 		if errFlavors[flavor] {

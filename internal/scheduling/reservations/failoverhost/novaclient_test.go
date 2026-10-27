@@ -32,10 +32,12 @@ func flavorClientAgainst(url string) *novaFlavorClient {
 func TestListFlavorsMapsFields(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"flavors":[
+		if _, err := w.Write([]byte(`{"flavors":[
 			{"name":"m1.large","ram":8192,"vcpus":4,"extra_specs":{"capabilities:hypervisor_type":"QEMU"}},
 			{"name":"m1.small","ram":2048,"vcpus":1,"extra_specs":{}}
-		]}`))
+		]}`)); err != nil {
+			t.Errorf("write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -67,12 +69,16 @@ func TestListFlavorsFollowsPagination(t *testing.T) {
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if strings.Contains(r.URL.RawQuery, "marker=page2") {
-			_, _ = w.Write([]byte(`{"flavors":[{"name":"second","ram":1024,"vcpus":1}]}`))
+			if _, err := w.Write([]byte(`{"flavors":[{"name":"second","ram":1024,"vcpus":1}]}`)); err != nil {
+				t.Errorf("write response: %v", err)
+			}
 			return
 		}
 		// First page points at the second via a next link.
-		_, _ = w.Write([]byte(`{"flavors":[{"name":"first","ram":1024,"vcpus":1}],
-			"flavors_links":[{"rel":"next","href":"` + server.URL + `/flavors/detail?marker=page2"}]}`))
+		if _, err := w.Write([]byte(`{"flavors":[{"name":"first","ram":1024,"vcpus":1}],
+			"flavors_links":[{"rel":"next","href":"` + server.URL + `/flavors/detail?marker=page2"}]}`)); err != nil {
+			t.Errorf("write response: %v", err)
+		}
 	}))
 	defer server.Close()
 

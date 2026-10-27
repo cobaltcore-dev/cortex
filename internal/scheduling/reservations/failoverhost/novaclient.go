@@ -134,8 +134,9 @@ func (c *novaFlavorClient) ListFlavors(ctx context.Context) ([]Flavor, error) {
 		out = append(out, Flavor{
 			Name: f.Name,
 			// Nova reports RAM in MiB even though the field is labelled "MB".
-			MemoryMB:   uint64(f.RAM),
-			VCPUs:      uint64(f.VCPUs),
+			// RAM and VCPUs are non-negative, so the conversion is safe.
+			MemoryMB:   uint64(f.RAM),   //nolint:gosec
+			VCPUs:      uint64(f.VCPUs), //nolint:gosec
 			ExtraSpecs: f.ExtraSpecs,
 		})
 	}
