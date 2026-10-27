@@ -184,6 +184,7 @@ cortex-scheduling-controllers:
       - nova-pipeline-controllers
       - inflight-reservation-controller
       - nova-deschedulings-executor
+      - rescheduler-controller
       - hypervisor-overcommit-controller
       - committed-resource-reservations-controller
       - failover-reservations-controller
