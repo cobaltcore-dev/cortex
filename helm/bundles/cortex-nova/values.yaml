@@ -364,7 +364,10 @@ cortex-scheduling-controllers:
     # hosts into "failover partitions" (sets of hosts that can all be evacuated
     # onto one another, discovered from the scheduler) and keeps a share of each
     # partition empty and reserved, so when a host fails its entire workload can
-    # be moved onto a reserved host in one step. This is independent of the
+    # be moved onto a reserved host in one step. Partitions are discovered by
+    # probing the scheduler with flavor "seeds" (every Nova flavor crossed with
+    # every availability zone), not from the VMs currently running, so a
+    # partition is found even when its hosts are idle. This is independent of the
     # flavor-based failover controller configured above (schedulerURL,
     # reconcileInterval, flavorFailoverRequirements, ...).
     #
@@ -390,6 +393,18 @@ cortex-scheduling-controllers:
         # given host's workload could be evacuated onto. Typically the same
         # scheduler endpoint the flavor-based failover controller uses.
         externalSchedulerURL: "http://localhost:8080/scheduler/nova/external"
+        # Credentials for listing the Nova flavor catalogue. The partitions are
+        # seeded from flavors (every flavor crossed with every availability zone
+        # is probed against the scheduler), so the controller needs Nova access
+        # to enumerate them. Reuses the same keystone/SSO secret shape as the
+        # other OpenStack-facing controllers above.
+        nova:
+          keystoneSecretRef:
+            name: cortex-nova-openstack-keystone
+            namespace: default
+          # ssoSecretRef:
+          #   name: cortex-nova-openstack-sso
+          #   namespace: default
 
 cortex-knowledge-controllers:
   <<: *cortex
