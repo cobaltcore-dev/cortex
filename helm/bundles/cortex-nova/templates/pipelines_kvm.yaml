@@ -22,6 +22,11 @@ spec:
         This step will filter out hosts for which the hypervisor status conditions
         do not meet the expected values, for example, that the hypervisor is ready
         and not disabled.
+    - name: filter_drain_block
+      description: |
+        This step filters out hosts that the rescheduler is actively draining with
+        reserve set (recorded in a rescheduling request's status.blockedHosts), so
+        that incoming placement does not land on a host being emptied.
     - name: filter_correct_az
       description: |
         This step will filter out hosts whose aggregate information indicates they
@@ -192,6 +197,11 @@ spec:
         This step will filter out hosts for which the hypervisor status conditions
         do not meet the expected values, for example, that the hypervisor is ready
         and not disabled.
+    - name: filter_drain_block
+      description: |
+        This step filters out hosts that the rescheduler is actively draining with
+        reserve set (recorded in a rescheduling request's status.blockedHosts), so
+        that incoming placement does not land on a host being emptied.
     - name: filter_correct_az
       description: |
         This step will filter out hosts whose aggregate information indicates they
