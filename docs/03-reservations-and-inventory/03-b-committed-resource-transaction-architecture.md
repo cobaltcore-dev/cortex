@@ -65,19 +65,19 @@ sequenceDiagram
 stateDiagram-v2
     [*] --> Preparing : CRT created by API handler or syncer
 
-    Preparing --> Allocating : snapshot taken;\nadvance to Allocating
+    Preparing --> Allocating : snapshot taken
 
-    Allocating --> AwaitingScheduling : API mode — CR specs written,\nupserted refs recorded
-    Allocating --> Accepted : Syncer mode — apply-and-done,\nno scheduling gate
-    Allocating --> Superseded : non-rejectable, newer CRT\nfor same AZ took over
+    Allocating --> AwaitingScheduling : API mode — CR specs written
+    Allocating --> Accepted : Syncer mode — apply-and-done
+    Allocating --> Superseded : newer CRT for same AZ took over
 
-    AwaitingScheduling --> Accepted : all CRs report Ready\n(observedGeneration matches)
+    AwaitingScheduling --> Accepted : all CRs Ready (observedGeneration matches)
     AwaitingScheduling --> DryRunCleanup : all CRs Ready, but DryRun=true
-    AwaitingScheduling --> RollingBack : any CR rejected\nor timeout
+    AwaitingScheduling --> RollingBack : CR rejected or timeout
 
-    DryRunCleanup --> Accepted : pre-state restored\n(would-accept result)
+    DryRunCleanup --> Accepted : pre-state restored (would-accept)
 
-    RollingBack --> Rejected : pre-state restored\n(reason: RollbackFailed on permanent failure)
+    RollingBack --> Rejected : pre-state restored (RollbackFailed on permanent failure)
 
     Accepted --> [*]
     Rejected --> [*]
