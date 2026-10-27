@@ -5,6 +5,7 @@ package rescheduler
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -29,7 +30,12 @@ func newScheduler(t *testing.T, objs ...client.Object) *Scheduler {
 		WithObjects(objs...).
 		WithStatusSubresource(&v1alpha1.ReschedulingRequest{}).
 		Build()
-	return &Scheduler{Client: cl, Queue: NewFIFOQueue()}
+	return &Scheduler{
+		Client:     cl,
+		Queue:      NewFIFOQueue(),
+		Placement:  StubPlacementBackend{},
+		placements: make(chan placementCall),
+	}
 }
 
 func request(name string, state v1alpha1.ReschedulingRequestState) *v1alpha1.ReschedulingRequest {
@@ -232,9 +238,23 @@ func TestScheduler(t *testing.T) {
 	}
 }
 
+// fakeBackend is a placement backend returning a fixed result.
+type fakeBackend struct{ result PlacementResult }
+
+func (b fakeBackend) Schedule(context.Context, PlacementRequest) PlacementResult { return b.result }
+
+// startBroker runs the placement broker for a scheduler and returns a cancel
+// func to stop it.
+func startBroker(s *Scheduler) context.CancelFunc {
+	ctx, cancel := context.WithCancel(context.Background())
+	go s.runPlacement(ctx)
+	return cancel
+}
+
 func TestScheduleOne_SchedulesAcknowledged(t *testing.T) {
 	rr := request("req-ack", v1alpha1.ReschedulingRequestStateAcknowledged)
 	s := newScheduler(t, rr)
+	defer startBroker(s)()
 	s.Queue.Add(client.ObjectKeyFromObject(rr))
 
 	s.scheduleOne(context.Background())
@@ -244,10 +264,39 @@ func TestScheduleOne_SchedulesAcknowledged(t *testing.T) {
 	}
 }
 
+func TestScheduleOne_RejectsWhenNoHost(t *testing.T) {
+	rr := request("req-ack", v1alpha1.ReschedulingRequestStateAcknowledged)
+	s := newScheduler(t, rr)
+	s.Placement = fakeBackend{result: PlacementResult{Hosts: nil}}
+	defer startBroker(s)()
+	s.Queue.Add(client.ObjectKeyFromObject(rr))
+
+	s.scheduleOne(context.Background())
+
+	if got := stateOf(t, s, "req-ack"); got != v1alpha1.ReschedulingRequestStateRejected {
+		t.Errorf("expected Rejected when no host found, got %s", got)
+	}
+}
+
+func TestScheduleOne_FailsOnPlacementError(t *testing.T) {
+	rr := request("req-ack", v1alpha1.ReschedulingRequestStateAcknowledged)
+	s := newScheduler(t, rr)
+	s.Placement = fakeBackend{result: PlacementResult{Err: errors.New("boom")}}
+	defer startBroker(s)()
+	s.Queue.Add(client.ObjectKeyFromObject(rr))
+
+	s.scheduleOne(context.Background())
+
+	if got := stateOf(t, s, "req-ack"); got != v1alpha1.ReschedulingRequestStateFailed {
+		t.Errorf("expected Failed on placement error, got %s", got)
+	}
+}
+
 func TestScheduleOne_SkipsStaleEntry(t *testing.T) {
 	// A queued key whose request is no longer Acknowledged must not be advanced.
 	rr := request("req-pending", v1alpha1.ReschedulingRequestStatePending)
 	s := newScheduler(t, rr)
+	defer startBroker(s)()
 	s.Queue.Add(client.ObjectKeyFromObject(rr))
 
 	s.scheduleOne(context.Background())

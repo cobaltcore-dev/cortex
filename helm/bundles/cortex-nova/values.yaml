@@ -210,6 +210,9 @@ cortex-scheduling-controllers:
     # Minimum time between two consecutive capacity reconcile runs.
     # Prevents back-to-back reconciles on rapid watch events.
     capacityMinReconcileInterval: 30s
+    # URL of the external scheduler API used by the rescheduler for initial
+    # placement over HTTP.
+    reschedulerSchedulerURL: "http://localhost:8080/scheduler/nova/external"
     # If true, the external scheduler API will limit the list of hosts in its
     # response to those included in the scheduling request.
     novaLimitHostsToRequest: true
