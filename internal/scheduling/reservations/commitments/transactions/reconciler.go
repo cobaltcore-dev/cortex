@@ -90,8 +90,7 @@ func (r *CommittedResourceTransactionReconciler) reconcilePreparing(ctx context.
 			r.markError(ctx, tx, fmt.Sprintf("failed to snapshot commitment-%s: %v", uuid, err))
 			return ctrl.Result{}, err
 		}
-		spec := cr.Spec
-		snapshot[uuid] = &spec
+		snapshot[uuid] = cr.Spec.DeepCopy()
 	}
 
 	logger.Info("starting transaction", "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "newStateSize", len(tx.Spec.NewState), "allowRejection", tx.Spec.AllowRejection)
