@@ -200,10 +200,17 @@ func (f *evacuationPathFinder) fetchEvacuationCandidates(ctx context.Context, vm
 			resVCPUs = uint64(v)
 		}
 	}
+	// Build valid image properties. Note: may not include uuid or other metadata keys.
 	imageProps := map[string]any{}
 	for k, v := range vm.Spec.Nova.Image.Properties {
-		imageProps[k] = v
+		imageProps[k] = v // Note: may not include uuid or other metadata keys.
 	}
+	// We also include a proper image hypervisor type so the filter which checks
+	// that the flavor is compatible with the image can properly evaluate the
+	// hypervisor type. We set it explicitly here to ensure the filter has the
+	// necessary information. Note: since we only handle KVM virtual machines,
+	// we set it to KVM explicitly.
+	imageProps["img_hv_type"] = string(api.NovaImageMetaHVTypeKVM)
 	// Offer every known host as a candidate. The scheduler filters/weighs over
 	// exactly this host set — it does not gather the cluster itself — so leaving
 	// Hosts empty would make it return no candidates. Each host also needs a

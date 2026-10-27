@@ -67,6 +67,7 @@ import (
 	"maps"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -513,6 +514,17 @@ func (c *Controller) collect(ctx context.Context) (topology, bool) {
 		// a failover path and would otherwise nil-panic on Status.Nova below.
 		if vm.Status.Nova == nil || vm.Status.Nova.Host == "" {
 			log.V(1).Info("skipping unplaced vm", "vm", vm.Name)
+			continue
+		}
+		// Skip vms that don't have a valid hypervisor type specified in their flavor.
+		hvType, ok := vm.Spec.Nova.Flavor.ExtraSpecs["capabilities:hypervisor_type"]
+		if !ok {
+			log.V(1).Info("skipping vm with no hypervisor type", "vm", vm.Name)
+			continue
+		}
+		// Only KVM virtual machines are handled by the failoverhost controller.
+		if !strings.EqualFold(hvType, "QEMU") && !strings.EqualFold(hvType, "CH") {
+			log.V(1).Info("skipping vm with invalid hypervisor type", "vm", vm.Name, "hvType", hvType)
 			continue
 		}
 		vmsByHost[vm.Status.Nova.Host] = append(vmsByHost[vm.Status.Nova.Host], vm)

@@ -5,6 +5,7 @@ package failoverhost
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -168,7 +169,8 @@ func buildHV(name string, memGi, cpu int64) *hv1.Hypervisor {
 }
 
 // buildVM builds an az1 virtual machine that Nova reports as placed on the given
-// host, so collect indexes it under that host rather than skipping it.
+// host, so collect indexes it under that host rather than skipping it. It carries
+// a QEMU hypervisor type, the kind collect handles, so it isn't filtered out.
 func buildVM(name, host string) *vmv1alpha1.VirtualMachine {
 	return &vmv1alpha1.VirtualMachine{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
@@ -177,6 +179,11 @@ func buildVM(name, host string) *vmv1alpha1.VirtualMachine {
 			Resources: map[vmv1alpha1.ResourceName]resource.Quantity{
 				vmv1alpha1.ResourceMemory: *resource.NewQuantity(2*1024*1024*1024, resource.BinarySI),
 				vmv1alpha1.ResourceCPU:    *resource.NewQuantity(1, resource.DecimalSI),
+			},
+			Nova: vmv1alpha1.NovaSpec{
+				Flavor: vmv1alpha1.Flavor{
+					ExtraSpecs: map[string]string{"capabilities:hypervisor_type": "QEMU"},
+				},
 			},
 		},
 		Status: vmv1alpha1.VMStatus{
@@ -229,6 +236,40 @@ func TestLoopGeneratesReservations(t *testing.T) {
 		if r.Spec.AvailabilityZone != "az1" {
 			t.Errorf("availability zone = %q, want az1", r.Spec.AvailabilityZone)
 		}
+	}
+}
+
+// TestCollectFiltersByHypervisorType checks that collect only indexes vms whose
+// flavor declares a KVM hypervisor type (QEMU or CH, case-insensitively). A vm
+// with no hypervisor type or a non-KVM one is dropped, so the failoverhost
+// controller never plans failover paths for workloads it doesn't handle.
+func TestCollectFiltersByHypervisorType(t *testing.T) {
+	hv := buildHV("hv", 64, 32)
+	// kvm and ch are handled; the lowercase "qemu" proves the match is
+	// case-insensitive. none (no extra spec) and vmware are dropped.
+	kvm := buildVM("kvm", "hv")
+	lower := buildVM("lower", "hv")
+	lower.Spec.Nova.Flavor.ExtraSpecs["capabilities:hypervisor_type"] = "qemu"
+	ch := buildVM("ch", "hv")
+	ch.Spec.Nova.Flavor.ExtraSpecs["capabilities:hypervisor_type"] = "CH"
+	vmware := buildVM("vmware", "hv")
+	vmware.Spec.Nova.Flavor.ExtraSpecs["capabilities:hypervisor_type"] = "vmware"
+	none := buildVM("none", "hv")
+	none.Spec.Nova.Flavor.ExtraSpecs = nil
+
+	c := &Controller{Client: newTestClient(t, hv, kvm, lower, ch, vmware, none)}
+	topo, ok := c.collect(context.Background())
+	if !ok {
+		t.Fatal("collect: expected success, got ok=false")
+	}
+
+	got := make([]string, 0)
+	for _, vm := range topo.vmsByHost["hv"] {
+		got = append(got, vm.Name)
+	}
+	slices.Sort(got)
+	if want := []string{"ch", "kvm", "lower"}; !slices.Equal(got, want) {
+		t.Errorf("indexed vms = %v, want %v", got, want)
 	}
 }
 

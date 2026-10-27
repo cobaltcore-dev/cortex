@@ -18,9 +18,10 @@ import (
 
 // stubScheduler returns a path finder wired to an httptest server whose per-vm
 // answers come from candidatesByVM (keyed by vm name / InstanceUUID); a vm in
-// errVMs gets an HTTP 500. The handler asserts the request carries valid options
-// and a non-empty host set, mirroring what the real scheduler requires — so a
-// regression that drops either is caught here. The caller closes the server.
+// errVMs gets an HTTP 500. The handler asserts the request carries valid options,
+// a non-empty host set, and a kvm img_hv_type, mirroring what the real scheduler
+// requires — so a regression that drops any of them is caught here. The caller
+// closes the server.
 func stubScheduler(t *testing.T, candidatesByVM map[string][]string, errVMs map[string]bool) (*evacuationPathFinder, *httptest.Server) {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -38,6 +39,11 @@ func stubScheduler(t *testing.T, candidatesByVM map[string][]string, errVMs map[
 		}
 		if len(req.Hosts) == 0 {
 			t.Errorf("request for vm %q has no candidate hosts", req.Spec.Data.InstanceUUID)
+		}
+		if got := req.Spec.Data.Image.Data.Properties.Data["img_hv_type"]; got != string(api.NovaImageMetaHVTypeKVM) {
+			// The hypervisor-type filter needs img_hv_type to judge flavor/image
+			// compatibility; dropping it would make that filter misbehave.
+			t.Errorf("request for vm %q must set img_hv_type=%q, got %q", req.Spec.Data.InstanceUUID, api.NovaImageMetaHVTypeKVM, got)
 		}
 		if errVMs[req.Spec.Data.InstanceUUID] {
 			w.WriteHeader(http.StatusInternalServerError)
