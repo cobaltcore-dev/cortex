@@ -25,9 +25,19 @@ import (
 
 // PathFinder is the first pipeline stage. It discovers the directed edges of the
 // failover graph: for every occupied host it reports the hosts that host's
-// entire workload could be gang-evacuated onto. An edge source->target means
-// "all vms on source can be evacuated onto target, and target is large enough to
-// hold them all at once".
+// entire workload could be gang-drained onto. An edge source->target means
+// "all vms on source can be live-migrated onto target, and target is large
+// enough to hold them all at once".
+//
+// We probe with live-migration intent rather than evacuation intent even though
+// a failover ultimately evacuates (cold-migrates) the workload. The reason is
+// the drain that happens *before* a reservation goes active: a failover target
+// must be reserved empty, so cortex live-migrates its current workload away
+// first. A host that can only be evacuated-to but not live-migrated-from cannot
+// be drained, so admitting it as a target would block that drain and break
+// partitioning. Live migration is the stricter requirement (it adds CPU/feature
+// compatibility checks on top of capacity), so we assume that anything which can
+// be live-migrated can also be cold-migrated/evacuated.
 //
 // The direction matters. source->target does not imply target->source: target
 // might be too small for source's workload even if the reverse fits. The
@@ -44,8 +54,8 @@ type PathFinder interface {
 }
 
 // evacuationPathFinder finds failover paths by asking the external cortex
-// scheduler, per vm, where that vm could be evacuated to, then intersecting the
-// answers across all vms on a host and filtering by gang-level fit.
+// scheduler, per vm, where that vm could be live-migrated to, then intersecting
+// the answers across all vms on a host and filtering by gang-level fit.
 //
 // Asking the real scheduler (rather than reimplementing placement here) is
 // deliberate: it means failover paths are computed with exactly the same
@@ -65,15 +75,15 @@ type evacuationPathFinder struct {
 // FindPaths implements PathFinder.
 //
 // For a source host S, a target host T is a valid failover target only if every
-// vm on S can be evacuated onto T. We therefore query the scheduler per vm and
-// keep the running intersection of the candidate sets: a target survives only if
-// it appears for every vm on the host. (If the intersection comes out empty —
-// e.g. because vms on S carry conflicting scheduling constraints — then S has no
-// failover target for now. In the future we may relax this to tolerate single
-// vms that don't fit the same partition as the rest.)
+// vm on S can be live-migrated onto T. We therefore query the scheduler per vm
+// and keep the running intersection of the candidate sets: a target survives
+// only if it appears for every vm on the host. (If the intersection comes out
+// empty — e.g. because vms on S carry conflicting scheduling constraints — then
+// S has no failover target for now. In the future we may relax this to tolerate
+// single vms that don't fit the same partition as the rest.)
 //
-// Finally we apply the hard, gang-level constraint: an evacuation moves all of
-// S's vms onto T at once, so T must be at least as large as S. We drop every
+// Finally we apply the hard, gang-level constraint: a drain/evacuation moves all
+// of S's vms onto T at once, so T must be at least as large as S. We drop every
 // target smaller than its source before emitting the edge. Capacity is compared
 // on a fresh copy of the hypervisor's capacity maps so we never mutate the
 // shared Status.Capacity.
@@ -88,7 +98,7 @@ func (f *evacuationPathFinder) FindPaths(ctx context.Context, topo topology) ([]
 		targetHosts := []hv1.Hypervisor{}
 		initialized := false
 		for _, vm := range vms {
-			vmTargetHosts, err := f.fetchEvacuationCandidates(ctx, vm, topo.hypervisors)
+			vmTargetHosts, err := f.fetchLiveMigrationCandidates(ctx, vm, topo.hypervisors)
 			if err != nil {
 				// A lookup error is an infrastructure failure (the scheduler is
 				// unreachable, timed out, or returned a non-200) — not an answer
@@ -99,7 +109,7 @@ func (f *evacuationPathFinder) FindPaths(ctx context.Context, topo topology) ([]
 				// cycle; swallowing the error here would instead collapse every
 				// host's paths and prune all still-valid reservations.
 				return nil, fmt.Errorf(
-					"failed to fetch evacuation candidates for vm %q on host %q: %w",
+					"failed to fetch live migration candidates for vm %q on host %q: %w",
 					vm.Name, sourceHost, err)
 			}
 			// Log out the target hosts for this vm.
@@ -107,7 +117,7 @@ func (f *evacuationPathFinder) FindPaths(ctx context.Context, topo topology) ([]
 			for i, host := range vmTargetHosts {
 				vmTargetHostNames[i] = host.Name
 			}
-			log.V(1).Info("fetched evacuation candidates for vm",
+			log.V(1).Info("fetched live migration candidates for vm",
 				"sourceHost", sourceHost, "vm", vm.Name, "targetHosts", vmTargetHostNames)
 			if !initialized {
 				targetHosts = vmTargetHosts // Seed with the first vm's candidates.
@@ -157,14 +167,23 @@ func (f *evacuationPathFinder) FindPaths(ctx context.Context, topo topology) ([]
 	return paths, nil
 }
 
-// fetchEvacuationCandidates asks the external cortex scheduler where a single vm
-// could be evacuated to, and returns the subset of known hypervisors it accepts.
+// fetchLiveMigrationCandidates asks the external cortex scheduler where a single
+// vm could be live-migrated to, and returns the subset of known hypervisors it
+// accepts.
 //
-// The request is shaped to mirror a real evacuation as closely as possible: it
-// carries the vm's owner, availability zone, flavor and image so the same
+// We probe with live-migration intent even though a failover ultimately
+// evacuates: a failover target must first be drained via live migration before
+// its reservation goes active, so a target a vm cannot be live-migrated onto is
+// useless regardless of whether it could be evacuated onto. Live migration is
+// also the stricter check (it adds CPU/feature compatibility on top of
+// capacity), so we treat "can live-migrate" as implying "can evacuate".
+//
+// The request is shaped to mirror a real live migration as closely as possible:
+// it carries the vm's owner, availability zone, flavor and image so the same
 // filters apply, offers every known host as a candidate (Hosts) so the scheduler
-// has a host set to filter over, sets the evacuate scheduler hint, and ignores
-// the vm's current host as an evacuation target. Four options matter:
+// has a host set to filter over, sets the live_migrate scheduler hint plus
+// source_host (so filter_live_migratable runs its feature-compatibility checks),
+// and ignores the vm's current host as a target. Four options matter:
 //
 //   - ReadOnly, so probing placements never mutate shared scheduling state.
 //   - SkipInflight and SkipCommittedResourceTracking, which ReadOnly runs must
@@ -185,7 +204,7 @@ func (f *evacuationPathFinder) FindPaths(ctx context.Context, topo topology) ([]
 //     cheapest to empty is left to the planner's candidate ordering. The hard
 //     whole-host fit check in FindPaths still compares *total* capacities, so an
 //     undersized target is dropped regardless of this option.
-func (f *evacuationPathFinder) fetchEvacuationCandidates(ctx context.Context, vm vmv1alpha1.VirtualMachine, hvsByName map[string]hv1.Hypervisor) ([]hv1.Hypervisor, error) {
+func (f *evacuationPathFinder) fetchLiveMigrationCandidates(ctx context.Context, vm vmv1alpha1.VirtualMachine, hvsByName map[string]hv1.Hypervisor) ([]hv1.Hypervisor, error) {
 	log := logf.FromContext(ctx)
 
 	resMemoryMB, resVCPUs := uint64(0), uint64(0)
@@ -250,9 +269,21 @@ func (f *evacuationPathFinder) fetchEvacuationCandidates(ctx context.Context, vm
 				UserID:           vm.Spec.Nova.Ownership.User,
 				ProjectID:        vm.Spec.Nova.Ownership.Project,
 				AvailabilityZone: vm.Spec.AZ,
-				// Avoid evacuating to the same host as the current VM.
-				IgnoreHosts:    new([]string{vm.Status.Nova.Host}),
-				SchedulerHints: map[string]any{"_nova_check_type": api.EvacuateIntent},
+				// Avoid migrating to the same host as the current VM.
+				IgnoreHosts: new([]string{vm.Status.Nova.Host}),
+				// Probe with live-migration intent rather than evacuation. Draining a
+				// host before its reservation goes active relies on live migration, so
+				// a target that can only be evacuated-to but not live-migrated-from
+				// would break partitioning (see fetchLiveMigrationCandidates). We
+				// assume that a host which accepts a live migration also accepts the
+				// weaker cold migration (evacuation). The source_host hint lets
+				// filter_live_migratable run its feature-compatibility checks; the
+				// check type must be the literal "live_migrate" nova uses, which maps
+				// to LiveMigrationIntent in GetIntent.
+				SchedulerHints: map[string]any{
+					"_nova_check_type": "live_migrate",
+					"source_host":      vm.Status.Nova.Host,
+				},
 				Flavor: api.NovaObject[api.NovaFlavor]{
 					Data: api.NovaFlavor{
 						Name:       vm.Spec.Nova.Flavor.Name,
@@ -312,11 +343,11 @@ func (f *evacuationPathFinder) fetchEvacuationCandidates(ctx context.Context, vm
 	}
 	log.V(1).Info("external scheduler response received", "response", responseObj)
 
-	evacuationCandidates := []hv1.Hypervisor{}
+	candidates := []hv1.Hypervisor{}
 	for _, hv := range hvsByName {
 		if slices.Contains(responseObj.Hosts, hv.Name) {
-			evacuationCandidates = append(evacuationCandidates, hv)
+			candidates = append(candidates, hv)
 		}
 	}
-	return evacuationCandidates, nil
+	return candidates, nil
 }

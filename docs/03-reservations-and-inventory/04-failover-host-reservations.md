@@ -197,8 +197,18 @@ multi-target evacuation directly), removing the "one host, one landing zone" con
 
 Three things keep this probing faithful and safe:
 
-- **Each probe mirrors a real evacuation** — it carries the VM's owner, availability zone, flavor and image, and
-  tells the scheduler to treat it as an evacuation, so exactly the same filters apply as in a genuine failure.
+- **Each probe mirrors a real migration** — it carries the VM's owner, availability zone, flavor and image, and
+  tells the scheduler to treat it as a **live migration** (not an evacuation), so exactly the same filters apply
+  as in a genuine move. The choice of *live migration* over *evacuation* is deliberate and matters for
+  correctness. A failover target is reserved **empty**, which means that before its reservation can go active,
+  Cortex must first **drain** whatever currently runs on it — and draining a live host is done by *live*
+  migration, not evacuation. A host that a VM could only be *evacuated* onto (cold migration, VM powered off)
+  but not *live-migrated* onto therefore cannot actually be emptied, so admitting it as a target would block
+  the drain and break partitioning. Live migration is also the stricter test — on top of capacity it checks CPU
+  architecture, CPU modes, hypervisor features and emulated devices between source and target — so Cortex
+  assumes that any host which accepts a live migration also accepts the weaker cold migration (evacuation) a
+  real failover performs. Probing with the stricter requirement keeps every discovered partition genuinely
+  drainable.
 - **Candidates are judged as if empty.** The probe tells the scheduler to measure each candidate against its
   *total* capacity, ignoring whatever VMs currently run there. This is deliberate: a failover target is reserved
   **empty**, so the right question is "could this host hold the workload once cleared?", not "does it have room
