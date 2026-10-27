@@ -125,6 +125,8 @@ cortex: &cortex
           - cortex.cloud/v1alpha1/DecisionList
           - cortex.cloud/v1alpha1/Descheduling
           - cortex.cloud/v1alpha1/DeschedulingList
+          - cortex.cloud/v1alpha1/ReschedulingRequest
+          - cortex.cloud/v1alpha1/ReschedulingRequestList
           - cortex.cloud/v1alpha1/Pipeline
           - cortex.cloud/v1alpha1/PipelineList
           - cortex.cloud/v1alpha1/Knowledge

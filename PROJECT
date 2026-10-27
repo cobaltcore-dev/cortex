@@ -66,4 +66,12 @@ resources:
   kind: Pipeline
   path: github.com/cobaltcore-dev/cortex/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+  controller: true
+  domain: cortex
+  group: cortex.cloud
+  kind: ReschedulingRequest
+  path: github.com/cobaltcore-dev/cortex/api/v1alpha1
+  version: v1alpha1
 version: "3"
