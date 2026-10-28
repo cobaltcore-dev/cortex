@@ -6,6 +6,7 @@ package failoverhost
 import (
 	"context"
 	"sort"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -104,6 +105,17 @@ func (s *novaSeeder) Seeds(ctx context.Context, topo topology) ([]Seed, error) {
 	seeds := make([]Seed, 0, len(flavors)*len(azs))
 	for _, az := range azs {
 		for _, flavor := range flavors {
+			hvType, ok := flavor.ExtraSpecs["capabilities:hypervisor_type"]
+			if !ok {
+				log.V(1).Info("skipping flavor with no hypervisor type",
+					"flavor", flavor.Name)
+				continue
+			}
+			if !strings.EqualFold(hvType, "qemu") && !strings.EqualFold(hvType, "ch") {
+				log.V(1).Info("skipping flavor with unsupported hypervisor type",
+					"flavor", flavor.Name, "hvType", hvType)
+				continue
+			}
 			seeds = append(seeds, Seed{Flavor: flavor, AvailabilityZone: az})
 		}
 	}

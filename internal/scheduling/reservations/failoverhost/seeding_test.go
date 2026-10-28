@@ -41,10 +41,16 @@ func hvInAZ(name, az string) hv1.Hypervisor {
 	}}
 }
 
+// qemuFlavor builds a flavor with a supported (qemu) hypervisor type so it
+// passes the hypervisor-type filter in Seeds.
+func qemuFlavor(name string) Flavor {
+	return Flavor{Name: name, ExtraSpecs: map[string]string{"capabilities:hypervisor_type": "qemu"}}
+}
+
 func TestSeedsCrossesFlavorsWithAZs(t *testing.T) {
 	// Two flavors and two distinct AZs across three hosts (az1 appears twice, so
 	// it must be deduplicated) yield 2×2 = 4 seeds, sorted by az then flavor name.
-	fc := &fakeFlavorClient{flavors: []Flavor{{Name: "large"}, {Name: "small"}}}
+	fc := &fakeFlavorClient{flavors: []Flavor{qemuFlavor("large"), qemuFlavor("small")}}
 	s := &novaSeeder{flavorClient: fc}
 	topo := topology{hypervisors: map[string]hv1.Hypervisor{
 		"a": hvInAZ("a", "az1"),
@@ -71,8 +77,39 @@ func TestSeedsCrossesFlavorsWithAZs(t *testing.T) {
 	}
 }
 
+func TestSeedsFiltersUnsupportedHypervisorTypes(t *testing.T) {
+	// Only flavors whose hypervisor type is qemu or ch are seeded; others (and
+	// flavors with no hypervisor type at all) are skipped.
+	fc := &fakeFlavorClient{flavors: []Flavor{
+		qemuFlavor("qemu-flavor"),
+		{Name: "ch-flavor", ExtraSpecs: map[string]string{"capabilities:hypervisor_type": "CH"}},
+		{Name: "vmware-flavor", ExtraSpecs: map[string]string{"capabilities:hypervisor_type": "vmware"}},
+		{Name: "no-type-flavor"},
+	}}
+	s := &novaSeeder{flavorClient: fc}
+	topo := topology{hypervisors: map[string]hv1.Hypervisor{"a": hvInAZ("a", "az1")}}
+
+	seeds, err := s.Seeds(context.Background(), topo)
+	if err != nil {
+		t.Fatalf("Seeds: %v", err)
+	}
+	got := make([]string, len(seeds))
+	for i, sd := range seeds {
+		got[i] = sd.Flavor.Name
+	}
+	want := []string{"ch-flavor", "qemu-flavor"}
+	if len(got) != len(want) {
+		t.Fatalf("seeds = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("seed[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
 func TestSeedsConnectsOnceThenReuses(t *testing.T) {
-	fc := &fakeFlavorClient{flavors: []Flavor{{Name: "f"}}}
+	fc := &fakeFlavorClient{flavors: []Flavor{qemuFlavor("f")}}
 	s := &novaSeeder{flavorClient: fc}
 	topo := topology{hypervisors: map[string]hv1.Hypervisor{"a": hvInAZ("a", "az1")}}
 
@@ -97,7 +134,7 @@ func TestSeedsReconnectsAfterConnectFailure(t *testing.T) {
 		t.Fatal("Seeds: expected connect error, got nil")
 	}
 	fc.connectErr = nil
-	fc.flavors = []Flavor{{Name: "f"}}
+	fc.flavors = []Flavor{qemuFlavor("f")}
 	if _, err := s.Seeds(context.Background(), topo); err != nil {
 		t.Fatalf("Seeds after recovery: %v", err)
 	}
