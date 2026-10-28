@@ -64,6 +64,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -72,6 +73,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -188,6 +190,34 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	c.desiredReservationsMu.Lock()
 	desired, desiredExists := c.desiredReservations[corev1.ObjectReference{Name: req.Name}]
 	c.desiredReservationsMu.Unlock()
+
+	// Before acting on a desired reservation, confirm the hypervisor it targets
+	// still exists and still has the capacity the reservation reserves (a failover
+	// host reservation blocks a host's full capacity, so a drift means we would
+	// under- or over-reserve). The reservation's resources are the host's capacity
+	// overlaid with its effective capacity (see the planner), so rebuild that same
+	// view and compare it to the reservation. A missing hypervisor or a mismatch
+	// returns an error so the reconcile is retried with exponential backoff, giving
+	// the hypervisor CRD and the calculation loop time to settle.
+	if desiredExists {
+		hv := &hv1.Hypervisor{}
+		if err := c.Get(ctx, client.ObjectKey{Name: desired.Spec.TargetHost}, hv); err != nil {
+			log.Error(err, "failed to get hypervisor for reservation", "host", desired.Spec.TargetHost)
+			c.Monitor.RecordReservationError("hypervisor")
+			return ctrl.Result{}, err
+		}
+		capacity := map[hv1.ResourceName]resource.Quantity{}
+		maps.Copy(capacity, hv.Status.Capacity)
+		maps.Copy(capacity, hv.Status.EffectiveCapacity)
+		// equality.Semantic compares resource.Quantity by value, unlike
+		// reflect.DeepEqual which trips over its unexported cached state.
+		if !equality.Semantic.DeepEqual(capacity, desired.Spec.Resources) {
+			log.Error(nil, "hypervisor capacity does not match reservation, retrying",
+				"host", desired.Spec.TargetHost, "hypervisorCapacity", capacity, "reservationResources", desired.Spec.Resources)
+			c.Monitor.RecordReservationError("hypervisor")
+			return ctrl.Result{}, errors.New("hypervisor capacity does not match reservation")
+		}
+	}
 
 	switch {
 	case !desiredExists && !actualExists:

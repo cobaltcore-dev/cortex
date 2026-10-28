@@ -46,7 +46,9 @@ func newTestClient(t *testing.T, objs ...client.Object) client.Client {
 }
 
 // failoverReservation builds a minimal failover host reservation targeting the
-// given host, matching the shape the planner produces.
+// given host, matching the shape the planner produces. Its resources match the
+// capacity buildHV(host, 64, 32) gives the hypervisor, so the controller's
+// hypervisor-size check passes.
 func failoverReservation(host string) v1alpha1.Reservation {
 	return v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{
@@ -56,6 +58,10 @@ func failoverReservation(host string) v1alpha1.Reservation {
 		Spec: v1alpha1.ReservationSpec{
 			Type:       v1alpha1.ReservationTypeFailoverHost,
 			TargetHost: host,
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceMemory: *resource.NewQuantity(64*1024*1024*1024, resource.BinarySI),
+				hv1.ResourceCPU:    *resource.NewQuantity(32, resource.DecimalSI),
+			},
 		},
 	}
 }
@@ -70,7 +76,7 @@ func reconcileReq(name string) ctrl.Request {
 // cluster independently, then asserting the resulting cluster state.
 
 func TestReconcileCreatesDesiredReservation(t *testing.T) {
-	c := &Controller{Client: newTestClient(t)}
+	c := &Controller{Client: newTestClient(t, buildHV("hv1", 64, 32))}
 	desired := failoverReservation("hv1")
 	c.desiredReservations = map[corev1.ObjectReference]v1alpha1.Reservation{
 		{Name: desired.Name}: desired,
@@ -105,7 +111,7 @@ func TestReconcileDeletesStaleReservation(t *testing.T) {
 func TestReconcileUpdatesDriftedReservation(t *testing.T) {
 	actual := failoverReservation("hv1")
 	actual.Spec.AvailabilityZone = "az-old"
-	c := &Controller{Client: newTestClient(t, &actual)}
+	c := &Controller{Client: newTestClient(t, &actual, buildHV("hv1", 64, 32))}
 	desired := failoverReservation("hv1")
 	desired.Spec.AvailabilityZone = "az-new"
 	c.desiredReservations = map[corev1.ObjectReference]v1alpha1.Reservation{
@@ -126,7 +132,7 @@ func TestReconcileUpdatesDriftedReservation(t *testing.T) {
 
 func TestReconcileNoopWhenInSync(t *testing.T) {
 	actual := failoverReservation("hv1")
-	c := &Controller{Client: newTestClient(t, &actual)}
+	c := &Controller{Client: newTestClient(t, &actual, buildHV("hv1", 64, 32))}
 	desired := failoverReservation("hv1")
 	c.desiredReservations = map[corev1.ObjectReference]v1alpha1.Reservation{
 		{Name: desired.Name}: desired,
@@ -146,6 +152,41 @@ func TestReconcileNoopWhenInSync(t *testing.T) {
 	// An update bumps the resourceVersion, so an unchanged one proves the no-op.
 	if before.ResourceVersion != after.ResourceVersion {
 		t.Errorf("reservation was rewritten: %q -> %q", before.ResourceVersion, after.ResourceVersion)
+	}
+}
+
+func TestReconcileErrorsWhenHypervisorMissing(t *testing.T) {
+	c := &Controller{Client: newTestClient(t)}
+	desired := failoverReservation("hv1")
+	c.desiredReservations = map[corev1.ObjectReference]v1alpha1.Reservation{
+		{Name: desired.Name}: desired,
+	}
+	if _, err := c.Reconcile(context.Background(), reconcileReq(desired.Name)); err == nil {
+		t.Fatal("expected an error to trigger backoff when the hypervisor is missing")
+	}
+}
+
+func TestReconcileErrorsWhenHypervisorSizeMismatches(t *testing.T) {
+	// The hypervisor reports 32Gi but the reservation reserves 64Gi.
+	c := &Controller{Client: newTestClient(t, buildHV("hv1", 32, 32))}
+	desired := failoverReservation("hv1")
+	c.desiredReservations = map[corev1.ObjectReference]v1alpha1.Reservation{
+		{Name: desired.Name}: desired,
+	}
+	if _, err := c.Reconcile(context.Background(), reconcileReq(desired.Name)); err == nil {
+		t.Fatal("expected an error to trigger backoff on a memory mismatch")
+	}
+}
+
+func TestReconcileErrorsWhenHypervisorCPUMismatches(t *testing.T) {
+	// Memory matches but the hypervisor reports 16 CPUs against the reserved 32.
+	c := &Controller{Client: newTestClient(t, buildHV("hv1", 64, 16))}
+	desired := failoverReservation("hv1")
+	c.desiredReservations = map[corev1.ObjectReference]v1alpha1.Reservation{
+		{Name: desired.Name}: desired,
+	}
+	if _, err := c.Reconcile(context.Background(), reconcileReq(desired.Name)); err == nil {
+		t.Fatal("expected an error to trigger backoff on a cpu mismatch")
 	}
 }
 
