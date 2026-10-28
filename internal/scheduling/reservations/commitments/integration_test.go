@@ -483,7 +483,6 @@ func newIntgEnv(t *testing.T, initialObjects []client.Object, schedulerFn http.H
 		Scheme: scheme,
 		Conf: ReservationControllerConfig{
 			SchedulerURL:                              schedulerSrv.URL,
-			AllocationGracePeriod:                     metav1.Duration{Duration: 15 * time.Minute},
 			RequeueIntervalActive:                     metav1.Duration{Duration: 5 * time.Minute},
 			EnableOversubscriptionCheck:               true,
 			EnableOversubscriptionReservationEviction: true,

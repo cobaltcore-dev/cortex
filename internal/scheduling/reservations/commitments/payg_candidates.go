@@ -82,8 +82,7 @@ func ScanAZForPaygCandidates(
 }
 
 // buildAllocatedVMSet lists CR Reservations in az and returns the set of VM UUIDs present
-// in any Status.Allocations (confirmed placements) or in the AnnotationCandidateAllocation annotation
-// (pending PAYG pre-allocations not yet confirmed). Filtering by AZ keeps the set small —
+// in any Status.Allocations (confirmed placements). Filtering by AZ keeps the set small —
 // only slots relevant to the current scan are included. One cache scan shared across all HV filters.
 func buildAllocatedVMSet(ctx context.Context, k8sClient client.Client, az string) (map[string]struct{}, error) {
 	var resList v1alpha1.ReservationList
@@ -102,10 +101,6 @@ func buildAllocatedVMSet(ctx context.Context, k8sClient client.Client, az string
 			for vmUUID := range res.Status.CommittedResourceReservation.Allocations {
 				allocated[vmUUID] = struct{}{}
 			}
-		}
-		// Include pending PAYG pre-allocation from annotation (before status is confirmed).
-		if vmUUID := res.Annotations[v1alpha1.AnnotationCandidateAllocation]; vmUUID != "" {
-			allocated[vmUUID] = struct{}{}
 		}
 	}
 	return allocated, nil

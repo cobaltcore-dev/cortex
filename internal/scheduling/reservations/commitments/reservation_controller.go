@@ -123,16 +123,13 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		logger.V(1).Info("reservation is active, verifying allocations")
 
 		// Verify all allocations in Status against actual VM state
-		result, err := r.reconcileAllocations(ctx, &res)
+		err := r.reconcileAllocations(ctx, &res)
 		if err != nil {
 			logger.Error(err, "failed to reconcile allocations")
 			return ctrl.Result{}, err
 		}
 
 		// Requeue with appropriate interval based on allocation state
-		if result.HasAllocationsInGracePeriod {
-			return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalGracePeriod.Duration}, nil
-		}
 		return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalActive.Duration}, nil
 	}
 
@@ -335,12 +332,6 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	return ctrl.Result{}, nil
 }
 
-// reconcileAllocationsResult holds the outcome of allocation reconciliation.
-type reconcileAllocationsResult struct {
-	// HasAllocationsInGracePeriod is true if any allocations are still in grace period.
-	HasAllocationsInGracePeriod bool
-}
-
 // reconcileAllocations verifies all confirmed allocations in Status against actual VM state
 // using the Hypervisor CRD as the sole source of truth.
 //
@@ -352,13 +343,12 @@ type reconcileAllocationsResult struct {
 // from the reservation so the slot remains available for re-use on the original host.
 // Moving TargetHost when other VMs are present would cause those remaining VMs to appear
 // misplaced on the next reconcile cycle.
-func (r *CommitmentReservationController) reconcileAllocations(ctx context.Context, res *v1alpha1.Reservation) (*reconcileAllocationsResult, error) {
+func (r *CommitmentReservationController) reconcileAllocations(ctx context.Context, res *v1alpha1.Reservation) error {
 	logger := LoggerFromContext(ctx)
-	result := &reconcileAllocationsResult{}
 
 	// Skip if no CommittedResourceReservation
 	if res.Spec.CommittedResourceReservation == nil {
-		return result, nil
+		return nil
 	}
 
 	// Initialize status if needed
@@ -373,16 +363,16 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		candidateVMUUID := res.Annotations[v1alpha1.AnnotationCandidateAllocation]
 		if candidateVMUUID == "" || res.Status.Host == "" {
 			logger.V(1).Info("no allocations to verify", "reservation", res.Name)
-			return result, nil
+			return nil
 		}
 		// Check if candidate VM is active on the expected host.
 		var hypervisor hv1.Hypervisor
 		if err := r.Get(ctx, client.ObjectKey{Name: res.Status.Host}, &hypervisor); err != nil {
 			if client.IgnoreNotFound(err) != nil {
-				return nil, fmt.Errorf("failed to get hypervisor %s: %w", res.Status.Host, err)
+				return fmt.Errorf("failed to get hypervisor %s: %w", res.Status.Host, err)
 			}
 			logger.V(1).Info("candidate VM host not found", "host", res.Status.Host, "vm", candidateVMUUID)
-			return result, nil
+			return nil
 		}
 		for _, inst := range hypervisor.Status.Instances {
 			if inst.ID == candidateVMUUID && inst.Active {
@@ -395,9 +385,9 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 				}
 				if err := r.Status().Patch(ctx, res, client.MergeFrom(old)); err != nil {
 					if client.IgnoreNotFound(err) == nil {
-						return result, nil
+						return nil
 					}
-					return nil, fmt.Errorf("failed to patch status allocations for candidate VM: %w", err)
+					return fmt.Errorf("failed to patch status allocations for candidate VM: %w", err)
 				}
 				logger.Info("confirmed PAYG candidate VM via Hypervisor CRD",
 					"vm", candidateVMUUID,
@@ -407,7 +397,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 				break
 			}
 		}
-		return result, nil
+		return nil
 	}
 
 	expectedHost := res.Status.Host
@@ -418,7 +408,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 	if expectedHost != "" {
 		if err := r.Get(ctx, client.ObjectKey{Name: expectedHost}, &hypervisor); err != nil {
 			if client.IgnoreNotFound(err) != nil {
-				return nil, fmt.Errorf("failed to get hypervisor %s: %w", expectedHost, err)
+				return fmt.Errorf("failed to get hypervisor %s: %w", expectedHost, err)
 			}
 			// Hypervisor not found — treat all VMs as stale.
 			logger.V(1).Info("hypervisor CRD not found", "host", expectedHost)
@@ -476,7 +466,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 
 		// Confirmed VM missing from expected host — could be a live migration.
 		if err := ensureHVsAndReservations(); err != nil {
-			return nil, err
+			return err
 		}
 
 		var foundHost string
@@ -539,15 +529,15 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		res.Status.Host = migrationTargetHost
 		if err := r.Patch(ctx, res, client.MergeFrom(old)); err != nil {
 			if client.IgnoreNotFound(err) == nil {
-				return result, nil
+				return nil
 			}
-			return nil, fmt.Errorf("failed to patch reservation spec: %w", err)
+			return fmt.Errorf("failed to patch reservation spec: %w", err)
 		}
 		if err := r.Get(ctx, client.ObjectKeyFromObject(res), res); err != nil {
 			if client.IgnoreNotFound(err) == nil {
-				return result, nil
+				return nil
 			}
-			return nil, fmt.Errorf("failed to re-fetch reservation: %w", err)
+			return fmt.Errorf("failed to re-fetch reservation: %w", err)
 		}
 		old = res.DeepCopy()
 		res.Status.CommittedResourceReservation.Allocations = newStatusAllocations
@@ -560,16 +550,15 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 	// Patch Status
 	if err := r.Status().Patch(ctx, res, client.MergeFrom(old)); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			return result, nil
+			return nil
 		}
-		return nil, fmt.Errorf("failed to patch reservation status: %w", err)
+		return fmt.Errorf("failed to patch reservation status: %w", err)
 	}
 
 	logger.V(1).Info("reconciled allocations",
-		"statusAllocations", len(newStatusAllocations),
-		"hasAllocationsInGracePeriod", result.HasAllocationsInGracePeriod)
+		"statusAllocations", len(newStatusAllocations))
 
-	return result, nil
+	return nil
 }
 
 // getPipelineForFlavorGroup returns the pipeline name for a given flavor group.

@@ -164,7 +164,7 @@ func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
 	now := time.Now()
 	oldTime := metav1.NewTime(now.Add(-30 * time.Minute))
 
-	config := ReservationControllerConfig{AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute}}
+	config := ReservationControllerConfig{}
 
 	tests := []struct {
 		name                      string
@@ -230,7 +230,7 @@ func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
 			}
 
 			ctx := WithNewGlobalRequestID(context.Background())
-			_, err := controller.reconcileAllocations(ctx, tt.reservation)
+			err := controller.reconcileAllocations(ctx, tt.reservation)
 			if err != nil {
 				t.Fatalf("reconcileAllocations() error = %v", err)
 			}
@@ -267,7 +267,7 @@ func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
 // Status.Allocations is removed immediately when it disappears from the HV CRD.
 func TestReconcileAllocations_ConfirmedVMDeparture(t *testing.T) {
 	scheme := newCRTestScheme(t)
-	config := ReservationControllerConfig{AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute}}
+	config := ReservationControllerConfig{}
 
 	res := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-reservation"},
@@ -300,14 +300,9 @@ func TestReconcileAllocations_ConfirmedVMDeparture(t *testing.T) {
 	controller := &CommitmentReservationController{Client: k8sClient, Scheme: scheme, Conf: config}
 
 	ctx := WithNewGlobalRequestID(context.Background())
-	result, err := controller.reconcileAllocations(ctx, res)
+	err := controller.reconcileAllocations(ctx, res)
 	if err != nil {
 		t.Fatalf("reconcileAllocations() error = %v", err)
-	}
-
-	// Must not be treated as grace-period — departure of confirmed VM is immediate.
-	if result.HasAllocationsInGracePeriod {
-		t.Error("confirmed VM departure must not trigger grace period requeue")
 	}
 
 	var updated v1alpha1.Reservation
@@ -446,7 +441,7 @@ func TestReconcileAllocations_ConfirmTriggersCandidateCleanup(t *testing.T) {
 	scheme := newCRTestScheme(t)
 
 	const vmUUID = "vm-confirmed-uuid"
-	config := ReservationControllerConfig{AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute}}
+	config := ReservationControllerConfig{}
 
 	// Winning reservation already has the VM confirmed in status.allocations.
 	winning := &v1alpha1.Reservation{
@@ -473,7 +468,7 @@ func TestReconcileAllocations_ConfirmTriggersCandidateCleanup(t *testing.T) {
 	controller := &CommitmentReservationController{Client: k8sClient, Scheme: scheme, Conf: config}
 	ctx := WithNewGlobalRequestID(context.Background())
 
-	if _, err := controller.reconcileAllocations(ctx, winning); err != nil {
+	if err := controller.reconcileAllocations(ctx, winning); err != nil {
 		t.Fatalf("reconcileAllocations() error = %v", err)
 	}
 
@@ -495,7 +490,7 @@ func TestReconcileAllocations_NoCleanupForAlreadyConfirmedVM(t *testing.T) {
 	scheme := newCRTestScheme(t)
 
 	const vmUUID = "vm-already-confirmed"
-	config := ReservationControllerConfig{AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute}}
+	config := ReservationControllerConfig{}
 
 	// Reservation already has the VM confirmed in Status.Allocations from a prior cycle.
 	winning := &v1alpha1.Reservation{
@@ -522,7 +517,7 @@ func TestReconcileAllocations_NoCleanupForAlreadyConfirmedVM(t *testing.T) {
 	controller := &CommitmentReservationController{Client: k8sClient, Scheme: scheme, Conf: config}
 	ctx := WithNewGlobalRequestID(context.Background())
 
-	if _, err := controller.reconcileAllocations(ctx, winning); err != nil {
+	if err := controller.reconcileAllocations(ctx, winning); err != nil {
 		t.Fatalf("reconcileAllocations() error = %v", err)
 	}
 
@@ -833,7 +828,7 @@ func TestReconcileAllocations_LiveMigration(t *testing.T) {
 		newHost = "host-new"
 	)
 
-	config := ReservationControllerConfig{AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute}}
+	config := ReservationControllerConfig{}
 
 	tests := []struct {
 		name string
@@ -934,7 +929,7 @@ func TestReconcileAllocations_LiveMigration(t *testing.T) {
 			controller := &CommitmentReservationController{Client: k8sClient, Scheme: scheme, Conf: config}
 			ctx := WithNewGlobalRequestID(context.Background())
 
-			if _, err := controller.reconcileAllocations(ctx, res); err != nil {
+			if err := controller.reconcileAllocations(ctx, res); err != nil {
 				t.Fatalf("reconcileAllocations() error = %v", err)
 			}
 
@@ -962,7 +957,7 @@ func TestReconcileAllocations_LiveMigration(t *testing.T) {
 			// For the migration-follow case: run a second reconcile to confirm state is
 			// stable and Status.Host was advanced to the new host in the first pass.
 			if tt.assertSecondPass {
-				if _, err := controller.reconcileAllocations(ctx, &updated); err != nil {
+				if err := controller.reconcileAllocations(ctx, &updated); err != nil {
 					t.Fatalf("second reconcileAllocations() error = %v", err)
 				}
 				var updated2 v1alpha1.Reservation
