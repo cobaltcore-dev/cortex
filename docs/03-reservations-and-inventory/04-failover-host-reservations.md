@@ -47,8 +47,9 @@ pipeline does, the partitions inherit, automatically and for free, including eve
 filters and weighers.
 
 The probes are seeded from the **flavor catalogue**, not from the VMs that happen to be running. Cortex takes
-every flavor Nova knows about whose hypervisor type it supports — the `capabilities:hypervisor_type` extra-spec
-is `qemu` (the Nova label for KVM) or `ch` (Cloud Hypervisor); flavors with any other, or no, hypervisor type
+every flavor in the `flavor-groups` Knowledge CRD whose hypervisor type it supports — the
+`capabilities:hypervisor_type` extra-spec is `qemu` (the Nova label for KVM) or `ch` (Cloud Hypervisor);
+flavors with any other, or no, hypervisor type
 are skipped — crosses each with every availability zone in the fleet, and asks the scheduler which hosts would
 accept it. These `(flavor, availability zone)` permutations are the **seeds** of the partitioning.
 Seeding from flavors rather than running VMs closes two blind spots the VM-based approach had:
@@ -229,7 +230,8 @@ is exactly what upholds the "consistent picture or nothing" rule:
   error). This is a valid answer, not a failure. A seed accepted on fewer than two hosts can form no pair, so it
   simply contributes no link, and the pass continues normally.
 - **The lookup itself fails** (the scheduler is unreachable, times out, or returns a non-200) — or the seed set
-  itself cannot be gathered, because Nova is unreachable. This is an infrastructure failure, not an answer — on
+  itself cannot be gathered, because the `flavor-groups` Knowledge CRD is missing or not yet ready. This is an
+  infrastructure failure, not an answer — on
   a partial view Cortex cannot assert anything about the failover graph, so it **aborts the entire pass** and
   leaves the last published picture untouched, retrying next cycle. Swallowing the error and skipping just that
   seed would collapse rescue links and prune reservations that are in fact still valid, so a single transient
@@ -487,16 +489,11 @@ failover:
     minimum: 1                 # floor per partition, > 0
     generationInterval: 5m     # how often to recompute, ≥ 1m
     externalSchedulerURL: "http://localhost:8080/scheduler/nova/external"
-    nova:                      # credentials for listing the flavors to seed with
-      keystoneSecretRef:
-        name: cortex-openstack
-        namespace: cortex
-      # ssoSecretRef: { name: ..., namespace: ... }   # optional SSO client cert
 ```
 
-The `nova` block points at the OpenStack credentials the controller uses to list the Nova flavor catalogue —
-the seeds the partitioning is built from (see [Step 1](#step-1--discover-who-can-rescue-whom)). It reuses the
-same keystone (and optional SSO) secret shape as the other OpenStack-facing reservation controllers.
+The flavors the partitioning is seeded from (see [Step 1](#step-1--discover-who-can-rescue-whom)) are read
+from the `flavor-groups` Knowledge CRD, which Cortex already extracts into the cluster — so the controller
+needs no OpenStack credentials of its own to enumerate them.
 
 > [!NOTE]
 > The settings live under `failover.hosts` as a deliberate example of grouping a controller's config under its

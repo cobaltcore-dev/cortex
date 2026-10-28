@@ -49,7 +49,7 @@ type topology struct {
 // interface so it can be understood, tested and swapped in isolation:
 //
 //  1. Seeder (seeding.go) enumerates the hypothetical placements to probe with:
-//     every Nova flavor crossed with every availability zone in the fleet. These
+//     every flavor crossed with every availability zone in the fleet. These
 //     flavor "seeds" replace the running vms the pipeline used to derive paths
 //     from, so a partition is found even when its hosts run no vms and no single
 //     exotic vm can veto a host from its partition.

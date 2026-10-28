@@ -13,7 +13,7 @@ import (
 )
 
 // fakeSeeder returns a fixed set of seeds, so generator tests drive the pipeline
-// without a Nova client.
+// without reading the flavor-groups Knowledge CRD.
 type fakeSeeder struct{ seeds []Seed }
 
 func (f fakeSeeder) Seeds(context.Context, topology) ([]Seed, error) { return f.seeds, nil }

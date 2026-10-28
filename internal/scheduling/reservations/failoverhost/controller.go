@@ -109,11 +109,6 @@ type ControllerConfig struct {
 	// ExternalSchedulerURL is the URL of the external scheduler service that
 	// will be used to request failover host placements.
 	ExternalSchedulerURL string `json:"externalSchedulerURL"`
-
-	// Nova configures the client used to list the flavors the seeder permutes
-	// into scheduler probes. Its credentials are resolved from the cluster at
-	// startup.
-	Nova NovaFlavorClientConfig `json:"nova"`
 }
 
 // Controller keeps the cluster's failover host reservations in sync with the
@@ -314,7 +309,7 @@ func (c *Controller) SetupWithManager(mgr ctrl.Manager) error {
 		c.generator = &pipelineGenerator{
 			Client:  c.Client,
 			Monitor: c.Monitor,
-			seeder:  &novaSeeder{flavorClient: NewNovaFlavorClient(c.Config.Nova), k8s: c.Client},
+			seeder:  &seeder{k8s: c.Client},
 			pathFinder: &evacuationPathFinder{
 				// Timeout so a hung scheduler can't stall the calculation loop.
 				httpClient:   &http.Client{Timeout: 30 * time.Second},

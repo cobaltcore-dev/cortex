@@ -393,18 +393,6 @@ cortex-scheduling-controllers:
         # given host's workload could be evacuated onto. Typically the same
         # scheduler endpoint the flavor-based failover controller uses.
         externalSchedulerURL: "http://localhost:8080/scheduler/nova/external"
-        # Credentials for listing the Nova flavor catalogue. The partitions are
-        # seeded from flavors (every flavor crossed with every availability zone
-        # is probed against the scheduler), so the controller needs Nova access
-        # to enumerate them. Reuses the same keystone/SSO secret shape as the
-        # other OpenStack-facing controllers above.
-        nova:
-          keystoneSecretRef:
-            name: cortex-nova-openstack-keystone
-            namespace: default
-          # ssoSecretRef:
-          #   name: cortex-nova-openstack-sso
-          #   namespace: default
 
 cortex-knowledge-controllers:
   <<: *cortex

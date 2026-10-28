@@ -814,8 +814,7 @@ func main() {
 			"ratio", failoverHostConfig.Ratio,
 			"minimum", failoverHostConfig.Minimum,
 			"generationInterval", failoverHostConfig.GenerationInterval,
-			"externalSchedulerURL", failoverHostConfig.ExternalSchedulerURL,
-			"novaKeystoneSecret", failoverHostConfig.Nova.KeystoneSecretRef.Name)
+			"externalSchedulerURL", failoverHostConfig.ExternalSchedulerURL)
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "capacity-controller") {
 		setupLog.Info("enabling controller", "controller", "capacity-controller")
