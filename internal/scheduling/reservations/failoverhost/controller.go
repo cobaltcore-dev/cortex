@@ -33,9 +33,9 @@
 // The controller has a producer and a consumer that communicate through the
 // desiredReservations map:
 //
-//   - A periodic calculation loop (Start -> loop, see loop.go) recomputes the
-//     desired set of failover host reservations from the current cluster state
-//     on a fixed interval, and stores it as desiredReservations.
+//   - A periodic calculation loop (Start -> loop, both in controller.go)
+//     recomputes the desired set of failover host reservations from the current
+//     cluster state on a fixed interval, and stores it as desiredReservations.
 //   - An event-driven reconciler (Reconcile, below) brings the actual
 //     reservations in the cluster in line with that desired set, creating,
 //     updating and pruning Reservation objects.
@@ -55,16 +55,16 @@
 //     flavor "seeds" replace the running vms the pipeline used to derive paths
 //     from, so a partition is found even when its hosts run no vms and no single
 //     exotic vm can veto a host from its partition.
-//  2. PathFinder (paths.go) probes the scheduler per seed and turns the answers
-//     into the directed edges of a failover graph: source -> target means "a
-//     host's whole workload can be evacuated onto target, and target is big
+//  2. PathFinder (pathfinding.go) probes the scheduler per seed and turns the
+//     answers into the directed edges of a failover graph: source -> target means
+//     "a host's whole workload can be evacuated onto target, and target is big
 //     enough to hold it".
-//  3. PartitionBuilder (partitions.go) clusters those edges into partitions
+//  3. PartitionBuilder (partitioning.go) clusters those edges into partitions
 //     (maximal sets of mutually-evacuable hosts).
-//  4. ReservationPlanner (reservations.go) decides, per partition, which hosts
+//  4. ReservationPlanner (planning.go) decides, per partition, which hosts
 //     become failover targets, honouring the configured ratio and minimum.
 //
-// loop.go wires these together and documents the end-to-end flow.
+// loop (in controller.go) wires these together and documents the end-to-end flow.
 package failoverhost
 
 import (
@@ -171,7 +171,7 @@ type Controller struct {
 	// The pipeline stages run by loop. They are defaulted to the production
 	// implementations in SetupWithManager but can be set beforehand to substitute
 	// fakes in tests. See loop for how they fit together, and seeding.go /
-	// paths.go / partitions.go / reservations.go for each stage.
+	// pathfinding.go / partitioning.go / planning.go for each stage.
 	seeder             Seeder
 	pathFinder         PathFinder
 	partitionBuilder   PartitionBuilder
@@ -421,7 +421,7 @@ func (c *Controller) loop(ctx context.Context) {
 		return
 	}
 
-	// Cluster the failover edges into partitions. See partitions.go for why a
+	// Cluster the failover edges into partitions. See partitioning.go for why a
 	// partition is a maximal clique of mutually-evacuable hosts, and how empty
 	// hosts are recruited into the partition that can reach them.
 	partitions := c.partitionBuilder.BuildPartitions(paths)

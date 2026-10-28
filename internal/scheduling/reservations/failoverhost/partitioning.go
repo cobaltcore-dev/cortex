@@ -16,7 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-// PartitionBuilder is the second pipeline stage. It clusters the directed
+// PartitionBuilder is the third pipeline stage. It clusters the directed
 // failover edges found by the PathFinder into failover partitions.
 //
 // A failover partition is a maximal set of hypervisors in which every host can

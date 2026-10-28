@@ -102,6 +102,7 @@ func NewMonitor() *Monitor {
 	// Pre-initialize the labelled series so they appear at zero before the first
 	// event, which lets rate()/increase() alerts behave from pod startup.
 	m.calculationAborts.WithLabelValues("collect")
+	m.calculationAborts.WithLabelValues("seeding")
 	m.calculationAborts.WithLabelValues("pathfinding")
 	m.reservationsErrors.WithLabelValues("create")
 	m.reservationsErrors.WithLabelValues("update")
@@ -122,7 +123,7 @@ func (m *Monitor) RecordCalculation(summary calculationSummary) {
 }
 
 // RecordCalculationAbort records a calculation pass that aborted before
-// producing a desired state. reason is "collect" or "pathfinding".
+// producing a desired state. reason is "collect", "seeding" or "pathfinding".
 func (m *Monitor) RecordCalculationAbort(reason string) {
 	if m == nil {
 		return

@@ -40,11 +40,13 @@ type Seed struct {
 // Seeder produces the seeds a single calculation pass probes with. It is the
 // first input to the pipeline, replacing the per-host vm enumeration.
 type Seeder interface {
-	// Seeds returns every (flavor, availability zone) permutation to probe. The
-	// topology supplies the availability zones (the distinct topology-zone labels
-	// of the known hypervisors); the flavors come from Nova. Any error aborts the
-	// pass, exactly like a failed scheduler probe, so partitions are never
-	// recomputed from a shrunken seed set.
+	// Seeds returns every (flavor, availability zone) permutation to probe,
+	// restricted to flavors whose hypervisor type this controller supports (see
+	// the hvType filter in novaSeeder.Seeds). The topology supplies the
+	// availability zones (the distinct topology-zone labels of the known
+	// hypervisors); the flavors come from Nova. Any error aborts the pass, exactly
+	// like a failed scheduler probe, so partitions are never recomputed from a
+	// shrunken seed set.
 	Seeds(ctx context.Context, topo topology) ([]Seed, error)
 }
 
@@ -105,6 +107,13 @@ func (s *novaSeeder) Seeds(ctx context.Context, topo topology) ([]Seed, error) {
 	seeds := make([]Seed, 0, len(flavors)*len(azs))
 	for _, az := range azs {
 		for _, flavor := range flavors {
+			// Only seed with flavors whose capabilities:hypervisor_type extra-spec
+			// names a hypervisor this controller supports: "qemu" (the Nova label
+			// for KVM guests, which the probe mirrors with an img_hv_type=KVM image,
+			// see fetchSeedCandidates) and "ch" (Cloud Hypervisor). A flavor with no
+			// hypervisor type, or one we don't support, is skipped so it never
+			// contributes a probe — and hence never shapes a partition — for a guest
+			// kind the failover machinery doesn't handle.
 			hvType, ok := flavor.ExtraSpecs["capabilities:hypervisor_type"]
 			if !ok {
 				log.V(1).Info("skipping flavor with no hypervisor type",

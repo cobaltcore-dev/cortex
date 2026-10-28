@@ -23,7 +23,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// PathFinder is the first pipeline stage. It discovers the directed edges of the
+// PathFinder is the second pipeline stage. It discovers the directed edges of the
 // failover graph: for every host it reports the hosts that host's workload could
 // be gang-evacuated onto. An edge source->target means "a host's whole workload
 // can be evacuated onto target, and target is large enough to hold it".

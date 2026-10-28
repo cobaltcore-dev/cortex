@@ -15,7 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ReservationPlanner is the third pipeline stage. For a single failover
+// ReservationPlanner is the fourth pipeline stage. For a single failover
 // partition it decides which hosts should become failover targets, i.e. be kept
 // empty so another host in the partition can gang-evacuate onto them.
 //

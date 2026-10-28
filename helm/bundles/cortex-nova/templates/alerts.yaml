@@ -1059,8 +1059,9 @@ spec:
           failover-host-controller logs for a stuck loop or repeated aborts.
     - alert: CortexNovaFailoverHostCalculationAborting
       # Each calculation pass aborts (without touching the desired state) when the
-      # cluster snapshot is inconsistent (reason="collect") or the external
-      # scheduler lookup fails (reason="pathfinding"). A sustained abort rate means
+      # cluster snapshot is inconsistent (reason="collect"), the Nova flavor seed
+      # set cannot be gathered (reason="seeding"), or the external scheduler lookup
+      # fails (reason="pathfinding"). A sustained abort rate means
       # no pass is producing a fresh desired state, so reservations go stale.
       expr: rate(cortex_failover_host_calculation_aborts_total{service="cortex-nova-metrics"}[15m]) > 0
       for: 30m
@@ -1080,6 +1081,7 @@ spec:
           desired state for over 30 minutes (reason=`{{ "{{" }} $labels.reason {{ "}}" }}`).
           reason="collect" means the cluster snapshot was inconsistent (e.g. a VM on an
           unknown hypervisor, or a hypervisor without an availability zone);
+          reason="seeding" means the Nova flavor catalogue could not be listed;
           reason="pathfinding" means the external scheduler lookup failed. Failover host
           reservations are not being refreshed while this persists.
     - alert: CortexNovaFailoverHostReconcileErrors
@@ -1106,8 +1108,8 @@ spec:
           the desired set. Check the failover-host-controller-reconcile logs and the
           Reservation objects for the affected hosts.
     - alert: CortexNovaFailoverHostSchedulerErrors
-      # The path finder asks the external scheduler, per VM, where each host's
-      # workload could evacuate. A high fraction of failed requests (transport
+      # The path finder asks the external scheduler, per flavor seed, which hosts
+      # would accept that flavor. A high fraction of failed requests (transport
       # errors or non-2xx) makes every calculation pass abort, so this is the root
       # cause behind a persistent CortexNovaFailoverHostCalculationAborting with
       # reason="pathfinding".

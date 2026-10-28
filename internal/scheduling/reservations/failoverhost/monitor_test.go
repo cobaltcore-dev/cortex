@@ -51,6 +51,7 @@ func TestMonitor_Counters(t *testing.T) {
 # TYPE cortex_failover_host_calculation_aborts_total counter
 cortex_failover_host_calculation_aborts_total{reason="collect"} 1
 cortex_failover_host_calculation_aborts_total{reason="pathfinding"} 2
+cortex_failover_host_calculation_aborts_total{reason="seeding"} 0
 `
 	if err := testutil.CollectAndCompare(m.calculationAborts, strings.NewReader(expected)); err != nil {
 		t.Error(err)

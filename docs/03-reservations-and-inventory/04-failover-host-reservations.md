@@ -46,9 +46,11 @@ answers (the next section works through how). The compatibility rules are never 
 pipeline does, the partitions inherit, automatically and for free, including every future change to the
 filters and weighers.
 
-The probes are seeded from the **flavor catalogue**, not from the VMs that happen to be running. For every
-flavor Nova knows about — crossed with every availability zone in the fleet — Cortex asks the scheduler which
-hosts would accept it. These `(flavor, availability zone)` permutations are the **seeds** of the partitioning.
+The probes are seeded from the **flavor catalogue**, not from the VMs that happen to be running. Cortex takes
+every flavor Nova knows about whose hypervisor type it supports — the `capabilities:hypervisor_type` extra-spec
+is `qemu` (the Nova label for KVM) or `ch` (Cloud Hypervisor); flavors with any other, or no, hypervisor type
+are skipped — crosses each with every availability zone in the fleet, and asks the scheduler which hosts would
+accept it. These `(flavor, availability zone)` permutations are the **seeds** of the partitioning.
 Seeding from flavors rather than running VMs closes two blind spots the VM-based approach had:
 
 - **A group of hosts running no VMs is still discovered.** Flavor seeds exist whether or not anything is
