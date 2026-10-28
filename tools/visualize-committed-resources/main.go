@@ -418,11 +418,10 @@ func printReservations(crs []v1alpha1.CommittedResource, reservations []v1alpha1
 			}
 
 			genOK := ""
-			if s := res.Status.CommittedResourceReservation; s != nil {
-				spec := res.Spec.CommittedResourceReservation
-				if spec != nil && s.ObservedParentGeneration != spec.ParentGeneration {
-					genOK = yellow(fmt.Sprintf(" [gen: spec=%d observed=%d]",
-						spec.ParentGeneration, s.ObservedParentGeneration))
+			if cond := apimeta.FindStatusCondition(res.Status.Conditions, v1alpha1.ReservationConditionReady); cond != nil {
+				if cond.ObservedGeneration != res.Generation {
+					genOK = yellow(fmt.Sprintf(" [gen: resGen=%d condObsGen=%d]",
+						res.Generation, cond.ObservedGeneration))
 				}
 			}
 

@@ -208,8 +208,8 @@ func countChildReservations(t *testing.T, k8sClient client.Client, commitmentUUI
 }
 
 // setChildReservationsReady simulates the reservation controller by marking all child
-// Reservations for the given commitmentUUID as Ready=True and echoing ParentGeneration
-// into ObservedParentGeneration (matching what echoParentGeneration does in production).
+// Reservations for the given commitmentUUID as Ready=True with ObservedGeneration set
+// to the reservation's own Generation (matching the conditions[Ready].ObservedGeneration contract).
 func setChildReservationsReady(t *testing.T, k8sClient client.Client, commitmentUUID string) {
 	t.Helper()
 	var list v1alpha1.ReservationList
@@ -229,11 +229,8 @@ func setChildReservationsReady(t *testing.T, k8sClient client.Client, commitment
 			Status:             metav1.ConditionTrue,
 			Reason:             "ReservationActive",
 			LastTransitionTime: metav1.Now(),
+			ObservedGeneration: res.Generation,
 		}}
-		if res.Status.CommittedResourceReservation == nil {
-			res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{}
-		}
-		res.Status.CommittedResourceReservation.ObservedParentGeneration = res.Spec.CommittedResourceReservation.ParentGeneration
 		if err := k8sClient.Status().Update(context.Background(), res); err != nil {
 			t.Fatalf("set reservation Ready=True: %v", err)
 		}
@@ -557,11 +554,10 @@ func TestCommittedResourceController_Rollback(t *testing.T) {
 				hv1.ResourceCPU:    resource.MustParse("2"),
 			},
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				CommitmentUUID:   "test-uuid-1234",
-				ProjectID:        "test-project",
-				DomainID:         "test-domain",
-				ResourceGroup:    "test-group",
-				ParentGeneration: 1, // stale
+				CommitmentUUID: "test-uuid-1234",
+				ProjectID:      "test-project",
+				DomainID:       "test-domain",
+				ResourceGroup:  "test-group",
 			},
 		},
 	}
@@ -577,8 +573,8 @@ func TestCommittedResourceController_Rollback(t *testing.T) {
 	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "test-cr-0"}, &res); err != nil {
 		t.Fatalf("get reservation: %v", err)
 	}
-	if got := res.Spec.CommittedResourceReservation.ParentGeneration; got != cr.Generation {
-		t.Errorf("ParentGeneration: want %d, got %d", cr.Generation, got)
+	if got := res.Spec.CommittedResourceReservation.CommitmentUUID; got != "test-uuid-1234" {
+		t.Errorf("CommitmentUUID: want %q, got %q", "test-uuid-1234", got)
 	}
 }
 
@@ -615,11 +611,10 @@ func TestCommittedResourceController_RollbackUsesAcceptedSpecAZ(t *testing.T) {
 				hv1.ResourceCPU:    resource.MustParse("2"),
 			},
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				CommitmentUUID:   "test-uuid-1234",
-				ProjectID:        "test-project",
-				DomainID:         "test-domain",
-				ResourceGroup:    "test-group",
-				ParentGeneration: 2,
+				CommitmentUUID: "test-uuid-1234",
+				ProjectID:      "test-project",
+				DomainID:       "test-domain",
+				ResourceGroup:  "test-group",
 			},
 		},
 	}
@@ -1291,6 +1286,7 @@ func TestCheckChildReservationStatus_GenerationGuard(t *testing.T) {
 			wantAllReady:   false,
 			wantAnyFailed:  false,
 			wantReadySlots: 0,
+			wantNudge:      true,
 		},
 		{
 			name:           "parentGen written to spec but echo not yet in status: nudge annotation set",
@@ -1312,7 +1308,8 @@ func TestCheckChildReservationStatus_GenerationGuard(t *testing.T) {
 
 			child := &v1alpha1.Reservation{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-cr-0",
+					Name:       "test-cr-0",
+					Generation: 2,
 					Labels: map[string]string{
 						v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
 					},
@@ -1320,16 +1317,12 @@ func TestCheckChildReservationStatus_GenerationGuard(t *testing.T) {
 				Spec: v1alpha1.ReservationSpec{
 					Type: v1alpha1.ReservationTypeCommittedResource,
 					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-						CommitmentUUID:   cr.Spec.CommitmentUUID,
-						ParentGeneration: cr.Generation,
+						CommitmentUUID: cr.Spec.CommitmentUUID,
 					},
 				},
 			}
 			k8sClient := newCRTestClient(scheme, child)
 
-			child.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{
-				ObservedParentGeneration: tt.obsGen,
-			}
 			if tt.condStatus != "" {
 				child.Status.Conditions = []metav1.Condition{{
 					Type:               v1alpha1.ReservationConditionReady,
@@ -1337,6 +1330,7 @@ func TestCheckChildReservationStatus_GenerationGuard(t *testing.T) {
 					Reason:             "Test",
 					Message:            tt.condMessage,
 					LastTransitionTime: metav1.Now(),
+					ObservedGeneration: tt.obsGen,
 				}}
 			}
 			if err := k8sClient.Status().Update(context.Background(), child); err != nil {

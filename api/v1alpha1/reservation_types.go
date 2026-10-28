@@ -126,12 +126,15 @@ type CommittedResourceReservationSpec struct {
 	// once it has processed the reservation, allowing the CR controller to wait until
 	// all child reservations are up-to-date before accepting.
 	// Zero means the field is not set (syncer-created reservations, no parent CR).
+	//
+	// Deprecated: replaced by conditions[Ready].ObservedGeneration signaling. Will be removed once old pods are fully rolled out.
 	// +kubebuilder:validation:Optional
 	ParentGeneration int64 `json:"parentGeneration,omitempty"`
 
 	// Allocations maps workload identifiers to their allocation details.
 	// Key: Workload UUID (VM UUID for Nova, Pod UID for Pods, Machine UID for IronCore, etc.)
 	// Value: allocation state and metadata
+	//
 	// +kubebuilder:validation:Optional
 	Allocations map[string]CommittedResourceAllocation `json:"allocations,omitempty"`
 }
@@ -248,6 +251,8 @@ type CommittedResourceReservationStatus struct {
 	// ObservedParentGeneration is the Spec.CommittedResourceReservation.ParentGeneration value
 	// that this Reservation controller last processed. When it matches ParentGeneration in spec,
 	// the CR controller knows this reservation is up-to-date for the current CR spec version.
+	//
+	// Deprecated: replaced by conditions[Ready].ObservedGeneration signaling. Will be removed once old pods are fully rolled out.
 	// +kubebuilder:validation:Optional
 	ObservedParentGeneration int64 `json:"observedParentGeneration,omitempty"`
 

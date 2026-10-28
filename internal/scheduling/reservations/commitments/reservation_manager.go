@@ -408,14 +408,11 @@ func (m *ReservationManager) syncReservationMetadata(
 	if (state.CommitmentUUID != "" && reservation.Spec.CommittedResourceReservation.CommitmentUUID != state.CommitmentUUID) ||
 		(state.DomainID != "" && reservation.Spec.CommittedResourceReservation.DomainID != state.DomainID) ||
 		(state.StartTime != nil && (reservation.Spec.StartTime == nil || !reservation.Spec.StartTime.Time.Equal(*state.StartTime))) ||
-		(state.EndTime != nil && (reservation.Spec.EndTime == nil || !reservation.Spec.EndTime.Time.Equal(*state.EndTime))) ||
-		(state.ParentGeneration != 0 && reservation.Spec.CommittedResourceReservation.ParentGeneration != state.ParentGeneration) {
+		(state.EndTime != nil && (reservation.Spec.EndTime == nil || !reservation.Spec.EndTime.Time.Equal(*state.EndTime))) {
 		// Apply patch
 		logger.V(1).Info("syncing reservation metadata",
 			"reservation", reservation.Name,
 			"commitmentUUID", state.CommitmentUUID,
-			"currentParentGen", reservation.Spec.CommittedResourceReservation.ParentGeneration,
-			"newParentGen", state.ParentGeneration,
 		)
 
 		patch := client.MergeFrom(reservation.DeepCopy())
@@ -425,9 +422,6 @@ func (m *ReservationManager) syncReservationMetadata(
 		}
 		if state.DomainID != "" {
 			reservation.Spec.CommittedResourceReservation.DomainID = state.DomainID
-		}
-		if state.ParentGeneration != 0 {
-			reservation.Spec.CommittedResourceReservation.ParentGeneration = state.ParentGeneration
 		}
 		if state.StartTime != nil {
 			reservation.Spec.StartTime = &metav1.Time{Time: *state.StartTime}
@@ -509,14 +503,13 @@ func (m *ReservationManager) newReservation(
 			),
 		},
 		CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-			ProjectID:        state.ProjectID,
-			CommitmentUUID:   state.CommitmentUUID,
-			DomainID:         state.DomainID,
-			ResourceGroup:    state.FlavorGroupName,
-			ResourceName:     flavorInGroup.Name,
-			Creator:          creator,
-			ParentGeneration: state.ParentGeneration,
-			Allocations:      nil,
+			ProjectID:      state.ProjectID,
+			CommitmentUUID: state.CommitmentUUID,
+			DomainID:       state.DomainID,
+			ResourceGroup:  state.FlavorGroupName,
+			ResourceName:   flavorInGroup.Name,
+			Creator:        creator,
+			Allocations:    nil,
 		},
 	}
 
@@ -588,13 +581,12 @@ func (m *ReservationManager) newPaygReservation(
 			hv1.ResourceCPU:    *resource.NewQuantity(cpus, resource.DecimalSI),
 		},
 		CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-			ProjectID:        state.ProjectID,
-			CommitmentUUID:   state.CommitmentUUID,
-			DomainID:         state.DomainID,
-			ResourceGroup:    state.FlavorGroupName,
-			ResourceName:     candidate.FlavorName,
-			Creator:          creator,
-			ParentGeneration: state.ParentGeneration,
+			ProjectID:      state.ProjectID,
+			CommitmentUUID: state.CommitmentUUID,
+			DomainID:       state.DomainID,
+			ResourceGroup:  state.FlavorGroupName,
+			ResourceName:   candidate.FlavorName,
+			Creator:        creator,
 			Allocations: map[string]v1alpha1.CommittedResourceAllocation{
 				candidate.VMID: {
 					CreationTimestamp: metav1.Now(),

@@ -67,20 +67,6 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	ctx = reservations.WithRequestID(ctx, req.Name)
 	logger := LoggerFromContext(ctx).WithValues("reservation", req.Name)
 
-	// Debug: timing anchor — log RV and gen/obs so we can correlate watch delivery with Phase 6.
-	if res.Spec.CommittedResourceReservation != nil {
-		obs := int64(0)
-		if res.Status.CommittedResourceReservation != nil {
-			obs = res.Status.CommittedResourceReservation.ObservedParentGeneration
-		}
-		logger.V(1).Info("reconcile entry",
-			"rv", res.ResourceVersion,
-			"specGen", res.Generation,
-			"parentGen", res.Spec.CommittedResourceReservation.ParentGeneration,
-			"obs", obs,
-		)
-	}
-
 	// filter for CR reservations
 	resourceName := ""
 	if res.Spec.CommittedResourceReservation != nil {
