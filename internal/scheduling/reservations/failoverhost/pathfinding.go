@@ -23,6 +23,19 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// Path is one directed edge of the failover graph: source's whole workload can
+// be gang-evacuated onto target. It also carries the flavors whose seed proved
+// the edge — i.e. the flavors source and target co-accept — so downstream stages
+// can report which flavors a partition can actually run. Flavors is sorted and
+// deduplicated.
+type Path struct {
+	// Source and Target are the endpoints: source can be evacuated onto target.
+	Source, Target hv1.Hypervisor
+	// Flavors are the names of the flavor seeds both endpoints co-accepted, which
+	// is what produced this edge. Sorted and deduplicated.
+	Flavors []string
+}
+
 // PathFinder is the second pipeline stage. It discovers the directed edges of the
 // failover graph: for every host it reports the hosts that host's workload could
 // be gang-evacuated onto. An edge source->target means "a host's whole workload
@@ -48,13 +61,14 @@ import (
 // PartitionBuilder later keeps only the mutual edges, so this stage is free to
 // report one-directional possibilities.
 type PathFinder interface {
-	// FindPaths returns the failover edges as [source, target] hypervisor pairs,
-	// discovered by probing the scheduler with the given seeds. A seed the
-	// scheduler accepts on fewer than two hosts yields no edge and is not an
-	// error. Any lookup error, by contrast, is an infrastructure failure
-	// (scheduler unreachable/timed out/non-200) that invalidates the pass, so it
-	// is returned to abort it rather than silently collapsing the failover graph.
-	FindPaths(ctx context.Context, topo topology, seeds []Seed) ([][2]hv1.Hypervisor, error)
+	// FindPaths returns the failover edges as Paths, discovered by probing the
+	// scheduler with the given seeds; each Path also records the flavors its
+	// endpoints co-accepted. A seed the scheduler accepts on fewer than two hosts
+	// yields no edge and is not an error. Any lookup error, by contrast, is an
+	// infrastructure failure (scheduler unreachable/timed out/non-200) that
+	// invalidates the pass, so it is returned to abort it rather than silently
+	// collapsing the failover graph.
+	FindPaths(ctx context.Context, topo topology, seeds []Seed) ([]Path, error)
 }
 
 // evacuationPathFinder finds failover paths by asking the external cortex
@@ -93,12 +107,13 @@ type evacuationPathFinder struct {
 // every flavor a pair of identical hosts both run), but the graph only needs each
 // directed edge once. Capacity is compared on fresh copies of the hypervisors'
 // capacity maps so we never mutate the shared Status.Capacity.
-func (f *evacuationPathFinder) FindPaths(ctx context.Context, topo topology, seeds []Seed) ([][2]hv1.Hypervisor, error) {
+func (f *evacuationPathFinder) FindPaths(ctx context.Context, topo topology, seeds []Seed) ([]Path, error) {
 	log := logf.FromContext(ctx)
 
-	// edges[src][dst] records a discovered directed edge, deduplicating across
-	// seeds. We materialize it into the [source, target] slice at the end.
-	edges := map[string]map[string]bool{}
+	// edges[src][dst] records the flavor seeds that produced a discovered directed
+	// edge, deduplicating across seeds. We materialize it into the []Path slice at
+	// the end, carrying each edge's supporting flavors.
+	edges := map[string]map[string]map[string]bool{}
 	for _, seed := range seeds {
 		accepting, err := f.fetchSeedCandidates(ctx, seed, topo.hypervisors)
 		if err != nil {
@@ -125,7 +140,9 @@ func (f *evacuationPathFinder) FindPaths(ctx context.Context, topo topology, see
 		log.V(1).Info("fetched candidates for seed",
 			"flavor", seed.Flavor.Name, "az", seed.AvailabilityZone, "hosts", acceptingNames)
 		// Pair up every co-accepting host, emitting source->target when the target
-		// is at least as large as the source (the gang-fit constraint).
+		// is at least as large as the source (the gang-fit constraint). Record the
+		// seed's flavor on the edge so downstream stages know which flavors the pair
+		// co-accepts.
 		for _, src := range accepting {
 			for _, dst := range accepting {
 				if src.Name == dst.Name {
@@ -135,16 +152,20 @@ func (f *evacuationPathFinder) FindPaths(ctx context.Context, topo topology, see
 					continue // Target smaller than source: it cannot hold the gang.
 				}
 				if edges[src.Name] == nil {
-					edges[src.Name] = map[string]bool{}
+					edges[src.Name] = map[string]map[string]bool{}
 				}
-				edges[src.Name][dst.Name] = true
+				if edges[src.Name][dst.Name] == nil {
+					edges[src.Name][dst.Name] = map[string]bool{}
+				}
+				edges[src.Name][dst.Name][seed.Flavor.Name] = true
 			}
 		}
 	}
 
-	// Materialize the deduplicated edges into [source, target] pairs, sorted so
-	// the output is deterministic despite the map iteration above.
-	paths := [][2]hv1.Hypervisor{}
+	// Materialize the deduplicated edges into Paths, sorted so the output is
+	// deterministic despite the map iteration above. Each edge's flavor set is
+	// flattened into a sorted slice.
+	paths := []Path{}
 	srcNames := make([]string, 0, len(edges))
 	for src := range edges {
 		srcNames = append(srcNames, src)
@@ -157,8 +178,18 @@ func (f *evacuationPathFinder) FindPaths(ctx context.Context, topo topology, see
 		}
 		sort.Strings(dstNames)
 		for _, dst := range dstNames {
-			paths = append(paths, [2]hv1.Hypervisor{topo.hypervisors[src], topo.hypervisors[dst]})
-			log.V(1).Info("added failover path", "sourceHost", src, "targetHost", dst)
+			flavors := make([]string, 0, len(edges[src][dst]))
+			for flavor := range edges[src][dst] {
+				flavors = append(flavors, flavor)
+			}
+			sort.Strings(flavors)
+			paths = append(paths, Path{
+				Source:  topo.hypervisors[src],
+				Target:  topo.hypervisors[dst],
+				Flavors: flavors,
+			})
+			log.V(1).Info("added failover path",
+				"sourceHost", src, "targetHost", dst, "flavors", flavors)
 		}
 	}
 	return paths, nil

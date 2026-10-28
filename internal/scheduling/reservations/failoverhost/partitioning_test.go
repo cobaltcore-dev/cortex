@@ -28,26 +28,31 @@ func hvWithMemory(name string, memGiB int64) hv1.Hypervisor {
 }
 
 // edgesHV turns directed hypervisor pairs into failover paths, preserving the
-// hypervisors' capacity (unlike edges, which rebuilds bare hosts from names).
-func edgesHV(pairs ...[2]hv1.Hypervisor) [][2]hv1.Hypervisor {
-	return pairs
+// hypervisors' capacity (unlike edges, which rebuilds bare hosts from names). No
+// supporting flavors are attached; flavor propagation is covered separately.
+func edgesHV(pairs ...[2]hv1.Hypervisor) []Path {
+	paths := make([]Path, 0, len(pairs))
+	for _, p := range pairs {
+		paths = append(paths, Path{Source: p[0], Target: p[1]})
+	}
+	return paths
 }
 
 // edges turns a list of directed name pairs into failover paths.
-func edges(pairs ...[2]string) [][2]hv1.Hypervisor {
-	paths := make([][2]hv1.Hypervisor, 0, len(pairs))
+func edges(pairs ...[2]string) []Path {
+	paths := make([]Path, 0, len(pairs))
 	for _, p := range pairs {
-		paths = append(paths, [2]hv1.Hypervisor{hv(p[0]), hv(p[1])})
+		paths = append(paths, Path{Source: hv(p[0]), Target: hv(p[1])})
 	}
 	return paths
 }
 
 // partitionNames extracts the sorted host names of each partition.
-func partitionNames(partitions [][]hv1.Hypervisor) [][]string {
+func partitionNames(partitions []Partition) [][]string {
 	out := make([][]string, 0, len(partitions))
 	for _, partition := range partitions {
-		names := make([]string, 0, len(partition))
-		for _, hv := range partition {
+		names := make([]string, 0, len(partition.Hosts))
+		for _, hv := range partition.Hosts {
 			names = append(names, hv.Name)
 		}
 		slices.Sort(names)
@@ -59,7 +64,7 @@ func partitionNames(partitions [][]hv1.Hypervisor) [][]string {
 func TestBuildPartitions(t *testing.T) {
 	tests := []struct {
 		name  string
-		paths [][2]hv1.Hypervisor
+		paths []Path
 		want  [][]string
 	}{
 		{
@@ -166,6 +171,16 @@ func hvWithAggregates(name string, aggregates ...string) hv1.Hypervisor {
 	return h
 }
 
+// parts wraps plain host slices into flavorless Partitions, for the
+// characterize tests that only exercise the host dimensions.
+func parts(hostSets ...[]hv1.Hypervisor) []Partition {
+	out := make([]Partition, 0, len(hostSets))
+	for _, hosts := range hostSets {
+		out = append(out, Partition{Hosts: hosts})
+	}
+	return out
+}
+
 func TestCharacterizePartitions(t *testing.T) {
 	t.Run("no partitions", func(t *testing.T) {
 		if got := characterizePartitions(nil); len(got) != 0 {
@@ -174,10 +189,10 @@ func TestCharacterizePartitions(t *testing.T) {
 	})
 
 	t.Run("distinguishing aggregate is reported per partition", func(t *testing.T) {
-		labels := characterizePartitions([][]hv1.Hypervisor{
-			{hvWithAggregates("a", "hana"), hvWithAggregates("b", "hana")},
-			{hvWithAggregates("c", "general"), hvWithAggregates("d", "general")},
-		})
+		labels := characterizePartitions(parts(
+			[]hv1.Hypervisor{hvWithAggregates("a", "hana"), hvWithAggregates("b", "hana")},
+			[]hv1.Hypervisor{hvWithAggregates("c", "general"), hvWithAggregates("d", "general")},
+		))
 		want := []string{"spec.aggregates=[hana]", "spec.aggregates=[general]"}
 		if !slices.Equal(labels, want) {
 			t.Errorf("got %v, want %v", labels, want)
@@ -186,10 +201,10 @@ func TestCharacterizePartitions(t *testing.T) {
 
 	t.Run("field shared across all partitions is dropped", func(t *testing.T) {
 		// Both partitions share the same aggregate, so it distinguishes neither.
-		labels := characterizePartitions([][]hv1.Hypervisor{
-			{hvWithAggregates("a", "hana")},
-			{hvWithAggregates("b", "hana")},
-		})
+		labels := characterizePartitions(parts(
+			[]hv1.Hypervisor{hvWithAggregates("a", "hana")},
+			[]hv1.Hypervisor{hvWithAggregates("b", "hana")},
+		))
 		for i, label := range labels {
 			if strings.Contains(label, "aggregates") {
 				t.Errorf("partition %d label %q should not mention the shared aggregate", i, label)
@@ -199,18 +214,113 @@ func TestCharacterizePartitions(t *testing.T) {
 
 	t.Run("single partition keeps its distinguishing fields", func(t *testing.T) {
 		// With only one partition nothing is fleet-wide, so shared fields survive.
-		labels := characterizePartitions([][]hv1.Hypervisor{
-			{hvWithAggregates("a", "hana")},
-		})
+		labels := characterizePartitions(parts(
+			[]hv1.Hypervisor{hvWithAggregates("a", "hana")},
+		))
 		if len(labels) != 1 || !strings.Contains(labels[0], "spec.aggregates=[hana]") {
 			t.Errorf("got %v, want a label containing spec.aggregates=[hana]", labels)
 		}
 	})
 
 	t.Run("empty partition yields an empty label", func(t *testing.T) {
-		labels := characterizePartitions([][]hv1.Hypervisor{{}})
+		labels := characterizePartitions(parts([]hv1.Hypervisor{}))
 		if len(labels) != 1 || labels[0] != "" {
 			t.Errorf("got %v, want one empty label", labels)
 		}
 	})
+}
+
+// pathWithFlavors builds a directed edge between bare hosts carrying the given
+// supporting flavors.
+func pathWithFlavors(src, dst string, flavors ...string) Path {
+	return Path{Source: hv(src), Target: hv(dst), Flavors: flavors}
+}
+
+func TestBuildPartitionsFlavors(t *testing.T) {
+	t.Run("only flavors accepted on every host are listed", func(t *testing.T) {
+		// flavorAll is co-accepted on both mutual pairs of the triangle a-b-c, so
+		// all three hosts accept it. flavorAB rides only the a<->b edges, so c never
+		// accepts it and it must be excluded from the partition's flavor set.
+		paths := []Path{
+			pathWithFlavors("a", "b", "flavorAll", "flavorAB"),
+			pathWithFlavors("b", "a", "flavorAll", "flavorAB"),
+			pathWithFlavors("b", "c", "flavorAll"),
+			pathWithFlavors("c", "b", "flavorAll"),
+			pathWithFlavors("a", "c", "flavorAll"),
+			pathWithFlavors("c", "a", "flavorAll"),
+		}
+		got := cliquePartitionBuilder{}.BuildPartitions(paths)
+		if len(got) != 1 {
+			t.Fatalf("got %d partitions, want 1", len(got))
+		}
+		if want := []string{"flavorAll"}; !slices.Equal(got[0].Flavors, want) {
+			t.Errorf("flavors = %v, want %v (flavorAB is not accepted on c)", got[0].Flavors, want)
+		}
+	})
+
+	t.Run("recruited host contributes its inbound-edge flavors", func(t *testing.T) {
+		// e has no outgoing edge (so the builder treats it as an empty host to
+		// recruit), but it is the target of a<->b's probes for flavorX, which by the
+		// path finder's semantics means e co-accepted flavorX too. Since a and b also
+		// accept flavorX, it survives the all-hosts intersection and is listed.
+		paths := []Path{
+			{Source: hvWithMemory("a", 4), Target: hvWithMemory("b", 4), Flavors: []string{"flavorX"}},
+			{Source: hvWithMemory("b", 4), Target: hvWithMemory("a", 4), Flavors: []string{"flavorX"}},
+			{Source: hvWithMemory("a", 4), Target: hvWithMemory("e", 4), Flavors: []string{"flavorX"}},
+			{Source: hvWithMemory("b", 4), Target: hvWithMemory("e", 4), Flavors: []string{"flavorX"}},
+		}
+		got := cliquePartitionBuilder{}.BuildPartitions(paths)
+		if len(got) != 1 || len(got[0].Hosts) != 3 {
+			t.Fatalf("got %d partitions %v, want one of 3 hosts", len(got), partitionNames(got))
+		}
+		if want := []string{"flavorX"}; !slices.Equal(got[0].Flavors, want) {
+			t.Errorf("flavors = %v, want %v", got[0].Flavors, want)
+		}
+	})
+
+	t.Run("flavor on only one member is excluded after recruitment", func(t *testing.T) {
+		// Like above, but flavorAB rides only the a<->b edges. The recruited host e
+		// never accepts flavorAB (its inbound edges carry only flavorX), so once e
+		// joins, flavorAB is no longer accepted on every host and drops out.
+		paths := []Path{
+			{Source: hvWithMemory("a", 4), Target: hvWithMemory("b", 4), Flavors: []string{"flavorX", "flavorAB"}},
+			{Source: hvWithMemory("b", 4), Target: hvWithMemory("a", 4), Flavors: []string{"flavorX", "flavorAB"}},
+			{Source: hvWithMemory("a", 4), Target: hvWithMemory("e", 4), Flavors: []string{"flavorX"}},
+			{Source: hvWithMemory("b", 4), Target: hvWithMemory("e", 4), Flavors: []string{"flavorX"}},
+		}
+		got := cliquePartitionBuilder{}.BuildPartitions(paths)
+		if len(got) != 1 {
+			t.Fatalf("got %d partitions, want 1", len(got))
+		}
+		if want := []string{"flavorX"}; !slices.Equal(got[0].Flavors, want) {
+			t.Errorf("flavors = %v, want %v (flavorAB is not accepted on recruited e)", got[0].Flavors, want)
+		}
+	})
+}
+
+func TestDescribePartition(t *testing.T) {
+	tests := []struct {
+		name    string
+		label   string
+		flavors []string
+		want    string
+	}{
+		{"label and flavors", "spec.aggregates=[hana]", []string{"a", "b"}, "spec.aggregates=[hana] | flavors: a, b"},
+		{"label only", "spec.aggregates=[hana]", nil, "spec.aggregates=[hana]"},
+		{"flavors only", "", []string{"a", "b"}, "flavors: a, b"},
+		{"neither", "", nil, ""},
+		{
+			name:    "flavor list is capped",
+			label:   "",
+			flavors: []string{"f1", "f2", "f3", "f4", "f5", "f6", "f7"},
+			want:    "flavors: f1, f2, f3, f4, f5 (+2 more)",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := describePartition(tt.label, tt.flavors); got != tt.want {
+				t.Errorf("describePartition(%q, %v) = %q, want %q", tt.label, tt.flavors, got, tt.want)
+			}
+		})
+	}
 }

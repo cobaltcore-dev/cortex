@@ -418,6 +418,14 @@ reservations only appear when the count grows or an existing target leaves the p
 Each chosen host is then reserved in full, recording the other partition members as the hosts it stands ready
 to rescue.
 
+Each reservation also carries a human-readable **partition description** (stored in the reservation's
+`partitionDescription` field) made of two parts: what distinguishes the partition's hosts from other partitions
+(e.g. `spec.aggregates=[hana]`), and **which flavors the partition can run** — the flavors every host in the
+partition was seen to accept, so a listed flavor is guaranteed to fit anywhere in it. A long flavor list is
+capped (e.g. `flavors: hana.4xl, hana.8xl (+3 more)`) to keep the field compact; the full set is logged each
+pass. The description carries no scheduling semantics — it exists purely so an operator can tell, at a glance,
+what a reserved host is standing by to absorb.
+
 **A reserved host is listed as a source of its sibling reservations — and that is intentional.** When a
 partition reserves more than one failover host, each reservation records *every* other partition member as a
 source host, including the partition's *other* reserved hosts. At first glance this looks wrong: why list a

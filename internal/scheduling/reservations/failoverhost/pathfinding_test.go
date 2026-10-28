@@ -69,10 +69,10 @@ func stubScheduler(t *testing.T, candidatesByFlavor map[string][]string, errFlav
 
 // pathNames collapses failover edges into sorted "source->target" strings, for
 // order-independent comparison.
-func pathNames(paths [][2]hv1.Hypervisor) []string {
+func pathNames(paths []Path) []string {
 	out := make([]string, 0, len(paths))
 	for _, p := range paths {
-		out = append(out, p[0].Name+"->"+p[1].Name)
+		out = append(out, p.Source.Name+"->"+p.Target.Name)
 	}
 	slices.Sort(out)
 	return out
@@ -187,5 +187,30 @@ func TestFindPathsSingleCandidateYieldsNoEdge(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("paths = %v, want none", pathNames(got))
+	}
+}
+
+func TestFindPathsRecordsSupportingFlavors(t *testing.T) {
+	// flavorA is accepted on both hosts, flavorB only on hvA. The edge hvA<->hvB is
+	// produced solely by flavorA, so each directed edge must carry exactly
+	// ["flavorA"] — flavorB co-accepts on no pair and leaves no trace.
+	finder, server := stubScheduler(t, map[string][]string{
+		"flavorA": {"hvA", "hvB"},
+		"flavorB": {"hvA"},
+	}, nil)
+	defer server.Close()
+
+	topo := hostTopo(map[string]int64{"hvA": 64, "hvB": 64})
+	got, err := finder.FindPaths(context.Background(), topo, []Seed{seed("flavorA"), seed("flavorB")})
+	if err != nil {
+		t.Fatalf("FindPaths: %v", err)
+	}
+	for _, p := range got {
+		if want := []string{"flavorA"}; !slices.Equal(p.Flavors, want) {
+			t.Errorf("edge %s->%s flavors = %v, want %v", p.Source.Name, p.Target.Name, p.Flavors, want)
+		}
+	}
+	if want := []string{"hvA->hvB", "hvB->hvA"}; !slices.Equal(pathNames(got), want) {
+		t.Errorf("paths = %v, want %v", pathNames(got), want)
 	}
 }

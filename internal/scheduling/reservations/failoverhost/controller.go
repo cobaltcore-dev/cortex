@@ -443,13 +443,13 @@ func (c *Controller) loop(ctx context.Context) {
 	// is deterministic. Partitions are already sorted by their first member, so a
 	// stable sort by ascending size keeps that tiebreak order.
 	sort.SliceStable(partitions, func(i, j int) bool {
-		return len(partitions[i]) < len(partitions[j])
+		return len(partitions[i].Hosts) < len(partitions[j].Hosts)
 	})
 	assigned := map[string]bool{}
-	deduped := make([][]hv1.Hypervisor, 0, len(partitions))
+	deduped := make([]Partition, 0, len(partitions))
 	for _, partition := range partitions {
-		kept := make([]hv1.Hypervisor, 0, len(partition))
-		for _, hv := range partition {
+		kept := make([]hv1.Hypervisor, 0, len(partition.Hosts))
+		for _, hv := range partition.Hosts {
 			if assigned[hv.Name] {
 				continue
 			}
@@ -459,22 +459,27 @@ func (c *Controller) loop(ctx context.Context) {
 		// Drop a partition emptied out by the dedupe, and one reduced below two
 		// hosts: a lone host offers no failover peer (see PlanReservations).
 		if len(kept) >= 2 {
-			deduped = append(deduped, kept)
+			// Keep the partition's supported flavors as computed over its full
+			// membership. Dropping a shared host can only relax the all-hosts
+			// intersection, never tighten it, so every listed flavor still runs on
+			// every remaining host — the set is at worst conservative.
+			deduped = append(deduped, Partition{Hosts: kept, Flavors: partition.Flavors})
 		}
 	}
 	// Restore the deterministic ordering the builder produced (by first host
 	// name), which the size sort above disturbed.
 	sort.SliceStable(deduped, func(i, j int) bool {
-		return deduped[i][0].Name < deduped[j][0].Name
+		return deduped[i].Hosts[0].Name < deduped[j].Hosts[0].Name
 	})
 	partitions = deduped
 	labels := characterizePartitions(partitions)
 	for i, partition := range partitions {
 		// Describe what sets this partition apart from the others: the shared
-		// fields no other partition shares. See characterizePartitions.
+		// fields no other partition shares, plus the flavors it can run. See
+		// characterizePartitions and Partition.Flavors.
 		log.V(1).Info("characterized failover partition",
-			"partition", i, "partitionSize", len(partition),
-			"distinctBy", labels[i])
+			"partition", i, "partitionSize", len(partition.Hosts),
+			"distinctBy", labels[i], "flavors", partition.Flavors)
 	}
 
 	// Plan the desired reservations per partition and collect them into one map.
@@ -485,12 +490,13 @@ func (c *Controller) loop(ctx context.Context) {
 	// but still present in the cluster is detected as stale.
 	desired := make(map[corev1.ObjectReference]v1alpha1.Reservation)
 	for i, partition := range partitions {
-		planned := c.reservationPlanner.PlanReservations(topo, partition, labels[i])
+		description := describePartition(labels[i], partition.Flavors)
+		planned := c.reservationPlanner.PlanReservations(topo, partition.Hosts, description)
 		for _, reservation := range planned {
 			desired[corev1.ObjectReference{Name: reservation.Name}] = reservation
 		}
 		log.V(1).Info("planned failover hosts for partition",
-			"partitionSize", len(partition), "planned", len(planned))
+			"partitionSize", len(partition.Hosts), "planned", len(planned))
 	}
 	c.desiredReservationsMu.Lock()
 	c.desiredReservations = desired

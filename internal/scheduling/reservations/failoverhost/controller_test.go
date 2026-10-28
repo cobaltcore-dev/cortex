@@ -219,9 +219,9 @@ func TestLoopGeneratesReservations(t *testing.T) {
 
 // fakePartitionBuilder returns a fixed set of partitions regardless of input, so
 // a test can drive loop with overlapping cliques the real builder would produce.
-type fakePartitionBuilder struct{ partitions [][]hv1.Hypervisor }
+type fakePartitionBuilder struct{ partitions []Partition }
 
-func (f fakePartitionBuilder) BuildPartitions([][2]hv1.Hypervisor) [][]hv1.Hypervisor {
+func (f fakePartitionBuilder) BuildPartitions([]Path) []Partition {
 	return f.partitions
 }
 
@@ -253,8 +253,8 @@ func TestLoopDeduplicatesSharedHost(t *testing.T) {
 		reconcileCh: make(chan event.GenericEvent, 16),
 		seeder:      fakeSeeder{seeds: []Seed{seed("flavor")}},
 		pathFinder:  finder,
-		partitionBuilder: fakePartitionBuilder{partitions: [][]hv1.Hypervisor{
-			{*hvA, *hvB}, {*hvB, *hvC},
+		partitionBuilder: fakePartitionBuilder{partitions: []Partition{
+			{Hosts: []hv1.Hypervisor{*hvA, *hvB}}, {Hosts: []hv1.Hypervisor{*hvB, *hvC}},
 		}},
 		reservationPlanner: ratioReservationPlanner{ratio: 0.5, minimum: 1},
 	}
@@ -302,8 +302,8 @@ func TestLoopSharedHostKeptInSmallestPartition(t *testing.T) {
 		reconcileCh: make(chan event.GenericEvent, 16),
 		seeder:      fakeSeeder{seeds: []Seed{seed("flavor")}},
 		pathFinder:  finder,
-		partitionBuilder: fakePartitionBuilder{partitions: [][]hv1.Hypervisor{
-			{*hvA, *hvB, *hvC}, {*hvC, *hvD},
+		partitionBuilder: fakePartitionBuilder{partitions: []Partition{
+			{Hosts: []hv1.Hypervisor{*hvA, *hvB, *hvC}}, {Hosts: []hv1.Hypervisor{*hvC, *hvD}},
 		}},
 		reservationPlanner: ratioReservationPlanner{ratio: 0.5, minimum: 1},
 	}

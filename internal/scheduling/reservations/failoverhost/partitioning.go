@@ -4,17 +4,31 @@
 package failoverhost
 
 import (
-	"encoding/json"
 	"fmt"
 	"maps"
-	"reflect"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
+
+// Partition is one failover partition: a set of hypervisors in which every host
+// can be evacuated onto every other host, plus the flavors that whole set can
+// run. Flavors answers "which flavors can be spawned anywhere in this partition":
+// a flavor is listed only if *every* host in the partition accepts it, so a
+// listed flavor is guaranteed to run on all of them. Flavors is sorted and may be
+// empty — e.g. when the members' accept sets are disjoint, so no single flavor is
+// proven to fit everywhere in the partition.
+type Partition struct {
+	// Hosts are the partition's members, sorted by name.
+	Hosts []hv1.Hypervisor
+	// Flavors are the flavor names accepted on every host of the partition,
+	// sorted.
+	Flavors []string
+}
 
 // PartitionBuilder is the third pipeline stage. It clusters the directed
 // failover edges found by the PathFinder into failover partitions.
@@ -24,9 +38,10 @@ import (
 // hosts and external-customer hosts typically each form their own partition,
 // because their workloads can only ever fail over within the group.
 type PartitionBuilder interface {
-	// BuildPartitions groups the [source, target] failover edges into
-	// partitions. The output is deterministic regardless of edge order.
-	BuildPartitions(paths [][2]hv1.Hypervisor) [][]hv1.Hypervisor
+	// BuildPartitions groups the failover Paths into partitions, each carrying the
+	// flavors its whole host set can run. The output is deterministic regardless
+	// of edge order.
+	BuildPartitions(paths []Path) []Partition
 }
 
 // cliquePartitionBuilder builds partitions by finding maximal cliques in the
@@ -42,10 +57,12 @@ type PartitionBuilder interface {
 // we then assume the reverse direction is also possible.
 type cliquePartitionBuilder struct{}
 
-// BuildPartitions implements PartitionBuilder. It works in four steps:
+// BuildPartitions implements PartitionBuilder. It works in five steps:
 //
-//  1. Build the directed adjacency from the edges, and note which hosts have no
-//     outgoing edge at all (the "empty" hosts, handled specially in step 3).
+//  1. Build the directed adjacency from the edges, record which flavors each host
+//     accepts (it is an endpoint of an edge carrying that flavor), and note which
+//     hosts have no outgoing edge at all (the "empty" hosts, handled specially in
+//     step 3).
 //  2. Derive the undirected "mutual" adjacency (a—b iff both a→b and b→a), and
 //     run Bron-Kerbosch over it to enumerate every maximal clique. Each clique
 //     is one partition. Bron-Kerbosch recursively grows a candidate clique R by
@@ -58,18 +75,33 @@ type cliquePartitionBuilder struct{}
 //     fully reaches stays on its own.
 //  4. Translate host names back to Hypervisor values and sort, so the result is
 //     deterministic despite the map iteration used throughout.
-func (cliquePartitionBuilder) BuildPartitions(paths [][2]hv1.Hypervisor) [][]hv1.Hypervisor {
-	// Collect all hosts and the directed adjacency, keyed by host name.
+//  5. Compute each partition's supported flavors: the flavors accepted on *every*
+//     one of its hosts (the intersection of the per-host accept sets from step 1).
+func (cliquePartitionBuilder) BuildPartitions(paths []Path) []Partition {
+	// Collect all hosts and the directed adjacency, keyed by host name. Also record
+	// which flavors each host accepts: a host is an endpoint of an edge exactly
+	// when it co-accepted that edge's flavors, so both endpoints accept them.
 	hvsByName := map[string]hv1.Hypervisor{}
 	outgoing := map[string]map[string]bool{}
+	acceptedBy := map[string]map[string]bool{}
+	accept := func(host string, flavors []string) {
+		if acceptedBy[host] == nil {
+			acceptedBy[host] = map[string]bool{}
+		}
+		for _, flavor := range flavors {
+			acceptedBy[host][flavor] = true
+		}
+	}
 	for _, path := range paths {
-		src, dst := path[0], path[1]
+		src, dst := path.Source, path.Target
 		hvsByName[src.Name] = src
 		hvsByName[dst.Name] = dst
 		if outgoing[src.Name] == nil {
 			outgoing[src.Name] = map[string]bool{}
 		}
 		outgoing[src.Name][dst.Name] = true
+		accept(src.Name, path.Flavors)
+		accept(dst.Name, path.Flavors)
 	}
 
 	// Build the undirected adjacency from mutual edges only. Hosts without any
@@ -205,99 +237,123 @@ func (cliquePartitionBuilder) BuildPartitions(paths [][2]hv1.Hypervisor) [][]hv1
 		}
 	}
 
-	// Translate the clique host names back into hypervisors. Sort for
-	// deterministic output, as the clustering relies on map iteration.
-	partitions := make([][]hv1.Hypervisor, 0, len(cliques))
+	// Translate the clique host names back into hypervisors and compute each
+	// partition's supported flavors: those accepted on *every* host, so a listed
+	// flavor is guaranteed to run anywhere in the partition. Sort for deterministic
+	// output, as the clustering relies on map iteration.
+	partitions := make([]Partition, 0, len(cliques))
 	for _, clique := range cliques {
 		slices.Sort(clique)
-		partition := make([]hv1.Hypervisor, 0, len(clique))
+		hosts := make([]hv1.Hypervisor, 0, len(clique))
 		for _, name := range clique {
-			partition = append(partition, hvsByName[name])
+			hosts = append(hosts, hvsByName[name])
 		}
-		partitions = append(partitions, partition)
+		partitions = append(partitions, Partition{
+			Hosts:   hosts,
+			Flavors: sharedFlavors(clique, acceptedBy),
+		})
 	}
 	sort.SliceStable(partitions, func(i, j int) bool {
-		return partitions[i][0].Name < partitions[j][0].Name
+		return partitions[i].Hosts[0].Name < partitions[j].Hosts[0].Name
 	})
 	return partitions
+}
+
+// sharedFlavors returns the flavors accepted on *every* host in the clique,
+// sorted. A host accepts a flavor when it is an endpoint of an edge the path
+// finder tagged with that flavor (both endpoints co-accepted it), so even a
+// recruited host counts through its inbound edges. The result is empty when the
+// members' accept sets don't intersect.
+func sharedFlavors(clique []string, acceptedBy map[string]map[string]bool) []string {
+	if len(clique) == 0 {
+		return nil
+	}
+	shared := []string{}
+	for flavor := range acceptedBy[clique[0]] {
+		onAll := true
+		for _, host := range clique[1:] {
+			if !acceptedBy[host][flavor] {
+				onAll = false
+				break
+			}
+		}
+		if onAll {
+			shared = append(shared, flavor)
+		}
+	}
+	slices.Sort(shared)
+	return shared
 }
 
 // characterizePartitions returns a short, human-readable label per partition
 // describing what sets it apart from the others, e.g. "spec.aggregates=[hana]".
 // The result is index-aligned with partitions.
 //
-// For each partition we first intersect its hypervisors down to the leaf paths
-// whose value is identical across all of them — the fields that implicitly make
-// those hosts a partition (a common AZ, aggregate, or hypervisor type), without
-// hard-coding which fields matter. We then keep only the *distinguishing* leaves:
-// a field is dropped if its shared value is identical across every partition, as
-// such fleet-wide constants (default booleans, versions, ...) say nothing about
-// what makes a partition special. The surviving leaves are rendered as a compact,
-// sorted "key=value key=value" string for at-a-glance logging.
-func characterizePartitions(partitions [][]hv1.Hypervisor) []string {
-	// flatten serializes a hypervisor to its leaf paths, keyed by dotted path.
-	flatten := func(hv hv1.Hypervisor) map[string]any {
-		raw, err := json.Marshal(hv)
-		if err != nil {
-			return nil
+// It compares partitions on just the three dimensions that actually shape a
+// failover partition — aggregates, traits and (rounded) capacity — rather than
+// reflecting over every field of the hypervisor. For each dimension we take the
+// value shared by all of a partition's hosts (dropping it if they disagree), then
+// keep only the *distinguishing* ones: a dimension is dropped if its shared value
+// is identical across every partition, as such a fleet-wide constant says nothing
+// about what makes a partition special. The survivors are rendered as a compact,
+// sorted "key=value key=value" string for at-a-glance logging. Flavor support is
+// reported separately (see Partition.Flavors), so it is not repeated here.
+func characterizePartitions(partitions []Partition) []string {
+	// fields returns the three comparable dimensions of a hypervisor, each as a
+	// stable string: its aggregates, its traits, and its capacity rounded to GiB
+	// (so tiny per-node memory discrepancies don't split an otherwise-shared
+	// value). Capacity reuses hvCapacity and the GiB rounding cmpResources applies.
+	fields := func(hv hv1.Hypervisor) map[string]string {
+		aggregates := slices.Clone(hv.Spec.Aggregates)
+		slices.Sort(aggregates)
+		traits := slices.Clone(hv.Status.Traits)
+		slices.Sort(traits)
+		capa := hvCapacity(hv)
+		const gib = 1 << 30
+		memGi := capa[hv1.ResourceMemory]
+		cpu := capa[hv1.ResourceCPU]
+		return map[string]string{
+			"spec.aggregates":       fmt.Sprintf("%v", aggregates),
+			"status.traits":         fmt.Sprintf("%v", traits),
+			"status.capacity.memGi": strconv.FormatInt(memGi.Value()/gib, 10),
+			"status.capacity.cpu":   cpu.String(),
 		}
-		var nested map[string]any
-		if err := json.Unmarshal(raw, &nested); err != nil {
-			return nil
-		}
-		flat := make(map[string]any)
-		var walk func(prefix string, v any)
-		walk = func(prefix string, v any) {
-			if m, ok := v.(map[string]any); ok {
-				for k, vv := range m {
-					key := k
-					if prefix != "" {
-						key = prefix + "." + k
-					}
-					walk(key, vv)
-				}
-				return
-			}
-			flat[prefix] = v
-		}
-		walk("", nested)
-		return flat
 	}
-	// shared[i] holds the leaves common to every hypervisor in partition i.
-	shared := make([]map[string]any, len(partitions))
+	// shared[i] holds the dimensions common to every hypervisor in partition i.
+	shared := make([]map[string]string, len(partitions))
 	for i, partition := range partitions {
-		if len(partition) == 0 {
-			shared[i] = map[string]any{}
+		if len(partition.Hosts) == 0 {
+			shared[i] = map[string]string{}
 			continue
 		}
-		common := flatten(partition[0])
-		for _, hv := range partition[1:] {
-			flat := flatten(hv)
+		common := fields(partition.Hosts[0])
+		for _, hv := range partition.Hosts[1:] {
+			f := fields(hv)
 			for key, want := range common {
-				if got, ok := flat[key]; !ok || !reflect.DeepEqual(got, want) {
+				if f[key] != want {
 					delete(common, key)
 				}
 			}
 		}
 		shared[i] = common
 	}
-	// Count how many partitions carry each (key, value). A field common to all
+	// Count how many partitions carry each (key, value). A dimension common to all
 	// of them is a fleet-wide constant and tells us nothing distinguishing.
 	seen := map[string]int{}
 	for _, common := range shared {
 		for key, val := range common {
-			seen[key+"="+fmt.Sprintf("%v", val)]++
+			seen[key+"="+val]++
 		}
 	}
-	// Render the distinguishing leaves of each partition as a sorted label. A
-	// field is distinguishing unless every partition shares it (a fleet-wide
-	// constant); with a single partition there is nothing to contrast against,
-	// so all its shared fields survive.
+	// Render the distinguishing dimensions of each partition as a sorted label. A
+	// dimension is distinguishing unless every partition shares it (a fleet-wide
+	// constant); with a single partition there is nothing to contrast against, so
+	// all its shared dimensions survive.
 	labels := make([]string, len(partitions))
 	for i, common := range shared {
 		parts := make([]string, 0, len(common))
 		for key, val := range common {
-			pair := key + "=" + fmt.Sprintf("%v", val)
+			pair := key + "=" + val
 			if len(partitions) == 1 || seen[pair] < len(partitions) {
 				parts = append(parts, pair)
 			}
@@ -306,4 +362,33 @@ func characterizePartitions(partitions [][]hv1.Hypervisor) []string {
 		labels[i] = strings.Join(parts, " ")
 	}
 	return labels
+}
+
+// maxDescribedFlavors caps how many flavor names describePartition spells out, so
+// a partition that runs hundreds of flavors doesn't bloat the reservation's
+// PartitionDescription field. The rest are summarized as a "(+k more)" count; the
+// full set is still logged per pass.
+const maxDescribedFlavors = 5
+
+// describePartition renders the human-readable PartitionDescription stored on each
+// reservation: the distinguishing label (see characterizePartitions) followed by
+// the flavors the partition can run (see Partition.Flavors), e.g.
+// "spec.aggregates=[hana] | flavors: hana.4xl, hana.8xl (+3 more)". flavors is
+// assumed sorted. Either half is omitted when empty, so a partition with no
+// distinguishing label still reports its flavors and vice versa.
+func describePartition(label string, flavors []string) string {
+	parts := []string{}
+	if label != "" {
+		parts = append(parts, label)
+	}
+	if len(flavors) > 0 {
+		shown := flavors
+		suffix := ""
+		if len(flavors) > maxDescribedFlavors {
+			shown = flavors[:maxDescribedFlavors]
+			suffix = fmt.Sprintf(" (+%d more)", len(flavors)-maxDescribedFlavors)
+		}
+		parts = append(parts, "flavors: "+strings.Join(shown, ", ")+suffix)
+	}
+	return strings.Join(parts, " | ")
 }
