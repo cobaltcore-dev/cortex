@@ -45,26 +45,14 @@
 // heavy computation out of the reconcile path means reconciles stay cheap and
 // idempotent.
 //
-// # The calculation pipeline
+// # The calculation
 //
-// Each pass of the loop runs a four-stage pipeline, each stage a small interface
-// so it can be understood, tested and swapped in isolation:
-//
-//  1. Seeder (seeding.go) enumerates the hypothetical placements to probe with:
-//     every Nova flavor crossed with every availability zone in the fleet. These
-//     flavor "seeds" replace the running vms the pipeline used to derive paths
-//     from, so a partition is found even when its hosts run no vms and no single
-//     exotic vm can veto a host from its partition.
-//  2. PathFinder (pathfinding.go) probes the scheduler per seed and turns the
-//     answers into the directed edges of a failover graph: source -> target means
-//     "a host's whole workload can be evacuated onto target, and target is big
-//     enough to hold it".
-//  3. PartitionBuilder (partitioning.go) clusters those edges into partitions
-//     (maximal sets of mutually-evacuable hosts).
-//  4. ReservationPlanner (planning.go) decides, per partition, which hosts
-//     become failover targets, honouring the configured ratio and minimum.
-//
-// loop (in controller.go) wires these together and documents the end-to-end flow.
+// The calculation half is a ReservationGenerator (generation.go): loop calls
+// Generate each pass, swaps its result in as the desired state, and wakes the
+// reconciler. The production generator runs a four-stage pipeline (Seeder ->
+// PathFinder -> PartitionBuilder -> ReservationPlanner); see pipelineGenerator
+// in generation.go for the end-to-end flow. The interface lets the whole
+// generation strategy be swapped without touching the controller's plumbing.
 package failoverhost
 
 import (
@@ -72,7 +60,6 @@ import (
 	"errors"
 	"maps"
 	"net/http"
-	"sort"
 	"sync"
 	"time"
 
@@ -82,7 +69,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -168,14 +154,11 @@ type Controller struct {
 	// reservation; the reconciler reads desiredReservations itself.
 	reconcileCh chan event.GenericEvent
 
-	// The pipeline stages run by loop. They are defaulted to the production
-	// implementations in SetupWithManager but can be set beforehand to substitute
-	// fakes in tests. See loop for how they fit together, and seeding.go /
-	// pathfinding.go / partitioning.go / planning.go for each stage.
-	seeder             Seeder
-	pathFinder         PathFinder
-	partitionBuilder   PartitionBuilder
-	reservationPlanner ReservationPlanner
+	// generator computes the desired reservations each pass (the swappable
+	// producer half of the controller). It is defaulted to the production
+	// pipelineGenerator in SetupWithManager but can be set beforehand to
+	// substitute a fake in tests. See generation.go.
+	generator ReservationGenerator
 }
 
 // Reconcile drives a single failover host reservation toward the desired state
@@ -318,32 +301,29 @@ func (c *Controller) Start(ctx context.Context) error {
 //   - It registers the reconciler with a channel event source, so the loop can
 //     enqueue reconcile requests by sending on reconcileCh.
 //
-// It also defaults the three pipeline stages to their production
-// implementations. Tests may set any of them beforehand to substitute a fake
-// (e.g. a path finder pointed at a stub scheduler); only the nil ones are
-// defaulted here.
+// It also defaults the generator to the production pipelineGenerator. Tests may
+// set it beforehand to substitute a fake (e.g. a path finder pointed at a stub
+// scheduler); it is only defaulted here when nil.
 func (c *Controller) SetupWithManager(mgr ctrl.Manager) error {
 	if mgr == nil {
 		return errors.New("manager cannot be nil")
 	}
-	// Default the pipeline stages. Tests may set these before calling Setup to
-	// substitute fakes; here we wire the production implementations.
-	if c.seeder == nil {
-		c.seeder = &novaSeeder{flavorClient: NewNovaFlavorClient(c.Config.Nova), k8s: c.Client}
-	}
-	if c.pathFinder == nil {
-		c.pathFinder = &evacuationPathFinder{
-			// Timeout so a hung scheduler can't stall the calculation loop.
-			httpClient:   &http.Client{Timeout: 30 * time.Second},
-			schedulerURL: c.Config.ExternalSchedulerURL,
-			monitor:      c.Monitor,
+	// Default the generator. Tests may set it before calling Setup to substitute
+	// a fake; here we wire the production pipeline stages.
+	if c.generator == nil {
+		c.generator = &pipelineGenerator{
+			Client:  c.Client,
+			Monitor: c.Monitor,
+			seeder:  &novaSeeder{flavorClient: NewNovaFlavorClient(c.Config.Nova), k8s: c.Client},
+			pathFinder: &evacuationPathFinder{
+				// Timeout so a hung scheduler can't stall the calculation loop.
+				httpClient:   &http.Client{Timeout: 30 * time.Second},
+				schedulerURL: c.Config.ExternalSchedulerURL,
+				monitor:      c.Monitor,
+			},
+			partitionBuilder:   cliquePartitionBuilder{},
+			reservationPlanner: ratioReservationPlanner{ratio: c.Config.Ratio, minimum: c.Config.Minimum},
 		}
-	}
-	if c.partitionBuilder == nil {
-		c.partitionBuilder = cliquePartitionBuilder{}
-	}
-	if c.reservationPlanner == nil {
-		c.reservationPlanner = ratioReservationPlanner{ratio: c.Config.Ratio, minimum: c.Config.Minimum}
 	}
 
 	c.reconcileCh = make(chan event.GenericEvent)
@@ -360,201 +340,29 @@ func (c *Controller) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(c)
 }
 
-// topology is the host layout a single calculation pass reasons over: every
-// known hypervisor and the failover host reservations that exist right now. It
-// is a consistent snapshot built once per loop by collect, so every pipeline
-// stage reasons over the same view of the cluster.
-type topology struct {
-	// hypervisors indexes every known hypervisor by its name.
-	hypervisors map[string]hv1.Hypervisor
-	// existing holds the failover host reservations currently in the cluster,
-	// keyed by their object reference. The planner prefers to keep these stable.
-	existing map[corev1.ObjectReference]v1alpha1.Reservation
-}
-
-// loop runs one calculation pass of the failover host pipeline:
+// loop runs one calculation pass: it asks the generator for the desired failover
+// host reservations, swaps them in as the new desired state, and wakes the
+// reconciler. The heavy lifting (snapshotting the cluster and running the
+// pipeline) lives in the generator; see generation.go.
 //
-//  1. collect   — snapshot the cluster into a consistent topology.
-//  2. Seeds     — enumerate the flavor × availability-zone permutations to probe.
-//  3. FindPaths — probe the scheduler per seed and find, for each host, the hosts
-//     its whole workload could be gang-evacuated onto (the directed edges of the
-//     failover graph).
-//  4. BuildPartitions — cluster those edges into failover partitions: maximal
-//     sets of hosts that can all fail over onto one another. These cliques can
-//     overlap, so loop then assigns each shared host to exactly one partition
-//     (the smallest) to keep the planner input disjoint.
-//  5. PlanReservations — per partition, pick which hosts become failover
-//     targets, honouring the configured ratio/minimum and keeping existing
-//     reservations stable.
-//  6. publish   — store the result as the desired state and wake the reconciler.
+// The desired map is swapped in wholesale under the lock Reconcile reads it with,
+// so Reconcile never sees a half-built state. Replacing (rather than mutating)
+// the map is what lets Reconcile prune reservations that are no longer planned:
+// anything absent from the new map but still present in the cluster is detected
+// as stale.
 //
-// Any error or inconsistency aborts the whole pass without touching the desired
+// A generator that returns ok=false aborts the pass without touching the desired
 // state: a partial recalculation is worse than a slightly stale one, as it could
 // drop reservations that are still valid.
 func (c *Controller) loop(ctx context.Context) {
-	log := logf.FromContext(ctx).WithName("failoverhost-controller-calculation-loop")
-	log.Info("recalculating failover host reservations")
-
-	start := time.Now()
-
-	topo, ok := c.collect(ctx)
+	desired, topo, ok := c.generator.Generate(ctx)
 	if !ok {
-		c.Monitor.RecordCalculationAbort("collect")
-		return // collect already logged the reason.
-	}
-
-	// Enumerate the seeds (flavor × availability-zone permutations) to probe
-	// with. A seeding failure (Nova unreachable, auth expired) is an
-	// infrastructure error on a partial view, so abort the pass and keep the last
-	// published picture rather than recomputing from a shrunken seed set.
-	seeds, err := c.seeder.Seeds(ctx, topo)
-	if err != nil {
-		log.Error(err, "failed to generate failover seeds")
-		c.Monitor.RecordCalculationAbort("seeding")
-		return
-	}
-
-	paths, err := c.pathFinder.FindPaths(ctx, topo, seeds)
-	if err != nil {
-		log.Error(err, "failed to find failover paths")
-		c.Monitor.RecordCalculationAbort("pathfinding")
-		return
-	}
-
-	// Cluster the failover edges into partitions. See partitioning.go for why a
-	// partition is a maximal clique of mutually-evacuable hosts, and how empty
-	// hosts are recruited into the partition that can reach them.
-	partitions := c.partitionBuilder.BuildPartitions(paths)
-	log.V(1).Info("clustered failover paths into partitions",
-		"paths", len(paths), "partitions", len(partitions))
-
-	// Maximal cliques overlap: a host with a mutual edge into two otherwise
-	// disjoint cliques (a—b, b—c but not a—c) appears in both. The planner keys
-	// reservations by target host name ("failover-host-"+host), so a host picked
-	// as a failover target by two partitions would yield two reservations with
-	// the same name but conflicting SourceHosts, and whichever is written last to
-	// the desired map wins — silently dropping the other partition's coverage. To
-	// keep the planner input disjoint we assign each shared host to exactly one
-	// partition: the smallest it belongs to. Assigning to the smallest keeps the
-	// most partitions alive — a small partition only survives if it retains its
-	// shared hosts, whereas a large one usually stays above the two-host minimum
-	// even after giving one up — so failover space reaches as many partitions as
-	// possible. Ties are broken by the partition's first host name so the choice
-	// is deterministic. Partitions are already sorted by their first member, so a
-	// stable sort by ascending size keeps that tiebreak order.
-	sort.SliceStable(partitions, func(i, j int) bool {
-		return len(partitions[i].Hosts) < len(partitions[j].Hosts)
-	})
-	assigned := map[string]bool{}
-	deduped := make([]Partition, 0, len(partitions))
-	for _, partition := range partitions {
-		kept := make([]hv1.Hypervisor, 0, len(partition.Hosts))
-		for _, hv := range partition.Hosts {
-			if assigned[hv.Name] {
-				continue
-			}
-			assigned[hv.Name] = true
-			kept = append(kept, hv)
-		}
-		// Drop a partition emptied out by the dedupe, and one reduced below two
-		// hosts: a lone host offers no failover peer (see PlanReservations).
-		if len(kept) >= 2 {
-			// Keep the partition's supported flavors as computed over its full
-			// membership. Dropping a shared host can only relax the all-hosts
-			// intersection, never tighten it, so every listed flavor still runs on
-			// every remaining host — the set is at worst conservative.
-			deduped = append(deduped, Partition{Hosts: kept, Flavors: partition.Flavors})
-		}
-	}
-	// Restore the deterministic ordering the builder produced (by first host
-	// name), which the size sort above disturbed.
-	sort.SliceStable(deduped, func(i, j int) bool {
-		return deduped[i].Hosts[0].Name < deduped[j].Hosts[0].Name
-	})
-	partitions = deduped
-	labels := characterizePartitions(partitions)
-	for i, partition := range partitions {
-		// Describe what sets this partition apart from the others: the shared
-		// fields no other partition shares, plus the flavors it can run. See
-		// characterizePartitions and Partition.Flavors.
-		log.V(1).Info("characterized failover partition",
-			"partition", i, "partitionSize", len(partition.Hosts),
-			"distinctBy", labels[i], "flavors", partition.Flavors)
-	}
-
-	// Plan the desired reservations per partition and collect them into one map.
-	// We then swap that map in wholesale as the new desired state, under the
-	// lock Reconcile reads it with, so Reconcile never sees a half-built state.
-	// Replacing (rather than mutating) the map is what lets Reconcile prune
-	// reservations that are no longer planned: anything absent from the new map
-	// but still present in the cluster is detected as stale.
-	desired := make(map[corev1.ObjectReference]v1alpha1.Reservation)
-	for i, partition := range partitions {
-		description := describePartition(labels[i], partition.Flavors)
-		planned := c.reservationPlanner.PlanReservations(topo, partition.Hosts, description)
-		for _, reservation := range planned {
-			desired[corev1.ObjectReference{Name: reservation.Name}] = reservation
-		}
-		log.V(1).Info("planned failover hosts for partition",
-			"partitionSize", len(partition.Hosts), "planned", len(planned))
+		return // the generator already logged the reason and recorded the abort.
 	}
 	c.desiredReservationsMu.Lock()
 	c.desiredReservations = desired
 	c.desiredReservationsMu.Unlock()
-	log.Info("generated desired failover host reservations",
-		"partitions", len(partitions), "desiredReservations", len(desired),
-		"existingReservations", len(topo.existing))
-	c.Monitor.RecordCalculation(calculationSummary{
-		duration:             time.Since(start),
-		partitions:           len(partitions),
-		desiredReservations:  len(desired),
-		existingReservations: len(topo.existing),
-	})
-
 	c.publish(ctx, topo, desired)
-}
-
-// collect snapshots the current cluster into a topology. It returns ok=false if
-// the snapshot is inconsistent (e.g. a hypervisor lacks an availability zone),
-// in which case the loop must abort rather than compute on a partial view.
-func (c *Controller) collect(ctx context.Context) (topology, bool) {
-	log := logf.FromContext(ctx).WithName("failoverhost-controller-calculation-loop")
-
-	hvs := &hv1.HypervisorList{}
-	if err := c.List(ctx, hvs); err != nil {
-		log.Error(err, "failed to list hypervisors")
-		return topology{}, false
-	}
-	hvsByName := make(map[string]hv1.Hypervisor)
-	for i := range hvs.Items {
-		hvsByName[hvs.Items[i].Name] = hvs.Items[i]
-	}
-	log.V(1).Info("listed cluster state", "hypervisors", len(hvsByName))
-
-	// Every hypervisor must carry an availability zone: the seeder permutes
-	// flavors across these AZs, and the planner stamps each reservation with its
-	// host's AZ. A hypervisor missing its AZ label is a torn snapshot, so abort
-	// rather than seed or plan from an inconsistent set of hosts.
-	for name, hv := range hvsByName {
-		if _, ok := hv.Labels[corev1.LabelTopologyZone]; !ok {
-			log.Error(nil, "hypervisor has no availability zone, aborting", "host", name)
-			return topology{}, false
-		}
-	}
-
-	allReservations := &v1alpha1.ReservationList{}
-	if err := c.List(ctx, allReservations); err != nil {
-		log.Error(err, "failed to list existing failover host reservations")
-		return topology{}, false
-	}
-	existing := make(map[corev1.ObjectReference]v1alpha1.Reservation)
-	for _, reservation := range allReservations.Items {
-		if reservation.Spec.Type == v1alpha1.ReservationTypeFailoverHost {
-			existing[corev1.ObjectReference{Name: reservation.Name}] = reservation
-		}
-	}
-
-	return topology{hypervisors: hvsByName, existing: existing}, true
 }
 
 // publish wakes the reconciler for every reservation that is either desired now

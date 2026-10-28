@@ -151,7 +151,8 @@ func TestReconcileNoopWhenInSync(t *testing.T) {
 
 // buildHV builds a hypervisor in az1 with an availability-zone label and the
 // given memory (GiB) and cpu capacity, so collect accepts it and the planner can
-// order hosts by cost.
+// order hosts by cost. It is shared by the generator tests (generation_test.go)
+// and the path finder tests (pathfinding_test.go).
 func buildHV(name string, memGi, cpu int64) *hv1.Hypervisor {
 	return &hv1.Hypervisor{
 		ObjectMeta: metav1.ObjectMeta{
@@ -167,169 +168,58 @@ func buildHV(name string, memGi, cpu int64) *hv1.Hypervisor {
 	}
 }
 
-// fakeSeeder returns a fixed set of seeds, so loop tests drive the pipeline
-// without a Nova client.
-type fakeSeeder struct{ seeds []Seed }
-
-func (f fakeSeeder) Seeds(context.Context, topology) ([]Seed, error) { return f.seeds, nil }
-
-// TestLoopGeneratesReservations exercises the whole pipeline end-to-end against
-// a fake cluster and a stub external scheduler: collect -> Seeds -> FindPaths
-// (via HTTP) -> BuildPartitions -> PlanReservations -> publish. It asserts the
-// loop turns a pair of mutually-evacuable hosts into a desired failover host
-// reservation.
-func TestLoopGeneratesReservations(t *testing.T) {
-	// Two equally-sized hosts. A single flavor seed is accepted on both, so the
-	// path finder discovers the mutual edges hvA<->hvB and they form one partition.
-	hvA := buildHV("hvA", 64, 32)
-	hvB := buildHV("hvB", 64, 32)
-
-	finder, server := stubScheduler(t, map[string][]string{
-		"flavor": {"hvA", "hvB"},
-	}, nil)
-	defer server.Close()
-
-	// Wire the pipeline stages explicitly (loop is driven directly here, not via
-	// SetupWithManager), using the fake seeder and stub path finder.
-	c := &Controller{
-		Client:             newTestClient(t, hvA, hvB),
-		Config:             ControllerConfig{Ratio: 0.5, Minimum: 1},
-		reconcileCh:        make(chan event.GenericEvent, 16),
-		seeder:             fakeSeeder{seeds: []Seed{seed("flavor")}},
-		pathFinder:         finder,
-		partitionBuilder:   cliquePartitionBuilder{},
-		reservationPlanner: ratioReservationPlanner{ratio: 0.5, minimum: 1},
-	}
-	c.loop(context.Background())
-
-	c.desiredReservationsMu.Lock()
-	defer c.desiredReservationsMu.Unlock()
-	if len(c.desiredReservations) == 0 {
-		t.Fatalf("expected at least one desired reservation, got none")
-	}
-	for _, r := range c.desiredReservations {
-		if r.Spec.Type != v1alpha1.ReservationTypeFailoverHost {
-			t.Errorf("unexpected reservation type %q", r.Spec.Type)
-		}
-		if r.Spec.AvailabilityZone != "az1" {
-			t.Errorf("availability zone = %q, want az1", r.Spec.AvailabilityZone)
-		}
-	}
+// fakeGenerator is a stub ReservationGenerator returning fixed output, so the
+// controller's loop plumbing can be tested without the real pipeline.
+type fakeGenerator struct {
+	desired map[corev1.ObjectReference]v1alpha1.Reservation
+	topo    topology
+	ok      bool
 }
 
-// fakePartitionBuilder returns a fixed set of partitions regardless of input, so
-// a test can drive loop with overlapping cliques the real builder would produce.
-type fakePartitionBuilder struct{ partitions []Partition }
-
-func (f fakePartitionBuilder) BuildPartitions([]Path) []Partition {
-	return f.partitions
+func (f fakeGenerator) Generate(context.Context) (map[corev1.ObjectReference]v1alpha1.Reservation, topology, bool) {
+	return f.desired, f.topo, f.ok
 }
 
-// TestLoopDeduplicatesSharedHost checks that when overlapping maximal cliques
-// share a host (hvB in both {hvA,hvB} and {hvB,hvC}), loop assigns that host to
-// exactly one partition before planning, so planning never sees hvB in two
-// partitions and cannot emit two reservations with the same name. The two
-// partitions are equal size, so the deterministic tiebreak keeps hvB in the one
-// with the smaller first host name ({hvA,hvB}); the other shrinks to the single
-// host hvC, too small to reserve. The surviving {hvA,hvB} partition reserves one
-// target (hvA, the first equal-cost host), whose only source host is hvB — proof
-// hvB was planned once, as a source, not as a conflicting second target.
-func TestLoopDeduplicatesSharedHost(t *testing.T) {
-	hvA := buildHV("hvA", 64, 32)
-	hvB := buildHV("hvB", 64, 32)
-	hvC := buildHV("hvC", 64, 32)
-
-	// The path finder's edges are irrelevant here: the fake builder ignores them
-	// and hands loop the overlapping cliques directly. The stub still needs an
-	// answer so FindPaths succeeds; one seed accepted on all three suffices.
-	finder, server := stubScheduler(t, map[string][]string{
-		"flavor": {"hvA", "hvB", "hvC"},
-	}, nil)
-	defer server.Close()
-
+// TestLoopPublishesGeneratorOutput checks the controller half: loop swaps the
+// generator's desired reservations in as the new desired state.
+func TestLoopPublishesGeneratorOutput(t *testing.T) {
+	desired := failoverReservation("hvA")
 	c := &Controller{
-		Client:      newTestClient(t, hvA, hvB, hvC),
-		Config:      ControllerConfig{Ratio: 0.5, Minimum: 1},
+		Client:      newTestClient(t),
 		reconcileCh: make(chan event.GenericEvent, 16),
-		seeder:      fakeSeeder{seeds: []Seed{seed("flavor")}},
-		pathFinder:  finder,
-		partitionBuilder: fakePartitionBuilder{partitions: []Partition{
-			{Hosts: []hv1.Hypervisor{*hvA, *hvB}}, {Hosts: []hv1.Hypervisor{*hvB, *hvC}},
-		}},
-		reservationPlanner: ratioReservationPlanner{ratio: 0.5, minimum: 1},
+		generator: fakeGenerator{
+			desired: map[corev1.ObjectReference]v1alpha1.Reservation{{Name: desired.Name}: desired},
+			ok:      true,
+		},
 	}
 	c.loop(context.Background())
 
 	c.desiredReservationsMu.Lock()
 	defer c.desiredReservationsMu.Unlock()
-	// Exactly one reservation survives: {hvA,hvB} reserves hvA, whose source host
-	// is the deduped hvB. {hvB,hvC} lost hvB and shrank to lone hvC, reserving
-	// nothing.
+	if _, ok := c.desiredReservations[corev1.ObjectReference{Name: desired.Name}]; !ok {
+		t.Fatalf("expected generator output to become the desired state")
+	}
+}
+
+// TestLoopKeepsDesiredStateWhenGeneratorAborts checks that an aborting generator
+// (ok=false) leaves the previously published desired state untouched, so a
+// partial recalculation never drops still-valid reservations.
+func TestLoopKeepsDesiredStateWhenGeneratorAborts(t *testing.T) {
+	kept := failoverReservation("hvKept")
+	c := &Controller{
+		Client:              newTestClient(t),
+		reconcileCh:         make(chan event.GenericEvent, 16),
+		desiredReservations: map[corev1.ObjectReference]v1alpha1.Reservation{{Name: kept.Name}: kept},
+		generator:           fakeGenerator{ok: false},
+	}
+	c.loop(context.Background())
+
+	c.desiredReservationsMu.Lock()
+	defer c.desiredReservationsMu.Unlock()
 	if len(c.desiredReservations) != 1 {
-		t.Fatalf("desired reservations = %d, want 1", len(c.desiredReservations))
+		t.Fatalf("desired reservations = %d, want the previous 1 kept", len(c.desiredReservations))
 	}
-	aRes, ok := c.desiredReservations[corev1.ObjectReference{Name: "failover-host-hvA"}]
-	if !ok {
-		t.Fatalf("expected a reservation targeting hvA")
-	}
-	if got := aRes.Spec.FailoverHostReservation.SourceHosts; len(got) != 1 || got[0] != "hvB" {
-		t.Errorf("hvA source hosts = %v, want [hvB]", got)
-	}
-}
-
-// TestLoopSharedHostKeptInSmallestPartition checks that when a shared host sits
-// in partitions of different sizes, loop assigns it to the smallest one, keeping
-// the most partitions alive. Here hvC is shared between {hvA,hvB,hvC} (size 3)
-// and {hvC,hvD} (size 2). Keeping hvC in the smaller {hvC,hvD} lets that
-// partition survive, while {hvA,hvB,hvC} merely shrinks to {hvA,hvB} and stays
-// above the two-host minimum — so both partitions retain a failover target.
-// Keeping hvC in the larger partition instead would collapse {hvC,hvD} to a lone
-// host and leave hvD unprotected.
-func TestLoopSharedHostKeptInSmallestPartition(t *testing.T) {
-	hvA := buildHV("hvA", 64, 32)
-	hvB := buildHV("hvB", 64, 32)
-	hvC := buildHV("hvC", 64, 32)
-	hvD := buildHV("hvD", 64, 32)
-
-	finder, server := stubScheduler(t, map[string][]string{
-		"flavor": {"hvA", "hvB", "hvC", "hvD"},
-	}, nil)
-	defer server.Close()
-
-	c := &Controller{
-		Client:      newTestClient(t, hvA, hvB, hvC, hvD),
-		Config:      ControllerConfig{Ratio: 0.5, Minimum: 1},
-		reconcileCh: make(chan event.GenericEvent, 16),
-		seeder:      fakeSeeder{seeds: []Seed{seed("flavor")}},
-		pathFinder:  finder,
-		partitionBuilder: fakePartitionBuilder{partitions: []Partition{
-			{Hosts: []hv1.Hypervisor{*hvA, *hvB, *hvC}}, {Hosts: []hv1.Hypervisor{*hvC, *hvD}},
-		}},
-		reservationPlanner: ratioReservationPlanner{ratio: 0.5, minimum: 1},
-	}
-	c.loop(context.Background())
-
-	c.desiredReservationsMu.Lock()
-	defer c.desiredReservationsMu.Unlock()
-	// Both partitions survive: {hvC,hvD} keeps the shared hvC and {hvA,hvB,hvC}
-	// shrinks to {hvA,hvB}. Each reserves one target, so the shared host did not
-	// cost either partition its coverage.
-	if len(c.desiredReservations) != 2 {
-		t.Fatalf("desired reservations = %d, want 2", len(c.desiredReservations))
-	}
-	// {hvC,hvD} must still exist, proving hvC stayed in the smaller partition.
-	// Whichever of hvC/hvD is reserved, its sole source host is the other.
-	cdReserved := false
-	for name, r := range c.desiredReservations {
-		sources := r.Spec.FailoverHostReservation.SourceHosts
-		if name.Name == "failover-host-hvC" && len(sources) == 1 && sources[0] == "hvD" {
-			cdReserved = true
-		}
-		if name.Name == "failover-host-hvD" && len(sources) == 1 && sources[0] == "hvC" {
-			cdReserved = true
-		}
-	}
-	if !cdReserved {
-		t.Errorf("expected a {hvC,hvD} reservation, got %v", c.desiredReservations)
+	if _, ok := c.desiredReservations[corev1.ObjectReference{Name: kept.Name}]; !ok {
+		t.Errorf("expected the previously published reservation to survive an aborted pass")
 	}
 }
