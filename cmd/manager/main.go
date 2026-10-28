@@ -54,6 +54,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
 	novafilters "github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/rescheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/capacity"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
@@ -353,6 +354,7 @@ func main() {
 			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}:   multicluster.CommittedResourceRouter{},
 			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "FlavorGroupCapacity"}: multicluster.FlavorGroupCapacityResourceRouter{},
 			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "ProjectQuota"}:        multicluster.ProjectQuotaResourceRouter{},
+			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "ReschedulingRequest"}: multicluster.ReschedulingRequestResourceRouter{},
 		},
 	}
 	multiclusterClientConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
@@ -509,6 +511,34 @@ func main() {
 			NovaClient: novaClient,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DeschedulingsExecutor")
+			os.Exit(1)
+		}
+	}
+	if slices.Contains(mainConfig.EnabledControllers, "rescheduler-controller") {
+		setupLog.Info("enabling controller", "controller", "rescheduler-controller")
+		reschedulerConfig := conf.GetConfigOrDie[rescheduler.Config]()
+		schedulerURL := reschedulerConfig.SchedulerURL
+		if schedulerURL == "" {
+			schedulerURL = rescheduler.DefaultSchedulerURL
+		}
+		blockedHostsTTL := reschedulerConfig.BlockedHostsTTL.Duration
+		if blockedHostsTTL == 0 {
+			blockedHostsTTL = rescheduler.DefaultBlockedHostsTTL.Duration
+		}
+		apiTimeout := reschedulerConfig.APITimeout.Duration
+		if apiTimeout == 0 {
+			apiTimeout = rescheduler.DefaultAPITimeout.Duration
+		}
+		setupLog.Info("rescheduler using HTTP placement backend", "url", schedulerURL)
+		if err := (&rescheduler.Scheduler{
+			Client:              multiclusterClient,
+			Queue:               rescheduler.NewFIFOQueue(),
+			Placement:           rescheduler.NewHTTPPlacementBackend(schedulerURL),
+			CandidateSaturation: reschedulerConfig.CandidateSaturation,
+			BlockedHostsTTL:     blockedHostsTTL,
+			APITimeout:          apiTimeout,
+		}).SetupWithManager(mgr, multiclusterClient); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "rescheduler-controller")
 			os.Exit(1)
 		}
 	}

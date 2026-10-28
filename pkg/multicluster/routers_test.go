@@ -203,6 +203,103 @@ func TestFlavorGroupCapacityResourceRouter_Match(t *testing.T) {
 	}
 }
 
+func TestReschedulingRequestResourceRouter_Match(t *testing.T) {
+	router := ReschedulingRequestResourceRouter{}
+
+	tests := []struct {
+		name      string
+		obj       any
+		labels    map[string]string
+		wantMatch bool
+		wantErr   bool
+	}{
+		{
+			name: "matching AZ",
+			obj: v1alpha1.ReschedulingRequest{
+				Spec: v1alpha1.ReschedulingRequestSpec{
+					AvailabilityZone: "qa-de-1a",
+				},
+			},
+			labels:    map[string]string{"availabilityZone": "qa-de-1a"},
+			wantMatch: true,
+		},
+		{
+			name: "matching AZ pointer",
+			obj: new(v1alpha1.ReschedulingRequest{
+				Spec: v1alpha1.ReschedulingRequestSpec{
+					AvailabilityZone: "qa-de-1a",
+				},
+			}),
+			labels:    map[string]string{"availabilityZone": "qa-de-1a"},
+			wantMatch: true,
+		},
+		{
+			name: "non-matching AZ",
+			obj: v1alpha1.ReschedulingRequest{
+				Spec: v1alpha1.ReschedulingRequestSpec{
+					AvailabilityZone: "qa-de-1a",
+				},
+			},
+			labels:    map[string]string{"availabilityZone": "qa-de-1b"},
+			wantMatch: false,
+		},
+		{
+			name:    "not a ReschedulingRequest",
+			obj:     "not-a-rescheduling-request",
+			labels:  map[string]string{"availabilityZone": "qa-de-1a"},
+			wantErr: true,
+		},
+		{
+			name: "cluster missing availabilityZone label",
+			obj: v1alpha1.ReschedulingRequest{
+				Spec: v1alpha1.ReschedulingRequestSpec{
+					AvailabilityZone: "qa-de-1a",
+				},
+			},
+			labels:  map[string]string{},
+			wantErr: true,
+		},
+		{
+			name: "rescheduling request missing availability zone",
+			obj: v1alpha1.ReschedulingRequest{
+				Spec: v1alpha1.ReschedulingRequestSpec{
+					AvailabilityZone: "",
+				},
+			},
+			labels:  map[string]string{"availabilityZone": "qa-de-1a"},
+			wantErr: true,
+		},
+		{
+			name:    "typed nil pointer doesn't panic",
+			obj:     (*v1alpha1.ReschedulingRequest)(nil),
+			labels:  map[string]string{"availabilityZone": "qa-de-1a"},
+			wantErr: true,
+		},
+		{
+			name:      "nil object doesn't panic",
+			obj:       nil,
+			labels:    map[string]string{"availabilityZone": "qa-de-1a"},
+			wantErr:   true,
+			wantMatch: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			match, err := router.Match(tt.obj, tt.labels)
+			if tt.wantErr && err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if match != tt.wantMatch {
+				t.Errorf("expected match=%v, got %v", tt.wantMatch, match)
+			}
+		})
+	}
+}
+
 func TestReservationsResourceRouter_Match(t *testing.T) {
 	router := ReservationsResourceRouter{}
 

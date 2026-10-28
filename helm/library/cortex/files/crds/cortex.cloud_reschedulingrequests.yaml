@@ -1,0 +1,287 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.23.0
+  name: reschedulingrequests.cortex.cloud
+spec:
+  group: cortex.cloud
+  names:
+    kind: ReschedulingRequest
+    listKind: ReschedulingRequestList
+    plural: reschedulingrequests
+    singular: reschedulingrequest
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.action
+      name: Action
+      type: string
+    - jsonPath: .spec.availabilityZone
+      name: AZ
+      type: string
+    - jsonPath: .status.state
+      name: State
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Created
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ReschedulingRequest is the Schema for the reschedulingrequests
+          API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of ReschedulingRequest
+            properties:
+              action:
+                description: Action names the rescheduling action to perform.
+                enum:
+                - drain
+                type: string
+              availabilityZone:
+                description: |-
+                  AvailabilityZone specifies the availability zone this request belongs to.
+                  It is used to route the request to the lighthouse cluster of that AZ.
+                type: string
+              drain:
+                description: |-
+                  Drain contains fields specific to the drain action.
+                  Only used when Action is drain.
+                properties:
+                  constraints:
+                    description: Constraints configures how the drain action is executed.
+                    properties:
+                      mode:
+                        description: Mode defines how strictly the constraints are
+                          enforced.
+                        enum:
+                        - all
+                        - bestEffort
+                        type: string
+                    type: object
+                  reserve:
+                    description: |-
+                      Reserve indicates whether the capacity freed by draining should be
+                      reserved to prevent it from being used by other workloads.
+                    type: boolean
+                  target:
+                    description: Target describes the hosts and entities to drain.
+                    properties:
+                      hosts:
+                        description: Hosts are the hosts to drain entities from.
+                        items:
+                          description: DrainTargetHost names a host and the entities
+                            on it that should be moved.
+                          properties:
+                            entities:
+                              description: Entities are the entities on the host that
+                                should be moved.
+                              items:
+                                description: DrainTargetEntity identifies a single
+                                  entity that should be moved off a host.
+                                properties:
+                                  kind:
+                                    description: Kind is the kind of the targeted
+                                      entity.
+                                    enum:
+                                    - vm
+                                    - reservation
+                                    type: string
+                                  ref:
+                                    description: Ref references the entity to move
+                                      (e.g. the Nova server uuid for a vm).
+                                    maxLength: 253
+                                    type: string
+                                required:
+                                - kind
+                                - ref
+                                type: object
+                              maxItems: 100
+                              type: array
+                            host:
+                              description: Host is the name of the host to drain entities
+                                from.
+                              maxLength: 253
+                              type: string
+                          required:
+                          - host
+                          type: object
+                        maxItems: 10
+                        type: array
+                    type: object
+                type: object
+            required:
+            - action
+            type: object
+            x-kubernetes-validations:
+            - message: spec is immutable once created
+              rule: self == oldSelf
+            - message: drain action requires a drain spec
+              rule: self.action != 'drain' || has(self.drain)
+          status:
+            description: status defines the observed state of ReschedulingRequest
+            properties:
+              blockExpiresAt:
+                description: |-
+                  BlockExpiresAt is the time after which the host-block of a succeeded request
+                  may be released. It is set when an accepted request succeeds and lets the
+                  block linger for a grace period so incoming placement does not immediately
+                  land on a just-drained host.
+                format: date-time
+                type: string
+              blockedHosts:
+                description: |-
+                  BlockedHosts are the hosts this request currently blocks from receiving
+                  incoming placement (the host-block taken for a drain with reserve). It is
+                  set while the request is active and cleared on rollback or, for a succeeded
+                  request, once BlockExpiresAt has passed. The drain-block scheduling filter
+                  reads this field across all requests to exclude these hosts.
+                items:
+                  type: string
+                maxItems: 10
+                type: array
+              conditions:
+                description: The current status conditions of the rescheduling request.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              moves:
+                description: |-
+                  Moves are the entity relocations the scheduling pass committed to when the
+                  request was accepted. Empty until the request reaches Accepted.
+                items:
+                  description: |-
+                    ReschedulingMove records a single entity relocation decided by the scheduling
+                    pass: an entity is moved off its source host onto the chosen target host.
+                  properties:
+                    entityKind:
+                      description: EntityKind is the kind of the moved entity.
+                      type: string
+                    entityRef:
+                      description: EntityRef references the moved entity (e.g. the
+                        Nova server uuid for a vm).
+                      maxLength: 253
+                      type: string
+                    sourceHost:
+                      description: SourceHost is the host the entity is moved away
+                        from.
+                      maxLength: 253
+                      type: string
+                    targetHost:
+                      description: TargetHost is the host the entity is moved onto.
+                      maxLength: 253
+                      type: string
+                  required:
+                  - entityKind
+                  - entityRef
+                  - sourceHost
+                  - targetHost
+                  type: object
+                maxItems: 1000
+                type: array
+              state:
+                default: Pending
+                description: |-
+                  State is the current lifecycle stage of the request.
+                  The transition rule enforces the state machine at the apiserver for all
+                  writers; self-transitions (unchanged state) are allowed so conditions-only
+                  status writes pass, and terminal states have no outgoing transitions.
+                enum:
+                - Pending
+                - Acknowledged
+                - Processing
+                - Accepted
+                - Rejected
+                - Succeeded
+                - Failed
+                type: string
+                x-kubernetes-validations:
+                - message: illegal rescheduling request state transition
+                  rule: self == oldSelf || (oldSelf == 'Pending' && (self == 'Acknowledged'
+                    || self == 'Rejected')) || (oldSelf == 'Acknowledged' && (self
+                    == 'Processing' || self == 'Rejected')) || (oldSelf == 'Processing'
+                    && (self == 'Accepted' || self == 'Rejected' || self == 'Failed'))
+                    || (oldSelf == 'Accepted' && (self == 'Succeeded' || self == 'Failed'))
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
