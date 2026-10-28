@@ -8,7 +8,6 @@ import (
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/api/resource"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -126,19 +125,24 @@ func (s *KVMCommittedResourceReservationStep) Run(traceLog logr.Logger, request 
 	return result, nil
 }
 
-// freeMemoryBytes returns the free memory in bytes for a committed resource reservation:
-// total reserved memory minus the sum of memory already allocated to running VMs.
+// freeMemoryBytes returns the free memory in bytes for a committed resource reservation.
 func freeMemoryBytes(res *v1alpha1.Reservation) int64 {
-	total := res.Spec.Resources[hv1.ResourceMemory]
-	var used resource.Quantity
-	if res.Spec.CommittedResourceReservation != nil {
-		for _, alloc := range res.Spec.CommittedResourceReservation.Allocations {
-			if mem, ok := alloc.Resources[hv1.ResourceMemory]; ok {
-				used.Add(mem)
-			}
+	totalMemQ := res.Spec.Resources[hv1.ResourceMemory]
+	total := totalMemQ.Value()
+	if res.Status.CommittedResourceReservation == nil {
+		return total
+	}
+	var confirmed int64
+	for _, alloc := range res.Status.CommittedResourceReservation.Allocations {
+		if used, ok := alloc.Resources[hv1.ResourceMemory]; ok {
+			confirmed += used.Value()
 		}
 	}
-	return total.Value() - used.Value()
+	remaining := total - confirmed
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
 }
 
 func init() {

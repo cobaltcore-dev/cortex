@@ -32,6 +32,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -298,8 +299,8 @@ func TestCRIntegration(t *testing.T) {
 				if res.Spec.CommittedResourceReservation == nil {
 					t.Fatal("CommittedResourceReservation is nil")
 				}
-				if _, ok := res.Spec.CommittedResourceReservation.Allocations["vm-payg-1"]; !ok {
-					t.Error("expected vm-payg-1 in Spec.Allocations")
+				if res.Annotations[v1alpha1.AnnotationCandidateAllocation] != "vm-payg-1" {
+					t.Errorf("expected annotation %s=vm-payg-1, got %q", v1alpha1.AnnotationCandidateAllocation, res.Annotations[v1alpha1.AnnotationCandidateAllocation])
 				}
 			},
 		},
@@ -323,8 +324,8 @@ func TestCRIntegration(t *testing.T) {
 				if slots[0].Spec.TargetHost == "" {
 					t.Error("expected TargetHost set by scheduler (Phase 5 path)")
 				}
-				if len(slots[0].Spec.CommittedResourceReservation.Allocations) != 0 {
-					t.Error("expected no pre-allocations on scheduler-placed slot")
+				if slots[0].Annotations[v1alpha1.AnnotationCandidateAllocation] != "" {
+					t.Error("expected no candidate VM annotation on scheduler-placed slot")
 				}
 			},
 		},
@@ -436,11 +437,11 @@ func newIntgEnv(t *testing.T, initialObjects []client.Object, schedulerFn http.H
 		}).
 		WithIndex(&v1alpha1.Reservation{}, idxReservationByAllocationVMUUID, func(obj client.Object) []string {
 			res, ok := obj.(*v1alpha1.Reservation)
-			if !ok || res.Spec.CommittedResourceReservation == nil {
+			if !ok || res.Status.CommittedResourceReservation == nil {
 				return nil
 			}
-			uuids := make([]string, 0, len(res.Spec.CommittedResourceReservation.Allocations))
-			for vmUUID := range res.Spec.CommittedResourceReservation.Allocations {
+			uuids := make([]string, 0, len(res.Status.CommittedResourceReservation.Allocations))
+			for vmUUID := range res.Status.CommittedResourceReservation.Allocations {
 				uuids = append(uuids, vmUUID)
 			}
 			return uuids
@@ -1325,14 +1326,16 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 		if i < 10 {
 			// slots 0-9: allocated — have a confirmed VM
 			vmID := fmt.Sprintf("vm-%02d", i)
-			slot.Spec.CommittedResourceReservation.Allocations = map[string]v1alpha1.CommittedResourceAllocation{
-				vmID: {Resources: map[hv1.ResourceName]resource.Quantity{
-					hv1.ResourceMemory: gib(memGiB),
-					hv1.ResourceCPU:    cpu(cores),
-				}},
-			}
 			slot.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{
-				Allocations: map[string]string{vmID: "host-1"},
+				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+					vmID: {
+						ObjectRef: corev1.ObjectReference{Name: vmID},
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceMemory: gib(memGiB),
+							hv1.ResourceCPU:    cpu(cores),
+						},
+					},
+				},
 			}
 		}
 		objects = append(objects, slot)
@@ -1389,9 +1392,9 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 
 	for _, r := range resList.Items {
 		if r.Spec.TargetHost == "" &&
-			r.Spec.CommittedResourceReservation != nil &&
-			len(r.Spec.CommittedResourceReservation.Allocations) > 0 {
-			t.Errorf("slot %s has allocations but was evicted", r.Name)
+			r.Status.CommittedResourceReservation != nil &&
+			len(r.Status.CommittedResourceReservation.Allocations) > 0 {
+			t.Errorf("slot %s has confirmed allocations but was evicted", r.Name)
 		}
 	}
 

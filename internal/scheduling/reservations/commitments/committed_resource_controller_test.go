@@ -129,11 +129,11 @@ func newCRTestClient(scheme *runtime.Scheme, objects ...client.Object) client.Cl
 		}).
 		WithIndex(&v1alpha1.Reservation{}, idxReservationByAllocationVMUUID, func(obj client.Object) []string {
 			res, ok := obj.(*v1alpha1.Reservation)
-			if !ok || res.Spec.CommittedResourceReservation == nil {
+			if !ok || res.Status.CommittedResourceReservation == nil {
 				return nil
 			}
-			uuids := make([]string, 0, len(res.Spec.CommittedResourceReservation.Allocations))
-			for vmUUID := range res.Spec.CommittedResourceReservation.Allocations {
+			uuids := make([]string, 0, len(res.Status.CommittedResourceReservation.Allocations))
+			for vmUUID := range res.Status.CommittedResourceReservation.Allocations {
 				uuids = append(uuids, vmUUID)
 			}
 			return uuids

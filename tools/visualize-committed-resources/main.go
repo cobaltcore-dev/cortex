@@ -441,43 +441,19 @@ func printReservations(crs []v1alpha1.CommittedResource, reservations []v1alpha1
 			)
 
 			if showAllocations {
-				specAllocs := 0
-				statusAllocs := 0
-				if res.Spec.CommittedResourceReservation != nil {
-					specAllocs = len(res.Spec.CommittedResourceReservation.Allocations)
-				}
-				if res.Status.CommittedResourceReservation != nil {
-					statusAllocs = len(res.Status.CommittedResourceReservation.Allocations)
-				}
-
-				if specAllocs > 0 || statusAllocs > 0 {
-					fmt.Printf("      allocations: spec=%d confirmed=%d\n", specAllocs, statusAllocs)
-					if res.Spec.CommittedResourceReservation != nil {
-						statusAlloc := map[string]string{}
-						if res.Status.CommittedResourceReservation != nil {
-							statusAlloc = res.Status.CommittedResourceReservation.Allocations
-						}
-						for vmUUID, alloc := range res.Spec.CommittedResourceReservation.Allocations {
-							resources := ""
-							var resourcesSb422 strings.Builder
-							for rname, qty := range alloc.Resources {
-								fmt.Fprintf(&resourcesSb422, "%s=%s ", rname, qty.String())
-							}
-							resources += resourcesSb422.String()
-							confirmedHost, confirmed := statusAlloc[vmUUID]
-							state := ""
-							if confirmed {
-								state = green("confirmed on " + confirmedHost)
-							} else {
-								state = yellow(fmt.Sprintf("spec-only (grace since %s)", age(&alloc.CreationTimestamp)))
-							}
-							fmt.Printf("        vm=%s  %s  %s\n",
-								truncate(vmUUID, 36),
-								gray(strings.TrimSpace(resources)),
-								state,
-							)
-						}
+				if res.Status.CommittedResourceReservation != nil &&
+					len(res.Status.CommittedResourceReservation.Allocations) > 0 {
+					fmt.Printf("      allocations: confirmed=%d\n",
+						len(res.Status.CommittedResourceReservation.Allocations))
+					for vmUUID, alloc := range res.Status.CommittedResourceReservation.Allocations {
+						fmt.Printf("        vm=%s  %s\n",
+							truncate(vmUUID, 36),
+							green("confirmed (ref="+alloc.ObjectRef.Name+")"),
+						)
 					}
+				} else if candidateVM := res.Annotations[v1alpha1.AnnotationCandidateAllocation]; candidateVM != "" {
+					fmt.Printf("      allocations: candidate=%s (pending HV confirmation)\n",
+						truncate(candidateVM, 36))
 				}
 			}
 		}

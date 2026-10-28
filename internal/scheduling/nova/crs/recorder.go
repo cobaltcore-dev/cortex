@@ -6,17 +6,12 @@ package crs
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
-	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -118,15 +113,16 @@ func (r *Recorder) RecordPlacement(ctx context.Context, decision *v1alpha1.Decis
 	slotsOnTarget := evaluator.SlotsForHost(selectedHost, projectID, flavorGroupName)
 
 	for _, slot := range slotsOnTarget {
-		if _, exists := slot.Spec.CommittedResourceReservation.Allocations[instanceUUID]; exists {
-			log.V(1).Info("CR allocation: VM UUID already in reservation, skipping",
-				"instanceUUID", instanceUUID, "reservation", slot.Name)
-			return
+		if slot.Status.CommittedResourceReservation != nil {
+			if _, exists := slot.Status.CommittedResourceReservation.Allocations[instanceUUID]; exists {
+				log.V(1).Info("CR allocation: VM UUID already confirmed in reservation, skipping",
+					"instanceUUID", instanceUUID, "reservation", slot.Name)
+				return
+			}
 		}
 	}
 
 	vmMemoryBytes := int64(flavorInGroup.MemoryMB) * 1024 * 1024 //nolint:gosec // flavor memory bounded by specs
-	vmCPUs := int64(flavorInGroup.VCPUs)                         //nolint:gosec // VCPUs bounded by specs
 
 	slotName := PickSlot(slotsOnTarget, vmMemoryBytes)
 	if slotName == "" {
@@ -135,38 +131,31 @@ func (r *Recorder) RecordPlacement(ctx context.Context, decision *v1alpha1.Decis
 		return
 	}
 
-	log.V(1).Info("CR allocation: writing VM UUID into reservation",
-		"instanceUUID", instanceUUID, "reservation", slotName,
-		"projectID", projectID, "flavorGroup", flavorGroupName, "host", selectedHost)
-
-	vmResources := map[hv1.ResourceName]resource.Quantity{
-		hv1.ResourceMemory: *resource.NewQuantity(vmMemoryBytes, resource.BinarySI),
-		hv1.ResourceCPU:    *resource.NewQuantity(vmCPUs, resource.DecimalSI),
+	var slot *v1alpha1.Reservation
+	for i := range slotsOnTarget {
+		if slotsOnTarget[i].Name == slotName {
+			slot = &slotsOnTarget[i]
+			break
+		}
 	}
-	if retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		latest := &v1alpha1.Reservation{}
-		if err := r.Get(ctx, client.ObjectKey{Name: slotName}, latest); err != nil {
-			return err
-		}
-		if latest.Spec.CommittedResourceReservation == nil {
-			return fmt.Errorf("reservation %s lost CommittedResourceReservation spec", slotName)
-		}
-		base := latest.DeepCopy()
-		if latest.Spec.CommittedResourceReservation.Allocations == nil {
-			latest.Spec.CommittedResourceReservation.Allocations = make(map[string]v1alpha1.CommittedResourceAllocation)
-		}
-		latest.Spec.CommittedResourceReservation.Allocations[instanceUUID] = v1alpha1.CommittedResourceAllocation{
-			CreationTimestamp: metav1.Now(),
-			Resources:         vmResources,
-		}
-		return r.Patch(ctx, latest, client.MergeFrom(base))
-	}); retryErr != nil {
-		log.Error(retryErr, "CR allocation: failed to patch reservation",
-			"reservation", slotName, "instanceUUID", instanceUUID)
+	if slot == nil {
+		log.V(1).Info("CR allocation: picked slot not found in slotsOnTarget (race?)",
+			"instanceUUID", instanceUUID, "reservation", slotName)
 		return
 	}
 
-	log.V(1).Info("CR allocation: done", "instanceUUID", instanceUUID, "reservation", slotName)
+	old := slot.DeepCopy()
+	if slot.Annotations == nil {
+		slot.Annotations = make(map[string]string)
+	}
+	slot.Annotations[v1alpha1.AnnotationCandidateAllocation] = instanceUUID
+	if err := r.Patch(ctx, slot, client.MergeFrom(old)); err != nil {
+		log.Error(err, "CR allocation: failed to annotate reservation with candidate VM UUID; controller will confirm via HV CRD",
+			"instanceUUID", instanceUUID, "reservation", slotName)
+	} else {
+		log.V(1).Info("CR allocation: reservation annotated with candidate VM UUID",
+			"instanceUUID", instanceUUID, "reservation", slotName)
+	}
 }
 
 // RecordNoHostFound classifies a no-host-found result and emits a log line and metric.

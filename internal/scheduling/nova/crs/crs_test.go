@@ -8,6 +8,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -27,10 +28,13 @@ func makeSlot(projectID, flavorGroup string, totalMemMiB, allocatedMemMiB int64)
 		},
 	}
 	if allocatedMemMiB > 0 {
-		res.Spec.CommittedResourceReservation.Allocations = map[string]v1alpha1.CommittedResourceAllocation{
-			"some-vm": {
-				Resources: map[hv1.ResourceName]resource.Quantity{
-					hv1.ResourceMemory: *resource.NewQuantity(allocatedMemMiB*1024*1024, resource.BinarySI),
+		res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{
+			Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+				"some-vm": {
+					ObjectRef: corev1.ObjectReference{Name: "some-vm"},
+					Resources: map[hv1.ResourceName]resource.Quantity{
+						hv1.ResourceMemory: *resource.NewQuantity(allocatedMemMiB*1024*1024, resource.BinarySI),
+					},
 				},
 			},
 		}
@@ -148,17 +152,17 @@ func TestClassifyNoHostFound(t *testing.T) {
 			activeCRs: []v1alpha1.CommittedResource{
 				makeCR(v1alpha1.CommitmentStatusConfirmed, 8192, 4096),
 			},
-			eval:         evalWithSlot(8192, 4096), // 4096 MiB remaining; 16384-8192+4096=12288 >= 4096
+			eval:         evalWithSlot(8192, 0), // free slot; HV has 16384 MiB free → 8192 MiB available ≥ 4096
 			inputHosts:   []string{"host-1"},
 			vmMemBytes:   4096 * MiB,
 			expectedCase: "slot_blocked",
 		},
 		{
-			name: "slot_blocked: overfill — slot smaller than VM is still usable",
+			name: "slot_blocked: overfill — empty slot smaller than VM (remaining 2048 < vmMem 4096, but overfill formula passes)",
 			activeCRs: []v1alpha1.CommittedResource{
 				makeCR(v1alpha1.CommitmentStatusConfirmed, 8192, 4096),
 			},
-			eval:         evalWithSlot(8192, 6144), // 2048 MiB remaining; 16384-8192+2048=10240 >= 4096
+			eval:         evalWithSlot(2048, 0), // free 2048 MiB slot; 16384-2048+2048=16384 >= 4096
 			inputHosts:   []string{"host-1"},
 			vmMemBytes:   4096 * MiB,
 			expectedCase: "slot_blocked",
@@ -198,7 +202,7 @@ func TestReservationRemainingMemory(t *testing.T) {
 		wantBytes   int64
 	}{
 		{"empty slot", 8192, 0, 8192 * 1024 * 1024},
-		{"partially used", 8192, 4096, 4096 * 1024 * 1024},
+		{"partially used: slot=8192 vm=4096 → remaining=4096", 8192, 4096, 4096 * 1024 * 1024},
 		{"fully used", 8192, 8192, 0},
 		{"over-allocated (clamped to zero)", 4096, 8192, 0},
 	}
@@ -218,30 +222,33 @@ func TestPickSlot(t *testing.T) {
 	// vmMemBytes for a 4096 MiB flavor.
 	const vmMemBytes = int64(4096) * 1024 * 1024
 
+	// makePickSlot creates a test slot. usedMemMiB sets confirmed allocation resources precisely.
+	// usedCPU is kept for fixture symmetry but has no effect on remaining memory.
 	makePickSlot := func(name string, totalMemMiB, totalCPU, usedMemMiB, usedCPU int64) v1alpha1.Reservation {
-		var allocs map[string]v1alpha1.CommittedResourceAllocation
-		if usedMemMiB > 0 || usedCPU > 0 {
-			allocs = map[string]v1alpha1.CommittedResourceAllocation{
-				"vm-existing": {
-					Resources: map[hv1.ResourceName]resource.Quantity{
-						hv1.ResourceMemory: *resource.NewQuantity(usedMemMiB*1024*1024, resource.BinarySI),
-						hv1.ResourceCPU:    *resource.NewQuantity(usedCPU, resource.DecimalSI),
-					},
-				},
-			}
-		}
-		return v1alpha1.Reservation{
+		_ = usedCPU
+		res := v1alpha1.Reservation{
 			ObjectMeta: metav1.ObjectMeta{Name: name},
 			Spec: v1alpha1.ReservationSpec{
 				Resources: map[hv1.ResourceName]resource.Quantity{
 					hv1.ResourceMemory: *resource.NewQuantity(totalMemMiB*1024*1024, resource.BinarySI),
 					hv1.ResourceCPU:    *resource.NewQuantity(totalCPU, resource.DecimalSI),
 				},
-				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-					Allocations: allocs,
-				},
+				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
 			},
 		}
+		if usedMemMiB > 0 {
+			res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{
+				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+					"vm-existing": {
+						ObjectRef: corev1.ObjectReference{Name: "vm-existing"},
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceMemory: *resource.NewQuantity(usedMemMiB*1024*1024, resource.BinarySI),
+						},
+					},
+				},
+			}
+		}
+		return res
 	}
 
 	tests := []struct {
@@ -260,7 +267,7 @@ func TestPickSlot(t *testing.T) {
 			want:       "a",
 		},
 		{
-			name:       "slot with zero remaining memory excluded",
+			name:       "slot with confirmed VM fully consumed (8192/8192 used → 0 remaining → excluded)",
 			candidates: []v1alpha1.Reservation{makePickSlot("a", 8192, 8, 8192, 0)},
 			want:       "",
 		},
@@ -293,28 +300,28 @@ func TestPickSlot(t *testing.T) {
 			want: "",
 		},
 		{
-			name:       "partially used slot still usable",
-			candidates: []v1alpha1.Reservation{makePickSlot("partial", 8192, 8, 2048, 2)}, // 6144 MiB remaining
+			name:       "slot partially used (2048/8192 used → 6144 remaining → usable for 4096 MiB VM)",
+			candidates: []v1alpha1.Reservation{makePickSlot("partial", 8192, 8, 2048, 2)},
 			want:       "partial",
 		},
 		{
-			name:       "overfill: slot smaller than VM is usable",
-			candidates: []v1alpha1.Reservation{makePickSlot("a", 4096, 8, 2048, 0)}, // 2048 MiB remaining < vmMemBytes
+			name:       "overfill: small empty slot smaller than VM is still usable",
+			candidates: []v1alpha1.Reservation{makePickSlot("a", 2048, 8, 0, 0)}, // 2048 MiB remaining < vmMemBytes (4096)
 			want:       "a",
 		},
 		{
-			name: "overfill: full coverage preferred over partial",
+			name: "overfill: full coverage preferred over partial fill (partial has 2048 remaining, full has 6144)",
 			candidates: []v1alpha1.Reservation{
-				makePickSlot("partial", 4096, 8, 2048, 0), // 2048 MiB remaining, coverage=2048
-				makePickSlot("full", 6144, 8, 0, 0),       // 6144 MiB remaining, coverage=4096 (full)
+				makePickSlot("partial", 4096, 8, 2048, 0), // 2048 remaining → coverage=2048 (overfill)
+				makePickSlot("full", 6144, 8, 0, 0),       // 6144 remaining → coverage=4096 (full)
 			},
 			want: "full",
 		},
 		{
-			name: "overfill: highest partial coverage preferred",
+			name: "overfill: among two empty slots, higher remaining memory preferred (more coverage for overfill)",
 			candidates: []v1alpha1.Reservation{
-				makePickSlot("low", 4096, 8, 2048, 0),  // 2048 MiB remaining, coverage=2048
-				makePickSlot("high", 4096, 8, 1024, 0), // 3072 MiB remaining, coverage=3072
+				makePickSlot("low", 2048, 8, 0, 0),  // 2048 MiB remaining < vmMemBytes, coverage=2048
+				makePickSlot("high", 3072, 8, 0, 0), // 3072 MiB remaining < vmMemBytes, coverage=3072
 			},
 			want: "high",
 		},

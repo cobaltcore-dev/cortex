@@ -10,6 +10,7 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -79,7 +80,14 @@ func confirmedSourceSlot(memory string) *v1alpha1.Reservation {
 				{Type: v1alpha1.ReservationConditionReady, Status: metav1.ConditionTrue, Reason: "ReservationActive"},
 			},
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-				Allocations: map[string]string{testInstanceUUID: testSourceHost},
+				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+					testInstanceUUID: {
+						ObjectRef: corev1.ObjectReference{Name: testInstanceUUID},
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceMemory: resource.MustParse(memory),
+						},
+					},
+				},
 			},
 		},
 	}

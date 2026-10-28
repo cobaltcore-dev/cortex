@@ -141,19 +141,28 @@ func (e *SlotEvaluator) CanAccommodateSlot(hostName string, requiredBytes int64)
 }
 
 // ReservationRemainingMemory returns how many bytes of memory remain
-// unallocated in a reservation slot. Returns 0 if the slot is full or nil.
+// unallocated in a reservation slot. Returns 0 if the slot is nil or fully consumed.
 func ReservationRemainingMemory(res v1alpha1.Reservation) int64 {
 	cr := res.Spec.CommittedResourceReservation
 	if cr == nil {
 		return 0
 	}
 	totalMemQ := res.Spec.Resources[hv1.ResourceMemory]
-	var usedMem int64
-	for _, alloc := range cr.Allocations {
-		allocMem := alloc.Resources[hv1.ResourceMemory]
-		usedMem += allocMem.Value()
+	total := totalMemQ.Value()
+	if res.Status.CommittedResourceReservation == nil {
+		return total
 	}
-	return max(totalMemQ.Value()-usedMem, 0)
+	var confirmed int64
+	for _, alloc := range res.Status.CommittedResourceReservation.Allocations {
+		if used, ok := alloc.Resources[hv1.ResourceMemory]; ok {
+			confirmed += used.Value()
+		}
+	}
+	remaining := total - confirmed
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
 }
 
 // PickSlot selects the best reservation slot for a new VM.

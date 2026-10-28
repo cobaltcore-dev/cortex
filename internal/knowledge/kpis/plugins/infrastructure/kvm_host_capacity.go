@@ -93,30 +93,25 @@ func aggregateReservationsByHost(reservations []v1alpha1.Reservation) (
 			failoverByHost[host] = entry
 
 		case v1alpha1.ReservationTypeCommittedResource:
-			// Total reserved resources for this reservation.
-			cpuTotal := reservation.Spec.Resources[hv1.ResourceCPU]
-			memTotal := reservation.Spec.Resources[hv1.ResourceMemory]
-
-			// Sum allocated resources across all workloads.
-			var cpuAllocated, memAllocated resource.Quantity
-			if reservation.Spec.CommittedResourceReservation != nil {
-				for _, alloc := range reservation.Spec.CommittedResourceReservation.Allocations {
-					cpuAllocated.Add(alloc.Resources[hv1.ResourceCPU])
-					memAllocated.Add(alloc.Resources[hv1.ResourceMemory])
+			// Compute remaining slot capacity: slot - sum of confirmed VM resources.
+			cpuNotInUse := reservation.Spec.Resources[hv1.ResourceCPU].DeepCopy()
+			memNotInUse := reservation.Spec.Resources[hv1.ResourceMemory].DeepCopy()
+			if reservation.Status.CommittedResourceReservation != nil {
+				zero := resource.MustParse("0")
+				for _, alloc := range reservation.Status.CommittedResourceReservation.Allocations {
+					if cpu, ok := alloc.Resources[hv1.ResourceCPU]; ok {
+						cpuNotInUse.Sub(cpu)
+					}
+					if mem, ok := alloc.Resources[hv1.ResourceMemory]; ok {
+						memNotInUse.Sub(mem)
+					}
 				}
-			}
-
-			// Not yet in use = total - allocated, clamped to zero.
-			cpuNotInUse := cpuTotal.DeepCopy()
-			cpuNotInUse.Sub(cpuAllocated)
-			if cpuNotInUse.Cmp(resource.MustParse("0")) < 0 {
-				cpuNotInUse = resource.MustParse("0")
-			}
-
-			memNotInUse := memTotal.DeepCopy()
-			memNotInUse.Sub(memAllocated)
-			if memNotInUse.Cmp(resource.MustParse("0")) < 0 {
-				memNotInUse = resource.MustParse("0")
+				if cpuNotInUse.Cmp(zero) < 0 {
+					cpuNotInUse = zero.DeepCopy()
+				}
+				if memNotInUse.Cmp(zero) < 0 {
+					memNotInUse = zero.DeepCopy()
+				}
 			}
 
 			entry := committedNotInUseByHost[host]

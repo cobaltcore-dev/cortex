@@ -14,6 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,12 +22,9 @@ import (
 )
 
 // newTestCRSlot creates a Reservation slot for commitment "abc123" / project "project-1".
-// Pass nil allocs for an empty allocation map.
-func newTestCRSlot(name string, memGiB int64, targetHost, resourceGroup string, allocs map[string]v1alpha1.CommittedResourceAllocation) v1alpha1.Reservation {
-	if allocs == nil {
-		allocs = map[string]v1alpha1.CommittedResourceAllocation{}
-	}
-	return v1alpha1.Reservation{
+// Pass nil statusAllocs for a slot with no confirmed VMs.
+func newTestCRSlot(name string, memGiB int64, targetHost, resourceGroup string, statusAllocs map[string]v1alpha1.CommittedResourceAllocation) v1alpha1.Reservation {
+	res := v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 			Labels: map[string]string{
@@ -43,10 +41,15 @@ func newTestCRSlot(name string, memGiB int64, targetHost, resourceGroup string, 
 				ProjectID:      "project-1",
 				ResourceGroup:  resourceGroup,
 				Creator:        "syncer",
-				Allocations:    allocs,
 			},
 		},
 	}
+	if len(statusAllocs) > 0 {
+		res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{
+			Allocations: statusAllocs,
+		}
+	}
+	return res
 }
 
 // withAZ returns a copy of the reservation with the given availability zone set.
@@ -176,7 +179,7 @@ func TestApplyCommitmentState(t *testing.T) {
 		{
 			name: "deletion priority: unscheduled (no TargetHost) deleted before scheduled",
 			existingSlots: []v1alpha1.Reservation{
-				newTestCRSlot("commitment-abc123-0", 8, "host-1", "test-group", map[string]v1alpha1.CommittedResourceAllocation{"vm-123": {}}),
+				newTestCRSlot("commitment-abc123-0", 8, "host-1", "test-group", map[string]v1alpha1.CommittedResourceAllocation{"vm-123": {ObjectRef: corev1.ObjectReference{Name: "vm-123"}}}),
 				newTestCRSlot("commitment-abc123-1", 8, "", "test-group", nil),
 			},
 			desiredMemoryGiB: 8,
@@ -190,7 +193,9 @@ func TestApplyCommitmentState(t *testing.T) {
 				if len(remaining) != 1 {
 					t.Fatalf("expected 1 remaining, got %d", len(remaining))
 				}
-				if remaining[0].Spec.TargetHost == "" || len(remaining[0].Spec.CommittedResourceReservation.Allocations) == 0 {
+				if remaining[0].Spec.TargetHost == "" ||
+					remaining[0].Status.CommittedResourceReservation == nil ||
+					len(remaining[0].Status.CommittedResourceReservation.Allocations) == 0 {
 					t.Error("expected scheduled reservation with allocations to remain")
 				}
 			},
@@ -198,13 +203,14 @@ func TestApplyCommitmentState(t *testing.T) {
 		{
 			name: "deletion priority: unused scheduled (no allocations) deleted before allocated",
 			existingSlots: []v1alpha1.Reservation{
-				newTestCRSlot("commitment-abc123-0", 8, "host-1", "test-group", map[string]v1alpha1.CommittedResourceAllocation{"vm-123": {}}),
+				newTestCRSlot("commitment-abc123-0", 8, "host-1", "test-group", map[string]v1alpha1.CommittedResourceAllocation{"vm-123": {ObjectRef: corev1.ObjectReference{Name: "vm-123"}}}),
 				newTestCRSlot("commitment-abc123-1", 8, "host-2", "test-group", nil),
 			},
 			desiredMemoryGiB: 8,
 			wantRemovedCount: 1,
 			validateRemoved: func(t *testing.T, removed []v1alpha1.Reservation) {
-				if len(removed[0].Spec.CommittedResourceReservation.Allocations) != 0 {
+				if removed[0].Status.CommittedResourceReservation != nil &&
+					len(removed[0].Status.CommittedResourceReservation.Allocations) != 0 {
 					t.Error("expected reservation without allocations to be removed")
 				}
 			},
@@ -212,7 +218,8 @@ func TestApplyCommitmentState(t *testing.T) {
 				if len(remaining) != 1 {
 					t.Fatalf("expected 1 remaining, got %d", len(remaining))
 				}
-				if len(remaining[0].Spec.CommittedResourceReservation.Allocations) == 0 {
+				if remaining[0].Status.CommittedResourceReservation == nil ||
+					len(remaining[0].Status.CommittedResourceReservation.Allocations) == 0 {
 					t.Error("expected reservation with allocations to remain")
 				}
 			},
@@ -220,7 +227,7 @@ func TestApplyCommitmentState(t *testing.T) {
 		{
 			name: "deletion priority: unscheduled removed first across mixed set",
 			existingSlots: []v1alpha1.Reservation{
-				newTestCRSlot("commitment-abc123-0", 8, "host-1", "test-group", map[string]v1alpha1.CommittedResourceAllocation{"vm-allocated": {}}),
+				newTestCRSlot("commitment-abc123-0", 8, "host-1", "test-group", map[string]v1alpha1.CommittedResourceAllocation{"vm-allocated": {ObjectRef: corev1.ObjectReference{Name: "vm-allocated"}}}),
 				newTestCRSlot("commitment-abc123-1", 8, "host-2", "test-group", nil),
 				newTestCRSlot("commitment-abc123-2", 8, "", "test-group", nil),
 				newTestCRSlot("commitment-abc123-3", 8, "", "test-group", nil),
@@ -632,8 +639,8 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 				if res.Spec.CommittedResourceReservation == nil {
 					t.Fatal("CommittedResourceReservation is nil")
 				}
-				if _, ok := res.Spec.CommittedResourceReservation.Allocations[vmUUID]; !ok {
-					t.Errorf("expected vm %q in Spec.Allocations", vmUUID)
+				if res.Annotations[v1alpha1.AnnotationCandidateAllocation] != vmUUID {
+					t.Errorf("expected annotation %s=%q, got %q", v1alpha1.AnnotationCandidateAllocation, vmUUID, res.Annotations[v1alpha1.AnnotationCandidateAllocation])
 				}
 				if res.Spec.CommittedResourceReservation.ResourceName != "small" {
 					t.Errorf("ResourceName: want %q, got %q", "small", res.Spec.CommittedResourceReservation.ResourceName)
@@ -653,8 +660,8 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 				if touched[0].Spec.TargetHost != "" {
 					t.Errorf("expected no TargetHost for blind slot, got %q", touched[0].Spec.TargetHost)
 				}
-				if len(touched[0].Spec.CommittedResourceReservation.Allocations) != 0 {
-					t.Error("expected no pre-allocations for blind slot")
+				if touched[0].Annotations[v1alpha1.AnnotationCandidateAllocation] != "" {
+					t.Error("expected no candidate VM annotation for blind slot")
 				}
 			},
 		},
@@ -667,7 +674,7 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 				// Different commitment UUID so Phase 1 doesn't count it against our delta.
 				func() v1alpha1.Reservation {
 					s := withAZ(newTestCRSlot("other-cr-0", 8, hvName, "test-group",
-						map[string]v1alpha1.CommittedResourceAllocation{vmUUID: {}}), az)
+						map[string]v1alpha1.CommittedResourceAllocation{vmUUID: {ObjectRef: corev1.ObjectReference{Name: vmUUID}}}), az)
 					s.Spec.CommittedResourceReservation.CommitmentUUID = "other-uuid"
 					return s
 				}(),
@@ -697,8 +704,8 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 				if res.Spec.TargetHost != hvName {
 					t.Errorf("TargetHost: want %q, got %q", hvName, res.Spec.TargetHost)
 				}
-				if _, ok := res.Spec.CommittedResourceReservation.Allocations[vmUUID]; !ok {
-					t.Errorf("expected vm %q in Spec.Allocations", vmUUID)
+				if res.Annotations[v1alpha1.AnnotationCandidateAllocation] != vmUUID {
+					t.Errorf("expected annotation %s=%q, got %q", v1alpha1.AnnotationCandidateAllocation, vmUUID, res.Annotations[v1alpha1.AnnotationCandidateAllocation])
 				}
 				wantMem := int64(4) * 1024 * 1024 * 1024
 				memQty := res.Spec.Resources[hv1.ResourceMemory]
@@ -748,8 +755,8 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 				if touched[0].Spec.TargetHost != "" {
 					t.Errorf("expected Phase 5 blind slot (no TargetHost), got %q", touched[0].Spec.TargetHost)
 				}
-				if len(touched[0].Spec.CommittedResourceReservation.Allocations) != 0 {
-					t.Error("expected no pre-allocations when flag is disabled")
+				if touched[0].Annotations[v1alpha1.AnnotationCandidateAllocation] != "" {
+					t.Error("expected no candidate VM annotation when flag is disabled")
 				}
 			},
 		},
@@ -765,9 +772,9 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 				if len(touched) != 1 {
 					t.Fatalf("want 1 slot, got %d", len(touched))
 				}
-				if _, ok := touched[0].Spec.CommittedResourceReservation.Allocations["vm-small"]; !ok {
-					t.Errorf("expected vm-small (8GiB exact fit), got allocations: %v",
-						touched[0].Spec.CommittedResourceReservation.Allocations)
+				if touched[0].Annotations[v1alpha1.AnnotationCandidateAllocation] != "vm-small" {
+					t.Errorf("expected vm-small (8GiB exact fit), got annotation: %v",
+						touched[0].Annotations[v1alpha1.AnnotationCandidateAllocation])
 				}
 			},
 		},
@@ -783,9 +790,9 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 				if len(touched) != 1 {
 					t.Fatalf("want 1 slot, got %d", len(touched))
 				}
-				if _, ok := touched[0].Spec.CommittedResourceReservation.Allocations["vm-small"]; !ok {
-					t.Errorf("expected smallest oversized vm-small, got allocations: %v",
-						touched[0].Spec.CommittedResourceReservation.Allocations)
+				if touched[0].Annotations[v1alpha1.AnnotationCandidateAllocation] != "vm-small" {
+					t.Errorf("expected smallest oversized vm-small, got annotation: %v",
+						touched[0].Annotations[v1alpha1.AnnotationCandidateAllocation])
 				}
 				wantMem := int64(4) * 1024 * 1024 * 1024
 				memQty := touched[0].Spec.Resources[hv1.ResourceMemory]
@@ -817,7 +824,7 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 				for _, res := range touched {
 					if res.Spec.TargetHost != "" {
 						preAllocated++
-						for vm := range res.Spec.CommittedResourceReservation.Allocations {
+						if vm := res.Annotations[v1alpha1.AnnotationCandidateAllocation]; vm != "" {
 							usedVMs[vm] = true
 						}
 					}
@@ -932,8 +939,8 @@ func TestApplyCommitmentState_PAYG(t *testing.T) {
 		if res.Spec.TargetHost != hvName {
 			t.Errorf("TargetHost: want %q, got %q", hvName, res.Spec.TargetHost)
 		}
-		if _, ok := res.Spec.CommittedResourceReservation.Allocations[vmID]; !ok {
-			t.Errorf("expected PAYG VM %q in Allocations", vmID)
+		if res.Annotations[v1alpha1.AnnotationCandidateAllocation] != vmID {
+			t.Errorf("expected annotation %s=%q, got %q", v1alpha1.AnnotationCandidateAllocation, vmID, res.Annotations[v1alpha1.AnnotationCandidateAllocation])
 		}
 		wantMem := int64(4080) * 1024 * 1024
 		memQty := res.Spec.Resources[hv1.ResourceMemory]

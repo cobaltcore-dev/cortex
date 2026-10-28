@@ -304,7 +304,7 @@ func selectEvictionTarget(
 		if res.Spec.TargetHost == "" {
 			continue // already evicted, pending status cleanup
 		}
-		if len(res.Spec.CommittedResourceReservation.Allocations) == 0 {
+		if res.Status.CommittedResourceReservation == nil || len(res.Status.CommittedResourceReservation.Allocations) == 0 {
 			unallocated = append(unallocated, res)
 		} else {
 			allocated = append(allocated, res)
@@ -371,8 +371,8 @@ func selectEvictionTarget(
 	return selectedRes
 }
 
-// evictReservation clears Spec.TargetHost and Spec.Allocations, and returns the resources
-// freed (full Spec.Resources — the slot is fully evicted). Status cleanup is left to the reconcile loop
+// evictReservation clears Spec.TargetHost, and returns the resources
+// freed (full Spec.Resources — the slot is fully evicted). Status cleanup is left to the reconcile loop.
 func evictReservation(
 	ctx context.Context,
 	c client.Client,
@@ -385,9 +385,6 @@ func evictReservation(
 
 	old := res.DeepCopy()
 	res.Spec.TargetHost = ""
-	if res.Spec.CommittedResourceReservation != nil {
-		res.Spec.CommittedResourceReservation.Allocations = nil
-	}
 	logger.Info("evicting reservation",
 		"freed", freed,
 		"previous host", old.Spec.TargetHost,

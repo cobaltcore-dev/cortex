@@ -64,7 +64,7 @@ func HostHasCapacityForReservation(allReservations []v1alpha1.Reservation, hv hv
 		}
 	}
 
-	for resourceName, required := range UnusedReservationCapacity(res, false) {
+	for resourceName, required := range UnusedReservationCapacity(res, true) {
 		remaining, ok := free[resourceName]
 		if !ok {
 			return false
@@ -124,61 +124,34 @@ func HostFreeCapacity(hostReservations []v1alpha1.Reservation, hv hv1.Hypervisor
 // filter_has_enough_capacity to ensure consistent accounting.
 //
 // CommittedResourceReservations: confirmed VMs already appear in hv.Status.Allocation,
-// so blocking the full slot would double-count them. The effective block is:
-// max(slot − confirmedVMs, specOnlyVMs), clamped to zero. Skipped (full slot used) when
-// ignoreAllocations is true or when mid-migration (TargetHost != Status.Host).
+// so blocking the full slot would double-count them. The remaining block is
+// max(slot − sum(confirmed VM resources), 0) per resource. Skipped when ignoreAllocations
+// is true or when mid-migration (TargetHost != Status.Host).
 //
 // FailoverReservations: always block the full Spec.Resources.
 func UnusedReservationCapacity(res *v1alpha1.Reservation, ignoreAllocations bool) map[hv1.ResourceName]resource.Quantity {
 	if res.Spec.Type == v1alpha1.ReservationTypeCommittedResource &&
 		!ignoreAllocations &&
 		res.Spec.TargetHost == res.Status.Host &&
-		res.Spec.CommittedResourceReservation != nil &&
-		len(res.Spec.CommittedResourceReservation.Allocations) > 0 {
-		confirmedResources := make(map[hv1.ResourceName]resource.Quantity)
-		specOnlyResources := make(map[hv1.ResourceName]resource.Quantity)
-
-		statusAllocs := map[string]string{}
-		if res.Status.CommittedResourceReservation != nil {
-			statusAllocs = res.Status.CommittedResourceReservation.Allocations
-		}
-
-		for instanceUUID, allocation := range res.Spec.CommittedResourceReservation.Allocations {
-			_, isConfirmed := statusAllocs[instanceUUID]
-			for resourceName, quantity := range allocation.Resources {
-				if isConfirmed {
-					existing := confirmedResources[resourceName]
-					existing.Add(quantity)
-					confirmedResources[resourceName] = existing
-				} else {
-					existing := specOnlyResources[resourceName]
-					existing.Add(quantity)
-					specOnlyResources[resourceName] = existing
+		res.Status.CommittedResourceReservation != nil &&
+		len(res.Status.CommittedResourceReservation.Allocations) > 0 {
+		// Compute remaining slot capacity: slot - sum of confirmed VM resources.
+		result := make(map[hv1.ResourceName]resource.Quantity, len(res.Spec.Resources))
+		zero := resource.MustParse("0")
+		for rn, slotQty := range res.Spec.Resources {
+			remaining := slotQty.DeepCopy()
+			for _, alloc := range res.Status.CommittedResourceReservation.Allocations {
+				if used, ok := alloc.Resources[rn]; ok {
+					remaining.Sub(used)
 				}
 			}
-		}
-
-		result := make(map[hv1.ResourceName]resource.Quantity)
-		zero := resource.Quantity{}
-		for resourceName, slotSize := range res.Spec.Resources {
-			confirmed := confirmedResources[resourceName]
-			specOnly := specOnlyResources[resourceName]
-
-			remaining := slotSize.DeepCopy()
-			remaining.Sub(confirmed)
 			if remaining.Cmp(zero) < 0 {
 				remaining = zero.DeepCopy()
 			}
-
-			if specOnly.Cmp(remaining) > 0 {
-				result[resourceName] = specOnly.DeepCopy()
-			} else {
-				result[resourceName] = remaining
-			}
+			result[rn] = remaining
 		}
 		return result
-	} else {
-		// FailoverReservations are always fully blocked and unused.
-		return res.Spec.Resources
 	}
+	// No confirmed allocations, or ignoreAllocations, or mid-migration: block the full slot.
+	return res.Spec.Resources
 }
