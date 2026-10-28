@@ -52,19 +52,6 @@ type CommitmentReservationController struct {
 	DomainResolver DomainResolver
 }
 
-// echoParentGeneration copies Spec.CommittedResourceReservation.ParentGeneration to
-// Status.CommittedResourceReservation.ObservedParentGeneration so the CommittedResource
-// controller can confirm this reservation was processed for the current CR generation.
-func echoParentGeneration(res *v1alpha1.Reservation) {
-	if res.Spec.CommittedResourceReservation == nil {
-		return
-	}
-	if res.Status.CommittedResourceReservation == nil {
-		res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{}
-	}
-	res.Status.CommittedResourceReservation.ObservedParentGeneration = res.Spec.CommittedResourceReservation.ParentGeneration
-}
-
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // Note: This controller only handles commitment reservations, as filtered by the predicate.
@@ -103,12 +90,12 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		logger.Info("reservation has no resource name, skipping")
 		old := res.DeepCopy()
 		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.ReservationConditionReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "MissingResourceName",
-			Message: "reservation has no resource name",
+			Type:               v1alpha1.ReservationConditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "MissingResourceName",
+			Message:            "reservation has no resource name",
+			ObservedGeneration: res.Generation,
 		})
-		echoParentGeneration(&res)
 		patch := client.MergeFrom(old)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			// Ignore not-found errors during background deletion
@@ -132,10 +119,11 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 				res.Status.CommittedResourceReservation.Allocations = nil
 			}
 			meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
-				Type:    v1alpha1.ReservationConditionReady,
-				Status:  metav1.ConditionFalse,
-				Reason:  "PlacementRevoked",
-				Message: "target host was cleared; pending re-placement",
+				Type:               v1alpha1.ReservationConditionReady,
+				Status:             metav1.ConditionFalse,
+				Reason:             "PlacementRevoked",
+				Message:            "target host was cleared; pending re-placement",
+				ObservedGeneration: res.Generation,
 			})
 			if err := r.Status().Patch(ctx, &res, client.MergeFrom(old)); client.IgnoreNotFound(err) != nil {
 				return ctrl.Result{}, err
@@ -146,27 +134,6 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		}
 
 		logger.V(1).Info("reservation is active, verifying allocations")
-
-		// Sync ObservedParentGeneration if the CR controller bumped ParentGeneration since
-		// the last time this reservation was processed (e.g. after a spec update). Without
-		// this patch the CR controller would spin in Reserving forever for already-ready slots.
-		if res.Spec.CommittedResourceReservation != nil &&
-			(res.Status.CommittedResourceReservation == nil ||
-				res.Status.CommittedResourceReservation.ObservedParentGeneration != res.Spec.CommittedResourceReservation.ParentGeneration) {
-			obs := int64(0)
-			if res.Status.CommittedResourceReservation != nil {
-				obs = res.Status.CommittedResourceReservation.ObservedParentGeneration
-			}
-			logger.V(1).Info("echoParentGeneration firing",
-				"parentGen", res.Spec.CommittedResourceReservation.ParentGeneration,
-				"obs", obs,
-			)
-			old := res.DeepCopy()
-			echoParentGeneration(&res)
-			if err := r.Status().Patch(ctx, &res, client.MergeFrom(old)); client.IgnoreNotFound(err) != nil {
-				return ctrl.Result{}, err
-			}
-		}
 
 		// Verify all allocations in Spec against actual VM state
 		result, err := r.reconcileAllocations(ctx, &res)
@@ -197,12 +164,12 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		old := res.DeepCopy()
 		res.Status.Host = res.Spec.TargetHost
 		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.ReservationConditionReady,
-			Status:  metav1.ConditionTrue,
-			Reason:  "PreAllocated",
-			Message: "reservation pre-allocated with VM allocations",
+			Type:               v1alpha1.ReservationConditionReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             "PreAllocated",
+			Message:            "reservation pre-allocated with VM allocations",
+			ObservedGeneration: res.Generation,
 		})
-		echoParentGeneration(&res)
 		patch := client.MergeFrom(old)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			// Ignore not-found errors during background deletion
@@ -227,12 +194,12 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		old := res.DeepCopy()
 		res.Status.Host = res.Spec.TargetHost
 		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.ReservationConditionReady,
-			Status:  metav1.ConditionTrue,
-			Reason:  "ReservationActive",
-			Message: "reservation is successfully scheduled",
+			Type:               v1alpha1.ReservationConditionReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             "ReservationActive",
+			Message:            "reservation is successfully scheduled",
+			ObservedGeneration: res.Generation,
 		})
-		echoParentGeneration(&res)
 		patch := client.MergeFrom(old)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			// Ignore not-found errors during background deletion
@@ -316,12 +283,12 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		logger.Info("no hypervisors available for scheduling")
 		old := res.DeepCopy()
 		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.ReservationConditionReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "NoHostsAvailable",
-			Message: "no hypervisors available for scheduling",
+			Type:               v1alpha1.ReservationConditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "NoHostsAvailable",
+			Message:            "no hypervisors available for scheduling",
+			ObservedGeneration: res.Generation,
 		})
-		echoParentGeneration(&res)
 		patch := client.MergeFrom(old)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -376,12 +343,12 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		logger.Info("no hosts found for reservation, will retry", "reservation", res.Name, "flavorName", resourceName)
 		old := res.DeepCopy()
 		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.ReservationConditionReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "NoHostsFound",
-			Message: "no hosts found for reservation",
+			Type:               v1alpha1.ReservationConditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "NoHostsFound",
+			Message:            "no hosts found for reservation",
+			ObservedGeneration: res.Generation,
 		})
-		echoParentGeneration(&res)
 		patch := client.MergeFrom(old)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
 			// Ignore not-found errors during background deletion

@@ -454,8 +454,6 @@ func (r *CommittedResourceController) applyReservationState(ctx context.Context,
 	}
 	state.NamePrefix = cr.Name + "-"
 	state.CreatorRequestID = reservations.GlobalRequestIDFromContext(ctx)
-	state.ParentGeneration = cr.Generation
-
 	maxSlots := 0
 	if cr.Spec.AllowRejection {
 		maxSlots = r.Conf.MaxSlotsPerCommitment
@@ -507,37 +505,34 @@ func (r *CommittedResourceController) checkChildReservationStatus(ctx context.Co
 	// other slots are still pending.
 	allReady = true
 	for _, res := range list.Items {
-		obs := int64(0)
-		if res.Status.CommittedResourceReservation != nil {
-			obs = res.Status.CommittedResourceReservation.ObservedParentGeneration
+		cond := meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ReservationConditionReady)
+		condObsGen := int64(0)
+		if cond != nil {
+			condObsGen = cond.ObservedGeneration
 		}
 		ctrl.LoggerFrom(ctx).V(1).Info("checkChildReservationStatus slot",
 			"slot", res.Name,
 			"rv", res.ResourceVersion,
-			"crGen", cr.Generation,
-			"obsParentGen", obs,
-			"genMatch", obs == cr.Generation,
+			"resGen", res.Generation,
+			"condObsGen", condObsGen,
+			"genMatch", condObsGen == res.Generation,
 		)
-		if res.Status.CommittedResourceReservation == nil ||
-			res.Status.CommittedResourceReservation.ObservedParentGeneration != cr.Generation {
-			// parentGen has been written to the Reservation spec (syncReservationMetadata
-			// already ran for this generation) but the Reservation controller hasn't echoed
-			// it to status yet. Poke the Reservation to generate a fresh watch event so the
-			// Reservation controller wakes up and fires the echo.
+		if cond == nil || cond.ObservedGeneration != res.Generation {
+			// Reservation controller hasn't processed the current generation yet.
+			// Poke the Reservation to generate a fresh watch event so the
+			// Reservation controller wakes up.
 			// Use gen+ms as the annotation value so each nudge attempt is a distinct string:
 			// a same-value patch is a no-op on the API server (no watch event generated), and
 			// in a double-stale scenario the first nudge may itself be processed with a stale
 			// object, so periodic retries (every 3s via the fallback requeue) are needed.
 			// shouldNudge is false on the first cycle (CR condition not yet set for this
-			// generation) to give the normal echo path ~3s to complete before intervening.
-			if shouldNudge &&
-				res.Spec.CommittedResourceReservation != nil &&
-				res.Spec.CommittedResourceReservation.ParentGeneration == cr.Generation {
+			// generation) to give the normal path ~3s to complete before intervening.
+			if shouldNudge {
 				nudgeVal := strconv.FormatInt(cr.Generation, 10) + "-" + strconv.FormatInt(time.Now().UnixMilli(), 10)
-				ctrl.LoggerFrom(ctx).V(1).Info("nudging stale reservation: parentGen written to spec but echo pending",
+				ctrl.LoggerFrom(ctx).V(1).Info("nudging stale reservation: condition ObservedGeneration behind reservation generation",
 					"slot", res.Name,
-					"crGen", cr.Generation,
-					"obs", obs,
+					"resGen", res.Generation,
+					"condObsGen", condObsGen,
 				)
 				old := res.DeepCopy()
 				if res.Annotations == nil {
@@ -545,14 +540,13 @@ func (r *CommittedResourceController) checkChildReservationStatus(ctx context.Co
 				}
 				res.Annotations["cortex.cloud/echo-nudge"] = nudgeVal
 				if pErr := r.Patch(ctx, &res, client.MergeFrom(old)); client.IgnoreNotFound(pErr) != nil {
-					ctrl.LoggerFrom(ctx).V(1).Info("failed to nudge stale reservation echo", "slot", res.Name, "err", pErr)
+					ctrl.LoggerFrom(ctx).V(1).Info("failed to nudge stale reservation", "slot", res.Name, "err", pErr)
 				}
 			}
 			allReady = false
 			continue
 		}
-		cond := meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ReservationConditionReady)
-		if cond == nil || cond.Status == metav1.ConditionUnknown {
+		if cond.Status == metav1.ConditionUnknown {
 			allReady = false
 			continue
 		}
@@ -666,7 +660,6 @@ func (r *CommittedResourceController) rollbackToAccepted(ctx context.Context, lo
 	}
 	state.NamePrefix = cr.Name + "-"
 	state.CreatorRequestID = reservations.GlobalRequestIDFromContext(ctx)
-	state.ParentGeneration = cr.Generation
 	rollbackMgr := NewReservationManager(r.Client, ReservationManagerConfig{
 		EnablePaygPreAllocation: r.Conf.EnablePaygPreAllocation,
 		VMSource:                r.VMSource,
@@ -855,7 +848,6 @@ func (r *CommittedResourceController) SetupWithManager(mgr ctrl.Manager, mcl *mu
 			if readyCond != nil &&
 				readyCond.Reason == v1alpha1.CommittedResourceReasonReserving &&
 				readyCond.ObservedGeneration == cr.Generation &&
-				res.Spec.CommittedResourceReservation.ParentGeneration == cr.Generation &&
 				time.Since(readyCond.LastTransitionTime.Time) > maxReservingAgeForSlowdown {
 				LoggerFromContext(ctx).V(1).Info("Reserving state age exceeded threshold, watch re-enqueues suppressed — retrying via backoff timer only",
 					"name", cr.Name, "reservingAge", time.Since(readyCond.LastTransitionTime.Time).Round(time.Second), "threshold", maxReservingAgeForSlowdown)
