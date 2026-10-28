@@ -96,40 +96,52 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, nil // Don't need to requeue.
 	}
 
-	if res.IsReady() {
-		// Spec.TargetHost was cleared (e.g. oversubscription eviction) — revoke status so the
-		// slot re-enters the placement flow on the next reconcile.
-		if res.Spec.TargetHost == "" {
+	// Spec.TargetHost was cleared (e.g. oversubscription eviction) while the slot was confirmed —
+	// revoke status so the slot re-enters the placement flow on the next reconcile.
+	if res.Status.Host != "" && res.Spec.TargetHost == "" {
+		old := res.DeepCopy()
+		res.Status.Host = ""
+		if res.Status.CommittedResourceReservation != nil {
+			res.Status.CommittedResourceReservation.Allocations = nil
+		}
+		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+			Type:               v1alpha1.ReservationConditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "PlacementRevoked",
+			Message:            "target host was cleared; pending re-placement",
+			ObservedGeneration: res.Generation,
+		})
+		if err := r.Status().Patch(ctx, &res, client.MergeFrom(old)); client.IgnoreNotFound(err) != nil {
+			return ctrl.Result{}, err
+		}
+		logger.Info("revoked ready status after placement eviction, slot re-enters placement flow",
+			"component", "oversubscription-check")
+		return ctrl.Result{}, nil
+	}
+
+	// Slot is placed and confirmed — verify allocations and keep ObservedGeneration current.
+	if res.Spec.TargetHost != "" && res.Status.Host == res.Spec.TargetHost {
+		logger.V(1).Info("reservation is active, verifying allocations")
+		if err := r.reconcileAllocations(ctx, &res); err != nil {
+			logger.Error(err, "failed to reconcile allocations")
+			return ctrl.Result{}, err
+		}
+		// Refresh ObservedGeneration if the spec changed since the last reconcile
+		// (e.g. endTime extension or metadata update via syncReservationMetadata).
+		cond := meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ReservationConditionReady)
+		if cond == nil || cond.ObservedGeneration < res.Generation {
 			old := res.DeepCopy()
-			res.Status.Host = ""
-			if res.Status.CommittedResourceReservation != nil {
-				res.Status.CommittedResourceReservation.Allocations = nil
-			}
 			meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
 				Type:               v1alpha1.ReservationConditionReady,
-				Status:             metav1.ConditionFalse,
-				Reason:             "PlacementRevoked",
-				Message:            "target host was cleared; pending re-placement",
+				Status:             metav1.ConditionTrue,
+				Reason:             "ReservationActive",
+				Message:            "reservation is successfully scheduled",
 				ObservedGeneration: res.Generation,
 			})
 			if err := r.Status().Patch(ctx, &res, client.MergeFrom(old)); client.IgnoreNotFound(err) != nil {
 				return ctrl.Result{}, err
 			}
-			logger.Info("revoked ready status after placement eviction, slot re-enters placement flow",
-				"component", "oversubscription-check")
-			return ctrl.Result{}, nil
 		}
-
-		logger.V(1).Info("reservation is active, verifying allocations")
-
-		// Verify all allocations in Status against actual VM state
-		err := r.reconcileAllocations(ctx, &res)
-		if err != nil {
-			logger.Error(err, "failed to reconcile allocations")
-			return ctrl.Result{}, err
-		}
-
-		// Requeue with appropriate interval based on allocation state
 		return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalActive.Duration}, nil
 	}
 
