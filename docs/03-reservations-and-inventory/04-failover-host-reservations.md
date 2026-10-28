@@ -416,6 +416,18 @@ reservations only appear when the count grows or an existing target leaves the p
 Each chosen host is then reserved in full, recording the other partition members as the hosts it stands ready
 to rescue.
 
+**A reserved host is listed as a source of its sibling reservations — and that is intentional.** When a
+partition reserves more than one failover host, each reservation records *every* other partition member as a
+source host, including the partition's *other* reserved hosts. At first glance this looks wrong: why list a
+host that is itself being kept empty as a source to rescue? The reason is what happens after a failover
+completes. Once a reserved host has absorbed an evacuation and is converted back into a normal host, it
+instantly needs a failover target of its own — and because it was already recorded as a source on its sibling
+reservations, that target is already in place. No existing reservation has to be rewritten to account for the
+newly-returned host; the planner only needs to create *additional* reservations to rebuild the failover
+headroom the partition just spent. Leaving the reserved hosts in each other's source lists is therefore a
+deliberate shortcut: it keeps the post-failover reservations consistent without an extra adjustment pass, so
+recovery reduces to "create what's now missing" rather than "re-derive who rescues whom".
+
 ## The reservation lifecycle
 
 A failover host reservation blocks its target host from receiving ordinary placements, so the host stays empty
