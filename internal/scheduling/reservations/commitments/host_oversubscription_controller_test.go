@@ -441,8 +441,10 @@ func TestEvictReservation_ClearsAllocations(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	freedMem := freed[hv1.ResourceMemory]
-	if freedMem.Cmp(testGiB(512)) != 0 {
-		t.Errorf("expected freed 512 GiB, got %s", freedMem.String())
+	// A fully-confirmed slot has no unfilled capacity: confirmed VMs appear in hv.Status.Allocation,
+	// so UnusedReservationCapacity returns 0. Only an empty slot's full block is freed.
+	if !freedMem.IsZero() {
+		t.Errorf("expected freed 0 (VM still running on host), got %s", freedMem.String())
 	}
 
 	var updated v1alpha1.Reservation

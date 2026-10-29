@@ -64,7 +64,7 @@ func HostHasCapacityForReservation(allReservations []v1alpha1.Reservation, hv hv
 		}
 	}
 
-	for resourceName, required := range UnusedReservationCapacity(res, true) {
+	for resourceName, required := range UnusedReservationCapacity(res, false) {
 		remaining, ok := free[resourceName]
 		if !ok {
 			return false

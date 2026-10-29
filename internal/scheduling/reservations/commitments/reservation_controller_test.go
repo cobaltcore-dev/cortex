@@ -852,10 +852,10 @@ func TestReconcileAllocations_LiveMigration(t *testing.T) {
 			assertSecondPass: true,
 		},
 		{
-			name: "single VM, new host at capacity: remove VM, slot stays on old host",
+			name: "single VM, new host has other reservations: follow VM (required=0 for confirmed slot)",
 			extraObjects: []client.Object{
-				// VM (240Gi/20) running on newHost; a full-slot blocker leaves no room for
-				// the 240Gi/20 slot remainder.
+				// VM running on newHost. A blocker reservation occupies the remaining slot-size capacity,
+				// but since the confirmed VM fills the slot, required=0 and the check always passes.
 				newHVWithCapacity(newHost, 480, 40, []hv1.Instance{{ID: vmUUID, Active: true}}),
 				&v1alpha1.Reservation{
 					ObjectMeta: metav1.ObjectMeta{Name: "res-blocker"},
@@ -870,8 +870,9 @@ func TestReconcileAllocations_LiveMigration(t *testing.T) {
 					Status: v1alpha1.ReservationStatus{Host: newHost},
 				},
 			},
-			wantTargetHost: oldHost,
-			wantStatusHost: "",
+			wantTargetHost:   newHost,
+			wantStatusHost:   vmUUID,
+			assertSecondPass: true,
 		},
 		{
 			name: "multiple VMs, one migrated: remove migrated VM, never update TargetHost",

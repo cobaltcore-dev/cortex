@@ -381,7 +381,7 @@ func evictReservation(
 
 	logger := LoggerFromContext(ctx).WithValues("component", "host-oversubscription", "reservation", res.Name)
 
-	freed := reservations.UnusedReservationCapacity(res, true)
+	freed := reservations.UnusedReservationCapacity(res, false)
 
 	old := res.DeepCopy()
 	res.Spec.TargetHost = ""
