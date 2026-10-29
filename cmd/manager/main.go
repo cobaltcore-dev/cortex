@@ -494,9 +494,8 @@ func main() {
 	if slices.Contains(mainConfig.EnabledControllers, "inflight-reservation-controller") {
 		setupLog.Info("enabling controller",
 			"controller", "inflight-reservation-controller")
-		config := conf.GetConfigOrDie[inflight.NovaVMClientConfig]()
-		vmClient := inflight.NewNovaVMClient(config)
-		controller := &inflight.Controller{Client: multiclusterClient, VMClient: vmClient}
+		monitor := inflight.NewMonitor(metrics.Registry)
+		controller := &inflight.Controller{Client: multiclusterClient, Monitor: monitor, DefaultOwnerKind: "VirtualMachine"}
 		if err := controller.SetupWithManager(ctx, mgr); err != nil {
 			setupLog.Error(err, "unable to create controller",
 				"controller", "inflight-reservation-controller")
