@@ -162,6 +162,7 @@ cortex: &cortex
         - cortex.cloud/v1alpha1/Reservation
         - cortex.cloud/v1alpha1/CommittedResource
         - cortex.cloud/v1alpha1/CommittedResourceChange
+        - cobaltcore.cloud/v1alpha1/VirtualMachine
     monitoring:
       labels: &cortexMonitoringLabels
         github_org: cobaltcore-dev
@@ -202,6 +203,17 @@ cortex-scheduling-controllers:
     # non-read-only requests.
     virtualMachineCreation: true
     virtualMachineCreationMandatory: false
+    # Keep disabled until terminal-release and abort-handling dependencies are resolved.
+    inFlightReservations: false
+    inFlightMaxCandidates: 3
+    # Required when enabling inFlightReservations; choose an operation-safe deadline.
+    inFlightTTLSeconds: 0
+    # Resize whose source size cannot be determined: "fail" (reject) or "skip" (target hold only).
+    inFlightResizeUnknownSource: fail
+    # Read a KVM resize's old size from the Nova server DB when the VM has no CRD yet.
+    inFlightResizeServerDBFallback: false
+    # Datasource CRD backing the server-DB fallback; required when the fallback is enabled.
+    inFlightDatasourceName: nova-servers
     # Pipeline used for the empty-state capacity probe (ignores allocations and reservations).
     capacityTotalPipeline: "kvm-general-purpose-load-balancing"
     # Pipeline used for the current-state capacity probe (considers current VM allocations).
