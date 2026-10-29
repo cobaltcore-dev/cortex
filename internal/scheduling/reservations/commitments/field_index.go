@@ -18,7 +18,7 @@ const idxCommittedResourceByUUID = "spec.commitmentUUID"
 const idxCommittedResourceByProjectID = "spec.projectID"
 const idxReservationByCommitmentUUID = "spec.committedResourceReservation.commitmentUUID"
 const idxProjectQuotaByProjectID = "spec.projectID"
-const idxReservationByAllocationVMUUID = "spec.committedResourceReservation.allocations"
+const idxReservationByAllocationVMUUID = "status.committedResourceReservation.allocations"
 
 // once guards ensure each field index is registered exactly once.
 // Both CommittedResourceController and UsageReconciler call indexCommittedResourceByUUID;

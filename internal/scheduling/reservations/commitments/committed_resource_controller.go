@@ -141,6 +141,7 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 			if rollbackErr := r.deleteChildReservations(ctx, cr); rollbackErr != nil {
 				return ctrl.Result{}, rollbackErr
 			}
+			// TODO: if firstSlotReason == "NoHostsFound", consider retrying with a smaller slot size before rejecting.
 			return ctrl.Result{}, r.setNotReady(ctx, cr, v1alpha1.CommittedResourceReasonRejected, failReason)
 		}
 		delay := r.retryDelay(cr)

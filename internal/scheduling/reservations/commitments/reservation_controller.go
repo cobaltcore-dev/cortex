@@ -464,6 +464,30 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 	isSingleVM := len(res.Status.CommittedResourceReservation.Allocations) == 1
 
 	for vmUUID := range res.Status.CommittedResourceReservation.Allocations {
+		// Double-allocation check: if another reservation already has this VM confirmed
+		// in its status.allocations, resolve by lexical name order — the reservation
+		// with the lexically-earlier name keeps the VM; the other removes it.
+		var conflicts v1alpha1.ReservationList
+		if err := r.List(ctx, &conflicts, client.MatchingFields{idxReservationByAllocationVMUUID: vmUUID}); err != nil {
+			logger.Error(err, "failed to query reservation index for double-allocation check", "vmUUID", vmUUID)
+		} else {
+			evicted := false
+			for _, other := range conflicts.Items {
+				if other.Name == res.Name && other.Namespace == res.Namespace {
+					continue
+				}
+				if other.Name < res.Name {
+					logger.Info("double allocation detected: evicting VM (other reservation wins by lexical order)",
+						"vmUUID", vmUUID, "winnerReservation", other.Name, "loserReservation", res.Name)
+					evicted = true
+					break
+				}
+			}
+			if evicted {
+				continue // don't add to newStatusAllocations; evicted VM falls out on next status patch
+			}
+		}
+
 		// VM still on expected host — confirmed.
 		if hvInstanceSet[vmUUID] {
 			newStatusAllocations[vmUUID] = v1alpha1.CommittedResourceAllocation{
