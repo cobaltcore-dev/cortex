@@ -158,7 +158,14 @@ type FailoverReservationSpec struct {
 // in buildup.
 type InFlightReservationSpec struct {
 	// VMID is the OpenStack server uuid from Nova assigned to the virtual
-	// machine expected to land on this reservation slot.
+	// machine expected to land on this reservation slot. It identifies the
+	// subject of the reservation (what is being placed), which is distinct
+	// from the reservation's owner (what controls its lifecycle, expressed via
+	// ownerReferences).
+	//
+	// TODO: generalize this into a domain-agnostic subject identifier once a
+	// non-Nova use case needs in-flight reservations. For now (KISS) we always
+	// have a VM uuid, so we keep this Nova-specific field.
 	VMID string `json:"vmID,omitempty"`
 	// UserID is the identifier of the user who owns the virtual machine.
 	UserID string `json:"userID,omitempty"`
@@ -166,9 +173,26 @@ type InFlightReservationSpec struct {
 	// the virtual machine.
 	ProjectID string `json:"projectID,omitempty"`
 	// Intent defines which kind of virtual machine lifecycle operation
-	// triggered the placement of this in-flight reservation.
+	// triggered the placement of this in-flight reservation. The reconciler
+	// dispatches on this to decide which terminal signal releases the
+	// reservation.
 	// +kubebuilder:validation:Optional
 	Intent SchedulingIntent `json:"intent"`
+	// OperationID groups all in-flight reservations created within a single
+	// scheduling call (e.g. one reservation per candidate host for an initial
+	// placement, or target + source host for a live migration). It is a
+	// Cortex-generated, time-sortable uuid (UUIDv7), independent of any
+	// external caller's request id, so uniqueness does not depend on callers.
+	//
+	// When one operation reaches a terminal state, the reconciler releases
+	// exactly the reservations sharing this OperationID, leaving concurrent
+	// operations on the same VM untouched. For VM-owned in-flight reservations,
+	// when multiple operations exist for the same VM the newest one wins:
+	// operations are ordered by (metadata.creationTimestamp, OperationID), with
+	// the UUIDv7 OperationID breaking ties within the timestamp's one-second
+	// resolution, and older operations' reservations are released.
+	// +kubebuilder:validation:Optional
+	OperationID string `json:"operationID,omitempty"`
 }
 
 // FailoverHostReservationSpec defines the spec fields specific to failover
