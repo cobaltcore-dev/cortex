@@ -4,16 +4,16 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.23.0
-  name: committedresourcechangerequests.cortex.cloud
+  name: committedresourcechanges.cortex.cloud
 spec:
   group: cortex.cloud
   names:
-    kind: CommittedResourceChangeRequest
-    listKind: CommittedResourceChangeRequestList
-    plural: committedresourcechangerequests
+    kind: CommittedResourceChange
+    listKind: CommittedResourceChangeList
+    plural: committedresourcechanges
     shortNames:
-    - crcr
-    singular: committedresourcechangerequest
+    - crc
+    singular: committedresourcechange
   scope: Cluster
   versions:
   - additionalPrinterColumns:
@@ -41,7 +41,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: CommittedResourceChangeRequest is the Schema for the committedresourcechangerequests
+        description: CommittedResourceChange is the Schema for the committedresourcechanges
           API
         properties:
           apiVersion:
@@ -62,8 +62,8 @@ spec:
           metadata:
             type: object
           spec:
-            description: CommittedResourceChangeRequestSpec defines the desired change
-              for a CommittedResourceChangeRequest.
+            description: CommittedResourceChangeSpec defines the desired change for
+              a CommittedResourceChange.
             properties:
               allowRejection:
                 description: |-
@@ -191,8 +191,8 @@ spec:
             - source
             type: object
           status:
-            description: CommittedResourceChangeRequestStatus defines the observed
-              state of a CommittedResourceChangeRequest.
+            description: CommittedResourceChangeStatus defines the observed state
+              of a CommittedResourceChange.
             properties:
               conditions:
                 description: Conditions holds Progressing and Finished conditions.

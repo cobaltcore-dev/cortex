@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package changerequests
+package changes
 
 import (
 	"context"
@@ -23,12 +23,12 @@ import (
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 )
 
-// CommittedResourceChangeRequestReconciler reconciles CommittedResourceChangeRequest CRDs.
+// CommittedResourceChangeReconciler reconciles CommittedResourceChange CRDs.
 // It is the sole writer of CommittedResource.Spec; it reads CommittedResource.Status
 // to drive its own FSM. It never writes CommittedResource.Status.
 //
 // TODO (#783): add perAZActive map[string]types.UID + mu sync.Mutex for per-AZ serialization.
-type CommittedResourceChangeRequestReconciler struct {
+type CommittedResourceChangeReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 	// AwaitingSchedulingTimeout is how long to wait in AwaitingScheduling before rolling back.
@@ -36,11 +36,11 @@ type CommittedResourceChangeRequestReconciler struct {
 	AwaitingSchedulingTimeout time.Duration
 }
 
-func (r *CommittedResourceChangeRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *CommittedResourceChangeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	ctx = commitments.WithNewGlobalRequestID(ctx)
 	logger := commitments.LoggerFromContext(ctx).WithValues("committedResourceChangeRequest", req.Name)
 
-	var tx v1alpha1.CommittedResourceChangeRequest
+	var tx v1alpha1.CommittedResourceChange
 	if err := r.Get(ctx, req.NamespacedName, &tx); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -52,17 +52,17 @@ func (r *CommittedResourceChangeRequestReconciler) Reconcile(ctx context.Context
 	logger.V(1).Info("reconcile entry", "rv", tx.ResourceVersion, "gen", tx.Generation, "phase", tx.Status.Phase)
 
 	switch tx.Status.Phase {
-	case "", v1alpha1.ChangeRequestPhasePreparing:
+	case "", v1alpha1.ChangePhasePreparing:
 		return r.reconcilePreparing(ctx, logger, &tx)
-	case v1alpha1.ChangeRequestPhaseAllocating:
+	case v1alpha1.ChangePhaseAllocating:
 		return r.reconcileAllocating(ctx, logger, &tx)
-	case v1alpha1.ChangeRequestPhaseAwaitingScheduling:
+	case v1alpha1.ChangePhaseAwaitingScheduling:
 		return r.reconcileAwaitingScheduling(ctx, logger, &tx)
-	case v1alpha1.ChangeRequestPhaseRollingBack:
+	case v1alpha1.ChangePhaseRollingBack:
 		return r.reconcileRollingBack(ctx, logger, &tx)
-	case v1alpha1.ChangeRequestPhaseDryRunCleanup:
+	case v1alpha1.ChangePhaseDryRunCleanup:
 		return r.reconcileDryRunCleanup(ctx, logger, &tx)
-	case v1alpha1.ChangeRequestPhaseAccepted, v1alpha1.ChangeRequestPhaseRejected, v1alpha1.ChangeRequestPhaseSuperseded:
+	case v1alpha1.ChangePhaseAccepted, v1alpha1.ChangePhaseRejected, v1alpha1.ChangePhaseSuperseded:
 		return ctrl.Result{}, nil
 	default:
 		return ctrl.Result{}, fmt.Errorf("unknown phase %q", tx.Status.Phase)
@@ -75,7 +75,7 @@ func commitmentName(uuid string) string { return "commitment-" + uuid }
 // reconcilePreparing snapshots pre-change CR specs and advances to Allocating.
 // Always snapshots regardless of AllowRejection — syncer-mode CRTs never roll back but the
 // snapshot is cheap and keeps this method free of branching.
-func (r *CommittedResourceChangeRequestReconciler) reconcilePreparing(ctx context.Context, logger logr.Logger, tx *v1alpha1.CommittedResourceChangeRequest) (ctrl.Result, error) {
+func (r *CommittedResourceChangeReconciler) reconcilePreparing(ctx context.Context, logger logr.Logger, tx *v1alpha1.CommittedResourceChange) (ctrl.Result, error) {
 	// Snapshot current CR specs for all keys in NewState so rollback can restore them.
 	// nil entry = CR did not exist before = delete it on rollback.
 	snapshot := make(map[string]*v1alpha1.CommittedResourceSpec, len(tx.Spec.NewState))
@@ -94,7 +94,7 @@ func (r *CommittedResourceChangeRequestReconciler) reconcilePreparing(ctx contex
 	}
 
 	logger.Info("starting transaction", "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "newStateSize", len(tx.Spec.NewState), "allowRejection", tx.Spec.AllowRejection)
-	return r.advanceTo(ctx, tx, v1alpha1.ChangeRequestPhaseAllocating, func(s *v1alpha1.CommittedResourceChangeRequestStatus) {
+	return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseAllocating, func(s *v1alpha1.CommittedResourceChangeStatus) {
 		s.SnapshotBefore = snapshot
 	})
 }
@@ -106,7 +106,7 @@ func (r *CommittedResourceChangeRequestReconciler) reconcilePreparing(ctx contex
 // UpsertedCommitments and the phase advance must happen in one patch (via the mutate function)
 // so that a crash between CR spec writes and status persistence does not leave AwaitingScheduling
 // with an empty UpsertedCommitments list — which would incorrectly advance to Accepted.
-func (r *CommittedResourceChangeRequestReconciler) reconcileAllocating(ctx context.Context, logger logr.Logger, tx *v1alpha1.CommittedResourceChangeRequest) (ctrl.Result, error) {
+func (r *CommittedResourceChangeReconciler) reconcileAllocating(ctx context.Context, logger logr.Logger, tx *v1alpha1.CommittedResourceChange) (ctrl.Result, error) {
 	var upserted []corev1.ObjectReference
 
 	for uuid, desiredSpec := range tx.Spec.NewState {
@@ -138,11 +138,11 @@ func (r *CommittedResourceChangeRequestReconciler) reconcileAllocating(ctx conte
 	}
 
 	// TODO (#782): syncer-mode recency check before advancing
-	nextPhase := v1alpha1.ChangeRequestPhaseAwaitingScheduling
+	nextPhase := v1alpha1.ChangePhaseAwaitingScheduling
 	if !tx.Spec.AllowRejection {
-		nextPhase = v1alpha1.ChangeRequestPhaseAccepted
+		nextPhase = v1alpha1.ChangePhaseAccepted
 	}
-	return r.advanceTo(ctx, tx, nextPhase, func(s *v1alpha1.CommittedResourceChangeRequestStatus) {
+	return r.advanceTo(ctx, tx, nextPhase, func(s *v1alpha1.CommittedResourceChangeStatus) {
 		s.UpsertedCommitments = upserted
 	})
 }
@@ -152,7 +152,7 @@ func (r *CommittedResourceChangeRequestReconciler) reconcileAllocating(ctx conte
 // All CRs accepted → Accepted (or DryRunCleanup when DryRun=true).
 // Any CR rejected → RollingBack.
 // Not yet settled → wait for the CR watch to re-enqueue.
-func (r *CommittedResourceChangeRequestReconciler) reconcileAwaitingScheduling(ctx context.Context, logger logr.Logger, tx *v1alpha1.CommittedResourceChangeRequest) (ctrl.Result, error) {
+func (r *CommittedResourceChangeReconciler) reconcileAwaitingScheduling(ctx context.Context, logger logr.Logger, tx *v1alpha1.CommittedResourceChange) (ctrl.Result, error) {
 	allAccepted := true
 	acceptedCount := 0
 	for _, ref := range tx.Status.UpsertedCommitments {
@@ -183,7 +183,7 @@ func (r *CommittedResourceChangeRequestReconciler) reconcileAwaitingScheduling(c
 			// Fail-fast: start rollback immediately on first rejection rather than waiting for all CRs
 			// to settle — this unblocks the AZ sooner and the first rejection message is sufficient for diagnosis.
 			logger.Info("CR rejected, rolling back", "cr", ref.Name, "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "message", cond.Message)
-			return r.advanceTo(ctx, tx, v1alpha1.ChangeRequestPhaseRollingBack, func(s *v1alpha1.CommittedResourceChangeRequestStatus) {
+			return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseRollingBack, func(s *v1alpha1.CommittedResourceChangeStatus) {
 				s.Message = fmt.Sprintf("CR %s rejected: %s", ref.Name, cond.Message)
 			})
 		default:
@@ -195,15 +195,15 @@ func (r *CommittedResourceChangeRequestReconciler) reconcileAwaitingScheduling(c
 	if !allAccepted {
 		logger.V(1).Info("awaiting scheduling", "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "ready", acceptedCount, "total", len(tx.Status.UpsertedCommitments))
 		if r.AwaitingSchedulingTimeout > 0 {
-			progressingCond := meta.FindStatusCondition(tx.Status.Conditions, v1alpha1.ChangeRequestConditionProgressing)
+			progressingCond := meta.FindStatusCondition(tx.Status.Conditions, v1alpha1.ChangeConditionProgressing)
 			if progressingCond != nil && time.Since(progressingCond.LastTransitionTime.Time) > r.AwaitingSchedulingTimeout {
 				logger.Info("timed out waiting for scheduling, rolling back", "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "timeout", r.AwaitingSchedulingTimeout)
-				return r.advanceTo(ctx, tx, v1alpha1.ChangeRequestPhaseRollingBack, func(s *v1alpha1.CommittedResourceChangeRequestStatus) {
+				return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseRollingBack, func(s *v1alpha1.CommittedResourceChangeStatus) {
 					s.Message = "timed out waiting for scheduling"
 					meta.SetStatusCondition(&s.Conditions, metav1.Condition{
-						Type:               v1alpha1.ChangeRequestConditionProgressing,
+						Type:               v1alpha1.ChangeConditionProgressing,
 						Status:             metav1.ConditionFalse,
-						Reason:             v1alpha1.ChangeRequestReasonTimedOut,
+						Reason:             v1alpha1.ChangeReasonTimedOut,
 						Message:            "timed out waiting for scheduling",
 						ObservedGeneration: tx.Generation,
 					})
@@ -216,15 +216,15 @@ func (r *CommittedResourceChangeRequestReconciler) reconcileAwaitingScheduling(c
 	}
 
 	if tx.Spec.DryRun {
-		return r.advanceTo(ctx, tx, v1alpha1.ChangeRequestPhaseDryRunCleanup, nil)
+		return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseDryRunCleanup, nil)
 	}
-	return r.advanceTo(ctx, tx, v1alpha1.ChangeRequestPhaseAccepted, nil)
+	return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseAccepted, nil)
 }
 
 // reconcileRollingBack converges affected CR specs back to the pre-change SnapshotBefore state.
 // On restore complete: advances to Rejected.
 // On permanent cleanup failure: advances to Rejected with reason RollbackFailed.
-func (r *CommittedResourceChangeRequestReconciler) reconcileRollingBack(ctx context.Context, logger logr.Logger, tx *v1alpha1.CommittedResourceChangeRequest) (ctrl.Result, error) {
+func (r *CommittedResourceChangeReconciler) reconcileRollingBack(ctx context.Context, logger logr.Logger, tx *v1alpha1.CommittedResourceChange) (ctrl.Result, error) {
 	// TODO (#780): for each entry in SnapshotBefore, converge CR spec back to snapshot value
 	//   using SSA with fieldManager=txFieldManager.
 	//   nil snapshot entry → CR did not exist before → delete it.
@@ -234,7 +234,7 @@ func (r *CommittedResourceChangeRequestReconciler) reconcileRollingBack(ctx cont
 
 // reconcileDryRunCleanup restores pre-change state after a dry-run would-accept outcome.
 // Re-uses snapshot rollback logic; terminal phase is Accepted (not Rejected).
-func (r *CommittedResourceChangeRequestReconciler) reconcileDryRunCleanup(ctx context.Context, logger logr.Logger, tx *v1alpha1.CommittedResourceChangeRequest) (ctrl.Result, error) {
+func (r *CommittedResourceChangeReconciler) reconcileDryRunCleanup(ctx context.Context, logger logr.Logger, tx *v1alpha1.CommittedResourceChange) (ctrl.Result, error) {
 	// TODO (#780): same convergence as reconcileRollingBack; terminal → advanceTo(Accepted, nil).
 	return ctrl.Result{}, nil
 }
@@ -246,11 +246,11 @@ func (r *CommittedResourceChangeRequestReconciler) reconcileDryRunCleanup(ctx co
 //
 // Status().Update is used (not Patch) so that nil map values in SnapshotBefore and similar
 // fields are preserved — JSON merge patch semantics treat null map values as deletions.
-func (r *CommittedResourceChangeRequestReconciler) advanceTo(
+func (r *CommittedResourceChangeReconciler) advanceTo(
 	ctx context.Context,
-	tx *v1alpha1.CommittedResourceChangeRequest,
-	phase v1alpha1.ChangeRequestPhase,
-	mutate func(*v1alpha1.CommittedResourceChangeRequestStatus),
+	tx *v1alpha1.CommittedResourceChange,
+	phase v1alpha1.ChangePhase,
+	mutate func(*v1alpha1.CommittedResourceChangeStatus),
 ) (ctrl.Result, error) {
 
 	tx.Status.Phase = phase
@@ -261,7 +261,7 @@ func (r *CommittedResourceChangeRequestReconciler) advanceTo(
 	if tx.IsTerminal() {
 		progressingStatus, progressingReason = metav1.ConditionFalse, string(phase)
 		meta.SetStatusCondition(&tx.Status.Conditions, metav1.Condition{
-			Type:               v1alpha1.ChangeRequestConditionFinished,
+			Type:               v1alpha1.ChangeConditionFinished,
 			Status:             metav1.ConditionTrue,
 			Reason:             string(phase),
 			ObservedGeneration: tx.Generation,
@@ -269,10 +269,10 @@ func (r *CommittedResourceChangeRequestReconciler) advanceTo(
 	}
 	// Preserve a Progressing=False condition already stamped by the mutate func (e.g. TimedOut).
 	// Terminal phases always overwrite to ensure Progressing=False/<terminal-phase>.
-	existingProgressing := meta.FindStatusCondition(tx.Status.Conditions, v1alpha1.ChangeRequestConditionProgressing)
+	existingProgressing := meta.FindStatusCondition(tx.Status.Conditions, v1alpha1.ChangeConditionProgressing)
 	if tx.IsTerminal() || existingProgressing == nil || existingProgressing.Status != metav1.ConditionFalse {
 		meta.SetStatusCondition(&tx.Status.Conditions, metav1.Condition{
-			Type:               v1alpha1.ChangeRequestConditionProgressing,
+			Type:               v1alpha1.ChangeConditionProgressing,
 			Status:             progressingStatus,
 			Reason:             progressingReason,
 			ObservedGeneration: tx.Generation,
@@ -286,11 +286,11 @@ func (r *CommittedResourceChangeRequestReconciler) advanceTo(
 
 // markError stamps Progressing=False/Error on the transaction as a best-effort status update.
 // The update error is logged but not returned — callers return the original error for requeue.
-func (r *CommittedResourceChangeRequestReconciler) markError(ctx context.Context, tx *v1alpha1.CommittedResourceChangeRequest, msg string) {
+func (r *CommittedResourceChangeReconciler) markError(ctx context.Context, tx *v1alpha1.CommittedResourceChange, msg string) {
 	meta.SetStatusCondition(&tx.Status.Conditions, metav1.Condition{
-		Type:               v1alpha1.ChangeRequestConditionProgressing,
+		Type:               v1alpha1.ChangeConditionProgressing,
 		Status:             metav1.ConditionFalse,
-		Reason:             v1alpha1.ChangeRequestReasonError,
+		Reason:             v1alpha1.ChangeReasonError,
 		Message:            msg,
 		ObservedGeneration: tx.Generation,
 	})
@@ -302,15 +302,15 @@ func (r *CommittedResourceChangeRequestReconciler) markError(ctx context.Context
 // SetupWithManager registers the controller and configures watches.
 // TODO (#783): set MaxConcurrentReconciles: 1 via WithOptions(controller.Options{MaxConcurrentReconciles: 1}).
 // TODO (#783): add predicate on WatchesMulticluster() to re-trigger same-AZ non-terminal siblings on terminal transition.
-func (r *CommittedResourceChangeRequestReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
+func (r *CommittedResourceChangeReconciler) SetupWithManager(mgr ctrl.Manager, mcl *multicluster.Client) error {
 	ctx := context.Background()
-	if err := indexCRCRByUpsertedCR(ctx, mcl); err != nil {
-		return fmt.Errorf("failed to set up CRCR-by-upserted-CR field index: %w", err)
+	if err := indexCRCByUpsertedCR(ctx, mcl); err != nil {
+		return fmt.Errorf("failed to set up CRC-by-upserted-CR field index: %w", err)
 	}
 	bldr := multicluster.BuildController(mcl, mgr)
 	var err error
 	bldr, err = bldr.WatchesMulticluster(
-		&v1alpha1.CommittedResourceChangeRequest{},
+		&v1alpha1.CommittedResourceChange{},
 		&handler.EnqueueRequestForObject{},
 	)
 	if err != nil {
@@ -328,10 +328,10 @@ func (r *CommittedResourceChangeRequestReconciler) SetupWithManager(mgr ctrl.Man
 }
 
 // crToChangeRequest maps a CommittedResource watch event back to the transaction that upserted it.
-func (r *CommittedResourceChangeRequestReconciler) crToChangeRequest(ctx context.Context, obj client.Object) []ctrl.Request {
-	var txList v1alpha1.CommittedResourceChangeRequestList
-	if err := r.List(ctx, &txList, client.MatchingFields{idxCRCRByUpsertedCR: obj.GetName()}); err != nil {
-		commitments.LoggerFromContext(ctx).Error(err, "failed to list CRCRs by upserted CR", "cr", obj.GetName())
+func (r *CommittedResourceChangeReconciler) crToChangeRequest(ctx context.Context, obj client.Object) []ctrl.Request {
+	var txList v1alpha1.CommittedResourceChangeList
+	if err := r.List(ctx, &txList, client.MatchingFields{idxCRCByUpsertedCR: obj.GetName()}); err != nil {
+		commitments.LoggerFromContext(ctx).Error(err, "failed to list CRCs by upserted CR", "cr", obj.GetName())
 		return nil
 	}
 	reqs := make([]ctrl.Request, 0, len(txList.Items))

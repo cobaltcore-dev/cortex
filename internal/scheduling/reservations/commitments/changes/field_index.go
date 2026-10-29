@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package changerequests
+package changes
 
 import (
 	"context"
@@ -11,19 +11,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// idxCRCRByUpsertedCR indexes CommittedResourceChangeRequests by each CR name in UpsertedCommitments.
+// idxCRCByUpsertedCR indexes CommittedResourceChanges by each CR name in UpsertedCommitments.
 // Used by crToChangeRequest to map a CR watch event back to its owning change request.
-const idxCRCRByUpsertedCR = "status.upsertedCommitments.name"
+const idxCRCByUpsertedCR = "status.upsertedCommitments.name"
 
-// indexCRCRByUpsertedCR registers the field index on all clusters that serve CRCR objects.
+// indexCRCByUpsertedCR registers the field index on all clusters that serve CRC objects.
 // Called once from SetupWithManager; no deduplication guard needed.
-func indexCRCRByUpsertedCR(ctx context.Context, mcl *multicluster.Client) error {
+func indexCRCByUpsertedCR(ctx context.Context, mcl *multicluster.Client) error {
 	return mcl.IndexField(ctx,
-		&v1alpha1.CommittedResourceChangeRequest{},
-		&v1alpha1.CommittedResourceChangeRequestList{},
-		idxCRCRByUpsertedCR,
+		&v1alpha1.CommittedResourceChange{},
+		&v1alpha1.CommittedResourceChangeList{},
+		idxCRCByUpsertedCR,
 		func(obj client.Object) []string {
-			tx, ok := obj.(*v1alpha1.CommittedResourceChangeRequest)
+			tx, ok := obj.(*v1alpha1.CommittedResourceChange)
 			if !ok {
 				return nil
 			}

@@ -8,29 +8,29 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ChangeRequestPhase represents the FSM phase of a CommittedResourceChangeRequest.
-type ChangeRequestPhase string
+// ChangePhase represents the FSM phase of a CommittedResourceChange.
+type ChangePhase string
 
 const (
-	// ChangeRequestPhasePreparing: change request created; sanity checks and optional snapshot in progress.
-	ChangeRequestPhasePreparing ChangeRequestPhase = "Preparing"
-	// ChangeRequestPhaseAllocating: CR specs are being written.
-	ChangeRequestPhaseAllocating ChangeRequestPhase = "Allocating"
-	// ChangeRequestPhaseAwaitingScheduling: CR specs written; waiting for placement success.
-	ChangeRequestPhaseAwaitingScheduling ChangeRequestPhase = "AwaitingScheduling"
-	// ChangeRequestPhaseRollingBack: a CR was rejected or timed out; restoring pre-change state.
-	ChangeRequestPhaseRollingBack ChangeRequestPhase = "RollingBack"
-	// ChangeRequestPhaseDryRunCleanup: dry-run would-accept; restoring pre-change state.
-	ChangeRequestPhaseDryRunCleanup ChangeRequestPhase = "DryRunCleanup"
-	// ChangeRequestPhaseAccepted: terminal; change request committed successfully.
-	ChangeRequestPhaseAccepted ChangeRequestPhase = "Accepted"
-	// ChangeRequestPhaseRejected: terminal; change request rolled back.
-	ChangeRequestPhaseRejected ChangeRequestPhase = "Rejected"
-	// ChangeRequestPhaseSuperseded: terminal; abandoned because a newer change request for the same AZ took over.
-	ChangeRequestPhaseSuperseded ChangeRequestPhase = "Superseded"
+	// ChangePhasePreparing: change request created; sanity checks and optional snapshot in progress.
+	ChangePhasePreparing ChangePhase = "Preparing"
+	// ChangePhaseAllocating: CR specs are being written.
+	ChangePhaseAllocating ChangePhase = "Allocating"
+	// ChangePhaseAwaitingScheduling: CR specs written; waiting for placement success.
+	ChangePhaseAwaitingScheduling ChangePhase = "AwaitingScheduling"
+	// ChangePhaseRollingBack: a CR was rejected or timed out; restoring pre-change state.
+	ChangePhaseRollingBack ChangePhase = "RollingBack"
+	// ChangePhaseDryRunCleanup: dry-run would-accept; restoring pre-change state.
+	ChangePhaseDryRunCleanup ChangePhase = "DryRunCleanup"
+	// ChangePhaseAccepted: terminal; change request committed successfully.
+	ChangePhaseAccepted ChangePhase = "Accepted"
+	// ChangePhaseRejected: terminal; change request rolled back.
+	ChangePhaseRejected ChangePhase = "Rejected"
+	// ChangePhaseSuperseded: terminal; abandoned because a newer change request for the same AZ took over.
+	ChangePhaseSuperseded ChangePhase = "Superseded"
 )
 
-// TxSource identifies the originator of a CommittedResourceChangeRequest.
+// TxSource identifies the originator of a CommittedResourceChange.
 type TxSource string
 
 const (
@@ -41,27 +41,27 @@ const (
 )
 
 const (
-	// ChangeRequestConditionProgressing is True while the change request is advancing normally.
+	// ChangeConditionProgressing is True while the change request is advancing normally.
 	// False + reason indicates a problem while still non-terminal.
-	ChangeRequestConditionProgressing = "Progressing"
+	ChangeConditionProgressing = "Progressing"
 
-	// ChangeRequestConditionFinished is True once the change request has reached a terminal phase.
-	ChangeRequestConditionFinished = "Finished"
+	// ChangeConditionFinished is True once the change request has reached a terminal phase.
+	ChangeConditionFinished = "Finished"
 
-	// Reasons for ChangeRequestConditionProgressing=False (non-terminal problems).
-	ChangeRequestReasonStalled        = "Stalled"
-	ChangeRequestReasonTimedOut       = "TimedOut"
-	ChangeRequestReasonError          = "Error"
-	ChangeRequestReasonRetryExhausted = "RetryExhausted"
+	// Reasons for ChangeConditionProgressing=False (non-terminal problems).
+	ChangeReasonStalled        = "Stalled"
+	ChangeReasonTimedOut       = "TimedOut"
+	ChangeReasonError          = "Error"
+	ChangeReasonRetryExhausted = "RetryExhausted"
 
-	// Reasons for ChangeRequestConditionFinished=True.
+	// Reasons for ChangeConditionFinished=True.
 	ChangeRequestReasonAccepted   = "Accepted"
 	ChangeRequestReasonRejected   = "Rejected"
 	ChangeRequestReasonSuperseded = "Superseded"
 )
 
-// CommittedResourceChangeRequestSpec defines the desired change for a CommittedResourceChangeRequest.
-type CommittedResourceChangeRequestSpec struct {
+// CommittedResourceChangeSpec defines the desired change for a CommittedResourceChange.
+type CommittedResourceChangeSpec struct {
 	// CorrelationID is the request/correlation ID.
 	// +kubebuilder:validation:Optional
 	CorrelationID string `json:"correlationID,omitempty"`
@@ -91,12 +91,12 @@ type CommittedResourceChangeRequestSpec struct {
 	NewState map[string]*CommittedResourceSpec `json:"newState,omitempty"`
 }
 
-// CommittedResourceChangeRequestStatus defines the observed state of a CommittedResourceChangeRequest.
-type CommittedResourceChangeRequestStatus struct {
+// CommittedResourceChangeStatus defines the observed state of a CommittedResourceChange.
+type CommittedResourceChangeStatus struct {
 	// Phase is the current FSM phase of the change request.
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:XValidation:rule="oldSelf == '' || !['Accepted','Rejected','Superseded'].exists(t, t == oldSelf) || self == oldSelf",message="phase cannot transition out of a terminal state"
-	Phase ChangeRequestPhase `json:"phase,omitempty"`
+	Phase ChangePhase `json:"phase,omitempty"`
 
 	// SnapshotBefore records the CommittedResource spec state before this change request.
 	// Key is commitmentUUID; nil value means the CR did not exist before (will be deleted on rollback).
@@ -121,7 +121,7 @@ type CommittedResourceChangeRequestStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Cluster,shortName=crcr
+// +kubebuilder:resource:scope=Cluster,shortName=crc
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 // +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone"
 // +kubebuilder:printcolumn:name="Source",type="string",JSONPath=".spec.source"
@@ -129,36 +129,36 @@ type CommittedResourceChangeRequestStatus struct {
 // +kubebuilder:printcolumn:name="Progressing",type="string",JSONPath=".status.conditions[?(@.type=='Progressing')].status",priority=1
 // +kubebuilder:printcolumn:name="Finished",type="string",JSONPath=".status.conditions[?(@.type=='Finished')].status",priority=1
 
-// CommittedResourceChangeRequest is the Schema for the committedresourcechangerequests API
-type CommittedResourceChangeRequest struct {
+// CommittedResourceChange is the Schema for the committedresourcechanges API
+type CommittedResourceChange struct {
 	metav1.TypeMeta `json:",inline"`
 
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
 	// +required
-	Spec CommittedResourceChangeRequestSpec `json:"spec"`
+	Spec CommittedResourceChangeSpec `json:"spec"`
 
 	// +optional
-	Status CommittedResourceChangeRequestStatus `json:"status,omitempty,omitzero"`
+	Status CommittedResourceChangeStatus `json:"status,omitempty,omitzero"`
 }
 
 // IsTerminal reports whether the change request has reached a terminal phase.
-func (tx *CommittedResourceChangeRequest) IsTerminal() bool {
-	return tx.Status.Phase == ChangeRequestPhaseAccepted ||
-		tx.Status.Phase == ChangeRequestPhaseRejected ||
-		tx.Status.Phase == ChangeRequestPhaseSuperseded
+func (tx *CommittedResourceChange) IsTerminal() bool {
+	return tx.Status.Phase == ChangePhaseAccepted ||
+		tx.Status.Phase == ChangePhaseRejected ||
+		tx.Status.Phase == ChangePhaseSuperseded
 }
 
 // +kubebuilder:object:root=true
 
-// CommittedResourceChangeRequestList contains a list of CommittedResourceChangeRequest
-type CommittedResourceChangeRequestList struct {
+// CommittedResourceChangeList contains a list of CommittedResourceChange
+type CommittedResourceChangeList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []CommittedResourceChangeRequest `json:"items"`
+	Items           []CommittedResourceChange `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&CommittedResourceChangeRequest{}, &CommittedResourceChangeRequestList{})
+	SchemeBuilder.Register(&CommittedResourceChange{}, &CommittedResourceChangeList{})
 }
