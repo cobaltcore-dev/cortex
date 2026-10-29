@@ -120,6 +120,12 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 	}
 
 	// Subtract reserved resources by Reservations.
+	// TODO: in-flight reservations double-count against the landed VM. Once a
+	// VM has landed on a host, that host's Status.Allocation already includes
+	// the VM, but the in-flight reservation for the same VM/host (held until the
+	// owning operation completes) is subtracted again below. The capacity filter
+	// should not count both the VM allocation and its in-flight reservation for
+	// the same subject on the same host. Fixed in a follow-up commit.
 	var reservations v1alpha1.ReservationList
 	if err := s.Client.List(context.Background(), &reservations); err != nil {
 		return nil, err
@@ -128,6 +134,10 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 		// Check if this reservation type should be ignored — applies regardless of ready state.
 		if slices.Contains(ignoredReservationTypes, reservation.Spec.Type) {
 			traceLog.V(1).Info("ignoring reservation type", "type", reservation.Spec.Type, "reservation", reservation.Name)
+			continue
+		}
+		if ownsObsoleteInFlight(request, reservation) {
+			traceLog.V(1).Info("ignoring obsolete in-flight reservation of the requested VM", "reservation", reservation.Name)
 			continue
 		}
 
@@ -361,4 +371,20 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 
 func init() {
 	Index["filter_has_enough_capacity"] = func() NovaFilter { return &FilterHasEnoughCapacity{} }
+}
+
+// ownsObsoleteInFlight reports whether the reservation is an in-flight
+// reservation of the VM being scheduled by a Nova lifecycle request. Nova
+// serializes its own operations per VM, so such a request means the VM's
+// previous Nova operation ended and its VM-owned in-flight reservations are
+// obsolete. Cortex-internal requests (e.g. failover scheduling, which also
+// carries the VM uuid) are not serialized by Nova, so the VM's in-flight
+// reservations still block for them.
+func ownsObsoleteInFlight(request api.ExternalSchedulerRequest, reservation v1alpha1.Reservation) bool {
+	spec := reservation.Spec.InFlightReservation
+	if reservation.Spec.Type != v1alpha1.ReservationTypeInFlight || spec == nil || spec.VMID != request.Spec.Data.InstanceUUID {
+		return false
+	}
+	intent, err := request.GetIntent()
+	return err != nil || slices.Contains(api.NovaIntents, intent) // Missing intent means initial placement.
 }

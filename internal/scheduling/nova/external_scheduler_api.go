@@ -290,16 +290,6 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		return
 	}
 	hosts := decision.Status.Result.OrderedHosts
-	if httpAPI.config.NovaLimitHostsToRequest {
-		hosts = limitHostsToRequest(requestData, hosts)
-		logger.V(1).Info("limited hosts to request",
-			"hosts", hosts, "originalHosts", decision.Status.Result.OrderedHosts)
-	}
-	// This is a hack to address the problem that Nova only uses the first host in hosts for evacuation requests.
-	// Only for evacuation we shuffle the first k hosts to ensure that we do not get stuck on a single host
-	if intent == api.EvacuateIntent {
-		hosts = shuffleTopHosts(hosts, httpAPI.config.EvacuationShuffleK)
-	}
 	// Ensure we always return an array, never null. Nova's schema requires
 	// hosts to be an array, and a nil slice would serialize to null.
 	if hosts == nil {

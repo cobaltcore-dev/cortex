@@ -178,6 +178,21 @@ func newMigratingReservation(
 	return res
 }
 
+func newInFlightReservation(name, vmID, cpu, memory string) *v1alpha1.Reservation {
+	return &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec: v1alpha1.ReservationSpec{
+			Type:       v1alpha1.ReservationTypeInFlight,
+			TargetHost: "host1",
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceCPU:    resource.MustParse(cpu),
+				hv1.ResourceMemory: resource.MustParse(memory),
+			},
+			InFlightReservation: &v1alpha1.InFlightReservationSpec{VMID: vmID},
+		},
+	}
+}
+
 func newFailoverReservation(name, targetHost, cpu, memory string, allocations map[string]string) *v1alpha1.Reservation {
 	res := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{
@@ -642,6 +657,29 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 			},
 			request:       newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
+			expectedHosts: []string{"host2", "host3"},
+			filteredHosts: []string{"host1", "host4"},
+		},
+		{
+			name:          "In-flight reservation of another VM blocks its target host",
+			reservations:  []*v1alpha1.Reservation{newInFlightReservation("inflight-1", "other-vm", "8", "16Gi")},
+			request:       newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			expectedHosts: []string{"host2", "host3"},
+			filteredHosts: []string{"host1", "host4"},
+		},
+		{
+			// Nova serializes operations per VM: the VM's previous holds are obsolete.
+			name:          "In-flight reservation of the requested VM is ignored for Nova requests",
+			reservations:  []*v1alpha1.Reservation{newInFlightReservation("inflight-1", "instance-123", "8", "16Gi")},
+			request:       newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			expectedHosts: []string{"host1", "host2", "host3"},
+			filteredHosts: []string{"host4"},
+		},
+		{
+			// Failover scheduling carries the VM uuid but is not serialized by Nova.
+			name:          "In-flight reservation of the requested VM still blocks Cortex-internal requests",
+			reservations:  []*v1alpha1.Reservation{newInFlightReservation("inflight-1", "instance-123", "8", "16Gi")},
+			request:       newNovaRequestWithIntent("instance-123", "project-A", "m1.small", "gp-1", 4, "8Gi", "reserve_for_failover", false, []string{"host1", "host2", "host3", "host4"}),
 			expectedHosts: []string{"host2", "host3"},
 			filteredHosts: []string{"host1", "host4"},
 		},

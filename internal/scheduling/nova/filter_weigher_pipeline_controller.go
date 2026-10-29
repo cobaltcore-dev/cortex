@@ -4,6 +4,7 @@
 package nova
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -21,6 +22,9 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/weighers"
+	resv "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	cacheoverlay "github.com/cobaltcore-dev/cortex/pkg/cache"
+	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -55,7 +59,10 @@ type FilterWeigherPipelineController struct {
 	vmHandler *VirtualMachineHandler
 
 	// CRRecorder receives scheduling events and updates CR reservations and metrics.
-	CRRecorder crs.Recorder
+	CRRecorder       crs.Recorder
+	InFlightConfig   InFlightConfig
+	HTTPConfig       HTTPAPIConfig
+	inflightProducer *inflightProducer
 }
 
 // The type of pipeline this controller manages.
@@ -158,6 +165,11 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		log.Error(err, "failed to unmarshal novaRaw spec")
 		return nil, err
 	}
+	originalRequest := request
+	intent := decision.Spec.Intent
+	createInflights := c.inflightProducer != nil && request.IsKVMRequest() &&
+		!request.Options.ReadOnly && !request.Options.SkipInflight &&
+		slices.Contains(inflightIntents, intent)
 
 	// If necessary gather all placement candidates before filtering.
 	// This will override the hosts and weights in the nova request.
@@ -175,20 +187,39 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		log.V(1).Info("gathered all placement candidates", "numHosts", len(request.Hosts))
 	}
 
+	// The pipeline scores the flavor exactly as Nova sent it; resize no longer
+	// widens the request to an envelope of the current and requested flavor
+	// (ADR 8, UC2). The source hold for a KVM resize is resolved separately
+	// below, before the VM upsert overwrites Spec.Resources.
 	result, err := pipeline.Run(request)
-	if err == nil {
-		decision.Status.Result = &result
+	if err != nil {
+		decision.Status.Explanation = lib.GenerateExplanation(nil, err)
+		log.Error(err, "failed to run pipeline")
+		return &request, err
 	}
-	// Record a human-readable explanation of the decision so it propagates to
-	// the VM CortexSpec.Explanation. On error the result is nil and the
-	// explanation carries the failure reason.
-	decision.Status.Explanation = lib.GenerateExplanation(decision.Status.Result, err)
-	// We create a virtual machine resource based on the scheduling decision,
-	// logging the specific reason whenever we skip creation so it can be traced.
+	c.finalizeHosts(&result, originalRequest, intent, createInflights)
+	decision.Status.Result = &result
+	decision.Status.Explanation = lib.GenerateExplanation(&result, nil)
+
+	// Resolve the in-flight holds before the VM upsert: resize source resolution
+	// reads the VM CRD Spec.Resources (the old size), which Upsert overwrites
+	// with the new flavor.
+	var holds []hold
+	if createInflights && len(result.OrderedHosts) > 0 {
+		resources, err := c.inflightProducer.requiredResources(request)
+		if err != nil {
+			return &request, err
+		}
+		if holds, err = c.inflightProducer.holds(ctx, request, intent, resources, result.OrderedHosts); err != nil {
+			return &request, err
+		}
+	}
+
+	// Create the VirtualMachine resource first so in-flight reservations created
+	// below can reference it as owner inline (no orphan window). We log the
+	// specific reason whenever we skip creation so it can be traced.
 	instanceUUID := request.Spec.Data.InstanceUUID
 	switch {
-	case err != nil:
-		log.V(1).Info("skipping virtual machine creation, pipeline run failed", "instanceUUID", instanceUUID)
 	case request.Options.ReadOnly:
 		log.V(1).Info("skipping virtual machine creation, request is read-only", "instanceUUID", instanceUUID)
 	case !c.FeatureGates.VirtualMachineCreation:
@@ -199,7 +230,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		log.V(1).Info("skipping virtual machine creation, unsupported hypervisor type", "instanceUUID", instanceUUID)
 	default:
 		vmUpsertErr := c.vmHandler.Upsert(ctx, decision, request)
-		if c.FeatureGates.VirtualMachineCreationMandatory && vmUpsertErr != nil {
+		if (c.FeatureGates.VirtualMachineCreationMandatory || createInflights) && vmUpsertErr != nil {
 			log.Error(vmUpsertErr, "failed to upsert virtual machine resource and it is mandatory", "instanceUUID", instanceUUID)
 			return &request, vmUpsertErr
 		}
@@ -209,10 +240,15 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		}
 	}
 
-	if err != nil {
-		log.Error(err, "failed to run pipeline")
-		return &request, err
+	// Block the returned hosts before handing control back to Nova. The VM CRD
+	// now exists (upsert above), so create attaches it as owner inline. The
+	// holds were resolved before the upsert (resize source reads the old size).
+	if createInflights && len(holds) > 0 {
+		if _, err = c.inflightProducer.create(ctx, originalRequest, intent, holds); err != nil {
+			return &request, err
+		}
 	}
+
 	meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
 		Type:    v1alpha1.DecisionConditionReady,
 		Status:  metav1.ConditionTrue,
@@ -221,6 +257,46 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	})
 	log.Info("decision processed successfully", "duration", time.Since(startedAt))
 	return &request, nil
+}
+
+// finalizeHosts applies the response policy to the pipeline result, so the
+// returned hosts are exactly the ones in-flight reservations are created for.
+func (c *FilterWeigherPipelineController) finalizeHosts(result *v1alpha1.DecisionResult, request api.ExternalSchedulerRequest, intent v1alpha1.SchedulingIntent, createInflights bool) {
+	hosts := result.OrderedHosts
+	if c.HTTPConfig.NovaLimitHostsToRequest {
+		hosts = limitHostsToRequest(request, hosts)
+	}
+	// This is a hack to address the problem that Nova only uses the first host
+	// in hosts for evacuation requests. Shuffle the first k hosts to ensure that
+	// we do not get stuck on a single host.
+	if intent == api.EvacuateIntent {
+		hosts = shuffleTopHosts(hosts, c.HTTPConfig.EvacuationShuffleK)
+	}
+	if createInflights {
+		limit := 1
+		if intent == api.CreateIntent {
+			limit = cmp.Or(c.InFlightConfig.MaxCandidates, 3)
+			if request.Options.MaxCandidates > 0 {
+				limit = min(limit, request.Options.MaxCandidates)
+			}
+		}
+		hosts = hosts[:min(limit, len(hosts))]
+	}
+	// Nova uses only the first host for evacuations (ADR 8, Pattern 3); with
+	// in-flight reservations enabled, return just the randomly chosen one.
+	if c.inflightProducer != nil && intent == api.EvacuateIntent {
+		hosts = hosts[:min(1, len(hosts))]
+	}
+	result.OrderedHosts = hosts
+	result.TargetHost = nil
+	if len(hosts) > 0 {
+		result.TargetHost = &hosts[0]
+	}
+	for host := range result.AggregatedOutWeights {
+		if !slices.Contains(hosts, host) {
+			delete(result.AggregatedOutWeights, host)
+		}
+	}
 }
 
 // peekReadOnly determines whether a decision should use a read lock instead of
@@ -250,6 +326,39 @@ func (c *FilterWeigherPipelineController) InitPipeline(
 }
 
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
+	if c.FeatureGates.InFlightReservations {
+		if c.InFlightConfig.TTLSeconds <= 0 || c.InFlightConfig.MaxCandidates < 0 {
+			return errors.New("in-flight reservations require positive TTL seconds and nonnegative max candidates")
+		}
+		if !c.FeatureGates.VirtualMachineCreation {
+			return errors.New("in-flight reservations require virtual machine creation")
+		}
+		if c.HTTPConfig.forcedDestinationEnabled() {
+			return errors.New("in-flight reservations require forcedDestinationEnabled=false")
+		}
+		cacheConfig := conf.GetConfigOrDie[cacheoverlay.RootConfig]().Cache
+		if !cacheConfig.Enabled || !slices.Contains(cacheConfig.GVKs, "cortex.cloud/v1alpha1/Reservation") ||
+			!slices.Contains(cacheConfig.GVKs, "cobaltcore.cloud/v1alpha1/VirtualMachine") {
+			return errors.New("in-flight reservations require Reservation and VirtualMachine write-through overlays")
+		}
+		resizeUnknownSource := cmp.Or(c.InFlightConfig.ResizeUnknownSource, resizeUnknownSourceFail)
+		if resizeUnknownSource != resizeUnknownSourceFail && resizeUnknownSource != resizeUnknownSourceSkip {
+			return fmt.Errorf("inFlightResizeUnknownSource must be %q or %q", resizeUnknownSourceFail, resizeUnknownSourceSkip)
+		}
+		producer := &inflightProducer{
+			Client:              mcl,
+			OwnerResolver:       vmOwnerResolver{Client: mcl},
+			TTL:                 time.Duration(c.InFlightConfig.TTLSeconds) * time.Second,
+			ResizeUnknownSource: resizeUnknownSource,
+		}
+		if c.InFlightConfig.ResizeServerDBFallback {
+			if c.InFlightConfig.DatasourceName == "" {
+				return errors.New("inFlightResizeServerDBFallback requires inFlightDatasourceName")
+			}
+			producer.VMSource = resv.NewPostgresVMSource(mcl, c.InFlightConfig.DatasourceName)
+		}
+		c.inflightProducer = producer
+	}
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainNova
 	c.gatherer = &candidateGatherer{Client: mcl}

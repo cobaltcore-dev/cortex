@@ -424,12 +424,15 @@ func main() {
 
 	if slices.Contains(mainConfig.EnabledControllers, "nova-pipeline-controllers") {
 		featureGates := conf.GetConfigOrDie[nova.FeatureGates]()
+		novaAPIConfig := conf.GetConfigOrDie[nova.HTTPAPIConfig]()
 		noHostFoundCounter := crs.NewNoHostFoundCounter()
 		placementCounter := crs.NewPlacementCounter()
 		// Filter-weigher pipeline controller setup.
 		filterWeigherController := &nova.FilterWeigherPipelineController{
-			Monitor:      filterWeigherPipelineMonitor,
-			FeatureGates: featureGates,
+			Monitor:        filterWeigherPipelineMonitor,
+			FeatureGates:   featureGates,
+			InFlightConfig: conf.GetConfigOrDie[nova.InFlightConfig](),
+			HTTPConfig:     novaAPIConfig,
 			CRRecorder: crs.Recorder{
 				NoHostFoundCounter: noHostFoundCounter,
 				PlacementCounter:   placementCounter,
@@ -444,7 +447,6 @@ func main() {
 			setupLog.Error(err, "unable to create controller", "controller", "nova FilterWeigherPipelineController")
 			os.Exit(1)
 		}
-		novaAPIConfig := conf.GetConfigOrDie[nova.HTTPAPIConfig]()
 		setupLog.Info("loaded nova API config",
 			"evacuationShuffleK", novaAPIConfig.EvacuationShuffleK,
 			"novaLimitHostsToRequest", novaAPIConfig.NovaLimitHostsToRequest)

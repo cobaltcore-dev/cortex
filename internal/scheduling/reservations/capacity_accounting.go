@@ -51,6 +51,14 @@ func HostHasCapacityForReservation(allReservations []v1alpha1.Reservation, hv hv
 		if other.Name == res.Name && other.Namespace == res.Namespace {
 			continue
 		}
+		// TODO: account for in-flight reservations here. They are ignored for now
+		// so this helper does not double-count a landed VM against its hold; the
+		// capacity filter applies the per-(VM, host) in-flight rule instead.
+		// Consequence: failover and committed-resource placement may pick a host
+		// that an in-flight hold is currently blocking.
+		if other.Spec.Type == v1alpha1.ReservationTypeInFlight {
+			continue
+		}
 		// Only block resources from reservations that target or are confirmed on this host.
 		targetsThisHost := other.Spec.TargetHost == hv.Name || other.Status.Host == hv.Name
 		if !targetsThisHost {
@@ -105,6 +113,12 @@ func HostFreeCapacity(hostReservations []v1alpha1.Reservation, hv hv1.Hypervisor
 		res := &hostReservations[i]
 		if res.Spec.TargetHost == "" {
 			continue // evicted; status.Host may lag until reconcile
+		}
+		// TODO: account for in-flight reservations here (see
+		// HostHasCapacityForReservation). Ignored for now to avoid
+		// double-counting a landed VM against its hold.
+		if res.Spec.Type == v1alpha1.ReservationTypeInFlight {
+			continue
 		}
 		if res.Spec.TargetHost != hv.Name && res.Status.Host != hv.Name {
 			continue
