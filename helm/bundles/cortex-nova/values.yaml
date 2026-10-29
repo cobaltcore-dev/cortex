@@ -137,8 +137,8 @@ cortex: &cortex
           - cortex.cloud/v1alpha1/ReservationList
           - cortex.cloud/v1alpha1/CommittedResource
           - cortex.cloud/v1alpha1/CommittedResourceList
-          - cortex.cloud/v1alpha1/CommittedResourceTransaction
-          - cortex.cloud/v1alpha1/CommittedResourceTransactionList
+          - cortex.cloud/v1alpha1/CommittedResourceChangeRequest
+          - cortex.cloud/v1alpha1/CommittedResourceChangeRequestList
           - cortex.cloud/v1alpha1/ProjectQuota
           - cortex.cloud/v1alpha1/ProjectQuotaList
           - cortex.cloud/v1alpha1/FlavorGroupCapacity
@@ -161,7 +161,7 @@ cortex: &cortex
       gvks:
         - cortex.cloud/v1alpha1/Reservation
         - cortex.cloud/v1alpha1/CommittedResource
-        - cortex.cloud/v1alpha1/CommittedResourceTransaction
+        - cortex.cloud/v1alpha1/CommittedResourceChangeRequest
     monitoring:
       labels: &cortexMonitoringLabels
         github_org: cobaltcore-dev

@@ -4,14 +4,16 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.23.0
-  name: committedresourcetransactions.cortex.cloud
+  name: committedresourcechangerequests.cortex.cloud
 spec:
   group: cortex.cloud
   names:
-    kind: CommittedResourceTransaction
-    listKind: CommittedResourceTransactionList
-    plural: committedresourcetransactions
-    singular: committedresourcetransaction
+    kind: CommittedResourceChangeRequest
+    listKind: CommittedResourceChangeRequestList
+    plural: committedresourcechangerequests
+    shortNames:
+    - crcr
+    singular: committedresourcechangerequest
   scope: Cluster
   versions:
   - additionalPrinterColumns:
@@ -39,7 +41,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: CommittedResourceTransaction is the Schema for the committedresourcetransactions
+        description: CommittedResourceChangeRequest is the Schema for the committedresourcechangerequests
           API
         properties:
           apiVersion:
@@ -60,25 +62,25 @@ spec:
           metadata:
             type: object
           spec:
-            description: CommittedResourceTransactionSpec defines the desired change
-              for a CommittedResourceTransaction.
+            description: CommittedResourceChangeRequestSpec defines the desired change
+              for a CommittedResourceChangeRequest.
             properties:
               allowRejection:
                 description: |-
-                  AllowRejection controls whether the transaction may be rejected and rolled back
+                  AllowRejection controls whether the change request may be rejected and rolled back
                   on placement failure. When false, the reconciler retries until Accepted or Superseded.
                 type: boolean
               availabilityZone:
-                description: AvailabilityZone is the availability zone this transaction
-                  is scoped to.
+                description: AvailabilityZone is the availability zone this change
+                  request is scoped to.
                 minLength: 1
                 type: string
               correlationID:
                 description: CorrelationID is the request/correlation ID.
                 type: string
               dryRun:
-                description: DryRun controls whether the transaction commits or only
-                  probes schedulability.
+                description: DryRun controls whether the change request commits or
+                  only probes schedulability.
                 type: boolean
               newState:
                 additionalProperties:
@@ -179,7 +181,7 @@ spec:
                   A nil value means the corresponding CommittedResource should be deleted.
                 type: object
               source:
-                description: Source identifies who created this transaction.
+                description: Source identifies who created this change request.
                 enum:
                 - api
                 - syncer
@@ -189,8 +191,8 @@ spec:
             - source
             type: object
           status:
-            description: CommittedResourceTransactionStatus defines the observed state
-              of a CommittedResourceTransaction.
+            description: CommittedResourceChangeRequestStatus defines the observed
+              state of a CommittedResourceChangeRequest.
             properties:
               conditions:
                 description: Conditions holds Progressing and Finished conditions.
@@ -254,7 +256,7 @@ spec:
                   state or terminal outcome.
                 type: string
               phase:
-                description: Phase is the current FSM phase of the transaction.
+                description: Phase is the current FSM phase of the change request.
                 type: string
                 x-kubernetes-validations:
                 - message: phase cannot transition out of a terminal state
@@ -355,13 +357,13 @@ spec:
                   - state
                   type: object
                 description: |-
-                  SnapshotBefore records the CommittedResource spec state before this transaction.
+                  SnapshotBefore records the CommittedResource spec state before this change request.
                   Key is commitmentUUID; nil value means the CR did not exist before (will be deleted on rollback).
                   Populated in Preparing when AllowRejection=true.
                 type: object
               upsertedCommitments:
                 description: |-
-                  UpsertedCommitments holds references to CommittedResource CRDs written by this transaction.
+                  UpsertedCommitments holds references to CommittedResource CRDs written by this change request.
                   Watched in AwaitingScheduling to gate on placement success.
                   These are plain object references, not owner references.
                 items:

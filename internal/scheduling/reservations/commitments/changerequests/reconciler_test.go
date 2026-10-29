@@ -1,7 +1,7 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package transactions
+package changerequests
 
 import (
 	"context"
@@ -42,11 +42,11 @@ func testClient(t *testing.T, scheme *runtime.Scheme, objects ...client.Object) 
 		WithScheme(scheme).
 		WithObjects(objects...).
 		WithStatusSubresource(
-			&v1alpha1.CommittedResourceTransaction{},
+			&v1alpha1.CommittedResourceChangeRequest{},
 			&v1alpha1.CommittedResource{},
 		).
-		WithIndex(&v1alpha1.CommittedResourceTransaction{}, idxCRTByUpsertedCR, func(obj client.Object) []string {
-			tx, ok := obj.(*v1alpha1.CommittedResourceTransaction)
+		WithIndex(&v1alpha1.CommittedResourceChangeRequest{}, idxCRCRByUpsertedCR, func(obj client.Object) []string {
+			tx, ok := obj.(*v1alpha1.CommittedResourceChangeRequest)
 			if !ok {
 				return nil
 			}
@@ -61,11 +61,11 @@ func testClient(t *testing.T, scheme *runtime.Scheme, objects ...client.Object) 
 		Build()
 }
 
-func testReconciler(c client.Client, scheme *runtime.Scheme) *CommittedResourceTransactionReconciler {
-	return &CommittedResourceTransactionReconciler{Client: c, Scheme: scheme}
+func testReconciler(c client.Client, scheme *runtime.Scheme) *CommittedResourceChangeRequestReconciler {
+	return &CommittedResourceChangeRequestReconciler{Client: c, Scheme: scheme}
 }
 
-func doReconcile(t *testing.T, r *CommittedResourceTransactionReconciler, name string) ctrl.Result {
+func doReconcile(t *testing.T, r *CommittedResourceChangeRequestReconciler, name string) ctrl.Result {
 	t.Helper()
 	res, err := r.Reconcile(testCtx, ctrl.Request{NamespacedName: types.NamespacedName{Name: name}})
 	if err != nil {
@@ -74,11 +74,11 @@ func doReconcile(t *testing.T, r *CommittedResourceTransactionReconciler, name s
 	return res
 }
 
-func getTx(t *testing.T, c client.Client, name string) *v1alpha1.CommittedResourceTransaction {
+func getTx(t *testing.T, c client.Client, name string) *v1alpha1.CommittedResourceChangeRequest {
 	t.Helper()
-	var tx v1alpha1.CommittedResourceTransaction
+	var tx v1alpha1.CommittedResourceChangeRequest
 	if err := c.Get(testCtx, types.NamespacedName{Name: name}, &tx); err != nil {
-		t.Fatalf("get CRT %q: %v", name, err)
+		t.Fatalf("get CRCR %q: %v", name, err)
 	}
 	return &tx
 }
@@ -93,7 +93,7 @@ func getCR(t *testing.T, c client.Client, name string) *v1alpha1.CommittedResour
 }
 
 // driveToPhase calls Reconcile until the CRT reaches target, up to 5 attempts.
-func driveToPhase(t *testing.T, r *CommittedResourceTransactionReconciler, c client.Client, txName string, target v1alpha1.TxPhase) {
+func driveToPhase(t *testing.T, r *CommittedResourceChangeRequestReconciler, c client.Client, txName string, target v1alpha1.ChangeRequestPhase) {
 	t.Helper()
 	const maxSteps = 5
 	for range maxSteps {
@@ -148,7 +148,7 @@ func backdateProgressingCondition(t *testing.T, c client.Client, txName string, 
 	t.Helper()
 	tx := getTx(t, c, txName)
 	for i, cond := range tx.Status.Conditions {
-		if cond.Type == v1alpha1.TxConditionProgressing {
+		if cond.Type == v1alpha1.ChangeRequestConditionProgressing {
 			tx.Status.Conditions[i].LastTransitionTime = metav1.NewTime(time.Now().Add(-age))
 			break
 		}
@@ -197,8 +197,8 @@ func TestCRTReconciler_Preparing(t *testing.T) {
 	tests := []struct {
 		name                  string
 		preObjects            []client.Object
-		tx                    *v1alpha1.CommittedResourceTransaction
-		wantPhase             v1alpha1.TxPhase
+		tx                    *v1alpha1.CommittedResourceChangeRequest
+		wantPhase             v1alpha1.ChangeRequestPhase
 		wantSnapshotNilFor    []string // UUIDs that must have nil snapshot entry (CR did not exist)
 		wantSnapshotSetFor    []string // UUIDs that must have non-nil snapshot entry (CR existed)
 		wantProgressingStatus metav1.ConditionStatus
@@ -206,16 +206,16 @@ func TestCRTReconciler_Preparing(t *testing.T) {
 	}{
 		{
 			name: "no pre-existing CR: snapshot entry is nil, phase advances to Allocating",
-			tx: &v1alpha1.CommittedResourceTransaction{
+			tx: &v1alpha1.CommittedResourceChangeRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "tx-prep-1"},
-				Spec: v1alpha1.CommittedResourceTransactionSpec{
+				Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 					AvailabilityZone: "az-1",
 					Source:           v1alpha1.TxSourceAPI,
 					AllowRejection:   true,
 					NewState:         map[string]*v1alpha1.CommittedResourceSpec{"uuid-a": minimalCRSpec("az-1")},
 				},
 			},
-			wantPhase:             v1alpha1.TxPhaseAllocating,
+			wantPhase:             v1alpha1.ChangeRequestPhaseAllocating,
 			wantSnapshotNilFor:    []string{"uuid-a"},
 			wantProgressingStatus: metav1.ConditionTrue,
 			wantProgressingReason: "Advancing",
@@ -228,32 +228,32 @@ func TestCRTReconciler_Preparing(t *testing.T) {
 					Spec:       *minimalCRSpec("az-1"),
 				},
 			},
-			tx: &v1alpha1.CommittedResourceTransaction{
+			tx: &v1alpha1.CommittedResourceChangeRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "tx-prep-2"},
-				Spec: v1alpha1.CommittedResourceTransactionSpec{
+				Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 					AvailabilityZone: "az-1",
 					Source:           v1alpha1.TxSourceAPI,
 					AllowRejection:   true,
 					NewState:         map[string]*v1alpha1.CommittedResourceSpec{"uuid-b": minimalCRSpec("az-1")},
 				},
 			},
-			wantPhase:             v1alpha1.TxPhaseAllocating,
+			wantPhase:             v1alpha1.ChangeRequestPhaseAllocating,
 			wantSnapshotSetFor:    []string{"uuid-b"},
 			wantProgressingStatus: metav1.ConditionTrue,
 			wantProgressingReason: "Advancing",
 		},
 		{
 			name: "Preparing idempotent: running reconcile twice does not error",
-			tx: &v1alpha1.CommittedResourceTransaction{
+			tx: &v1alpha1.CommittedResourceChangeRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "tx-prep-3"},
-				Spec: v1alpha1.CommittedResourceTransactionSpec{
+				Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 					AvailabilityZone: "az-1",
 					Source:           v1alpha1.TxSourceAPI,
 					AllowRejection:   true,
 					NewState:         map[string]*v1alpha1.CommittedResourceSpec{"uuid-c": minimalCRSpec("az-1")},
 				},
 			},
-			wantPhase:             v1alpha1.TxPhaseAllocating,
+			wantPhase:             v1alpha1.ChangeRequestPhaseAllocating,
 			wantProgressingStatus: metav1.ConditionTrue,
 			wantProgressingReason: "Advancing",
 		},
@@ -282,7 +282,7 @@ func TestCRTReconciler_Preparing(t *testing.T) {
 				t.Errorf("phase: want %q, got %q", tt.wantPhase, tx.Status.Phase)
 			}
 			if tt.wantProgressingStatus != "" {
-				assertCondition(t, tx.Status.Conditions, v1alpha1.TxConditionProgressing, tt.wantProgressingStatus, tt.wantProgressingReason)
+				assertCondition(t, tx.Status.Conditions, v1alpha1.ChangeRequestConditionProgressing, tt.wantProgressingStatus, tt.wantProgressingReason)
 			}
 			for _, uuid := range tt.wantSnapshotNilFor {
 				snap, ok := tx.Status.SnapshotBefore[uuid]
@@ -316,8 +316,8 @@ func TestCRTReconciler_Allocating(t *testing.T) {
 	tests := []struct {
 		name                    string
 		preObjects              []client.Object
-		tx                      *v1alpha1.CommittedResourceTransaction
-		wantPhase               v1alpha1.TxPhase
+		tx                      *v1alpha1.CommittedResourceChangeRequest
+		wantPhase               v1alpha1.ChangeRequestPhase
 		wantCRExists            []string
 		wantCRAbsent            []string
 		wantUpsertedCommitments int
@@ -328,16 +328,16 @@ func TestCRTReconciler_Allocating(t *testing.T) {
 	}{
 		{
 			name: "API-mode: creates CR and advances to AwaitingScheduling",
-			tx: &v1alpha1.CommittedResourceTransaction{
+			tx: &v1alpha1.CommittedResourceChangeRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "tx-alloc-1"},
-				Spec: v1alpha1.CommittedResourceTransactionSpec{
+				Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 					AvailabilityZone: "az-1",
 					Source:           v1alpha1.TxSourceAPI,
 					AllowRejection:   true,
 					NewState:         map[string]*v1alpha1.CommittedResourceSpec{"uuid-1": minimalCRSpec("az-1")},
 				},
 			},
-			wantPhase:               v1alpha1.TxPhaseAwaitingScheduling,
+			wantPhase:               v1alpha1.ChangeRequestPhaseAwaitingScheduling,
 			wantCRExists:            []string{"commitment-uuid-1"},
 			wantUpsertedCommitments: 1,
 			wantProgressingStatus:   metav1.ConditionTrue,
@@ -345,22 +345,22 @@ func TestCRTReconciler_Allocating(t *testing.T) {
 		},
 		{
 			name: "syncer-mode: applies CR and advances directly to Accepted (no scheduling gate)",
-			tx: &v1alpha1.CommittedResourceTransaction{
+			tx: &v1alpha1.CommittedResourceChangeRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "tx-alloc-2"},
-				Spec: v1alpha1.CommittedResourceTransactionSpec{
+				Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 					AvailabilityZone: "az-1",
 					Source:           v1alpha1.TxSourceSyncer,
 					AllowRejection:   false,
 					NewState:         map[string]*v1alpha1.CommittedResourceSpec{"uuid-2": minimalCRSpec("az-1")},
 				},
 			},
-			wantPhase:               v1alpha1.TxPhaseAccepted,
+			wantPhase:               v1alpha1.ChangeRequestPhaseAccepted,
 			wantCRExists:            []string{"commitment-uuid-2"},
 			wantUpsertedCommitments: 1,
 			wantProgressingStatus:   metav1.ConditionFalse,
-			wantProgressingReason:   string(v1alpha1.TxPhaseAccepted),
+			wantProgressingReason:   string(v1alpha1.ChangeRequestPhaseAccepted),
 			wantFinished:            true,
-			wantFinishedReason:      string(v1alpha1.TxPhaseAccepted),
+			wantFinishedReason:      string(v1alpha1.ChangeRequestPhaseAccepted),
 		},
 		{
 			name: "nil spec deletes CR and it is absent from UpsertedCommitments",
@@ -370,16 +370,16 @@ func TestCRTReconciler_Allocating(t *testing.T) {
 					Spec:       *minimalCRSpec("az-1"),
 				},
 			},
-			tx: &v1alpha1.CommittedResourceTransaction{
+			tx: &v1alpha1.CommittedResourceChangeRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "tx-alloc-3"},
-				Spec: v1alpha1.CommittedResourceTransactionSpec{
+				Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 					AvailabilityZone: "az-1",
 					Source:           v1alpha1.TxSourceAPI,
 					AllowRejection:   true,
 					NewState:         map[string]*v1alpha1.CommittedResourceSpec{"uuid-3": nil},
 				},
 			},
-			wantPhase:               v1alpha1.TxPhaseAwaitingScheduling,
+			wantPhase:               v1alpha1.ChangeRequestPhaseAwaitingScheduling,
 			wantCRAbsent:            []string{"commitment-uuid-3"},
 			wantUpsertedCommitments: 0,
 			wantProgressingStatus:   metav1.ConditionTrue,
@@ -393,16 +393,16 @@ func TestCRTReconciler_Allocating(t *testing.T) {
 					Spec:       *minimalCRSpec("az-old"),
 				},
 			},
-			tx: &v1alpha1.CommittedResourceTransaction{
+			tx: &v1alpha1.CommittedResourceChangeRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "tx-alloc-4"},
-				Spec: v1alpha1.CommittedResourceTransactionSpec{
+				Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 					AvailabilityZone: "az-1",
 					Source:           v1alpha1.TxSourceAPI,
 					AllowRejection:   true,
 					NewState:         map[string]*v1alpha1.CommittedResourceSpec{"uuid-4": minimalCRSpec("az-new")},
 				},
 			},
-			wantPhase:               v1alpha1.TxPhaseAwaitingScheduling,
+			wantPhase:               v1alpha1.ChangeRequestPhaseAwaitingScheduling,
 			wantCRExists:            []string{"commitment-uuid-4"},
 			wantUpsertedCommitments: 1,
 			wantProgressingStatus:   metav1.ConditionTrue,
@@ -427,10 +427,10 @@ func TestCRTReconciler_Allocating(t *testing.T) {
 				t.Errorf("UpsertedCommitments len: want %d, got %d", tt.wantUpsertedCommitments, got)
 			}
 			if tt.wantProgressingStatus != "" {
-				assertCondition(t, tx.Status.Conditions, v1alpha1.TxConditionProgressing, tt.wantProgressingStatus, tt.wantProgressingReason)
+				assertCondition(t, tx.Status.Conditions, v1alpha1.ChangeRequestConditionProgressing, tt.wantProgressingStatus, tt.wantProgressingReason)
 			}
 			if tt.wantFinished {
-				assertCondition(t, tx.Status.Conditions, v1alpha1.TxConditionFinished, metav1.ConditionTrue, tt.wantFinishedReason)
+				assertCondition(t, tx.Status.Conditions, v1alpha1.ChangeRequestConditionFinished, metav1.ConditionTrue, tt.wantFinishedReason)
 			}
 			for _, name := range tt.wantCRExists {
 				getCR(t, c, name) // fatals if absent
@@ -449,9 +449,9 @@ func TestCRTReconciler_Allocating(t *testing.T) {
 // desired spec is idempotent: no error, phase advances correctly again.
 func TestCRTReconciler_Allocating_Idempotent(t *testing.T) {
 	scheme := testScheme(t)
-	tx := &v1alpha1.CommittedResourceTransaction{
+	tx := &v1alpha1.CommittedResourceChangeRequest{
 		ObjectMeta: metav1.ObjectMeta{Name: "tx-idem"},
-		Spec: v1alpha1.CommittedResourceTransactionSpec{
+		Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 			AvailabilityZone: "az-1",
 			Source:           v1alpha1.TxSourceAPI,
 			AllowRejection:   true,
@@ -461,11 +461,11 @@ func TestCRTReconciler_Allocating_Idempotent(t *testing.T) {
 	c := testClient(t, scheme, tx)
 	r := testReconciler(c, scheme)
 
-	driveToPhase(t, r, c, tx.Name, v1alpha1.TxPhaseAwaitingScheduling)
+	driveToPhase(t, r, c, tx.Name, v1alpha1.ChangeRequestPhaseAwaitingScheduling)
 
 	// Reset to Allocating to re-run it.
 	stored := getTx(t, c, tx.Name)
-	stored.Status.Phase = v1alpha1.TxPhaseAllocating
+	stored.Status.Phase = v1alpha1.ChangeRequestPhaseAllocating
 	if err := c.Status().Update(testCtx, stored); err != nil {
 		t.Fatalf("reset phase to Allocating: %v", err)
 	}
@@ -473,7 +473,7 @@ func TestCRTReconciler_Allocating_Idempotent(t *testing.T) {
 	doReconcile(t, r, tx.Name) // second run of Allocating
 
 	final := getTx(t, c, tx.Name)
-	if final.Status.Phase != v1alpha1.TxPhaseAwaitingScheduling {
+	if final.Status.Phase != v1alpha1.ChangeRequestPhaseAwaitingScheduling {
 		t.Errorf("idempotent Allocating: want AwaitingScheduling, got %q", final.Status.Phase)
 	}
 }
@@ -487,12 +487,12 @@ func TestCRTReconciler_AwaitingScheduling(t *testing.T) {
 	const crName = "commitment-uuid-await"
 
 	// setup drives a CRT to AwaitingScheduling and returns the client and reconciler.
-	setup := func(t *testing.T, txOpts ...func(*v1alpha1.CommittedResourceTransaction)) (client.Client, *CommittedResourceTransactionReconciler) {
+	setup := func(t *testing.T, txOpts ...func(*v1alpha1.CommittedResourceChangeRequest)) (client.Client, *CommittedResourceChangeRequestReconciler) {
 		t.Helper()
 		scheme := testScheme(t)
-		tx := &v1alpha1.CommittedResourceTransaction{
+		tx := &v1alpha1.CommittedResourceChangeRequest{
 			ObjectMeta: metav1.ObjectMeta{Name: txName},
-			Spec: v1alpha1.CommittedResourceTransactionSpec{
+			Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 				AvailabilityZone: "az-1",
 				Source:           v1alpha1.TxSourceAPI,
 				AllowRejection:   true,
@@ -504,17 +504,17 @@ func TestCRTReconciler_AwaitingScheduling(t *testing.T) {
 		}
 		c := testClient(t, scheme, tx)
 		r := testReconciler(c, scheme)
-		driveToPhase(t, r, c, txName, v1alpha1.TxPhaseAwaitingScheduling)
+		driveToPhase(t, r, c, txName, v1alpha1.ChangeRequestPhaseAwaitingScheduling)
 		return c, r
 	}
 
 	tests := []struct {
 		name                  string
-		txOpts                []func(*v1alpha1.CommittedResourceTransaction)
+		txOpts                []func(*v1alpha1.CommittedResourceChangeRequest)
 		setupCR               func(t *testing.T, c client.Client)
 		setupTx               func(t *testing.T, c client.Client)
-		reconcilerOpt         func(r *CommittedResourceTransactionReconciler)
-		wantPhase             v1alpha1.TxPhase
+		reconcilerOpt         func(r *CommittedResourceChangeRequestReconciler)
+		wantPhase             v1alpha1.ChangeRequestPhase
 		wantMessage           string // substring that must appear in tx.Status.Message; empty = no check
 		wantProgressingStatus metav1.ConditionStatus
 		wantProgressingReason string
@@ -526,21 +526,21 @@ func TestCRTReconciler_AwaitingScheduling(t *testing.T) {
 			setupCR: func(t *testing.T, c client.Client) {
 				setCRReady(t, c, crName, metav1.ConditionTrue, v1alpha1.CommittedResourceReasonAccepted, "")
 			},
-			wantPhase:             v1alpha1.TxPhaseAccepted,
+			wantPhase:             v1alpha1.ChangeRequestPhaseAccepted,
 			wantProgressingStatus: metav1.ConditionFalse,
-			wantProgressingReason: string(v1alpha1.TxPhaseAccepted),
+			wantProgressingReason: string(v1alpha1.ChangeRequestPhaseAccepted),
 			wantFinished:          true,
-			wantFinishedReason:    string(v1alpha1.TxPhaseAccepted),
+			wantFinishedReason:    string(v1alpha1.ChangeRequestPhaseAccepted),
 		},
 		{
 			name: "DryRun=true and all CRs accepted → DryRunCleanup",
-			txOpts: []func(*v1alpha1.CommittedResourceTransaction){
-				func(tx *v1alpha1.CommittedResourceTransaction) { tx.Spec.DryRun = true },
+			txOpts: []func(*v1alpha1.CommittedResourceChangeRequest){
+				func(tx *v1alpha1.CommittedResourceChangeRequest) { tx.Spec.DryRun = true },
 			},
 			setupCR: func(t *testing.T, c client.Client) {
 				setCRReady(t, c, crName, metav1.ConditionTrue, v1alpha1.CommittedResourceReasonAccepted, "")
 			},
-			wantPhase:             v1alpha1.TxPhaseDryRunCleanup,
+			wantPhase:             v1alpha1.ChangeRequestPhaseDryRunCleanup,
 			wantProgressingStatus: metav1.ConditionTrue,
 			wantProgressingReason: "Advancing",
 		},
@@ -549,7 +549,7 @@ func TestCRTReconciler_AwaitingScheduling(t *testing.T) {
 			setupCR: func(t *testing.T, c client.Client) {
 				setCRReady(t, c, crName, metav1.ConditionFalse, v1alpha1.CommittedResourceReasonRejected, "no capacity on host")
 			},
-			wantPhase:             v1alpha1.TxPhaseRollingBack,
+			wantPhase:             v1alpha1.ChangeRequestPhaseRollingBack,
 			wantMessage:           "no capacity on host",
 			wantProgressingStatus: metav1.ConditionTrue,
 			wantProgressingReason: "Advancing",
@@ -559,7 +559,7 @@ func TestCRTReconciler_AwaitingScheduling(t *testing.T) {
 			setupCR: func(t *testing.T, c client.Client) {
 				setCRReadyStaleGen(t, c, crName)
 			},
-			wantPhase:             v1alpha1.TxPhaseAwaitingScheduling,
+			wantPhase:             v1alpha1.ChangeRequestPhaseAwaitingScheduling,
 			wantProgressingStatus: metav1.ConditionTrue,
 			wantProgressingReason: "Advancing",
 		},
@@ -568,28 +568,28 @@ func TestCRTReconciler_AwaitingScheduling(t *testing.T) {
 			setupCR: func(t *testing.T, c client.Client) {
 				setCRReady(t, c, crName, metav1.ConditionTrue, v1alpha1.CommittedResourceReasonReserving, "still placing")
 			},
-			wantPhase:             v1alpha1.TxPhaseAwaitingScheduling,
+			wantPhase:             v1alpha1.ChangeRequestPhaseAwaitingScheduling,
 			wantProgressingStatus: metav1.ConditionTrue,
 			wantProgressingReason: "Advancing",
 		},
 		{
 			name: "timeout exceeded → RollingBack with timed out message",
-			reconcilerOpt: func(r *CommittedResourceTransactionReconciler) {
+			reconcilerOpt: func(r *CommittedResourceChangeRequestReconciler) {
 				r.AwaitingSchedulingTimeout = 50 * time.Millisecond
 			},
 			setupTx: func(t *testing.T, c client.Client) {
 				backdateProgressingCondition(t, c, txName, 1*time.Second)
 			},
-			wantPhase:             v1alpha1.TxPhaseRollingBack,
+			wantPhase:             v1alpha1.ChangeRequestPhaseRollingBack,
 			wantMessage:           "timed out",
 			wantProgressingStatus: metav1.ConditionFalse,
-			wantProgressingReason: v1alpha1.TxReasonTimedOut,
+			wantProgressingReason: v1alpha1.ChangeRequestReasonTimedOut,
 		},
 		{
 			name: "timeout=0 means no timeout: CRT stays in AwaitingScheduling indefinitely",
 			// No reconcilerOpt, so AwaitingSchedulingTimeout=0 (disabled).
 			// CR ready condition is never set → should stay in AwaitingScheduling.
-			wantPhase:             v1alpha1.TxPhaseAwaitingScheduling,
+			wantPhase:             v1alpha1.ChangeRequestPhaseAwaitingScheduling,
 			wantProgressingStatus: metav1.ConditionTrue,
 			wantProgressingReason: "Advancing",
 		},
@@ -619,17 +619,17 @@ func TestCRTReconciler_AwaitingScheduling(t *testing.T) {
 				t.Errorf("message: want substring %q in %q", tt.wantMessage, tx.Status.Message)
 			}
 			if tt.wantProgressingStatus != "" {
-				assertCondition(t, tx.Status.Conditions, v1alpha1.TxConditionProgressing, tt.wantProgressingStatus, tt.wantProgressingReason)
+				assertCondition(t, tx.Status.Conditions, v1alpha1.ChangeRequestConditionProgressing, tt.wantProgressingStatus, tt.wantProgressingReason)
 			}
 			if tt.wantFinished {
-				assertCondition(t, tx.Status.Conditions, v1alpha1.TxConditionFinished, metav1.ConditionTrue, tt.wantFinishedReason)
+				assertCondition(t, tx.Status.Conditions, v1alpha1.ChangeRequestConditionFinished, metav1.ConditionTrue, tt.wantFinishedReason)
 			}
 		})
 	}
 }
 
 // setPhase directly sets a CRT's phase via Status().Update for test setup.
-func setPhase(t *testing.T, c client.Client, txName string, phase v1alpha1.TxPhase) {
+func setPhase(t *testing.T, c client.Client, txName string, phase v1alpha1.ChangeRequestPhase) {
 	t.Helper()
 	tx := getTx(t, c, txName)
 	tx.Status.Phase = phase
@@ -639,7 +639,7 @@ func setPhase(t *testing.T, c client.Client, txName string, phase v1alpha1.TxPha
 }
 
 // reconcileN calls doReconcile exactly n times without inspecting the phase between calls.
-func reconcileN(t *testing.T, r *CommittedResourceTransactionReconciler, name string, n int) {
+func reconcileN(t *testing.T, r *CommittedResourceChangeRequestReconciler, name string, n int) {
 	t.Helper()
 	for range n {
 		doReconcile(t, r, name)
@@ -663,9 +663,9 @@ func TestCRTReconciler_Idempotency(t *testing.T) {
 			name: "Preparing: snapshot is consistent across re-runs",
 			run: func(t *testing.T) {
 				scheme := testScheme(t)
-				tx := &v1alpha1.CommittedResourceTransaction{
+				tx := &v1alpha1.CommittedResourceChangeRequest{
 					ObjectMeta: metav1.ObjectMeta{Name: "tx-idem-1"},
-					Spec: v1alpha1.CommittedResourceTransactionSpec{
+					Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 						AvailabilityZone: "az-1", Source: v1alpha1.TxSourceAPI, AllowRejection: true,
 						NewState: map[string]*v1alpha1.CommittedResourceSpec{"uuid-idem-1": minimalCRSpec("az-1")},
 					},
@@ -694,9 +694,9 @@ func TestCRTReconciler_Idempotency(t *testing.T) {
 			name: "Allocating: UpsertedCommitments and CR spec stable across re-runs",
 			run: func(t *testing.T) {
 				scheme := testScheme(t)
-				tx := &v1alpha1.CommittedResourceTransaction{
+				tx := &v1alpha1.CommittedResourceChangeRequest{
 					ObjectMeta: metav1.ObjectMeta{Name: "tx-idem-2"},
-					Spec: v1alpha1.CommittedResourceTransactionSpec{
+					Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 						AvailabilityZone: "az-1", Source: v1alpha1.TxSourceAPI, AllowRejection: true,
 						NewState: map[string]*v1alpha1.CommittedResourceSpec{"uuid-idem-2": minimalCRSpec("az-1")},
 					},
@@ -704,11 +704,11 @@ func TestCRTReconciler_Idempotency(t *testing.T) {
 				c := testClient(t, scheme, tx)
 				r := testReconciler(c, scheme)
 
-				driveToPhase(t, r, c, tx.Name, v1alpha1.TxPhaseAwaitingScheduling)
+				driveToPhase(t, r, c, tx.Name, v1alpha1.ChangeRequestPhaseAwaitingScheduling)
 				upserted1 := getTx(t, c, tx.Name).Status.UpsertedCommitments
 
-				setPhase(t, c, tx.Name, v1alpha1.TxPhaseAllocating) // reset to Allocating
-				doReconcile(t, r, tx.Name)                          // Allocating → AwaitingScheduling (re-run)
+				setPhase(t, c, tx.Name, v1alpha1.ChangeRequestPhaseAllocating) // reset to Allocating
+				doReconcile(t, r, tx.Name)                                     // Allocating → AwaitingScheduling (re-run)
 				upserted2 := getTx(t, c, tx.Name).Status.UpsertedCommitments
 
 				if len(upserted1) != 1 || len(upserted2) != 1 {
@@ -724,9 +724,9 @@ func TestCRTReconciler_Idempotency(t *testing.T) {
 			name: "AwaitingScheduling: multiple calls without CR ready stay waiting",
 			run: func(t *testing.T) {
 				scheme := testScheme(t)
-				tx := &v1alpha1.CommittedResourceTransaction{
+				tx := &v1alpha1.CommittedResourceChangeRequest{
 					ObjectMeta: metav1.ObjectMeta{Name: "tx-idem-3"},
-					Spec: v1alpha1.CommittedResourceTransactionSpec{
+					Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 						AvailabilityZone: "az-1", Source: v1alpha1.TxSourceAPI, AllowRejection: true,
 						NewState: map[string]*v1alpha1.CommittedResourceSpec{"uuid-idem-3": minimalCRSpec("az-1")},
 					},
@@ -734,10 +734,10 @@ func TestCRTReconciler_Idempotency(t *testing.T) {
 				c := testClient(t, scheme, tx)
 				r := testReconciler(c, scheme)
 
-				driveToPhase(t, r, c, tx.Name, v1alpha1.TxPhaseAwaitingScheduling)
+				driveToPhase(t, r, c, tx.Name, v1alpha1.ChangeRequestPhaseAwaitingScheduling)
 				reconcileN(t, r, tx.Name, 3) // CR never set ready — must stay in AwaitingScheduling
 
-				if got := getTx(t, c, tx.Name).Status.Phase; got != v1alpha1.TxPhaseAwaitingScheduling {
+				if got := getTx(t, c, tx.Name).Status.Phase; got != v1alpha1.ChangeRequestPhaseAwaitingScheduling {
 					t.Errorf("phase: want AwaitingScheduling, got %q", got)
 				}
 			},
@@ -746,9 +746,9 @@ func TestCRTReconciler_Idempotency(t *testing.T) {
 			name: "AwaitingScheduling → Accepted stays Accepted on repeated reconciles",
 			run: func(t *testing.T) {
 				scheme := testScheme(t)
-				tx := &v1alpha1.CommittedResourceTransaction{
+				tx := &v1alpha1.CommittedResourceChangeRequest{
 					ObjectMeta: metav1.ObjectMeta{Name: "tx-idem-4"},
-					Spec: v1alpha1.CommittedResourceTransactionSpec{
+					Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 						AvailabilityZone: "az-1", Source: v1alpha1.TxSourceAPI, AllowRejection: true,
 						NewState: map[string]*v1alpha1.CommittedResourceSpec{"uuid-idem-4": minimalCRSpec("az-1")},
 					},
@@ -756,11 +756,11 @@ func TestCRTReconciler_Idempotency(t *testing.T) {
 				c := testClient(t, scheme, tx)
 				r := testReconciler(c, scheme)
 
-				driveToPhase(t, r, c, tx.Name, v1alpha1.TxPhaseAwaitingScheduling)
+				driveToPhase(t, r, c, tx.Name, v1alpha1.ChangeRequestPhaseAwaitingScheduling)
 				setCRReady(t, c, "commitment-uuid-idem-4", metav1.ConditionTrue, v1alpha1.CommittedResourceReasonAccepted, "")
 				reconcileN(t, r, tx.Name, 3) // first call → Accepted; subsequent calls → terminal no-op
 
-				if got := getTx(t, c, tx.Name).Status.Phase; got != v1alpha1.TxPhaseAccepted {
+				if got := getTx(t, c, tx.Name).Status.Phase; got != v1alpha1.ChangeRequestPhaseAccepted {
 					t.Errorf("phase: want Accepted, got %q", got)
 				}
 			},
@@ -799,9 +799,9 @@ func TestCRTReconciler_APIScenarios(t *testing.T) {
 		// pre-existing CRs before the transaction is created
 		preObjects []client.Object
 		// the CRT to create
-		tx *v1alpha1.CommittedResourceTransaction
+		tx *v1alpha1.CommittedResourceChangeRequest
 		// expected phase after driving the FSM to a stable point
-		wantPhase v1alpha1.TxPhase
+		wantPhase v1alpha1.ChangeRequestPhase
 		// CR names that must exist after Allocating
 		wantCRExists []string
 		// CR names that must be absent after Allocating
@@ -815,9 +815,9 @@ func TestCRTReconciler_APIScenarios(t *testing.T) {
 	}{
 		{
 			name: "multiple new CRs: all created, all upserted",
-			tx: &v1alpha1.CommittedResourceTransaction{
+			tx: &v1alpha1.CommittedResourceChangeRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "tx-api-1"},
-				Spec: v1alpha1.CommittedResourceTransactionSpec{
+				Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 					AvailabilityZone: "az-1",
 					Source:           v1alpha1.TxSourceAPI,
 					AllowRejection:   true,
@@ -828,7 +828,7 @@ func TestCRTReconciler_APIScenarios(t *testing.T) {
 					},
 				},
 			},
-			wantPhase:          v1alpha1.TxPhaseAwaitingScheduling,
+			wantPhase:          v1alpha1.ChangeRequestPhaseAwaitingScheduling,
 			wantCRExists:       []string{"commitment-uuid-a1", "commitment-uuid-a2", "commitment-uuid-a3"},
 			wantUpsertedCount:  3,
 			wantSnapshotNilFor: []string{"uuid-a1", "uuid-a2", "uuid-a3"},
@@ -841,9 +841,9 @@ func TestCRTReconciler_APIScenarios(t *testing.T) {
 					Spec:       *minimalCRSpec("az-old"),
 				},
 			},
-			tx: &v1alpha1.CommittedResourceTransaction{
+			tx: &v1alpha1.CommittedResourceChangeRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "tx-api-2"},
-				Spec: v1alpha1.CommittedResourceTransactionSpec{
+				Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 					AvailabilityZone: "az-1",
 					Source:           v1alpha1.TxSourceAPI,
 					AllowRejection:   true,
@@ -853,7 +853,7 @@ func TestCRTReconciler_APIScenarios(t *testing.T) {
 					},
 				},
 			},
-			wantPhase:          v1alpha1.TxPhaseAwaitingScheduling,
+			wantPhase:          v1alpha1.ChangeRequestPhaseAwaitingScheduling,
 			wantCRExists:       []string{"commitment-uuid-b1", "commitment-uuid-b2"},
 			wantUpsertedCount:  2,
 			wantSnapshotNilFor: []string{"uuid-b1"},
@@ -871,9 +871,9 @@ func TestCRTReconciler_APIScenarios(t *testing.T) {
 					Spec:       *minimalCRSpec("az-1"),
 				},
 			},
-			tx: &v1alpha1.CommittedResourceTransaction{
+			tx: &v1alpha1.CommittedResourceChangeRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "tx-api-3"},
-				Spec: v1alpha1.CommittedResourceTransactionSpec{
+				Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 					AvailabilityZone: "az-1",
 					Source:           v1alpha1.TxSourceAPI,
 					AllowRejection:   true,
@@ -883,7 +883,7 @@ func TestCRTReconciler_APIScenarios(t *testing.T) {
 					},
 				},
 			},
-			wantPhase:          v1alpha1.TxPhaseAwaitingScheduling,
+			wantPhase:          v1alpha1.ChangeRequestPhaseAwaitingScheduling,
 			wantCRExists:       []string{"commitment-uuid-c2"},
 			wantCRAbsent:       []string{"commitment-uuid-c1"},
 			wantUpsertedCount:  1,
@@ -891,9 +891,9 @@ func TestCRTReconciler_APIScenarios(t *testing.T) {
 		},
 		{
 			name: "empty NewState: no CRs touched, advances all the way to Accepted",
-			tx: &v1alpha1.CommittedResourceTransaction{
+			tx: &v1alpha1.CommittedResourceChangeRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "tx-api-4"},
-				Spec: v1alpha1.CommittedResourceTransactionSpec{
+				Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 					AvailabilityZone: "az-1",
 					Source:           v1alpha1.TxSourceAPI,
 					AllowRejection:   true,
@@ -901,7 +901,7 @@ func TestCRTReconciler_APIScenarios(t *testing.T) {
 				},
 			},
 			// AwaitingScheduling with empty UpsertedCommitments → allAccepted=true immediately → Accepted
-			wantPhase:         v1alpha1.TxPhaseAccepted,
+			wantPhase:         v1alpha1.ChangeRequestPhaseAccepted,
 			wantUpsertedCount: 0,
 		},
 	}
@@ -961,14 +961,14 @@ func TestCRTReconciler_EdgeCases(t *testing.T) {
 	t.Run("DeletionTimestamp: reconcile is a no-op", func(t *testing.T) {
 		scheme := testScheme(t)
 		now := metav1.Now()
-		tx := &v1alpha1.CommittedResourceTransaction{
+		tx := &v1alpha1.CommittedResourceChangeRequest{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:              "tx-del",
 				DeletionTimestamp: &now,
 				// Finalizers required for the fake client to allow a non-zero DeletionTimestamp.
 				Finalizers: []string{"test.io/hold"},
 			},
-			Spec: v1alpha1.CommittedResourceTransactionSpec{
+			Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 				AvailabilityZone: "az-1",
 				Source:           v1alpha1.TxSourceAPI,
 			},
@@ -986,9 +986,9 @@ func TestCRTReconciler_EdgeCases(t *testing.T) {
 
 	t.Run("unknown phase returns error", func(t *testing.T) {
 		scheme := testScheme(t)
-		tx := &v1alpha1.CommittedResourceTransaction{
+		tx := &v1alpha1.CommittedResourceChangeRequest{
 			ObjectMeta: metav1.ObjectMeta{Name: "tx-unknown"},
-			Spec: v1alpha1.CommittedResourceTransactionSpec{
+			Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 				AvailabilityZone: "az-1",
 				Source:           v1alpha1.TxSourceAPI,
 			},
@@ -1010,9 +1010,9 @@ func TestCRTReconciler_EdgeCases(t *testing.T) {
 
 	t.Run("crToTransaction maps CR name to owning CRT via field index", func(t *testing.T) {
 		scheme := testScheme(t)
-		tx := &v1alpha1.CommittedResourceTransaction{
+		tx := &v1alpha1.CommittedResourceChangeRequest{
 			ObjectMeta: metav1.ObjectMeta{Name: "tx-map"},
-			Spec: v1alpha1.CommittedResourceTransactionSpec{
+			Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 				AvailabilityZone: "az-1",
 				Source:           v1alpha1.TxSourceAPI,
 				AllowRejection:   true,
@@ -1023,11 +1023,11 @@ func TestCRTReconciler_EdgeCases(t *testing.T) {
 		r := testReconciler(c, scheme)
 
 		// Drive to AwaitingScheduling so UpsertedCommitments is populated.
-		driveToPhase(t, r, c, tx.Name, v1alpha1.TxPhaseAwaitingScheduling)
+		driveToPhase(t, r, c, tx.Name, v1alpha1.ChangeRequestPhaseAwaitingScheduling)
 
 		// crToTransaction should return a request for the owning CRT.
 		cr := getCR(t, c, "commitment-uuid-map")
-		reqs := r.crToTransaction(testCtx, cr)
+		reqs := r.crToChangeRequest(testCtx, cr)
 		if len(reqs) != 1 {
 			t.Fatalf("crToTransaction: want 1 request, got %d", len(reqs))
 		}
@@ -1044,19 +1044,19 @@ func TestCRTReconciler_EdgeCases(t *testing.T) {
 func TestCRTReconciler_Terminal(t *testing.T) {
 	tests := []struct {
 		name  string
-		phase v1alpha1.TxPhase
+		phase v1alpha1.ChangeRequestPhase
 	}{
-		{"Accepted is a no-op", v1alpha1.TxPhaseAccepted},
-		{"Rejected is a no-op", v1alpha1.TxPhaseRejected},
-		{"Superseded is a no-op", v1alpha1.TxPhaseSuperseded},
+		{"Accepted is a no-op", v1alpha1.ChangeRequestPhaseAccepted},
+		{"Rejected is a no-op", v1alpha1.ChangeRequestPhaseRejected},
+		{"Superseded is a no-op", v1alpha1.ChangeRequestPhaseSuperseded},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			scheme := testScheme(t)
-			tx := &v1alpha1.CommittedResourceTransaction{
+			tx := &v1alpha1.CommittedResourceChangeRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "tx-term"},
-				Spec: v1alpha1.CommittedResourceTransactionSpec{
+				Spec: v1alpha1.CommittedResourceChangeRequestSpec{
 					AvailabilityZone: "az-1",
 					Source:           v1alpha1.TxSourceAPI,
 				},
