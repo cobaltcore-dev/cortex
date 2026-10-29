@@ -12,33 +12,18 @@ import (
 	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	vmv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
-
-// stubVMClient is a test double for vmClient. If err is non-nil, GetCurrentVMSize
-// returns it; otherwise it returns size.
-type stubVMClient struct {
-	size map[hv1.ResourceName]resource.Quantity
-	err  error
-}
-
-func (s *stubVMClient) StartWithKubernetesSecrets(ctx context.Context, client client.Client) error {
-	return nil
-}
-
-func (s *stubVMClient) GetCurrentVMSize(ctx context.Context, vmID string) (map[hv1.ResourceName]resource.Quantity, error) {
-	return s.size, s.err
-}
 
 // newTestScheme returns a runtime.Scheme with all required types registered.
 func newTestScheme(t *testing.T) *runtime.Scheme {
@@ -50,6 +35,9 @@ func newTestScheme(t *testing.T) *runtime.Scheme {
 	if err := hv1.AddToScheme(s); err != nil {
 		t.Fatalf("failed to add hypervisor scheme: %v", err)
 	}
+	if err := vmv1alpha1.AddToScheme(s); err != nil {
+		t.Fatalf("failed to add vm-operator scheme: %v", err)
+	}
 	return s
 }
 
@@ -58,24 +46,56 @@ func newTestClient(scheme *runtime.Scheme, objects ...client.Object) client.Clie
 	return fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(objects...).
-		WithStatusSubresource(&v1alpha1.Reservation{}).
-		WithIndex(&v1alpha1.Reservation{}, idxReservationByTargetHost, idxReservationByTargetHostFn).
+		WithStatusSubresource(&v1alpha1.Reservation{}, &vmv1alpha1.VirtualMachine{}).
+		WithIndex(&v1alpha1.Reservation{}, idxReservationByTargetHost, indexReservationByTargetHost).
+		WithIndex(&v1alpha1.Reservation{}, idxReservationByOperationID, indexReservationByOperationID).
+		WithIndex(&v1alpha1.Reservation{}, idxReservationByVMID, indexReservationByVMID).
 		Build()
 }
 
-// newInFlightReservation builds an in-flight reservation with the given name and VM ID.
-func newInFlightReservation(name, vmID, targetHost string) *v1alpha1.Reservation {
-	return &v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
+// newTestController builds a Controller wired with the VirtualMachine owner
+// handler, mirroring the production registry so Reconcile can dispatch.
+func newTestController(k8sClient client.Client) *Controller {
+	vmHandler := &VirtualMachineHandler{Client: k8sClient}
+	return &Controller{
+		Client:           k8sClient,
+		DefaultOwnerKind: "VirtualMachine",
+		handlers:         map[string]OwnerHandler{vmHandler.Kind(): vmHandler},
+	}
+}
+
+// inFlightOpts configures the in-flight reservation built by newInFlightReservation.
+type inFlightOpts struct {
+	intent      v1alpha1.SchedulingIntent
+	operationID string
+	resources   map[hv1.ResourceName]resource.Quantity
+	endTime     *metav1.Time
+	createdAt   *metav1.Time // reservation creationTimestamp, for condition-freshness checks
+	labels      map[string]string
+}
+
+// newInFlightReservation builds an in-flight reservation with the given name, VM
+// ID and target host plus optional extras.
+func newInFlightReservation(name, vmID, targetHost string, opts inFlightOpts) *v1alpha1.Reservation {
+	res := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Labels: opts.labels},
 		Spec: v1alpha1.ReservationSpec{
 			Type:             v1alpha1.ReservationTypeInFlight,
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
 			TargetHost:       targetHost,
+			Resources:        opts.resources,
+			EndTime:          opts.endTime,
 			InFlightReservation: &v1alpha1.InFlightReservationSpec{
-				VMID: vmID,
+				VMID:        vmID,
+				Intent:      opts.intent,
+				OperationID: opts.operationID,
 			},
 		},
 	}
+	if opts.createdAt != nil {
+		res.CreationTimestamp = *opts.createdAt
+	}
+	return res
 }
 
 // newHypervisor builds a Hypervisor with the given name and instance IDs.
@@ -87,8 +107,13 @@ func newHypervisor(name string, instanceIDs ...string) *hv1.Hypervisor {
 	return hv
 }
 
-// assertReadyCondition fetches the named reservation and asserts the Ready condition's
-// status and reason. Fails fast if the condition is missing.
+func exists(t *testing.T, k8sClient client.Client, name string) bool {
+	t.Helper()
+	var got v1alpha1.Reservation
+	err := k8sClient.Get(context.Background(), types.NamespacedName{Name: name}, &got)
+	return err == nil
+}
+
 func assertReadyCondition(t *testing.T, k8sClient client.Client, name string, wantStatus metav1.ConditionStatus, wantReason string) {
 	t.Helper()
 	var got v1alpha1.Reservation
@@ -98,7 +123,6 @@ func assertReadyCondition(t *testing.T, k8sClient client.Client, name string, wa
 	cond := meta.FindStatusCondition(got.Status.Conditions, v1alpha1.ReservationConditionReady)
 	if cond == nil {
 		t.Fatalf("Ready condition was not set on %q", name)
-		return
 	}
 	if cond.Status != wantStatus {
 		t.Errorf("%s: Ready status = %q, want %q", name, cond.Status, wantStatus)
@@ -108,450 +132,467 @@ func assertReadyCondition(t *testing.T, k8sClient client.Client, name string, wa
 	}
 }
 
-func TestReconcile_NotFoundIsIgnored(t *testing.T) {
-	scheme := newTestScheme(t)
-	k8sClient := newTestClient(scheme)
-	c := &Controller{Client: k8sClient}
+func TestReconcile(t *testing.T) {
+	cpu4 := map[hv1.ResourceName]resource.Quantity{"cpu": resource.MustParse("4")}
+	past := metav1.NewTime(time.Now().Add(-time.Minute))
+	future := metav1.NewTime(time.Now().Add(time.Hour))
+	// Freshness is judged against the reservation's creationTimestamp. Set it
+	// explicitly (the fake client does not stamp it) so a condition's
+	// LastTransitionTime can be placed clearly before (stale) or after (fresh).
+	resCreated := metav1.NewTime(time.Now())
+	freshFuture := metav1.NewTime(resCreated.Add(time.Hour))
+	stalePast := metav1.NewTime(resCreated.Add(-time.Hour))
+	createA := inFlightOpts{operationID: "op-a", intent: novaapi.CreateIntent}
+	expiredA := inFlightOpts{operationID: "op-a", endTime: &past, intent: novaapi.CreateIntent}
 
-	res, err := c.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "missing"},
-	})
-	if err != nil {
-		t.Fatalf("Reconcile returned error for missing object: %v", err)
+	type testCase struct {
+		name            string
+		objects         []client.Object
+		reconcile       string
+		wantErr         error
+		wantRequeue     time.Duration
+		wantDeleted     []string
+		wantKept        []string
+		wantReadyStatus metav1.ConditionStatus
+		wantReadyReason string
+		wantAnomaly     string
 	}
-	if res.RequeueAfter != 0 {
-		t.Errorf("expected empty result, got %+v", res)
+	tests := []testCase{
+		{name: "not found is ignored", reconcile: "missing"},
+		{
+			name: "missing spec sets condition false",
+			objects: []client.Object{&v1alpha1.Reservation{
+				ObjectMeta: metav1.ObjectMeta{Name: "res-1"},
+				Spec:       v1alpha1.ReservationSpec{Type: v1alpha1.ReservationTypeInFlight},
+			}},
+			wantKept:        []string{"res-1"},
+			wantReadyStatus: metav1.ConditionFalse, wantReadyReason: "MissingSpec",
+		},
+		{
+			name: "no owner handler sets condition and metric",
+			objects: []client.Object{&v1alpha1.Reservation{
+				ObjectMeta: metav1.ObjectMeta{Name: "res-1", OwnerReferences: []metav1.OwnerReference{{Kind: "ReschedulingRequest"}}},
+				Spec: v1alpha1.ReservationSpec{
+					Type:                v1alpha1.ReservationTypeInFlight,
+					SchedulingDomain:    v1alpha1.SchedulingDomainNova,
+					InFlightReservation: &v1alpha1.InFlightReservationSpec{}, // no VMID -> no fallback
+				},
+			}},
+			wantKept:        []string{"res-1"},
+			wantReadyStatus: metav1.ConditionUnknown, wantReadyReason: "NoOwnerHandler",
+			wantAnomaly: AnomalyNoOwnerHandler,
+		},
+		{
+			name:            "instance not spawned requeues",
+			objects:         []client.Object{newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{}), newHypervisor("host-1", "other-vm-uuid")},
+			wantRequeue:     requeueInterval,
+			wantKept:        []string{"res-1"},
+			wantReadyStatus: metav1.ConditionUnknown, wantReadyReason: "AwaitingPlacement",
+		},
+		{
+			// HV fallback, no VM CRD, initial placement: landing elsewhere is
+			// terminal, so the stale candidate is released.
+			name:        "create: instance on different host releases stale candidate",
+			objects:     []client.Object{newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.CreateIntent}), newHypervisor("host-1"), newHypervisor("host-2", "vm-uuid-1")},
+			wantDeleted: []string{"res-1"},
+		},
+		{
+			// HV fallback, no VM CRD, non-create intent: landing is NOT a
+			// completion signal, so the hold is kept and only the TTL releases it.
+			name:            "non-create: instance on different host is kept until TTL",
+			objects:         []client.Object{newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{}), newHypervisor("host-1"), newHypervisor("host-2", "vm-uuid-1")},
+			wantRequeue:     requeueInterval,
+			wantKept:        []string{"res-1"},
+			wantReadyStatus: metav1.ConditionUnknown, wantReadyReason: "AwaitingPlacement",
+		},
+		{
+			// UC1: reconciling the losing candidate releases the whole group.
+			name: "multi-candidate group released on landing",
+			objects: []client.Object{
+				newInFlightReservation("a", "vm-uuid-1", "host-1", createA),
+				newInFlightReservation("b", "vm-uuid-1", "host-2", createA),
+				newInFlightReservation("c", "vm-uuid-1", "host-3", createA),
+				newHypervisor("host-2", "vm-uuid-1"),
+			},
+			reconcile:   "a",
+			wantDeleted: []string{"a", "b", "c"},
+		},
+		{
+			// HV fallback, no VM CRD, initial placement: landing on the target host
+			// is terminal.
+			name:        "create: instance on target host deletes reservation",
+			objects:     []client.Object{newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.CreateIntent}), newHypervisor("host-1", "vm-uuid-1")},
+			wantDeleted: []string{"res-1"},
+		},
+		{
+			// HV fallback, no VM CRD, non-create intent (resize keeps the VM on its
+			// host throughout): observing the VM on the target is not completion, so
+			// the hold is kept until the TTL backstop.
+			name:            "non-create: instance on target host is kept until TTL",
+			objects:         []client.Object{newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.ResizeIntent}), newHypervisor("host-1", "vm-uuid-1")},
+			wantRequeue:     requeueInterval,
+			wantKept:        []string{"res-1"},
+			wantReadyStatus: metav1.ConditionUnknown, wantReadyReason: "AwaitingPlacement",
+		},
+		{
+			// Completing op-a must leave a concurrent op-b on the same VM untouched.
+			name: "operation ID scoped delete",
+			objects: []client.Object{
+				newInFlightReservation("a1", "vm-uuid-1", "host-1", inFlightOpts{operationID: "op-a", intent: novaapi.CreateIntent}),
+				newInFlightReservation("a2", "vm-uuid-1", "host-2", inFlightOpts{operationID: "op-a", intent: novaapi.CreateIntent}),
+				newInFlightReservation("b1", "vm-uuid-1", "host-1", inFlightOpts{operationID: "op-b", intent: novaapi.CreateIntent}),
+				newHypervisor("host-1", "vm-uuid-1"),
+			},
+			reconcile:   "a1",
+			wantDeleted: []string{"a1", "a2"},
+			wantKept:    []string{"b1"},
+		},
+		{
+			// No hypervisor hosts the VM -> without TTL this would just requeue.
+			name: "TTL expiry releases operation group",
+			objects: []client.Object{
+				newInFlightReservation("res-1", "vm-uuid-1", "host-1", expiredA),
+				newInFlightReservation("res-2", "vm-uuid-1", "host-2", expiredA),
+			},
+			wantDeleted: []string{"res-1", "res-2"},
+		},
+		{
+			name:        "TTL not yet exceeded requeues",
+			objects:     []client.Object{newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{endTime: &future}), newHypervisor("host-1", "other")},
+			wantRequeue: requeueInterval,
+			wantKept:    []string{"res-1"},
+		},
+		{
+			// Live migration without a VM CRD: the VM is observed on the source host
+			// throughout, which is not a completion signal, so the holds are kept
+			// until the TTL backstop rather than released on landing.
+			name: "non-create: live migration is kept until TTL",
+			objects: []client.Object{
+				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.LiveMigrationIntent, resources: cpu4}),
+				newHypervisor("host-1", "vm-uuid-1"),
+			},
+			wantRequeue:     requeueInterval,
+			wantKept:        []string{"res-1"},
+			wantReadyStatus: metav1.ConditionUnknown, wantReadyReason: "AwaitingPlacement",
+		},
+		// --- VM-CRD driven cases (primary release path through Reconcile) ---
+		{
+			// UC1: VM CRD reports placed and Running; the whole create group is
+			// released through Reconcile, not via the hypervisor fallback.
+			name: "create: VM placed and running releases group",
+			objects: []client.Object{
+				newInFlightReservation("a", "vm-uuid-1", "host-1", createA),
+				newInFlightReservation("b", "vm-uuid-1", "host-2", createA),
+				newVM("vm-uuid-1", "host-1", cond(vmv1alpha1.ConditionTypeRunning, metav1.ConditionTrue, "Running")),
+			},
+			reconcile:   "a",
+			wantDeleted: []string{"a", "b"},
+		},
+		{
+			// UC1: Nova ACTIVE on a placed VM is also a live signal.
+			name: "create: VM placed and nova ACTIVE deletes reservation",
+			objects: []client.Object{
+				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.CreateIntent}),
+				withNovaStatus(newVM("vm-uuid-1", "host-1"), "ACTIVE"),
+			},
+			wantDeleted: []string{"res-1"},
+		},
+		{
+			// UC1: placed but not yet live (Nova BUILD) must keep blocking and must
+			// not fall through to the hypervisor landing heuristic.
+			name: "create: VM building requeues",
+			objects: []client.Object{
+				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.CreateIntent}),
+				withNovaStatus(newVM("vm-uuid-1", "host-1"), "BUILD"),
+			},
+			wantRequeue:     requeueInterval,
+			wantKept:        []string{"res-1"},
+			wantReadyStatus: metav1.ConditionUnknown, wantReadyReason: "AwaitingPlacement",
+		},
+		{
+			// UC1: Nova ERROR releases a failed initial placement through Reconcile.
+			name: "create: nova ERROR deletes reservation",
+			objects: []client.Object{
+				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.CreateIntent}),
+				withNovaStatus(newVM("vm-uuid-1", ""), "ERROR"),
+			},
+			wantDeleted: []string{"res-1"},
+		},
+		{
+			// UC2: an ongoing resize keeps the hold and surfaces the Resizing reason.
+			name: "resize: ongoing requeues",
+			objects: []client.Object{
+				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.ResizeIntent}),
+				newVM("vm-uuid-1", "host-1", cond(vmv1alpha1.ConditionTypeResizing, metav1.ConditionTrue, vmv1alpha1.ConditionReasonResizingOngoing)),
+			},
+			wantRequeue:     requeueInterval,
+			wantKept:        []string{"res-1"},
+			wantReadyStatus: metav1.ConditionUnknown, wantReadyReason: "Resizing",
+		},
+		{
+			// UC2: a terminal Resizing reason that transitioned before the hold was
+			// created is stale (previous operation) and must not release it.
+			name: "resize: stale terminal condition is kept",
+			objects: []client.Object{
+				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.ResizeIntent, createdAt: &resCreated}),
+				vmWithCond("vm-uuid-1", vmv1alpha1.ConditionTypeResizing, vmv1alpha1.ConditionReasonResizingCompleted, stalePast),
+			},
+			wantRequeue:     requeueInterval,
+			wantKept:        []string{"res-1"},
+			wantReadyStatus: metav1.ConditionUnknown, wantReadyReason: "Resizing",
+		},
+		{
+			// VM-CRD precedence: an ongoing resize keeps the hold even though the VM
+			// is observed on a hypervisor (which alone would look "landed").
+			name: "resize: VM-CRD ongoing wins over hypervisor landing",
+			objects: []client.Object{
+				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.ResizeIntent}),
+				newVM("vm-uuid-1", "host-1", cond(vmv1alpha1.ConditionTypeResizing, metav1.ConditionTrue, vmv1alpha1.ConditionReasonResizingOngoing)),
+				newHypervisor("host-1", "vm-uuid-1"),
+			},
+			wantRequeue:     requeueInterval,
+			wantKept:        []string{"res-1"},
+			wantReadyStatus: metav1.ConditionUnknown, wantReadyReason: "Resizing",
+		},
+		{
+			// UC3: an ongoing live migration keeps both holds.
+			name: "live migration: ongoing requeues",
+			objects: []client.Object{
+				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.LiveMigrationIntent}),
+				newVM("vm-uuid-1", "host-1", cond(vmv1alpha1.ConditionTypeMigrating, metav1.ConditionTrue, vmv1alpha1.ConditionReasonMigratingOngoing)),
+			},
+			wantRequeue:     requeueInterval,
+			wantKept:        []string{"res-1"},
+			wantReadyStatus: metav1.ConditionUnknown, wantReadyReason: "Migrating",
+		},
+		{
+			// UC3: a fresh terminal migration releases both target and source holds
+			// (the whole operation group) through Reconcile.
+			name: "live migration: fresh terminal releases target and source group",
+			objects: []client.Object{
+				newInFlightReservation("target", "vm-uuid-1", "host-2", inFlightOpts{operationID: "op-m", intent: novaapi.LiveMigrationIntent, createdAt: &resCreated}),
+				newInFlightReservation("source", "vm-uuid-1", "host-1", inFlightOpts{operationID: "op-m", intent: novaapi.LiveMigrationIntent, createdAt: &resCreated}),
+				vmWithCond("vm-uuid-1", vmv1alpha1.ConditionTypeMigrating, vmv1alpha1.ConditionReasonMigratingCompleted, freshFuture),
+			},
+			reconcile:   "source",
+			wantDeleted: []string{"target", "source"},
+		},
+	}
+	// Every terminal resize reason, when fresh, releases the hold through Reconcile.
+	for _, r := range []string{
+		vmv1alpha1.ConditionReasonResizingCompleted,
+		vmv1alpha1.ConditionReasonResizingReverted,
+		vmv1alpha1.ConditionReasonResizingFailed,
+	} {
+		tests = append(tests, testCase{
+			name: "resize: fresh terminal " + r + " deletes reservation",
+			objects: []client.Object{
+				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.ResizeIntent, createdAt: &resCreated}),
+				vmWithCond("vm-uuid-1", vmv1alpha1.ConditionTypeResizing, r, freshFuture),
+			},
+			wantDeleted: []string{"res-1"},
+		})
+	}
+	// Every terminal live-migration reason, when fresh, releases the hold.
+	for _, r := range []string{
+		vmv1alpha1.ConditionReasonMigratingCompleted,
+		vmv1alpha1.ConditionReasonMigratingRolledBack,
+		vmv1alpha1.ConditionReasonMigratingAborting,
+		vmv1alpha1.ConditionReasonMigratingFailed,
+	} {
+		tests = append(tests, testCase{
+			name: "live migration: fresh terminal " + r + " deletes reservation",
+			objects: []client.Object{
+				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.LiveMigrationIntent, createdAt: &resCreated}),
+				vmWithCond("vm-uuid-1", vmv1alpha1.ConditionTypeMigrating, r, freshFuture),
+			},
+			wantDeleted: []string{"res-1"},
+		})
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			k8sClient := newTestClient(newTestScheme(t), tt.objects...)
+			c := newTestController(k8sClient)
+			c.Monitor = NewMonitor(nil)
+			name := tt.reconcile
+			if name == "" {
+				name = "res-1"
+			}
+			got, err := c.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: name}})
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Reconcile err = %v, want %v", err, tt.wantErr)
+			}
+			if got.RequeueAfter != tt.wantRequeue {
+				t.Errorf("RequeueAfter = %v, want %v", got.RequeueAfter, tt.wantRequeue)
+			}
+			for _, n := range tt.wantDeleted {
+				if exists(t, k8sClient, n) {
+					t.Errorf("expected %s to be deleted", n)
+				}
+			}
+			for _, n := range tt.wantKept {
+				if !exists(t, k8sClient, n) {
+					t.Errorf("expected %s to be kept", n)
+				}
+			}
+			if tt.wantReadyReason != "" {
+				assertReadyCondition(t, k8sClient, name, tt.wantReadyStatus, tt.wantReadyReason)
+			}
+			if tt.wantAnomaly != "" {
+				if v := testutil.ToFloat64(c.Monitor.anomaliesVec.WithLabelValues(tt.wantAnomaly)); v != 1 {
+					t.Errorf("%s anomaly count = %v, want 1", tt.wantAnomaly, v)
+				}
+			}
+		})
 	}
 }
 
-func TestReconcile_UnexpectedTypeSetsConditionFalse(t *testing.T) {
+func TestReconcile_UnexpectedTypeIsIgnored(t *testing.T) {
+	// A non-in-flight reservation must not be touched: its status belongs to
+	// another controller. Reconcile logs and returns without writing status.
 	scheme := newTestScheme(t)
 	wrong := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{Name: "wrong-type"},
-		Spec: v1alpha1.ReservationSpec{
-			Type: v1alpha1.ReservationTypeFailover,
-		},
+		Spec:       v1alpha1.ReservationSpec{Type: v1alpha1.ReservationTypeFailover},
 	}
 	k8sClient := newTestClient(scheme, wrong)
-	c := &Controller{Client: k8sClient}
-
-	if _, err := c.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "wrong-type"},
-	}); err != nil {
-		t.Fatalf("Reconcile returned error: %v", err)
-	}
-
-	assertReadyCondition(t, k8sClient, "wrong-type", metav1.ConditionFalse, "UnexpectedType")
-}
-
-func TestReconcile_MissingSpecSetsConditionFalse(t *testing.T) {
-	scheme := newTestScheme(t)
-	noSpec := &v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: "no-spec"},
-		Spec: v1alpha1.ReservationSpec{
-			Type: v1alpha1.ReservationTypeInFlight,
-			// InFlightReservation deliberately nil.
-		},
-	}
-	k8sClient := newTestClient(scheme, noSpec)
-	c := &Controller{Client: k8sClient}
-
-	if _, err := c.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "no-spec"},
-	}); err != nil {
-		t.Fatalf("Reconcile returned error: %v", err)
-	}
-
-	assertReadyCondition(t, k8sClient, "no-spec", metav1.ConditionFalse, "MissingSpec")
-}
-
-func TestReconcile_InstanceNotSpawnedRequeues(t *testing.T) {
-	scheme := newTestScheme(t)
-	res := newInFlightReservation("res-1", "vm-uuid-1", "host-1")
-	hv := newHypervisor("host-1", "other-vm-uuid")
-	k8sClient := newTestClient(scheme, res, hv)
-	c := &Controller{Client: k8sClient}
-
-	result, err := c.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "res-1"},
-	})
-	if err != nil {
-		t.Fatalf("Reconcile returned error: %v", err)
-	}
-	if result.RequeueAfter != 10*time.Second {
-		t.Errorf("RequeueAfter = %v, want 10s", result.RequeueAfter)
-	}
-
-	// Reservation still exists.
-	var got v1alpha1.Reservation
-	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-1"}, &got); err != nil {
-		t.Fatalf("reservation was unexpectedly deleted: %v", err)
-	}
-	assertReadyCondition(t, k8sClient, "res-1", metav1.ConditionUnknown, "InstanceNotFound")
-}
-
-func TestReconcile_InstanceOnDifferentHostAwaitsDeletion(t *testing.T) {
-	// Instance landed on a *different* host than the target. The reservation
-	// is now stale but the hypervisor operator (not this controller) removes
-	// it, so Reconcile should be a no-op that leaves the reservation intact.
-	scheme := newTestScheme(t)
-	res := newInFlightReservation("res-1", "vm-uuid-1", "host-1")
-	hv1Obj := newHypervisor("host-1")
-	hv2Obj := newHypervisor("host-2", "vm-uuid-1")
-	k8sClient := newTestClient(scheme, res, hv1Obj, hv2Obj)
-	c := &Controller{Client: k8sClient}
-
-	result, err := c.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "res-1"},
-	})
-	if err != nil {
-		t.Fatalf("Reconcile returned error: %v", err)
-	}
-	if result.RequeueAfter != 0 {
-		t.Errorf("expected empty result, got %+v", result)
-	}
-
-	// Reservation still exists — it's waiting for the hypervisor operator.
-	var got v1alpha1.Reservation
-	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-1"}, &got); err != nil {
-		t.Fatalf("expected reservation to still exist, got error: %v", err)
-	}
-}
-
-func TestReconcile_InstanceOnTargetHostDeletesReservation(t *testing.T) {
-	scheme := newTestScheme(t)
-	res := newInFlightReservation("res-1", "vm-uuid-1", "host-1")
-	hv := newHypervisor("host-1", "vm-uuid-1")
-	k8sClient := newTestClient(scheme, res, hv)
-	c := &Controller{Client: k8sClient}
-
-	if _, err := c.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "res-1"},
-	}); err != nil {
+	c := newTestController(k8sClient)
+	if _, err := c.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "wrong-type"}}); err != nil {
 		t.Fatalf("Reconcile returned error: %v", err)
 	}
 
 	var got v1alpha1.Reservation
-	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-1"}, &got); err == nil {
-		t.Fatal("expected reservation to be deleted, but Get succeeded")
+	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "wrong-type"}, &got); err != nil {
+		t.Fatalf("failed to get reservation: %v", err)
+	}
+	if len(got.Status.Conditions) != 0 {
+		t.Errorf("expected no status conditions on foreign reservation, got %+v", got.Status.Conditions)
 	}
 }
 
-func TestReconcile_InstanceOnTargetHostBatchDeletesReservationsForSameVM(t *testing.T) {
-	// Multiple in-flight reservations pointing at the same target host for the
-	// same VM (e.g. left over from earlier scheduling attempts). Once the
-	// instance is confirmed on that host, all of them must be cleaned up in a
-	// single reconcile.
-	scheme := newTestScheme(t)
-	res1 := newInFlightReservation("res-1", "vm-uuid-1", "host-1")
-	res2 := newInFlightReservation("res-2", "vm-uuid-1", "host-1")
-	// A reservation for a different VM on the same host must be left alone.
-	other := newInFlightReservation("res-other", "vm-uuid-2", "host-1")
-	hv := newHypervisor("host-1", "vm-uuid-1")
-	k8sClient := newTestClient(scheme, res1, res2, other, hv)
-	c := &Controller{Client: k8sClient}
+func TestHandlerFor(t *testing.T) {
+	vmOwned := metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{{Kind: "VirtualMachine"}}}
+	reschedOwned := metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{{Kind: "Rescheduling"}}}
+	novaVM := v1alpha1.ReservationSpec{
+		SchedulingDomain:    v1alpha1.SchedulingDomainNova,
+		InFlightReservation: &v1alpha1.InFlightReservationSpec{VMID: "vm-1"},
+	}
+	emptySpec := v1alpha1.ReservationSpec{InFlightReservation: &v1alpha1.InFlightReservationSpec{}}
 
-	if _, err := c.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "res-1"},
-	}); err != nil {
-		t.Fatalf("Reconcile returned error: %v", err)
-	}
-
-	var got v1alpha1.Reservation
-	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-1"}, &got); err == nil {
-		t.Fatal("expected res-1 to be deleted, but Get succeeded")
-	}
-	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-2"}, &got); err == nil {
-		t.Fatal("expected res-2 to be deleted, but Get succeeded")
-	}
-	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-other"}, &got); err != nil {
-		t.Fatalf("expected res-other to survive, got error: %v", err)
-	}
-}
-
-// newResizeReservation builds an in-flight reservation with the given intent
-// and resource requirements. Used to exercise the resize/rebuild size-check
-// branch of Reconcile.
-//
-//nolint:unparam
-func newResizeReservation(name, vmID, targetHost string, intent v1alpha1.SchedulingIntent, resources map[hv1.ResourceName]resource.Quantity) *v1alpha1.Reservation {
-	return &v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
-		Spec: v1alpha1.ReservationSpec{
-			Type:             v1alpha1.ReservationTypeInFlight,
-			SchedulingDomain: v1alpha1.SchedulingDomainNova,
-			TargetHost:       targetHost,
-			Resources:        resources,
-			InFlightReservation: &v1alpha1.InFlightReservationSpec{
-				VMID:   vmID,
-				Intent: intent,
+	tests := []struct {
+		name        string
+		extra       []string // additionally registered stub handler kinds
+		res         *v1alpha1.Reservation
+		wantKind    string // "" means no handler
+		wantAnomaly string
+	}{
+		{name: "owner reference kind", res: &v1alpha1.Reservation{ObjectMeta: vmOwned, Spec: emptySpec}, wantKind: "VirtualMachine"},
+		{name: "vmID fallback", res: &v1alpha1.Reservation{Spec: novaVM}, wantKind: "VirtualMachine"},
+		{name: "fallback requires nova domain", res: &v1alpha1.Reservation{Spec: v1alpha1.ReservationSpec{
+			SchedulingDomain:    v1alpha1.SchedulingDomainPods,
+			InFlightReservation: &v1alpha1.InFlightReservationSpec{VMID: "vm-1"},
+		}}},
+		{name: "unknown owner, no vmID", res: &v1alpha1.Reservation{ObjectMeta: reschedOwned, Spec: emptySpec}},
+		// An unregistered owner carrying a vmID must not fall back to the VM handler.
+		{name: "unregistered owner with vmID does not fall back to VM", res: &v1alpha1.Reservation{ObjectMeta: reschedOwned, Spec: novaVM}},
+		{name: "registered non-VM owner wins over vmID", extra: []string{"Rescheduling"}, res: &v1alpha1.Reservation{ObjectMeta: reschedOwned, Spec: novaVM}, wantKind: "Rescheduling"},
+		{
+			// An owner reference is present and other handlers are registered, but
+			// none matches this owner's kind: no handler, no fallback (owner refs
+			// exist), no ambiguity.
+			name:  "owner present but no handler matches",
+			extra: []string{"Rescheduling", "Backup"},
+			res: &v1alpha1.Reservation{
+				ObjectMeta: metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{{Kind: "Snapshot"}}},
+				Spec:       emptySpec,
 			},
 		},
+		{
+			// With more than two handlers registered, the one matching the owner's
+			// kind is selected (not the first registered, not the default).
+			name:     "selects correct handler among several",
+			extra:    []string{"Rescheduling", "Backup", "Snapshot"},
+			res:      &v1alpha1.Reservation{ObjectMeta: metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{{Kind: "Backup"}}}, Spec: emptySpec},
+			wantKind: "Backup",
+		},
+		{
+			// Several handlers registered and several owner references, only one of
+			// which maps to a registered handler: that one wins, unambiguously.
+			name:  "one of several owner refs matches among several handlers",
+			extra: []string{"Rescheduling", "Backup", "Snapshot"},
+			res: &v1alpha1.Reservation{
+				ObjectMeta: metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{{Kind: "Unknown"}, {Kind: "Snapshot"}}},
+				Spec:       emptySpec,
+			},
+			wantKind: "Snapshot",
+		},
+		{
+			name:  "ambiguous owner records metric",
+			extra: []string{"ReschedulingRequest"},
+			res: &v1alpha1.Reservation{
+				ObjectMeta: metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{{Kind: "VirtualMachine"}, {Kind: "ReschedulingRequest"}}},
+				Spec:       emptySpec,
+			},
+			wantKind:    "*", // any handler, chosen deterministically
+			wantAnomaly: AnomalyAmbiguousOwner,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := newTestController(newTestClient(newTestScheme(t)))
+			c.Monitor = NewMonitor(nil)
+			for _, k := range tt.extra {
+				c.handlers[k] = &stubHandler{kind: k}
+			}
+			h := c.handlerFor(context.Background(), tt.res)
+			switch {
+			case tt.wantKind == "" && h != nil:
+				t.Errorf("expected no handler, got %s", h.Kind())
+			case tt.wantKind != "" && h == nil:
+				t.Fatalf("expected %s handler, got nil", tt.wantKind)
+			case tt.wantKind != "" && tt.wantKind != "*" && h.Kind() != tt.wantKind:
+				t.Errorf("handler kind = %s, want %s", h.Kind(), tt.wantKind)
+			}
+			if tt.wantAnomaly != "" {
+				if v := testutil.ToFloat64(c.Monitor.anomaliesVec.WithLabelValues(tt.wantAnomaly)); v != 1 {
+					t.Errorf("%s anomaly count = %v, want 1", tt.wantAnomaly, v)
+				}
+			}
+		})
 	}
 }
 
-func TestReconcile_ResizeSizeMismatchRequeues(t *testing.T) {
-	// For a resize/rebuild reservation, the instance being present on the
-	// target host isn't sufficient — the VM must have grown/shrunk to the
-	// reserved size. Until it has, the controller must requeue and set the
-	// Ready condition to VMSizeMismatch.
-	scheme := newTestScheme(t)
-	reserved := map[hv1.ResourceName]resource.Quantity{
-		"cpu":    resource.MustParse("4"),
-		"memory": resource.MustParse("8Gi"),
-	}
-	current := map[hv1.ResourceName]resource.Quantity{
-		"cpu":    resource.MustParse("2"),
-		"memory": resource.MustParse("4Gi"),
-	}
-	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.ResizeIntent, reserved)
-	hv := newHypervisor("host-1", "vm-uuid-1")
-	k8sClient := newTestClient(scheme, res, hv)
-	c := &Controller{Client: k8sClient, VMClient: &stubVMClient{size: current}}
+// stubHandler is a minimal OwnerHandler for registry/dispatch tests.
+type stubHandler struct{ kind string }
 
-	result, err := c.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "res-1"},
-	})
-	if err != nil {
-		t.Fatalf("Reconcile returned error: %v", err)
-	}
-	if result.RequeueAfter != 10*time.Second {
-		t.Errorf("RequeueAfter = %v, want 10s", result.RequeueAfter)
-	}
-
-	// Reservation must still exist and carry the VMSizeMismatch condition.
-	var got v1alpha1.Reservation
-	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-1"}, &got); err != nil {
-		t.Fatalf("reservation was unexpectedly deleted: %v", err)
-	}
-	assertReadyCondition(t, k8sClient, "res-1", metav1.ConditionUnknown, "VMSizeMismatch")
+func (s *stubHandler) Kind() string              { return s.kind }
+func (s *stubHandler) WatchObjects() []WatchSpec { return nil }
+func (s *stubHandler) TerminalState(context.Context, *v1alpha1.Reservation, SubjectReservations) (TerminalResult, error) {
+	return TerminalResult{Done: true}, nil
 }
 
-func TestReconcile_ResizeSizeMatchesDeletesReservation(t *testing.T) {
-	// Once the VM has been resized to the reserved dimensions, the resize
-	// reservation can be freed like a normal in-flight reservation.
-	scheme := newTestScheme(t)
-	reserved := map[hv1.ResourceName]resource.Quantity{
-		"cpu":    resource.MustParse("4"),
-		"memory": resource.MustParse("8Gi"),
-	}
-	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.ResizeIntent, reserved)
-	hv := newHypervisor("host-1", "vm-uuid-1")
-	k8sClient := newTestClient(scheme, res, hv)
-	c := &Controller{Client: k8sClient, VMClient: &stubVMClient{size: reserved}}
-
-	if _, err := c.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "res-1"},
-	}); err != nil {
-		t.Fatalf("Reconcile returned error: %v", err)
-	}
-
-	var got v1alpha1.Reservation
-	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-1"}, &got); err == nil {
-		t.Fatal("expected reservation to be deleted, but Get succeeded")
-	}
-}
-
-// TestReconcile_ResizeSizeMatchesSemanticallyDeletesReservation guards the
-// semantic quantity comparison in Reconcile: the reservation spec and the vm
-// client return numerically-identical quantities that were constructed
-// differently (MustParse vs NewQuantity), so reflect.DeepEqual returns false
-// even though the resources match. If the controller ever regresses to
-// reflect.DeepEqual, this test starts failing.
-func TestReconcile_ResizeSizeMatchesSemanticallyDeletesReservation(t *testing.T) {
-	scheme := newTestScheme(t)
-	// Reservation spec side: built like the API server would (MustParse).
-	reserved := map[hv1.ResourceName]resource.Quantity{
-		"cpu":    resource.MustParse("4"),
-		"memory": resource.MustParse("8Gi"),
-	}
-	// VM client side: built like the nova vm client does (NewQuantity).
-	current := map[hv1.ResourceName]resource.Quantity{
-		"cpu":    *resource.NewQuantity(4, resource.DecimalSI),
-		"memory": *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
-	}
-	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.ResizeIntent, reserved)
-	hv := newHypervisor("host-1", "vm-uuid-1")
-	k8sClient := newTestClient(scheme, res, hv)
-	c := &Controller{Client: k8sClient, VMClient: &stubVMClient{size: current}}
-
-	if _, err := c.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "res-1"},
-	}); err != nil {
-		t.Fatalf("Reconcile returned error: %v", err)
-	}
-
-	var got v1alpha1.Reservation
-	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-1"}, &got); err == nil {
-		t.Fatal("expected reservation to be deleted (semantic size match), but Get succeeded")
-	}
-}
-
-// TestReconcile_ResizeStaleReservationSkipsVMClient covers the guard that
-// stops the size-check branch from running when the instance landed on a host
-// other than the reservation's target. A stale resize reservation should fall
-// through to the awaiting-deletion no-op — not fire a vmClient call and get
-// marked VMSizeMismatch. VMClient is left nil so an accidental call panics.
-func TestReconcile_ResizeStaleReservationSkipsVMClient(t *testing.T) {
-	scheme := newTestScheme(t)
-	reserved := map[hv1.ResourceName]resource.Quantity{
-		"cpu": resource.MustParse("4"),
-	}
-	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.ResizeIntent, reserved)
-	// Instance ended up on host-2, not the target host-1.
-	hv1Obj := newHypervisor("host-1")
-	hv2Obj := newHypervisor("host-2", "vm-uuid-1")
-	k8sClient := newTestClient(scheme, res, hv1Obj, hv2Obj)
-	c := &Controller{Client: k8sClient, VMClient: nil}
-
-	result, err := c.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "res-1"},
-	})
-	if err != nil {
-		t.Fatalf("Reconcile returned error: %v", err)
-	}
-	if result.RequeueAfter != 0 {
-		t.Errorf("expected empty result for stale reservation, got %+v", result)
-	}
-
-	// Reservation must still exist and must NOT have been marked with
-	// VMSizeMismatch — it's simply awaiting the hypervisor operator to
-	// prune it.
-	var got v1alpha1.Reservation
-	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-1"}, &got); err != nil {
-		t.Fatalf("expected reservation to still exist, got error: %v", err)
-	}
-	if cond := meta.FindStatusCondition(got.Status.Conditions, v1alpha1.ReservationConditionReady); cond != nil && cond.Reason == "VMSizeMismatch" {
-		t.Errorf("stale reservation was incorrectly marked VMSizeMismatch")
-	}
-}
-
-func TestReconcile_RebuildSizeMismatchRequeues(t *testing.T) {
-	// Same branch as resize but exercised via the rebuild intent to make sure
-	// both intents actually trip the vmClient check.
-	scheme := newTestScheme(t)
-	reserved := map[hv1.ResourceName]resource.Quantity{
-		"cpu": resource.MustParse("4"),
-	}
-	current := map[hv1.ResourceName]resource.Quantity{
-		"cpu": resource.MustParse("2"),
-	}
-	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.RebuildIntent, reserved)
-	hv := newHypervisor("host-1", "vm-uuid-1")
-	k8sClient := newTestClient(scheme, res, hv)
-	c := &Controller{Client: k8sClient, VMClient: &stubVMClient{size: current}}
-
-	result, err := c.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "res-1"},
-	})
-	if err != nil {
-		t.Fatalf("Reconcile returned error: %v", err)
-	}
-	if result.RequeueAfter != 10*time.Second {
-		t.Errorf("RequeueAfter = %v, want 10s", result.RequeueAfter)
-	}
-	assertReadyCondition(t, k8sClient, "res-1", metav1.ConditionUnknown, "VMSizeMismatch")
-}
-
-func TestReconcile_ResizeVMClientErrorReturnsError(t *testing.T) {
-	// If the source of truth for VMs can't be reached we must surface the
-	// error so controller-runtime backs off — silently deleting the
-	// reservation here would be a resource-accounting bug.
-	scheme := newTestScheme(t)
-	reserved := map[hv1.ResourceName]resource.Quantity{
-		"cpu": resource.MustParse("4"),
-	}
-	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.ResizeIntent, reserved)
-	hv := newHypervisor("host-1", "vm-uuid-1")
-	k8sClient := newTestClient(scheme, res, hv)
-	vmErr := errors.New("vm client boom")
-	c := &Controller{Client: k8sClient, VMClient: &stubVMClient{err: vmErr}}
-
-	_, err := c.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "res-1"},
-	})
-	if !errors.Is(err, vmErr) {
-		t.Fatalf("Reconcile err = %v, want %v", err, vmErr)
-	}
-
-	// Reservation must survive the error so it can be retried.
-	var got v1alpha1.Reservation
-	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-1"}, &got); err != nil {
-		t.Fatalf("reservation was unexpectedly deleted: %v", err)
-	}
-}
-
-func TestReconcile_NonResizeIntentSkipsVMClient(t *testing.T) {
-	// For non-resize/rebuild intents the vmClient must not be consulted at
-	// all — we leave it nil to make an accidental call panic loudly.
-	scheme := newTestScheme(t)
-	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.LiveMigrationIntent,
-		map[hv1.ResourceName]resource.Quantity{"cpu": resource.MustParse("4")})
-	hv := newHypervisor("host-1", "vm-uuid-1")
-	k8sClient := newTestClient(scheme, res, hv)
-	c := &Controller{Client: k8sClient, VMClient: nil}
-
-	if _, err := c.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: "res-1"},
-	}); err != nil {
-		t.Fatalf("Reconcile returned error: %v", err)
-	}
-
-	var got v1alpha1.Reservation
-	if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "res-1"}, &got); err == nil {
-		t.Fatal("expected reservation to be deleted, but Get succeeded")
-	}
-}
-
-func TestIdxReservationByTargetHostFn(t *testing.T) {
+func TestIdxReservationByOperationIDFn(t *testing.T) {
 	tests := []struct {
 		name string
 		obj  client.Object
 		want []string
 	}{
-		{
-			name: "wrong type",
-			obj:  &hv1.Hypervisor{},
-			want: nil,
-		},
-		{
-			name: "empty target host",
-			obj: &v1alpha1.Reservation{
-				Spec: v1alpha1.ReservationSpec{TargetHost: ""},
-			},
-			want: nil,
-		},
-		{
-			name: "non-inflight reservation ignored",
-			obj: &v1alpha1.Reservation{
-				Spec: v1alpha1.ReservationSpec{
-					Type:       v1alpha1.ReservationTypeCommittedResource,
-					TargetHost: "host-1",
-				},
-			},
-			want: nil,
-		},
-		{
-			name: "target host set",
-			obj: &v1alpha1.Reservation{
-				Spec: v1alpha1.ReservationSpec{
-					Type:       v1alpha1.ReservationTypeInFlight,
-					TargetHost: "host-1",
-				},
-			},
-			want: []string{"host-1"},
-		},
+		{"wrong type", &hv1.Hypervisor{}, nil},
+		{"non-inflight", &v1alpha1.Reservation{Spec: v1alpha1.ReservationSpec{Type: v1alpha1.ReservationTypeCommittedResource}}, nil},
+		{"no operation id", &v1alpha1.Reservation{Spec: v1alpha1.ReservationSpec{
+			Type:                v1alpha1.ReservationTypeInFlight,
+			InFlightReservation: &v1alpha1.InFlightReservationSpec{},
+		}}, nil},
+		{"operation id set", &v1alpha1.Reservation{Spec: v1alpha1.ReservationSpec{
+			Type:                v1alpha1.ReservationTypeInFlight,
+			InFlightReservation: &v1alpha1.InFlightReservationSpec{OperationID: "op-1"},
+		}}, []string{"op-1"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := idxReservationByTargetHostFn(tt.obj)
-			if len(got) != len(tt.want) {
-				t.Fatalf("got %v, want %v", got, tt.want)
-			}
-			for i := range got {
-				if got[i] != tt.want[i] {
-					t.Errorf("got[%d] = %q, want %q", i, got[i], tt.want[i])
-				}
+			got := indexReservationByOperationID(tt.obj)
+			if len(got) != len(tt.want) || (len(got) == 1 && got[0] != tt.want[0]) {
+				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -560,181 +601,62 @@ func TestIdxReservationByTargetHostFn(t *testing.T) {
 func TestPredicateReservations(t *testing.T) {
 	c := &Controller{}
 	pred := c.predicateReservations()
-
 	tests := []struct {
 		name string
 		obj  client.Object
 		want bool
 	}{
-		{
-			name: "wrong type",
-			obj:  &hv1.Hypervisor{},
-			want: false,
-		},
-		{
-			name: "wrong reservation type",
-			obj: &v1alpha1.Reservation{
-				Spec: v1alpha1.ReservationSpec{
-					Type:             v1alpha1.ReservationTypeFailover,
-					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-				},
-			},
-			want: false,
-		},
-		{
-			name: "wrong scheduling domain",
-			obj: &v1alpha1.Reservation{
-				Spec: v1alpha1.ReservationSpec{
-					Type:             v1alpha1.ReservationTypeInFlight,
-					SchedulingDomain: v1alpha1.SchedulingDomainPods,
-				},
-			},
-			want: false,
-		},
-		{
-			name: "in-flight nova reservation",
-			obj: &v1alpha1.Reservation{
-				Spec: v1alpha1.ReservationSpec{
-					Type:             v1alpha1.ReservationTypeInFlight,
-					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-				},
-			},
-			want: true,
-		},
+		{"wrong type", &hv1.Hypervisor{}, false},
+		{"wrong reservation type", &v1alpha1.Reservation{Spec: v1alpha1.ReservationSpec{
+			Type: v1alpha1.ReservationTypeFailover, SchedulingDomain: v1alpha1.SchedulingDomainNova}}, false},
+		{"wrong domain", &v1alpha1.Reservation{Spec: v1alpha1.ReservationSpec{
+			Type: v1alpha1.ReservationTypeInFlight, SchedulingDomain: v1alpha1.SchedulingDomainPods}}, false},
+		{"in-flight nova", &v1alpha1.Reservation{Spec: v1alpha1.ReservationSpec{
+			Type: v1alpha1.ReservationTypeInFlight, SchedulingDomain: v1alpha1.SchedulingDomainNova}}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := pred.Create(event.CreateEvent{Object: tt.obj}); got != tt.want {
 				t.Errorf("Create = %v, want %v", got, tt.want)
 			}
-			if got := pred.Update(event.UpdateEvent{ObjectNew: tt.obj, ObjectOld: tt.obj}); got != tt.want {
-				t.Errorf("Update = %v, want %v", got, tt.want)
-			}
-			if got := pred.Delete(event.DeleteEvent{Object: tt.obj}); got != tt.want {
-				t.Errorf("Delete = %v, want %v", got, tt.want)
-			}
 		})
 	}
 }
 
-func TestPredicateHypervisors(t *testing.T) {
-	c := &Controller{}
-	pred := c.predicateHypervisors()
+func TestHypervisorInstancesChangedPredicate(t *testing.T) {
+	pred := hypervisorInstancesChangedPredicate()
 
-	if got := pred.Create(event.CreateEvent{Object: &hv1.Hypervisor{}}); !got {
-		t.Errorf("Create(Hypervisor) = false, want true")
+	if !pred.Create(event.CreateEvent{Object: &hv1.Hypervisor{}}) {
+		t.Error("Create(Hypervisor) = false, want true")
 	}
-	if got := pred.Create(event.CreateEvent{Object: &v1alpha1.Reservation{}}); got {
-		t.Errorf("Create(Reservation) = true, want false")
-	}
-
-	// Update events must only pass when Status.Instances actually changes,
-	// so unrelated status churn on the Hypervisor doesn't trigger a list +
-	// enqueue of all reservations targeting the host.
 	same := newHypervisor("host-1", "vm-1")
-	if got := pred.Update(event.UpdateEvent{ObjectOld: same, ObjectNew: same.DeepCopy()}); got {
-		t.Errorf("Update(no instance change) = true, want false")
+	if pred.Update(event.UpdateEvent{ObjectOld: same, ObjectNew: same.DeepCopy()}) {
+		t.Error("Update(no instance change) = true, want false")
 	}
 	changed := same.DeepCopy()
 	changed.Status.Instances = append(changed.Status.Instances, hv1.Instance{ID: "vm-2"})
-	if got := pred.Update(event.UpdateEvent{ObjectOld: same, ObjectNew: changed}); !got {
-		t.Errorf("Update(instance added) = false, want true")
+	if !pred.Update(event.UpdateEvent{ObjectOld: same, ObjectNew: changed}) {
+		t.Error("Update(instance added) = false, want true")
 	}
 }
 
-// mockWorkQueue captures items added during handler invocations.
-type mockWorkQueue struct {
-	workqueue.TypedRateLimitingInterface[reconcile.Request]
-	items []reconcile.Request
-}
-
-func (m *mockWorkQueue) Add(item reconcile.Request) {
-	m.items = append(m.items, item)
-}
-
-func TestHandleReservations(t *testing.T) {
-	c := &Controller{}
-	h := c.handleReservations()
-	res := &v1alpha1.Reservation{ObjectMeta: metav1.ObjectMeta{Name: "res-1"}}
-	ctx := context.Background()
-
-	t.Run("Create", func(t *testing.T) {
-		q := &mockWorkQueue{}
-		h.Create(ctx, event.CreateEvent{Object: res}, q)
-		if len(q.items) != 1 || q.items[0].Name != "res-1" {
-			t.Errorf("queue = %+v, want one entry for res-1", q.items)
-		}
-	})
-	t.Run("Update", func(t *testing.T) {
-		q := &mockWorkQueue{}
-		h.Update(ctx, event.UpdateEvent{ObjectOld: res, ObjectNew: res}, q)
-		if len(q.items) != 1 || q.items[0].Name != "res-1" {
-			t.Errorf("queue = %+v, want one entry for res-1", q.items)
-		}
-	})
-	t.Run("Delete", func(t *testing.T) {
-		q := &mockWorkQueue{}
-		h.Delete(ctx, event.DeleteEvent{Object: res}, q)
-		if len(q.items) != 1 || q.items[0].Name != "res-1" {
-			t.Errorf("queue = %+v, want one entry for res-1", q.items)
-		}
-	})
-}
-
-func TestHandleHypervisors_EnqueuesMatchingReservations(t *testing.T) {
+func TestVMHandlerMapHypervisorToReservations(t *testing.T) {
 	scheme := newTestScheme(t)
-	matching := newInFlightReservation("res-1", "vm-1", "host-1")
-	other := newInFlightReservation("res-2", "vm-2", "host-2")
+	matching := newInFlightReservation("res-1", "vm-1", "host-1", inFlightOpts{})
+	other := newInFlightReservation("res-2", "vm-2", "host-2", inFlightOpts{})
 	k8sClient := newTestClient(scheme, matching, other)
-	c := &Controller{Client: k8sClient}
-	h := c.handleHypervisors()
+	h := &VirtualMachineHandler{Client: k8sClient}
 
-	hv := &hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "host-1"}}
-	ctx := context.Background()
-
-	t.Run("Create", func(t *testing.T) {
-		q := &mockWorkQueue{}
-		h.Create(ctx, event.CreateEvent{Object: hv}, q)
-		if len(q.items) != 1 || q.items[0].Name != "res-1" {
-			t.Errorf("queue = %+v, want only res-1", q.items)
-		}
-	})
-	t.Run("Update", func(t *testing.T) {
-		q := &mockWorkQueue{}
-		h.Update(ctx, event.UpdateEvent{ObjectOld: hv, ObjectNew: hv}, q)
-		if len(q.items) != 1 || q.items[0].Name != "res-1" {
-			t.Errorf("queue = %+v, want only res-1", q.items)
-		}
-	})
-	t.Run("Delete", func(t *testing.T) {
-		q := &mockWorkQueue{}
-		h.Delete(ctx, event.DeleteEvent{Object: hv}, q)
-		if len(q.items) != 1 || q.items[0].Name != "res-1" {
-			t.Errorf("queue = %+v, want only res-1", q.items)
-		}
-	})
-}
-
-func TestHandleHypervisors_NoMatchingReservations(t *testing.T) {
-	scheme := newTestScheme(t)
-	other := newInFlightReservation("res-2", "vm-2", "host-2")
-	k8sClient := newTestClient(scheme, other)
-	c := &Controller{Client: k8sClient}
-	h := c.handleHypervisors()
-
-	hv := &hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "host-1"}}
-	q := &mockWorkQueue{}
-	h.Create(context.Background(), event.CreateEvent{Object: hv}, q)
-	if len(q.items) != 0 {
-		t.Errorf("queue = %+v, want empty", q.items)
+	reqs := h.mapHypervisorToReservations(context.Background(), &hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "host-1"}})
+	if len(reqs) != 1 || reqs[0].Name != "res-1" {
+		t.Errorf("requests = %+v, want only res-1", reqs)
 	}
 }
 
 func TestSetupWithManager_RejectsNonMulticlusterClient(t *testing.T) {
 	scheme := newTestScheme(t)
-	c := &Controller{Client: newTestClient(scheme), VMClient: &stubVMClient{}}
-	err := c.SetupWithManager(context.Background(), nil)
-	if err == nil {
+	c := &Controller{Client: newTestClient(scheme)}
+	if err := c.SetupWithManager(context.Background(), nil); err == nil {
 		t.Fatal("expected error for non-multicluster client, got nil")
 	}
 }
