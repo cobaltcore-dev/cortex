@@ -241,6 +241,10 @@ const (
 	ReserveForCommittedResourceIntent v1alpha1.SchedulingIntent = "reserve_for_committed_resource"
 	// CapacityProbeIntent indicates that the request is a synthetic capacity probe (not a real VM placement).
 	CapacityProbeIntent v1alpha1.SchedulingIntent = "capacity_probe"
+	// ValidateFailoverReservationIntent indicates that cortex is validating whether a VM
+	// can use a specific failover reservation host. Uses EvacuateIntent semantics in
+	// filter_has_enough_capacity to unlock reservation resources for the VM.
+	ValidateFailoverReservationIntent v1alpha1.SchedulingIntent = "validate_failover_reservation"
 
 	// HintKeyResourceGroup is the scheduler hint key used to pass the resource group
 	// (e.g., flavor group name) for failover reservation scheduling.
@@ -289,6 +293,9 @@ func (req ExternalSchedulerRequest) GetIntent() (v1alpha1.SchedulingIntent, erro
 	// Used by cortex capacity probe controller
 	case "capacity_probe":
 		return CapacityProbeIntent, nil
+	// Used by cortex failover reservation controller (host validation check)
+	case "validate_failover_reservation":
+		return ValidateFailoverReservationIntent, nil
 	default:
 		return CreateIntent, nil
 	}

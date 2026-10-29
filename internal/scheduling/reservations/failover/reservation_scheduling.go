@@ -257,7 +257,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		IgnoreHosts:      []string{vm.CurrentHypervisor},
 		Pipeline:         inferFailoverPipeline(flavorExtraSpecs),
 		AvailabilityZone: vm.AvailabilityZone,
-		SchedulerHints:   map[string]any{"_nova_check_type": string(api.EvacuateIntent)},
+		SchedulerHints:   map[string]any{"_nova_check_type": string(api.ValidateFailoverReservationIntent)},
 		ImageProperties:  imagePropertiesFromFlavor(flavorExtraSpecs),
 	}
 

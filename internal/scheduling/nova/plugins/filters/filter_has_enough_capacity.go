@@ -187,7 +187,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 				intent, err := request.GetIntent()
 				if err == nil {
 					switch intent {
-					case api.EvacuateIntent:
+					case api.EvacuateIntent, api.ValidateFailoverReservationIntent:
 						if reservation.Status.FailoverReservation != nil {
 							if _, contained := reservation.Status.FailoverReservation.Allocations[request.Spec.Data.InstanceUUID]; contained {
 								traceLog.V(1).Info("unlocking resources reserved by failover reservation for VM in allocations (evacuation)",
