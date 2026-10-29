@@ -7,6 +7,8 @@ package nova
 // active rollout or only relevant for certain deployment types. Set via conf.json
 // under the "featureGates" key. All flags default to false (disabled) when omitted.
 type FeatureGates struct {
+	// InFlightReservations enables synchronous blocking for KVM create, resize and live migration.
+	InFlightReservations bool `json:"inFlightReservations,omitempty"`
 	// CommittedResourceTracking enables committed resource integration: writing
 	// placed VM UUIDs back into Reservation slots and classifying no-host-found
 	// results by committed resource coverage. Enable only on deployments that
