@@ -352,20 +352,22 @@ func printCommitments(crs []v1alpha1.CommittedResource, showUsage bool) {
 		)
 
 		// Line 3 (optional): usage
-		if mem, ok := cr.Status.UsedResources["memory"]; ok {
-			cpu := cr.Status.UsedResources["cpu"]
-			usageAgeStr := gray("—")
-			if cr.Status.LastUsageReconcileAt != nil {
-				usageAgeStr = age(cr.Status.LastUsageReconcileAt)
+		if cr.Status.Billing != nil {
+			if mem, ok := cr.Status.Billing.UsedResources["memory"]; ok {
+				cpu := cr.Status.Billing.UsedResources["cpu"]
+				usageAgeStr := gray("—")
+				if cr.Status.Billing.LastReconcileAt != nil {
+					usageAgeStr = age(cr.Status.Billing.LastReconcileAt)
+				}
+				fmt.Printf("    used=%s  cpu=%s  instances=%d  usage-age=%s\n",
+					mem.String(), cpu.String(), len(cr.Status.Billing.AssignedInstances), usageAgeStr)
 			}
-			fmt.Printf("    used=%s  cpu=%s  instances=%d  usage-age=%s\n",
-				mem.String(), cpu.String(), len(cr.Status.AssignedInstances), usageAgeStr)
-		}
 
-		if showUsage && len(cr.Status.AssignedInstances) > 0 {
-			fmt.Printf("    assigned instances (%d):\n", len(cr.Status.AssignedInstances))
-			for _, inst := range cr.Status.AssignedInstances {
-				fmt.Printf("      %s\n", gray(inst))
+			if showUsage && len(cr.Status.Billing.AssignedInstances) > 0 {
+				fmt.Printf("    assigned instances (%d):\n", len(cr.Status.Billing.AssignedInstances))
+				for _, inst := range cr.Status.Billing.AssignedInstances {
+					fmt.Printf("      %s\n", gray(inst))
+				}
 			}
 		}
 	}

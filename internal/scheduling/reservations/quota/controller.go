@@ -823,8 +823,8 @@ func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavo
 			continue
 		}
 
-		// Get used amount from UsedResources map
-		if len(cr.Status.UsedResources) == 0 {
+		// Get used amount from Billing.UsedResources map
+		if cr.Status.Billing == nil || len(cr.Status.Billing.UsedResources) == 0 {
 			continue
 		}
 
@@ -834,7 +834,7 @@ func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavo
 		switch spec.ResourceType {
 		case v1alpha1.CommittedResourceTypeMemory:
 			resourceName = commitments.ResourceNameRAM(spec.FlavorGroupName)
-			memQty, ok := cr.Status.UsedResources["memory"]
+			memQty, ok := cr.Status.Billing.UsedResources["memory"]
 			if !ok {
 				continue
 			}
@@ -850,7 +850,7 @@ func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavo
 			usedAmount = usedBytes / (1024 * 1024 * 1024)
 		case v1alpha1.CommittedResourceTypeCores:
 			resourceName = commitments.ResourceNameCores(spec.FlavorGroupName)
-			cpuQty, ok := cr.Status.UsedResources["cpu"]
+			cpuQty, ok := cr.Status.Billing.UsedResources["cpu"]
 			if !ok {
 				continue
 			}
@@ -1186,12 +1186,20 @@ func crUsedAmountChangePredicate() predicate.Predicate {
 			if !ok1 || !ok2 {
 				return false
 			}
-			// Trigger if UsedResources changed
-			if len(oldCR.Status.UsedResources) != len(newCR.Status.UsedResources) {
+			// Trigger if Billing.UsedResources changed
+			oldUsed := map[string]resource.Quantity{}
+			newUsed := map[string]resource.Quantity{}
+			if oldCR.Status.Billing != nil {
+				oldUsed = oldCR.Status.Billing.UsedResources
+			}
+			if newCR.Status.Billing != nil {
+				newUsed = newCR.Status.Billing.UsedResources
+			}
+			if len(oldUsed) != len(newUsed) {
 				return true
 			}
-			for key, oldQty := range oldCR.Status.UsedResources {
-				newQty, ok := newCR.Status.UsedResources[key]
+			for key, oldQty := range oldUsed {
+				newQty, ok := newUsed[key]
 				if !ok || oldQty.Cmp(newQty) != 0 {
 					return true
 				}

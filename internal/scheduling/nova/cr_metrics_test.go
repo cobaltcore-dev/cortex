@@ -81,8 +81,10 @@ func TestLogNoHostFound(t *testing.T) {
 			},
 		}
 		if usedMiB > 0 {
-			cr.Status.UsedResources = map[string]resource.Quantity{
-				"memory": *resource.NewQuantity(usedMiB*1024*1024, resource.BinarySI),
+			cr.Status.Billing = &v1alpha1.BillingStatus{
+				UsedResources: map[string]resource.Quantity{
+					"memory": *resource.NewQuantity(usedMiB*1024*1024, resource.BinarySI),
+				},
 			}
 		}
 		return cr

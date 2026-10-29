@@ -156,7 +156,10 @@ func (c *UsageCalculator) BuildVMAssignmentsFromStatus(ctx context.Context, proj
 	}
 	assignments := make(map[string]string)
 	for _, cr := range crList.Items {
-		for _, vmUUID := range cr.Status.AssignedInstances {
+		if cr.Status.Billing == nil {
+			continue
+		}
+		for _, vmUUID := range cr.Status.Billing.AssignedInstances {
 			assignments[vmUUID] = cr.Spec.CommitmentUUID
 		}
 	}

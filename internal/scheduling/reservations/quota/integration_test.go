@@ -1305,7 +1305,7 @@ func (env *integrationTestEnv) executeAction(action TestAction) {
 		if err := env.client.Get(ctx, client.ObjectKey{Name: action.CRName}, &cr); err != nil {
 			env.t.Fatalf("failed to get CR %s: %v", action.CRName, err)
 		}
-		cr.Status.UsedResources = usedResourcesFromMultiples(cr.Spec.ResourceType, cr.Spec.FlavorGroupName, action.UsedAmount)
+		cr.Status.Billing = &v1alpha1.BillingStatus{UsedResources: usedResourcesFromMultiples(cr.Spec.ResourceType, cr.Spec.FlavorGroupName, action.UsedAmount)}
 		if err := env.client.Status().Update(ctx, &cr); err != nil {
 			env.t.Fatalf("failed to update CR %s status: %v", action.CRName, err)
 		}
@@ -1430,7 +1430,7 @@ func makeCR(name, projectID, flavorGroup, az string, resourceType v1alpha1.Commi
 		},
 	}
 	if usedAmount != nil {
-		cr.Status.UsedResources = usedResourcesFromMultiples(resourceType, flavorGroup, *usedAmount)
+		cr.Status.Billing = &v1alpha1.BillingStatus{UsedResources: usedResourcesFromMultiples(resourceType, flavorGroup, *usedAmount)}
 	}
 	return cr
 }

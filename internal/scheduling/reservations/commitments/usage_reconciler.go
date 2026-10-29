@@ -51,12 +51,9 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// Only active commitments have assigned VMs. Clear stale usage status if present.
 	if !cr.IsActive() {
 		log.V(1).Info("skipping: commitment state is not active", "state", cr.Spec.State)
-		if len(cr.Status.AssignedInstances) > 0 || len(cr.Status.UsedResources) > 0 {
+		if cr.Status.Billing != nil {
 			old := cr.DeepCopy()
-			cr.Status.AssignedInstances = nil
-			cr.Status.UsedResources = nil
-			cr.Status.LastUsageReconcileAt = nil
-			cr.Status.UsageObservedGeneration = nil
+			cr.Status.Billing = nil
 			cr.Status.StatusSummary = computeStatusSummary(cr.Spec, cr.Status, start)
 			if err := r.Status().Patch(ctx, &cr, client.MergeFrom(old)); err != nil {
 				return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -70,12 +67,9 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// so we check EndTime directly to prevent stale assignments from persisting past expiry.
 	if cr.Spec.EndTime != nil && cr.Spec.EndTime.Time.Before(start) {
 		log.V(1).Info("skipping: commitment has expired", "endTime", cr.Spec.EndTime)
-		if len(cr.Status.AssignedInstances) > 0 || len(cr.Status.UsedResources) > 0 {
+		if cr.Status.Billing != nil {
 			old := cr.DeepCopy()
-			cr.Status.AssignedInstances = nil
-			cr.Status.UsedResources = nil
-			cr.Status.LastUsageReconcileAt = nil
-			cr.Status.UsageObservedGeneration = nil
+			cr.Status.Billing = nil
 			cr.Status.StatusSummary = computeStatusSummary(cr.Spec, cr.Status, start)
 			if err := r.Status().Patch(ctx, &cr, client.MergeFrom(old)); err != nil {
 				return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -107,10 +101,10 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// Bypass cooldown when the spec generation has advanced since the last usage reconcile.
 	// This ensures spec changes (e.g. shrink) are reflected immediately rather than waiting
 	// for the next cooldown interval — follows the Kubernetes observedGeneration pattern.
-	generationAdvanced := cr.Status.UsageObservedGeneration == nil ||
-		*cr.Status.UsageObservedGeneration != cr.Generation
-	if !generationAdvanced && cr.Status.LastUsageReconcileAt != nil {
-		if elapsed := time.Since(cr.Status.LastUsageReconcileAt.Time); elapsed < cooldown {
+	generationAdvanced := cr.Status.Billing == nil || cr.Status.Billing.ObservedGeneration == nil ||
+		*cr.Status.Billing.ObservedGeneration != cr.Generation
+	if !generationAdvanced && cr.Status.Billing.LastReconcileAt != nil {
+		if elapsed := time.Since(cr.Status.Billing.LastReconcileAt.Time); elapsed < cooldown {
 			return ctrl.Result{RequeueAfter: cooldown - elapsed}, nil
 		}
 	}
@@ -185,8 +179,8 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	r.Monitor.reconcileDuration.WithLabelValues("success").Observe(time.Since(start).Seconds())
 	// Observe status age once per reconcile, not once per commitment, to avoid biasing the
 	// histogram toward projects with many commitments.
-	if written > 0 && cr.Status.LastUsageReconcileAt != nil {
-		r.Monitor.statusAge.Observe(now.Time.Sub(cr.Status.LastUsageReconcileAt.Time).Seconds())
+	if written > 0 && cr.Status.Billing != nil && cr.Status.Billing.LastReconcileAt != nil {
+		r.Monitor.statusAge.Observe(now.Time.Sub(cr.Status.Billing.LastReconcileAt.Time).Seconds())
 	}
 	r.Monitor.assignedInstances.WithLabelValues(cr.Spec.ProjectID).Set(float64(totalAssigned))
 
@@ -217,13 +211,15 @@ func (r *UsageReconciler) writeUsageStatus(ctx context.Context, state *Commitmen
 	usedQty := resource.NewQuantity(usedBytes, resource.BinarySI)
 	usedCores := resource.NewQuantity(state.UsedVCPUs, resource.DecimalSI)
 
-	target.Status.AssignedInstances = state.AssignedInstances
-	target.Status.UsedResources = map[string]resource.Quantity{
-		"memory": *usedQty,
-		"cpu":    *usedCores,
+	target.Status.Billing = &v1alpha1.BillingStatus{
+		AssignedInstances: state.AssignedInstances,
+		UsedResources: map[string]resource.Quantity{
+			"memory": *usedQty,
+			"cpu":    *usedCores,
+		},
+		LastReconcileAt:    &now,
+		ObservedGeneration: &target.Generation,
 	}
-	target.Status.LastUsageReconcileAt = &now
-	target.Status.UsageObservedGeneration = &target.Generation
 	target.Status.StatusSummary = computeStatusSummary(target.Spec, target.Status, now.Time)
 
 	return r.Status().Patch(ctx, target, client.MergeFrom(old))
@@ -347,11 +343,11 @@ func (p acceptedGenerationPredicate) Update(e event.UpdateEvent) bool {
 		return false
 	}
 	// Don't fire if usage is already up to date for the accepted generation.
-	if newCR.Status.UsageObservedGeneration != nil && *newCR.Status.UsageObservedGeneration >= newCond.ObservedGeneration {
+	if newCR.Status.Billing != nil && newCR.Status.Billing.ObservedGeneration != nil && *newCR.Status.Billing.ObservedGeneration >= newCond.ObservedGeneration {
 		return false
 	}
 	p.log.V(1).Info("predicate fired: Ready accepted, usage not yet up to date",
 		"name", newCR.Name, "generation", newCR.Generation,
-		"usageObservedGeneration", newCR.Status.UsageObservedGeneration)
+		"billing", newCR.Status.Billing)
 	return true
 }

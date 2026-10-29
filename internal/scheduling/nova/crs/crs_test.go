@@ -51,8 +51,10 @@ func makeCR(state v1alpha1.CommitmentStatus, amountMiB, usedMiB int64) v1alpha1.
 		},
 	}
 	if usedMiB > 0 {
-		cr.Status.UsedResources = map[string]resource.Quantity{
-			"memory": *resource.NewQuantity(usedMiB*1024*1024, resource.BinarySI),
+		cr.Status.Billing = &v1alpha1.BillingStatus{
+			UsedResources: map[string]resource.Quantity{
+				"memory": *resource.NewQuantity(usedMiB*1024*1024, resource.BinarySI),
+			},
 		}
 	}
 	return cr
