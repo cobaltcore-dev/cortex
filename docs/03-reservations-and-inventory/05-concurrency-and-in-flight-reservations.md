@@ -63,6 +63,28 @@ confirmed anything:
   expires after a time-to-live and releases its capacity, so an abandoned request cannot strand space
   forever.
 
+## Assumption: Nova serializes its own operations per workload
+
+The design relies on one assumption about Nova: it holds a **per-VM lock on lifecycle operations**. When
+Cortex receives a *Nova* scheduling request for a VM, no other Nova lifecycle operation for that VM is in
+flight in Nova. A later Nova request for the same VM is therefore a *new* operation that begins only after
+the previous one has ended, not a second concurrent operation.
+
+This bounds only requests coming from Nova. Cortex-internal callers (for example the Rescheduler) are not
+covered by Nova's lock and may issue their own scheduling requests for the same VM, so in general more than
+one operation can hold in-flight reservations for a VM at the same time. The "at most one ongoing operation
+per VM" guarantee therefore applies only to in-flight reservations owned by that VM's `VirtualMachine` CRD
+(the reservations a Nova request creates). Reservations owned by another resource (e.g. a `Rescheduling`
+CRD) live alongside them and follow their owner's lifecycle instead.
+
+Cortex may still *observe* leftover CRD state from a previous Nova operation — reservations not yet
+garbage-collected, or a workload condition still carrying a previous operation's terminal reason — because
+CRD reconciliation is asynchronous. The assumption is only that nothing is *ongoing* in Nova, not that
+every CRD already reflects the latest operation. The
+[in-flight reservation controller](inflight-reservation-controller.md) uses this to tell a *fresh* terminal
+signal (the current Nova operation) apart from a *stale* one (a previous operation's leftover) so it never
+releases the holds it just created.
+
 ## Learning what the platform actually did
 
 In-flight reservations are only half the story: they express Cortex's *guess*, and the guess has to be
@@ -120,7 +142,9 @@ prevent.
 > This describes the concurrency design behind the `inflight-reservation-controller` and the scheduler's
 > handling of parallel requests. As with the other reservation kinds, in-flight reservations *reserve and
 > report* — the enforcement is that concurrent requests see each other's holds, not that a placement is
-> hard-refused. See [Reservations overview](01-reservations-overview.md).
+> hard-refused. See [Reservations overview](01-reservations-overview.md). For how the controller releases
+> in-flight reservations once an operation is over, see
+> [In-flight reservation controller](inflight-reservation-controller.md).
 
 In-flight reservations are the third term subtracted from usable capacity in
 [Reservations overview](01-reservations-overview.md), and the one that only exists because Cortex is an
