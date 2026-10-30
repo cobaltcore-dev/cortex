@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync"
 	"testing"
 
@@ -52,6 +53,20 @@ type IntegrationTestCase struct {
 	// ExpectReservations asserts at least one reservation is produced (most
 	// scenarios want this; a scenario proving nothing is reserved sets it false).
 	ExpectReservations bool
+
+	// ForbiddenTargets names hosts that must never be reserved as a failover
+	// target, e.g. a host too small to absorb a larger peer's whole workload.
+	ForbiddenTargets []string
+
+	// ExpectReservationCount, when non-zero, asserts the exact number of
+	// reservations produced. Used by scenarios that must reserve more than one
+	// target so the sibling-source wiring can be checked.
+	ExpectReservationCount int
+
+	// ExpectSiblingSources asserts every reservation lists all the other
+	// reservations' target hosts among its source hosts — the post-failover
+	// shortcut a multi-target partition relies on.
+	ExpectSiblingSources bool
 }
 
 func TestIntegration(t *testing.T) {
@@ -61,18 +76,18 @@ func TestIntegration(t *testing.T) {
 		// Whole-host evacuability
 		// =====================================================================
 		{
-			// The general flavor makes all four hosts mutually evacuable, so the
-			// clustering lumps the two plain "basic" hosts into the same partition
-			// as the two trait-X hosts and can reserve a basic host as their
-			// failover target. But a CUSTOM_TRAIT_X VM on a special host could never
-			// restart on a basic host: the real scheduler rejects the trait-X flavor
-			// there. The two special hosts on their own form a valid trait-X
+			// The general flavor makes all four hosts mutually evacuable, so a
+			// naive clustering would lump the two plain "basic" hosts into the same
+			// partition as the two trait-X hosts and could reserve a basic host as
+			// their failover target. But a CUSTOM_TRAIT_X VM on a special host could
+			// never restart on a basic host: the real scheduler rejects the trait-X
+			// flavor there. The two special hosts on their own form a valid trait-X
 			// partition (and the two basic hosts a valid general one), so the
 			// coverage is genuinely achievable — the algorithm just must not merge
-			// the incompatible hosts together. This fails today because a single
-			// shared flavor is enough to forge a rescue link, and neither the clique
-			// step nor the disjoint step re-checks that the target covers the
-			// source's other flavors.
+			// the incompatible hosts together. A single shared flavor is enough to
+			// forge a rescue link, so this is the regression guard for the
+			// same-flavor-set check that keeps the clique step from merging hosts
+			// that do not accept exactly the same flavors.
 			Name: "trait-incompatible host is not reserved as a failover target",
 			Hypervisors: []*hv1.Hypervisor{
 				hvWithTraits("basic-1"),
@@ -109,6 +124,76 @@ func TestIntegration(t *testing.T) {
 			Flavors:            []compute.FlavorInGroup{flavor("general", "")},
 			ExpectReservations: true,
 		},
+		// =====================================================================
+		// Whole-host capacity fit
+		// =====================================================================
+		{
+			// Two large hosts and one small host all accept the one general flavor,
+			// so under AssumeEmptyHosts the real capacity filter admits all three and
+			// they co-accept the seed. But an evacuation moves a whole host's
+			// workload at once, so a large host's VMs could never fit on the small
+			// one: the path finder's whole-host fit check must drop every
+			// large→small edge, leaving "small" only ever a source, never a
+			// mutual-edge target. The small host must therefore never be reserved —
+			// even though it happily accepts the flavor — or a large peer's workload
+			// would have nowhere to land.
+			Name: "undersized host is never reserved as a failover target",
+			Hypervisors: []*hv1.Hypervisor{
+				buildHV("large-1", 128, 64),
+				buildHV("large-2", 128, 64),
+				buildHV("small-1", 16, 8),
+			},
+			Flavors:            []compute.FlavorInGroup{flavor("general", "")},
+			ExpectReservations: true,
+			ForbiddenTargets:   []string{"small-1"},
+		},
+		// =====================================================================
+		// Availability-zone isolation
+		// =====================================================================
+		{
+			// Two hosts in az1 and two in az2 all accept the one flavor, but the real
+			// AZ filter only ever admits hosts of the seed's own zone, so a seed in
+			// az1 co-accepts only the az1 hosts and vice versa. The two zones must
+			// therefore form two separate partitions: no reservation may record a
+			// cross-AZ source, because a VM in az1 could not be evacuated onto an az2
+			// host. Each zone reserves its own target, so the fleet yields exactly
+			// two reservations — a wrong merge into one four-host partition would, at
+			// the default ratio of 1.0, cap at three instead.
+			Name: "hosts in different AZs are not merged into one partition",
+			Hypervisors: []*hv1.Hypervisor{
+				hvPtrInAZ("az1-1", "az1"),
+				hvPtrInAZ("az1-2", "az1"),
+				hvPtrInAZ("az2-1", "az2"),
+				hvPtrInAZ("az2-2", "az2"),
+			},
+			Flavors:                []compute.FlavorInGroup{flavor("general", "")},
+			ExpectReservations:     true,
+			ExpectReservationCount: 2,
+		},
+		// =====================================================================
+		// Multi-target partition: siblings list each other as sources
+		// =====================================================================
+		{
+			// A ratio of 1.0 would reserve the whole partition, but the never-reserve-
+			// all rule caps it at len(partition)-1, so a three-host partition reserves
+			// two targets. Each reservation must then list the *other* reserved host
+			// among its sources: once a reserved host absorbs an evacuation and
+			// returns to service it instantly needs a target of its own, which is why
+			// the planner keeps the sibling reserved hosts in each other's source
+			// lists. Whole-host evacuability still holds since the hosts are identical.
+			Name: "multi-target partition records sibling reserved hosts as sources",
+			Hypervisors: []*hv1.Hypervisor{
+				hvWithTraits("hv-1"),
+				hvWithTraits("hv-2"),
+				hvWithTraits("hv-3"),
+			},
+			Flavors:                []compute.FlavorInGroup{flavor("general", "")},
+			Ratio:                  1.0,
+			Minimum:                1,
+			ExpectReservations:     true,
+			ExpectReservationCount: 2,
+			ExpectSiblingSources:   true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -127,6 +212,17 @@ func TestIntegration(t *testing.T) {
 			desired := env.Generate(t, ratio, minimum)
 			if tc.ExpectReservations && len(desired) == 0 {
 				t.Fatal("expected at least one failover host reservation, got none")
+			}
+			if tc.ExpectReservationCount != 0 && len(desired) != tc.ExpectReservationCount {
+				t.Fatalf("expected %d reservations, got %d", tc.ExpectReservationCount, len(desired))
+			}
+			for _, res := range desired {
+				if slices.Contains(tc.ForbiddenTargets, res.Spec.TargetHost) {
+					t.Errorf("host %q was reserved as a failover target but must never be", res.Spec.TargetHost)
+				}
+			}
+			if tc.ExpectSiblingSources {
+				env.VerifySiblingSources(t, desired)
 			}
 
 			env.VerifyWholeHostEvacuable(t, desired)
@@ -237,29 +333,37 @@ func (env *integrationTestEnv) Generate(t *testing.T, ratio float64, minimum int
 // AcceptsByHost returns, per host, the set of flavors the real scheduler accepts
 // on it — the ground truth the reservations must respect. It reuses the path
 // finder's own evacuation-intent empty-host probe so the answer matches exactly
-// what the generation pipeline sees.
+// what the generation pipeline sees. It probes every availability zone present
+// in the fleet (the AZ filter only ever admits hosts of the seed's own zone), so
+// the ground truth covers multi-AZ fleets too.
 func (env *integrationTestEnv) AcceptsByHost(t *testing.T) map[string]map[string]bool {
 	t.Helper()
+	zones := map[string]bool{}
+	for _, hv := range env.hypervisors {
+		zones[hv.Labels[corev1.LabelTopologyZone]] = true
+	}
 	finder := &evacuationPathFinder{httpClient: http.DefaultClient, schedulerURL: env.schedulerURL}
 	accepts := map[string]map[string]bool{}
 	for _, flavor := range env.flavors {
-		accepting, err := finder.fetchSeedCandidates(context.Background(), Seed{
-			Flavor: Flavor{
-				Name:       flavor.Name,
-				MemoryMB:   flavor.MemoryMB,
-				VCPUs:      flavor.VCPUs,
-				ExtraSpecs: flavor.ExtraSpecs,
-			},
-			AvailabilityZone: "az1",
-		}, env.hypervisors)
-		if err != nil {
-			t.Fatalf("probe accepting for %q: %v", flavor.Name, err)
-		}
-		for _, hv := range accepting {
-			if accepts[hv.Name] == nil {
-				accepts[hv.Name] = map[string]bool{}
+		for zone := range zones {
+			accepting, err := finder.fetchSeedCandidates(context.Background(), Seed{
+				Flavor: Flavor{
+					Name:       flavor.Name,
+					MemoryMB:   flavor.MemoryMB,
+					VCPUs:      flavor.VCPUs,
+					ExtraSpecs: flavor.ExtraSpecs,
+				},
+				AvailabilityZone: zone,
+			}, env.hypervisors)
+			if err != nil {
+				t.Fatalf("probe accepting for %q in %q: %v", flavor.Name, zone, err)
 			}
-			accepts[hv.Name][flavor.Name] = true
+			for _, hv := range accepting {
+				if accepts[hv.Name] == nil {
+					accepts[hv.Name] = map[string]bool{}
+				}
+				accepts[hv.Name][flavor.Name] = true
+			}
 		}
 	}
 	return accepts
@@ -293,9 +397,33 @@ func (env *integrationTestEnv) VerifyWholeHostEvacuable(t *testing.T, desired ma
 	}
 }
 
-// ============================================================================
-// Scheduler HTTP front-end
-// ============================================================================
+// VerifySiblingSources asserts that in a partition reserving more than one
+// failover host, every reservation lists each *other* reserved host among its
+// source hosts. The planner keeps the reserved hosts in each other's source
+// lists on purpose: once a reserved host absorbs an evacuation and returns to
+// service it instantly needs a failover target of its own, and leaving it a
+// recorded source means that target is already in place.
+func (env *integrationTestEnv) VerifySiblingSources(t *testing.T, desired map[corev1.ObjectReference]v1alpha1.Reservation) {
+	t.Helper()
+	targets := make([]string, 0, len(desired))
+	for _, res := range desired {
+		targets = append(targets, res.Spec.TargetHost)
+	}
+	for _, res := range desired {
+		if res.Spec.FailoverHostReservation == nil {
+			t.Fatalf("reservation %s has no FailoverHostReservation spec", res.Name)
+		}
+		for _, sibling := range targets {
+			if sibling == res.Spec.TargetHost {
+				continue
+			}
+			if !slices.Contains(res.Spec.FailoverHostReservation.SourceHosts, sibling) {
+				t.Errorf("reservation for target %q does not list sibling reserved host %q as a source",
+					res.Spec.TargetHost, sibling)
+			}
+		}
+	}
+}
 
 // evacProbePipeline is the name of the real Nova filter/weigher pipeline the
 // probe exercises.
@@ -354,6 +482,16 @@ func (a *integrationHTTPAPI) handle(w http.ResponseWriter, r *http.Request) {
 func hvWithTraits(name string, traits ...string) *hv1.Hypervisor {
 	h := buildHV(name, 64, 32)
 	h.Status.Traits = traits
+	return h
+}
+
+// hvPtrInAZ builds a fixed-size hypervisor (matching hvWithTraits) in the given
+// availability zone, so a scenario can exercise the AZ filter rather than only
+// az1 (buildHV, which it reuses, hardcodes az1). It is distinct from seeding
+// test's hvInAZ, which returns a value and sets no capacity.
+func hvPtrInAZ(name, az string) *hv1.Hypervisor {
+	h := buildHV(name, 64, 32)
+	h.Labels[corev1.LabelTopologyZone] = az
 	return h
 }
 
