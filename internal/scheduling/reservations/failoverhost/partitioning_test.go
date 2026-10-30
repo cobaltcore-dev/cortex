@@ -237,10 +237,12 @@ func pathWithFlavors(src, dst string, flavors ...string) Path {
 }
 
 func TestBuildPartitionsFlavors(t *testing.T) {
-	t.Run("only flavors accepted on every host are listed", func(t *testing.T) {
-		// flavorAll is co-accepted on both mutual pairs of the triangle a-b-c, so
-		// all three hosts accept it. flavorAB rides only the a<->b edges, so c never
-		// accepts it and it must be excluded from the partition's flavor set.
+	t.Run("hosts with differing accept sets split into separate partitions", func(t *testing.T) {
+		// a and b accept {flavorAll, flavorAB}; c accepts only flavorAll. A single
+		// shared flavor would once have merged all three, but c could never be a
+		// failover target for a or b's flavorAB vms, so the builder must not merge
+		// it in. a-b form one partition running both flavors; c, with no mutual peer
+		// of a matching accept set, falls out as its own single-host partition.
 		paths := []Path{
 			pathWithFlavors("a", "b", "flavorAll", "flavorAB"),
 			pathWithFlavors("b", "a", "flavorAll", "flavorAB"),
@@ -250,11 +252,12 @@ func TestBuildPartitionsFlavors(t *testing.T) {
 			pathWithFlavors("c", "a", "flavorAll"),
 		}
 		got := cliquePartitionBuilder{}.BuildPartitions(paths)
-		if len(got) != 1 {
-			t.Fatalf("got %d partitions, want 1", len(got))
+		wantNames := [][]string{{"a", "b"}, {"c"}}
+		if !slices.EqualFunc(partitionNames(got), wantNames, slices.Equal) {
+			t.Fatalf("partitions = %v, want %v", partitionNames(got), wantNames)
 		}
-		if want := []string{"flavorAll"}; !slices.Equal(got[0].Flavors, want) {
-			t.Errorf("flavors = %v, want %v (flavorAB is not accepted on c)", got[0].Flavors, want)
+		if want := []string{"flavorAB", "flavorAll"}; !slices.Equal(got[0].Flavors, want) {
+			t.Errorf("partition a-b flavors = %v, want %v", got[0].Flavors, want)
 		}
 	})
 
@@ -278,10 +281,11 @@ func TestBuildPartitionsFlavors(t *testing.T) {
 		}
 	})
 
-	t.Run("flavor on only one member is excluded after recruitment", func(t *testing.T) {
-		// Like above, but flavorAB rides only the a<->b edges. The recruited host e
-		// never accepts flavorAB (its inbound edges carry only flavorX), so once e
-		// joins, flavorAB is no longer accepted on every host and drops out.
+	t.Run("empty host with a differing accept set is not recruited", func(t *testing.T) {
+		// a and b accept {flavorX, flavorAB}; the empty host e is only ever the
+		// target of flavorX probes, so it accepts {flavorX}. Recruiting e would let
+		// it become a failover target that cannot run a or b's flavorAB vms, so the
+		// builder must leave it out. a-b keep both flavors; e stays on its own.
 		paths := []Path{
 			{Source: hvWithMemory("a", 4), Target: hvWithMemory("b", 4), Flavors: []string{"flavorX", "flavorAB"}},
 			{Source: hvWithMemory("b", 4), Target: hvWithMemory("a", 4), Flavors: []string{"flavorX", "flavorAB"}},
@@ -289,11 +293,12 @@ func TestBuildPartitionsFlavors(t *testing.T) {
 			{Source: hvWithMemory("b", 4), Target: hvWithMemory("e", 4), Flavors: []string{"flavorX"}},
 		}
 		got := cliquePartitionBuilder{}.BuildPartitions(paths)
-		if len(got) != 1 {
-			t.Fatalf("got %d partitions, want 1", len(got))
+		wantNames := [][]string{{"a", "b"}, {"e"}}
+		if !slices.EqualFunc(partitionNames(got), wantNames, slices.Equal) {
+			t.Fatalf("partitions = %v, want %v", partitionNames(got), wantNames)
 		}
-		if want := []string{"flavorX"}; !slices.Equal(got[0].Flavors, want) {
-			t.Errorf("flavors = %v, want %v (flavorAB is not accepted on recruited e)", got[0].Flavors, want)
+		if want := []string{"flavorAB", "flavorX"}; !slices.Equal(got[0].Flavors, want) {
+			t.Errorf("partition a-b flavors = %v, want %v", got[0].Flavors, want)
 		}
 	})
 }

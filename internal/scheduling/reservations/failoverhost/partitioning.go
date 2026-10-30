@@ -63,13 +63,17 @@ type cliquePartitionBuilder struct{}
 //     accepts (it is an endpoint of an edge carrying that flavor), and note which
 //     hosts have no outgoing edge at all (the "empty" hosts, handled specially in
 //     step 3).
-//  2. Derive the undirected "mutual" adjacency (a—b iff both a→b and b→a), and
-//     run Bron-Kerbosch over it to enumerate every maximal clique. Each clique
-//     is one partition. Bron-Kerbosch recursively grows a candidate clique R by
-//     trying each still-eligible vertex in P, intersecting P and the
-//     already-seen set X with that vertex's neighbours; a clique is maximal when
-//     both P and X are empty. Non-empty hosts with no mutual edge are emitted as
-//     their own single-host partitions.
+//  2. Derive the undirected "mutual" adjacency (a—b iff both a→b and b→a *and*
+//     a and b accept the same flavors), and run Bron-Kerbosch over it to
+//     enumerate every maximal clique. Each clique is one partition. The
+//     same-flavors requirement enforces the ADR 0011 whole-host guarantee: any
+//     clique member may become the failover target with the rest its sources, so
+//     the target must run every flavor any source accepts; a single co-accepted
+//     flavor is enough to forge a mutual edge but not to prove this. Bron-Kerbosch
+//     recursively grows a candidate clique R by trying each still-eligible vertex
+//     in P, intersecting P and the already-seen set X with that vertex's
+//     neighbours; a clique is maximal when both P and X are empty. Non-empty hosts
+//     with no mutual edge are emitted as their own single-host partitions.
 //  3. Recruit each empty host into the first partition all of whose members can
 //     reach it (member→empty for every member). An empty host that no partition
 //     fully reaches stays on its own.
@@ -115,7 +119,15 @@ func (cliquePartitionBuilder) BuildPartitions(paths []Path) []Partition {
 	mutual := map[string]map[string]bool{}
 	for a, dsts := range outgoing {
 		for b := range dsts {
-			if outgoing[b][a] { // b also reaches a, so the edge is mutual
+			// b must also reach a (the edge is mutual), and the two must accept the
+			// same flavors. The clique both hosts land in may designate either of
+			// them the failover target, with the other becoming its source; a target
+			// must run every flavor its source accepts (the ADR 0011 whole-host
+			// guarantee), so hosts with differing accept sets must never be merged.
+			// A single co-accepted flavor is enough to forge a mutual edge, but it is
+			// not enough to prove whole-host evacuability — e.g. two hosts sharing a
+			// general flavor where only one also runs a trait-gated flavor.
+			if outgoing[b][a] && sameFlavors(acceptedBy[a], acceptedBy[b]) {
 				if mutual[a] == nil {
 					mutual[a] = map[string]bool{}
 				}
@@ -215,13 +227,17 @@ func (cliquePartitionBuilder) BuildPartitions(paths []Path) []Partition {
 			allReach := len(clique) > 0
 			for _, member := range clique {
 				// Every member must reach the empty host (member can evacuate onto
-				// it), and the empty host must be the same effective size as the
-				// member. The empty host has no vms, so Step 1 never produced an
-				// empty->member edge to prove it can rescue its peers; we fall back
-				// to the same gang-fit rule and require equal capacity. A larger
-				// empty host would be recorded as a source of a smaller reserved
-				// target it could never actually evacuate onto.
-				if !outgoing[member][empty] || cmpResources(emptyCapa, effectiveCapacity(member)) != 0 {
+				// it), the empty host must be the same effective size as the member,
+				// and the two must accept the same flavors. The empty host has no vms,
+				// so Step 1 never produced an empty->member edge to prove it can rescue
+				// its peers; we fall back to the same gang-fit rule and require equal
+				// capacity. A larger empty host would be recorded as a source of a
+				// smaller reserved target it could never actually evacuate onto. The
+				// flavor check mirrors the mutual-edge rule: a recruited host may become
+				// the partition's target, so it must run every flavor its peers accept.
+				if !outgoing[member][empty] ||
+					cmpResources(emptyCapa, effectiveCapacity(member)) != 0 ||
+					!sameFlavors(acceptedBy[empty], acceptedBy[member]) {
 					allReach = false
 					break
 				}
@@ -257,6 +273,24 @@ func (cliquePartitionBuilder) BuildPartitions(paths []Path) []Partition {
 		return partitions[i].Hosts[0].Name < partitions[j].Hosts[0].Name
 	})
 	return partitions
+}
+
+// sameFlavors reports whether two hosts accept exactly the same set of flavors.
+// It is the flavor-compatibility test for merging hosts into a partition: since
+// any member can become the partition's failover target and the rest its
+// sources, the target must run every flavor any source accepts, so all members
+// must share one accept set. An empty host's accept set comes from its inbound
+// edges (see acceptedBy), so a recruited host is compared the same way.
+func sameFlavors(a, b map[string]bool) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for flavor := range a {
+		if !b[flavor] {
+			return false
+		}
+	}
+	return true
 }
 
 // sharedFlavors returns the flavors accepted on *every* host in the clique,
