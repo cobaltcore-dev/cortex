@@ -5,8 +5,27 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
+# Phases run by `make all`, in order. Each is a normal target below.
+PHASES ?= crds deepcopy lint-fix format lint test
+
 .PHONY: all
-all: crds deepcopy lint-fix format lint test
+all: ## Run all phases (crds, deepcopy, lint-fix, format, lint, test), quietly unless one fails.
+	@rc=0; \
+	for phase in $(PHASES); do \
+	  printf '\033[1;34m▶ %-10s\033[0m ' "$$phase"; \
+	  log="$$(mktemp)"; \
+	  if $(MAKE) --no-print-directory "$$phase" >"$$log" 2>&1; then \
+	    printf '\033[1;32mok\033[0m\n'; \
+	  else \
+	    printf '\033[1;31mFAILED\033[0m\n'; \
+	    cat "$$log"; \
+	    rc=1; \
+	    rm -f "$$log"; \
+	    break; \
+	  fi; \
+	  rm -f "$$log"; \
+	done; \
+	exit $$rc
 
 .PHONY: help
 help: ## Display this help.
