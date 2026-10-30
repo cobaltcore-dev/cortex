@@ -33,3 +33,9 @@ var vropsProjectNoisinessSQL string
 func (e *VROpsProjectNoisinessExtractor) Extract() ([]plugins.Feature, error) {
 	return e.ExtractSQL(vropsProjectNoisinessSQL)
 }
+
+func init() {
+	plugins.Index["vrops_project_noisiness_extractor"] = func() plugins.FeatureExtractor {
+		return &VROpsProjectNoisinessExtractor{}
+	}
+}

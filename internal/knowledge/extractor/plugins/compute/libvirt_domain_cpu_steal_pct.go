@@ -35,3 +35,9 @@ var libvirtDomainCPUStealPctSQL string
 func (e *LibvirtDomainCPUStealPctExtractor) Extract() ([]plugins.Feature, error) {
 	return e.ExtractSQL(libvirtDomainCPUStealPctSQL)
 }
+
+func init() {
+	plugins.Index["kvm_libvirt_domain_cpu_steal_pct_extractor"] = func() plugins.FeatureExtractor {
+		return &LibvirtDomainCPUStealPctExtractor{}
+	}
+}

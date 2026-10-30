@@ -77,3 +77,7 @@ func (k *KnowledgeStateKPI) Collect(ch chan<- prometheus.Metric) {
 		)
 	}
 }
+
+func init() {
+	plugins.Index["knowledge_state_kpi"] = func() plugins.KPI { return &KnowledgeStateKPI{} }
+}

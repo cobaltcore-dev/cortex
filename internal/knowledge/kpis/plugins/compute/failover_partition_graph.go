@@ -150,3 +150,7 @@ func (k *FailoverPartitionGraphKPI) Collect(ch chan<- prometheus.Metric) {
 		)
 	}
 }
+
+func init() {
+	plugins.Index["failover_partition_graph_kpi"] = func() plugins.KPI { return &FailoverPartitionGraphKPI{} }
+}

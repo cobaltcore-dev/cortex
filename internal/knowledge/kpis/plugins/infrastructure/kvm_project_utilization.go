@@ -201,3 +201,7 @@ func (k *KVMProjectUtilizationKPI) queryProjectInstanceCount() ([]kvmProjectInst
 	}
 	return usages, nil
 }
+
+func init() {
+	plugins.Index["kvm_project_utilization_kpi"] = func() plugins.KPI { return &KVMProjectUtilizationKPI{} }
+}

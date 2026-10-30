@@ -210,3 +210,7 @@ func (k *VMwareProjectUtilizationKPI) queryProjectInstanceCount() ([]vmwareProje
 	}
 	return usages, nil
 }
+
+func init() {
+	plugins.Index["vmware_project_utilization_kpi"] = func() plugins.KPI { return &VMwareProjectUtilizationKPI{} }
+}

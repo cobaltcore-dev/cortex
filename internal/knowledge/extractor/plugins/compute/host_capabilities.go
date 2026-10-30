@@ -35,3 +35,9 @@ var hostCapabilitiesQuery string
 func (e *HostCapabilitiesExtractor) Extract() ([]plugins.Feature, error) {
 	return e.ExtractSQL(hostCapabilitiesQuery)
 }
+
+func init() {
+	plugins.Index["host_capabilities_extractor"] = func() plugins.FeatureExtractor {
+		return &HostCapabilitiesExtractor{}
+	}
+}

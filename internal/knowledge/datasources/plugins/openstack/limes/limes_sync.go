@@ -8,8 +8,10 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
+	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/go-gorp/gorp"
 )
 
@@ -75,4 +77,21 @@ func (s *LimesSyncer) SyncCommitments(ctx context.Context) (int64, error) {
 		counter.Inc()
 	}
 	return int64(len(commitments)), nil
+}
+
+func init() {
+	openstack.Index[v1alpha1.OpenStackDatasourceTypeLimes] = func(
+		datasource v1alpha1.Datasource,
+		authenticatedDB *db.DB,
+		authenticatedKeystone keystone.KeystoneClient,
+		monitor datasources.Monitor,
+	) openstack.Syncer {
+
+		return &LimesSyncer{
+			DB:   *authenticatedDB,
+			Mon:  monitor,
+			Conf: datasource.Spec.OpenStack.Limes,
+			API:  NewLimesAPI(monitor, authenticatedKeystone, datasource.Spec.OpenStack.Limes),
+		}
+	}
 }

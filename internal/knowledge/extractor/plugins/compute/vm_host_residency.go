@@ -91,3 +91,9 @@ func (e *VMHostResidencyExtractor) Extract() ([]plugins.Feature, error) {
 	}
 	return e.Extracted(features)
 }
+
+func init() {
+	plugins.Index["vm_host_residency_extractor"] = func() plugins.FeatureExtractor {
+		return &VMHostResidencyExtractor{}
+	}
+}

@@ -136,3 +136,9 @@ func (e *VMwareHostDetailsExtractor) Extract() ([]plugins.Feature, error) {
 	}
 	return e.Extracted(hostDetails)
 }
+
+func init() {
+	plugins.Index["vmware_host_details_extractor"] = func() plugins.FeatureExtractor {
+		return &VMwareHostDetailsExtractor{}
+	}
+}
