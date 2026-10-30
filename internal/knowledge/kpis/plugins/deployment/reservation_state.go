@@ -182,3 +182,7 @@ func (k *ReservationStateKPI) Collect(ch chan<- prometheus.Metric) {
 		)
 	}
 }
+
+func init() {
+	plugins.Index["reservation_state_kpi"] = func() plugins.KPI { return &ReservationStateKPI{} }
+}

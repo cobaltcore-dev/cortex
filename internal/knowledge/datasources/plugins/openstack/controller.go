@@ -169,14 +169,9 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	log.V(1).Info("Looking for supported syncer of datasource")
-	syncer, err := getSupportedSyncer(
-		*datasource,
-		authenticatedDB,
-		authenticatedKeystone,
-		r.Monitor,
-	)
-	if err != nil {
-		log.Error(err, "failed to get supported syncer for datasource", "type", datasource.Spec.OpenStack.Type)
+	newSyncer, ok := Index[datasource.Spec.OpenStack.Type]
+	if !ok {
+		log.Error(nil, "failed to get supported syncer for datasource", "type", datasource.Spec.OpenStack.Type)
 		old := datasource.DeepCopy()
 		meta.SetStatusCondition(&datasource.Status.Conditions, metav1.Condition{
 			Type:    v1alpha1.DatasourceConditionReady,
@@ -191,6 +186,7 @@ func (r *OpenStackDatasourceReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 		return ctrl.Result{}, nil
 	}
+	syncer := newSyncer(*datasource, authenticatedDB, authenticatedKeystone, r.Monitor)
 
 	// Initialize the syncer before syncing.
 	log.V(1).Info("Initializing syncer for datasource")

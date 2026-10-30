@@ -91,3 +91,7 @@ func (k *NetAppStoragePoolCPUUsageKPI) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstHistogram(k.storagePoolCPUUsageAvg, counts[key], sums[key], hist)
 	}
 }
+
+func init() {
+	plugins.Index["netapp_storage_pool_cpu_usage_kpi"] = func() plugins.KPI { return &NetAppStoragePoolCPUUsageKPI{} }
+}

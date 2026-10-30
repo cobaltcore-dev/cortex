@@ -254,3 +254,9 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 
 	return e.Extracted(features)
 }
+
+func init() {
+	plugins.Index["flavor_groups"] = func() plugins.FeatureExtractor {
+		return &FlavorGroupExtractor{}
+	}
+}

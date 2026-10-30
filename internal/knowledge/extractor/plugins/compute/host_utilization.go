@@ -47,3 +47,9 @@ var hostUtilizationQuery string
 func (e *HostUtilizationExtractor) Extract() ([]plugins.Feature, error) {
 	return e.ExtractSQL(hostUtilizationQuery)
 }
+
+func init() {
+	plugins.Index["host_utilization_extractor"] = func() plugins.FeatureExtractor {
+		return &HostUtilizationExtractor{}
+	}
+}

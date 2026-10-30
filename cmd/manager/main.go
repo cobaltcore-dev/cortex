@@ -39,6 +39,13 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack"
+	// Register all supported OpenStack syncers through their func init().
+	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/cinder"
+	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
+	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/limes"
+	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/manila"
+	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
+	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/placement"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/prometheus"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor"

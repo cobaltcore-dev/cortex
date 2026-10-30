@@ -33,3 +33,9 @@ var vropsHostsystemSQL string
 func (e *VROpsHostsystemResolver) Extract() ([]plugins.Feature, error) {
 	return e.ExtractSQL(vropsHostsystemSQL)
 }
+
+func init() {
+	plugins.Index["vrops_hostsystem_resolver"] = func() plugins.FeatureExtractor {
+		return &VROpsHostsystemResolver{}
+	}
+}

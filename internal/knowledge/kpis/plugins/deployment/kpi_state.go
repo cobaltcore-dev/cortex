@@ -77,3 +77,7 @@ func (k *KPIStateKPI) Collect(ch chan<- prometheus.Metric) {
 		)
 	}
 }
+
+func init() {
+	plugins.Index["kpi_state_kpi"] = func() plugins.KPI { return &KPIStateKPI{} }
+}

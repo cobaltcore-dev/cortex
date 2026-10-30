@@ -213,3 +213,7 @@ func (k *VMCommitmentsKPI) Collect(ch chan<- prometheus.Metric) {
 		)
 	}
 }
+
+func init() {
+	plugins.Index["vm_commitments_kpi"] = func() plugins.KPI { return &VMCommitmentsKPI{} }
+}

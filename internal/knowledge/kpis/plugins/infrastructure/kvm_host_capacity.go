@@ -215,3 +215,7 @@ func (k *KVMHostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(k.capacityPerHost, prometheus.GaugeValue, paygRAM.AsApproximateFloat64(), append(labels, "ram", "available")...)
 	}
 }
+
+func init() {
+	plugins.Index["kvm_host_capacity_kpi"] = func() plugins.KPI { return &KVMHostCapacityKPI{} }
+}
