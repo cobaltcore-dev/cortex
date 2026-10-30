@@ -37,11 +37,16 @@ on:
       CORTEX_AI_AGENTS_CLIENT_PKEY:
         required: true
 
-# Serialize review runs per PR so a new push (synchronize) or review comment
-# cancels the stale in-flight review instead of running two reviews at once.
+# Serialize review runs per PR so two reviews never run at once. A new push
+# (synchronize) or review comment queues behind the in-flight review rather
+# than cancelling it: cancelling marks the superseded run (and the parent
+# "Cortex Agents" run it was called from) as cancelled, which GitHub surfaces
+# as a red ✗ check on the PR. Serializing without cancelling avoids that, and
+# the queued run reviews the latest state once it starts. Mirrors the
+# serialize-don't-cancel policy of the release and update-appversion workflows.
 concurrency:
   group: cortex-agent-review-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   review:
