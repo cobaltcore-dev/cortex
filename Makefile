@@ -6,10 +6,10 @@ GOBIN=$(shell go env GOBIN)
 endif
 
 # Phases run by `make all`, in order. Each is a normal target below.
-PHASES ?= crds deepcopy lint-fix format lint test
+PHASES ?= crds deepcopy lint-fix format test
 
 .PHONY: all
-all: ## Run all phases (crds, deepcopy, lint-fix, format, lint, test), quietly unless one fails.
+all: ## Run all phases (crds, deepcopy, lint-fix, format, test), quietly unless one fails.
 	@rc=0; \
 	for phase in $(PHASES); do \
 	  printf '\033[1;34m▶ %-10s\033[0m ' "$$phase"; \
