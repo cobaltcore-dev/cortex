@@ -111,6 +111,7 @@ func TestWrapCoreWithLogMetrics(t *testing.T) {
 	tests := []struct {
 		name        string
 		entries     []entry
+		wantInfo    float64
 		wantWarn    float64
 		wantError   float64
 		wantUnknown float64
@@ -144,11 +145,12 @@ func TestWrapCoreWithLogMetrics(t *testing.T) {
 			wantError: 2,
 		},
 		{
-			name: "debug and info are not counted",
+			name: "info is counted, debug is not",
 			entries: []entry{
 				{zapcore.DebugLevel, true},
 				{zapcore.InfoLevel, true},
 			},
+			wantInfo:  1,
 			wantWarn:  0,
 			wantError: 0,
 		},
@@ -172,6 +174,7 @@ func TestWrapCoreWithLogMetrics(t *testing.T) {
 				{zapcore.ErrorLevel, true},
 				{zapcore.ErrorLevel, true},
 			},
+			wantInfo:    1,
 			wantWarn:    2,
 			wantError:   2,
 			wantUnknown: 1,
@@ -212,6 +215,9 @@ func TestWrapCoreWithLogMetrics(t *testing.T) {
 				}
 			}
 			counts := gatherCounts(t, &monitor)
+			if got := sumLevel(counts, "info"); got != tt.wantInfo {
+				t.Errorf("info count: got %v, want %v", got, tt.wantInfo)
+			}
 			if got := sumLevel(counts, "warn"); got != tt.wantWarn {
 				t.Errorf("warn count: got %v, want %v", got, tt.wantWarn)
 			}
@@ -223,8 +229,8 @@ func TestWrapCoreWithLogMetrics(t *testing.T) {
 					t.Errorf("warn[unknown] count: got %v, want %v", got, tt.wantUnknown)
 				}
 			}
-			if len(counts["debug"]) > 0 || len(counts["info"]) > 0 {
-				t.Errorf("debug/info should not be counted, got debug=%v info=%v", counts["debug"], counts["info"])
+			if len(counts["debug"]) > 0 {
+				t.Errorf("debug should not be counted, got debug=%v", counts["debug"])
 			}
 		})
 	}

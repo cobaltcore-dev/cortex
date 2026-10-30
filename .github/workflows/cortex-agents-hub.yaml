@@ -8,7 +8,7 @@ name: Cortex Agents
 
 on:
   pull_request_target:
-    types: [opened, synchronize]
+    types: [opened, synchronize, reopened]
   pull_request:
     types: [opened, synchronize, reopened]
   issue_comment:
