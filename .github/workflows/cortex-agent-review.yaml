@@ -37,6 +37,12 @@ on:
       CORTEX_AI_AGENTS_CLIENT_PKEY:
         required: true
 
+# Serialize review runs per PR so a new push (synchronize) or review comment
+# cancels the stale in-flight review instead of running two reviews at once.
+concurrency:
+  group: cortex-agent-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   review:
     runs-on: ubuntu-latest
