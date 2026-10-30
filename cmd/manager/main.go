@@ -59,6 +59,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	commitmentsapi "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failoverhost"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/inflight"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/quota"
 	"github.com/cobaltcore-dev/cortex/pkg/cache"
@@ -788,6 +789,30 @@ func main() {
 			"trustHypervisorLocation", failoverConfig.TrustHypervisorLocation,
 			"maxVMsToProcess", failoverConfig.MaxVMsToProcess,
 			"vmSelectionRotationInterval", failoverConfig.VMSelectionRotationInterval)
+	}
+	if slices.Contains(mainConfig.EnabledControllers, "failover-host-reservations-controller") {
+		setupLog.Info("enabling controller", "controller", "failover-host-reservations-controller")
+		failoverHostConfig := conf.GetConfigOrDie[failoverhost.Config]().Failover.Hosts
+		failoverHostMonitor := failoverhost.NewMonitor()
+		if err := metrics.Registry.Register(failoverHostMonitor); err != nil {
+			setupLog.Error(err, "failed to register failover host monitor metrics, continuing without metrics")
+			failoverHostMonitor = nil
+		}
+		controller := &failoverhost.Controller{
+			Client:  multiclusterClient,
+			Config:  failoverHostConfig,
+			Monitor: failoverHostMonitor,
+		}
+		if err := controller.SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller",
+				"controller", "failover-host-reservations-controller")
+			os.Exit(1)
+		}
+		setupLog.Info("failover-host-reservations-controller registered",
+			"ratio", failoverHostConfig.Ratio,
+			"minimum", failoverHostConfig.Minimum,
+			"generationInterval", failoverHostConfig.GenerationInterval,
+			"externalSchedulerURL", failoverHostConfig.ExternalSchedulerURL)
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "capacity-controller") {
 		setupLog.Info("enabling controller", "controller", "capacity-controller")

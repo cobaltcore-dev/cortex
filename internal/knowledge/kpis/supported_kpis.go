@@ -20,6 +20,8 @@ var supportedKPIs = map[string]plugins.KPI{
 	"vm_commitments_kpi":           &compute.VMCommitmentsKPI{},
 	"vm_faults_kpi":                &compute.VMFaultsKPI{},
 
+	"failover_partition_graph_kpi": &compute.FailoverPartitionGraphKPI{},
+
 	"kvm_host_capacity_kpi":          &infrastructure.KVMHostCapacityKPI{},
 	"kvm_project_utilization_kpi":    &infrastructure.KVMProjectUtilizationKPI{},
 	"kvm_hana_stacking_kpi":          &infrastructure.KVMHanaStackingKPI{},

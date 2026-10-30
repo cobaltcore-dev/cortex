@@ -38,7 +38,7 @@ The dashboard definitions are development/operations tooling, deliberately kept 
   `cortex-compute-kvm-details.json` (the compute KVM boards),
   `cortex-compute-vmware-overview.json` and `cortex-compute-vmware-details.json` (the compute VMware
   boards), `cortex-global-compute-capacity.json`, `cortex-placement-shim-status.json` (the
-  [shim](../03-reservations-and-inventory/05-placement-api-shim.md) status board),
+  [shim](../03-reservations-and-inventory/06-placement-api-shim.md) status board),
   `cortex-project-flavor-usage.json`, `cortex-status-global.json`, `cortex-status.json`, and
   `project.json`.
 

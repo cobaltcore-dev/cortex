@@ -6,6 +6,16 @@
 
 # Failover reservations for KVM HA
 
+> [!WARNING]
+> **Deprecated.** The slot-based failover reservation system described on this page (the
+> `failover-reservations-controller`, reserving a shared `FailoverReservation` pool) is being **replaced by the
+> failover *host* system** — see [Failover host reservations](04-failover-host-reservations.md). Rather than
+> reserving scattered headroom slots, the new system keeps whole hosts empty so a failed host's entire workload
+> gang-evacuates onto one reserved host. The `FailoverReservation` type is marked deprecated in
+> `api/v1alpha1/reservation_types.go` and will be removed; new deployments should enable the
+> `failover-host-reservations-controller` instead. This page is retained to document the existing system during
+> migration.
+
 Where committed resources reserve space a customer paid for, **failover reservations** reserve space
 *nobody is using yet* — headroom kept clear so that when a host fails, the workloads on it have somewhere
 to be evacuated. This page explains the two design choices that make failover headroom affordable: it is
@@ -94,4 +104,4 @@ same slot.
 
 ## Next
 
-[Prev: Committed-resource reservations](02-committed-resource-reservations.md) · [Next: Concurrency and in-flight reservations »](04-concurrency-and-in-flight-reservations.md)
+[Prev: Committed-resource reservations](02-committed-resource-reservations.md) · [Next: Failover host reservations »](04-failover-host-reservations.md)

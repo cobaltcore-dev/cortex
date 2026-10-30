@@ -55,8 +55,8 @@ and `cmd/shim`, and the Helm defaults under `helm/`.
 1. [Reservations overview](03-reservations-and-inventory/01-reservations-overview.md)
 2. [Committed-resource reservations and Limes quota/capacity](03-reservations-and-inventory/02-committed-resource-reservations.md)
 3. [Failover reservations for KVM HA](03-reservations-and-inventory/03-failover-reservations.md)
-4. [Concurrency and in-flight reservations](03-reservations-and-inventory/04-concurrency-and-in-flight-reservations.md)
-5. [The Placement API shim](03-reservations-and-inventory/05-placement-api-shim.md)
+4. [Concurrency and in-flight reservations](03-reservations-and-inventory/05-concurrency-and-in-flight-reservations.md)
+5. [The Placement API shim](03-reservations-and-inventory/06-placement-api-shim.md)
 
 ### [4 — The knowledge database](04-knowledge-database/readme.md)
 
@@ -91,7 +91,7 @@ and `cmd/shim`, and the Helm defaults under `helm/`.
   chapters for your domain, and keep [Monitoring Cortex](04-knowledge-database/06-monitoring.md) nearby.
 - **Integrators** wire Cortex into an existing scheduler — start with
   [The scheduling engine](02-external-scheduler-api/01-the-scheduling-engine.md) and the
-  [Placement API shim](03-reservations-and-inventory/05-placement-api-shim.md).
+  [Placement API shim](03-reservations-and-inventory/06-placement-api-shim.md).
 - **Developers** extend Cortex — read Chapter 1, then
   [The Cortex library](06-cortex-library/readme.md) and
   [Extend Cortex](02-external-scheduler-api/07-extending-cortex.md).

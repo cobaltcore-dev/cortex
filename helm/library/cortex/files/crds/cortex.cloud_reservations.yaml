@@ -172,6 +172,17 @@ spec:
                   FailoverHostReservation contains fields specific to failover host reservations.
                   Only used when Type is FailoverHostReservation.
                 properties:
+                  partitionDescription:
+                    description: |-
+                      PartitionDescription is a short, human-readable label describing the
+                      failover partition this reservation belongs to: what distinguishes its
+                      hosts from other partitions (e.g. "spec.aggregates=[hana]") and which
+                      flavors the whole partition can run (e.g. "flavors: hana.4xl, hana.8xl
+                      (+3 more)"). It carries no scheduling semantics and exists purely to make a
+                      reservation understandable at a glance — in particular, which workloads a
+                      reserved host stands ready to absorb. See describePartition in the
+                      failoverhost controller.
+                    type: string
                   sourceHosts:
                     description: |-
                       SourceHosts is a list of hosts inside the same failover partition from
