@@ -38,6 +38,16 @@ on:
       CORTEX_AI_AGENTS_CLIENT_PKEY:
         required: true
 
+# Serialize release runs per PR, but never cancel one in flight: the release
+# agent is a stateful multi-step mutator that opens a prep PR partway through,
+# so cancelling it would leave an orphaned prep PR and a half-prepared release.
+# A second event for the same PR therefore queues behind the running one; the
+# /release command is idempotent, so the queued run converges rather than
+# duplicating. Mirrors the serialize-don't-cancel policy of update-appversion.
+concurrency:
+  group: cortex-agent-release-${{ inputs.pr_number }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
