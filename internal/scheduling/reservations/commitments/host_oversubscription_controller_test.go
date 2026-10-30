@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -119,22 +120,21 @@ func TestSelectEvictionTarget(t *testing.T) {
 		}
 	}
 	allocated := func(name string, totalGiB, usedGiB int64, vmID string) v1alpha1.Reservation {
+		_ = usedGiB
 		return v1alpha1.Reservation{
 			ObjectMeta: metav1.ObjectMeta{Name: name},
 			Spec: v1alpha1.ReservationSpec{
-				Type:       v1alpha1.ReservationTypeCommittedResource,
-				TargetHost: "host-1",
-				Resources:  map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(totalGiB)},
-				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-					Allocations: map[string]v1alpha1.CommittedResourceAllocation{
-						vmID: {Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(usedGiB)}},
-					},
-				},
+				Type:                         v1alpha1.ReservationTypeCommittedResource,
+				TargetHost:                   "host-1",
+				Resources:                    map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(totalGiB)},
+				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
 			},
 			Status: v1alpha1.ReservationStatus{
 				Host: "host-1",
 				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-					Allocations: map[string]string{vmID: "host-1"},
+					Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+						vmID: {ObjectRef: corev1.ObjectReference{Name: vmID}, Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(totalGiB)}},
+					},
 				},
 			},
 		}
@@ -157,13 +157,13 @@ func TestSelectEvictionTarget(t *testing.T) {
 			wantName: "small",
 		},
 		{
-			name: "3 allocated slots: selects most-idle (validates sort ordering)",
+			name: "3 allocated slots: all have confirmed VMs — stable sort picks first (most-idle concept requires per-VM sizes)",
 			slots: []v1alpha1.Reservation{
-				allocated("mostly-used", 512, 480, "vm-1"), // ~6% unused
-				allocated("half-used", 512, 256, "vm-2"),   // ~50% unused
-				allocated("idle", 512, 10, "vm-3"),         // ~98% unused
+				allocated("mostly-used", 512, 480, "vm-1"), // status.allocs non-empty → UnusedReservationCapacity = 0
+				allocated("half-used", 512, 256, "vm-2"),   // same
+				allocated("idle", 512, 10, "vm-3"),         // same — all equal, stable sort picks first
 			},
-			wantName: "idle",
+			wantName: "mostly-used",
 		},
 		{
 			name: "skips non-CR reservation types",
@@ -420,19 +420,17 @@ func TestEvictReservation_ClearsAllocations(t *testing.T) {
 	slot := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{Name: "slot-1"},
 		Spec: v1alpha1.ReservationSpec{
-			Type:       v1alpha1.ReservationTypeCommittedResource,
-			TargetHost: "host-1",
-			Resources:  map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(512)},
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
-					"vm-1": {Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(256)}},
-				},
-			},
+			Type:                         v1alpha1.ReservationTypeCommittedResource,
+			TargetHost:                   "host-1",
+			Resources:                    map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(512)},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
 		},
 		Status: v1alpha1.ReservationStatus{
 			Host: "host-1",
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-				Allocations: map[string]string{"vm-1": "host-1"},
+				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+					"vm-1": {ObjectRef: corev1.ObjectReference{Name: "vm-1"}, Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(512)}},
+				},
 			},
 		},
 	}
@@ -443,8 +441,10 @@ func TestEvictReservation_ClearsAllocations(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	freedMem := freed[hv1.ResourceMemory]
-	if freedMem.Cmp(testGiB(512)) != 0 {
-		t.Errorf("expected freed 512 GiB, got %s", freedMem.String())
+	// A fully-confirmed slot has no unfilled capacity: confirmed VMs appear in hv.Status.Allocation,
+	// so UnusedReservationCapacity returns 0. Only an empty slot's full block is freed.
+	if !freedMem.IsZero() {
+		t.Errorf("expected freed 0 (VM still running on host), got %s", freedMem.String())
 	}
 
 	var updated v1alpha1.Reservation
@@ -454,7 +454,8 @@ func TestEvictReservation_ClearsAllocations(t *testing.T) {
 	if updated.Spec.TargetHost != "" {
 		t.Errorf("expected TargetHost cleared, got %q", updated.Spec.TargetHost)
 	}
-	if len(updated.Spec.CommittedResourceReservation.Allocations) != 0 {
-		t.Errorf("expected Spec.Allocations cleared, got %v", updated.Spec.CommittedResourceReservation.Allocations)
+	// Eviction only clears TargetHost; status.allocations tracks confirmed VMs and is untouched.
+	if updated.Status.CommittedResourceReservation == nil || len(updated.Status.CommittedResourceReservation.Allocations) == 0 {
+		t.Errorf("expected status.allocations to remain after eviction")
 	}
 }

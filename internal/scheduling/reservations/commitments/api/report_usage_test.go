@@ -1112,7 +1112,6 @@ func (tr *UsageTestReservation) toK8sReservation(number int) *v1alpha1.Reservati
 			ProjectID:      tr.ProjectID,
 			ResourceName:   tr.Flavor.Name,
 			ResourceGroup:  tr.Flavor.Group,
-			Allocations:    map[string]v1alpha1.CommittedResourceAllocation{},
 		},
 	}
 
@@ -1134,7 +1133,7 @@ func (tr *UsageTestReservation) toK8sReservation(number int) *v1alpha1.Reservati
 			},
 		},
 		CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-			Allocations: map[string]string{},
+			Allocations: map[string]v1alpha1.CommittedResourceAllocation{},
 		},
 	}
 

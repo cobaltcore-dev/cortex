@@ -81,8 +81,10 @@ func TestLogNoHostFound(t *testing.T) {
 			},
 		}
 		if usedMiB > 0 {
-			cr.Status.UsedResources = map[string]resource.Quantity{
-				"memory": *resource.NewQuantity(usedMiB*1024*1024, resource.BinarySI),
+			cr.Status.Billing = &v1alpha1.BillingStatus{
+				UsedResources: map[string]resource.Quantity{
+					"memory": *resource.NewQuantity(usedMiB*1024*1024, resource.BinarySI),
+				},
 			}
 		}
 		return cr
@@ -107,10 +109,13 @@ func TestLogNoHostFound(t *testing.T) {
 			},
 		}
 		if allocatedMemMiB > 0 {
-			res.Spec.CommittedResourceReservation.Allocations = map[string]v1alpha1.CommittedResourceAllocation{
-				"some-vm": {
-					Resources: map[hv1.ResourceName]resource.Quantity{
-						hv1.ResourceMemory: *resource.NewQuantity(allocatedMemMiB*1024*1024, resource.BinarySI),
+			res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{
+				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+					"some-vm": {
+						ObjectRef: corev1.ObjectReference{Name: "some-vm"},
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceMemory: *resource.NewQuantity(allocatedMemMiB*1024*1024, resource.BinarySI),
+						},
 					},
 				},
 			}
@@ -182,7 +187,7 @@ func TestLogNoHostFound(t *testing.T) {
 				flavorKnowledge(),
 				makeCRObject(v1alpha1.CommitmentStatusConfirmed, 8192, 4096),
 				makeHV("host-1", 16384),
-				makeReadyReservationSlot("slot-free", "host-1", 8192, 4096),
+				makeReadyReservationSlot("slot-free", "host-1", 8192, 0),
 			},
 			requestHosts: []api.ExternalSchedulerHost{{ComputeHost: "host-1"}},
 			expectedCase: "slot_blocked",

@@ -166,7 +166,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusConfirmed,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("5Gi")},
+				Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("5Gi")}},
 			},
 		},
 		{
@@ -178,7 +178,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusGuaranteed,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("3Gi")},
+				Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("3Gi")}},
 			},
 		},
 		{
@@ -190,7 +190,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusConfirmed,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				UsedResources: map[string]resource.Quantity{"cpu": resource.MustParse("2")},
+				Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"cpu": resource.MustParse("2")}},
 			},
 		},
 		// Different project — should be excluded by groupCRsByProject
@@ -203,7 +203,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusConfirmed,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("5Gi")},
+				Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("5Gi")}},
 			},
 		},
 		// Pending state — should be excluded by state filter
@@ -216,7 +216,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusPending,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("2Gi")},
+				Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("2Gi")}},
 			},
 		},
 	}

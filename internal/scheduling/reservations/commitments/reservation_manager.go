@@ -217,7 +217,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 		}
 		if reservationToDelete == nil {
 			for i, res := range existing {
-				if len(res.Spec.CommittedResourceReservation.Allocations) == 0 {
+				if res.Status.CommittedResourceReservation == nil || len(res.Status.CommittedResourceReservation.Allocations) == 0 {
 					reservationToDelete = &res
 					existing = append(existing[:i], existing[i+1:]...) // remove from existing list
 					break
@@ -408,14 +408,11 @@ func (m *ReservationManager) syncReservationMetadata(
 	if (state.CommitmentUUID != "" && reservation.Spec.CommittedResourceReservation.CommitmentUUID != state.CommitmentUUID) ||
 		(state.DomainID != "" && reservation.Spec.CommittedResourceReservation.DomainID != state.DomainID) ||
 		(state.StartTime != nil && (reservation.Spec.StartTime == nil || !reservation.Spec.StartTime.Time.Equal(*state.StartTime))) ||
-		(state.EndTime != nil && (reservation.Spec.EndTime == nil || !reservation.Spec.EndTime.Time.Equal(*state.EndTime))) ||
-		(state.ParentGeneration != 0 && reservation.Spec.CommittedResourceReservation.ParentGeneration != state.ParentGeneration) {
+		(state.EndTime != nil && (reservation.Spec.EndTime == nil || !reservation.Spec.EndTime.Time.Equal(*state.EndTime))) {
 		// Apply patch
 		logger.V(1).Info("syncing reservation metadata",
 			"reservation", reservation.Name,
 			"commitmentUUID", state.CommitmentUUID,
-			"currentParentGen", reservation.Spec.CommittedResourceReservation.ParentGeneration,
-			"newParentGen", state.ParentGeneration,
 		)
 
 		patch := client.MergeFrom(reservation.DeepCopy())
@@ -425,9 +422,6 @@ func (m *ReservationManager) syncReservationMetadata(
 		}
 		if state.DomainID != "" {
 			reservation.Spec.CommittedResourceReservation.DomainID = state.DomainID
-		}
-		if state.ParentGeneration != 0 {
-			reservation.Spec.CommittedResourceReservation.ParentGeneration = state.ParentGeneration
 		}
 		if state.StartTime != nil {
 			reservation.Spec.StartTime = &metav1.Time{Time: *state.StartTime}
@@ -509,14 +503,12 @@ func (m *ReservationManager) newReservation(
 			),
 		},
 		CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-			ProjectID:        state.ProjectID,
-			CommitmentUUID:   state.CommitmentUUID,
-			DomainID:         state.DomainID,
-			ResourceGroup:    state.FlavorGroupName,
-			ResourceName:     flavorInGroup.Name,
-			Creator:          creator,
-			ParentGeneration: state.ParentGeneration,
-			Allocations:      nil,
+			ProjectID:      state.ProjectID,
+			CommitmentUUID: state.CommitmentUUID,
+			DomainID:       state.DomainID,
+			ResourceGroup:  state.FlavorGroupName,
+			ResourceName:   flavorInGroup.Name,
+			Creator:        creator,
 		},
 	}
 
@@ -588,22 +580,12 @@ func (m *ReservationManager) newPaygReservation(
 			hv1.ResourceCPU:    *resource.NewQuantity(cpus, resource.DecimalSI),
 		},
 		CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-			ProjectID:        state.ProjectID,
-			CommitmentUUID:   state.CommitmentUUID,
-			DomainID:         state.DomainID,
-			ResourceGroup:    state.FlavorGroupName,
-			ResourceName:     candidate.FlavorName,
-			Creator:          creator,
-			ParentGeneration: state.ParentGeneration,
-			Allocations: map[string]v1alpha1.CommittedResourceAllocation{
-				candidate.VMID: {
-					CreationTimestamp: metav1.Now(),
-					Resources: map[hv1.ResourceName]resource.Quantity{
-						hv1.ResourceMemory: *resource.NewQuantity(memoryBytes, resource.BinarySI),
-						hv1.ResourceCPU:    *resource.NewQuantity(cpus, resource.DecimalSI),
-					},
-				},
-			},
+			ProjectID:      state.ProjectID,
+			CommitmentUUID: state.CommitmentUUID,
+			DomainID:       state.DomainID,
+			ResourceGroup:  state.FlavorGroupName,
+			ResourceName:   candidate.FlavorName,
+			Creator:        creator,
 		},
 	}
 	if state.AvailabilityZone != "" {
@@ -623,7 +605,8 @@ func (m *ReservationManager) newPaygReservation(
 				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelCommittedResource,
 			},
 			Annotations: map[string]string{
-				v1alpha1.AnnotationCreatorRequestID: state.CreatorRequestID,
+				v1alpha1.AnnotationCreatorRequestID:    state.CreatorRequestID,
+				v1alpha1.AnnotationCandidateAllocation: candidate.VMID,
 			},
 		},
 		Spec: spec,

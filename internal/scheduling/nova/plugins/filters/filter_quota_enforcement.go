@@ -39,7 +39,7 @@ func (FilterQuotaEnforcementOpts) Validate() error { return nil }
 //
 //  1. CR headroom (RAM only): checks if any CommittedResource CRD for the project has
 //     unused capacity that can accommodate the request
-//     (AcceptedSpec.Amount - Status.UsedResources >= requestRAM).
+//     (AcceptedSpec.Amount - Status.Billing.UsedResources >= requestRAM).
 //     If a matching CR has headroom, the request is accepted immediately — PAYG checks
 //     are skipped entirely.
 //
@@ -210,8 +210,8 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 		// Check if this specific CR has headroom for the request.
 		if !crHasHeadroom {
 			usedGiB := int64(0)
-			if cr.Status.UsedResources != nil {
-				if usedQty, ok := cr.Status.UsedResources["memory"]; ok {
+			if cr.Status.Billing != nil {
+				if usedQty, ok := cr.Status.Billing.UsedResources["memory"]; ok {
 					usedGiB = quantityToGiB(usedQty)
 				}
 			}

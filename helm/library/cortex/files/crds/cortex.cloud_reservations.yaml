@@ -109,10 +109,55 @@ spec:
                         The workload could be a VM (Nova/IronCore), Pod (Kubernetes), or other resource.
                       properties:
                         creationTimestamp:
-                          description: Timestamp when this workload was assigned to
-                            the reservation.
+                          description: 'Deprecated: CreationTimestamp is no longer
+                            populated. Will be removed once old pods are fully rolled
+                            out.'
                           format: date-time
                           type: string
+                        objectRef:
+                          description: ObjectRef is a reference to the workload object
+                            (e.g. VM CRD).
+                          properties:
+                            apiVersion:
+                              description: API version of the referent.
+                              type: string
+                            fieldPath:
+                              description: |-
+                                If referring to a piece of an object instead of an entire object, this string
+                                should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                                For example, if the object reference is to a container within a pod, this would take on a value like:
+                                "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                                the event) or if no container name is specified "spec.containers[2]" (container with
+                                index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                                referencing a part of an object.
+                              type: string
+                            kind:
+                              description: |-
+                                Kind of the referent.
+                                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                              type: string
+                            name:
+                              description: |-
+                                Name of the referent.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                            namespace:
+                              description: |-
+                                Namespace of the referent.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                              type: string
+                            resourceVersion:
+                              description: |-
+                                Specific resourceVersion to which this reference is made, if any.
+                                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                              type: string
+                            uid:
+                              description: |-
+                                UID of the referent.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
                         resources:
                           additionalProperties:
                             anyOf:
@@ -120,16 +165,17 @@ spec:
                             - type: string
                             pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                             x-kubernetes-int-or-string: true
-                          description: Resources consumed by this instance.
+                          description: Resources consumed by this workload.
                           type: object
                       required:
-                      - creationTimestamp
                       - resources
                       type: object
                     description: |-
                       Allocations maps workload identifiers to their allocation details.
                       Key: Workload UUID (VM UUID for Nova, Pod UID for Pods, Machine UID for IronCore, etc.)
                       Value: allocation state and metadata
+
+                      Deprecated: use status.committedResourceReservation.allocations instead. Will be removed once old pods are fully rolled out.
                     type: object
                   commitmentUUID:
                     description: CommitmentUUID is the UUID of the commitment that
@@ -150,6 +196,8 @@ spec:
                       once it has processed the reservation, allowing the CR controller to wait until
                       all child reservations are up-to-date before accepting.
                       Zero means the field is not set (syncer-created reservations, no parent CR).
+
+                      Deprecated: replaced by conditions[Ready].ObservedGeneration signaling. Will be removed once old pods are fully rolled out.
                     format: int64
                     type: integer
                   projectID:
@@ -264,16 +312,84 @@ spec:
                 properties:
                   allocations:
                     additionalProperties:
-                      type: string
+                      description: |-
+                        CommittedResourceAllocation represents a workload's assignment to a committed resource reservation slot.
+                        The workload could be a VM (Nova/IronCore), Pod (Kubernetes), or other resource.
+                      properties:
+                        creationTimestamp:
+                          description: 'Deprecated: CreationTimestamp is no longer
+                            populated. Will be removed once old pods are fully rolled
+                            out.'
+                          format: date-time
+                          type: string
+                        objectRef:
+                          description: ObjectRef is a reference to the workload object
+                            (e.g. VM CRD).
+                          properties:
+                            apiVersion:
+                              description: API version of the referent.
+                              type: string
+                            fieldPath:
+                              description: |-
+                                If referring to a piece of an object instead of an entire object, this string
+                                should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                                For example, if the object reference is to a container within a pod, this would take on a value like:
+                                "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                                the event) or if no container name is specified "spec.containers[2]" (container with
+                                index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                                referencing a part of an object.
+                              type: string
+                            kind:
+                              description: |-
+                                Kind of the referent.
+                                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                              type: string
+                            name:
+                              description: |-
+                                Name of the referent.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                            namespace:
+                              description: |-
+                                Namespace of the referent.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                              type: string
+                            resourceVersion:
+                              description: |-
+                                Specific resourceVersion to which this reference is made, if any.
+                                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                              type: string
+                            uid:
+                              description: |-
+                                UID of the referent.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        resources:
+                          additionalProperties:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          description: Resources consumed by this workload.
+                          type: object
+                      required:
+                      - resources
+                      type: object
                     description: |-
-                      Allocations maps VM/instance UUIDs to the host they are currently running on.
-                      Key: VM/instance UUID, Value: Host name where the VM is currently running.
+                      Allocations maps workload identifiers to their allocation details.
+                      Key: workload UUID (vmUUID for virtual machines)
+                      Value: allocation details including resource consumption and object reference.
                     type: object
                   observedParentGeneration:
                     description: |-
                       ObservedParentGeneration is the Spec.CommittedResourceReservation.ParentGeneration value
                       that this Reservation controller last processed. When it matches ParentGeneration in spec,
                       the CR controller knows this reservation is up-to-date for the current CR spec version.
+
+                      Deprecated: replaced by conditions[Ready].ObservedGeneration signaling. Will be removed once old pods are fully rolled out.
                     format: int64
                     type: integer
                 type: object

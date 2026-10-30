@@ -5,6 +5,7 @@ package v1alpha1
 
 import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -81,18 +82,27 @@ const (
 	// AnnotationCreatorRequestID tracks the request ID that created this reservation.
 	// Used for end-to-end traceability across API calls, controller reconciles, and scheduler invocations.
 	AnnotationCreatorRequestID = "reservations.cortex.cloud/creator-request-id"
+
+	// AnnotationCandidateAllocation signals that this PAYG pre-allocated reservation slot is intended
+	// for a specific workload object (e.g. VM UUID). Set by the commitment reconciler on creation.
+	// The reservation controller reads this annotation to discover and confirm the assignment.
+	AnnotationCandidateAllocation = "reservations.cortex.cloud/candidate-allocation"
 )
 
 // CommittedResourceAllocation represents a workload's assignment to a committed resource reservation slot.
 // The workload could be a VM (Nova/IronCore), Pod (Kubernetes), or other resource.
 type CommittedResourceAllocation struct {
-	// Timestamp when this workload was assigned to the reservation.
-	// +kubebuilder:validation:Required
-	CreationTimestamp metav1.Time `json:"creationTimestamp"`
+	// ObjectRef is a reference to the workload object (e.g. VM CRD).
+	// +kubebuilder:validation:Optional
+	ObjectRef corev1.ObjectReference `json:"objectRef,omitempty"`
 
-	// Resources consumed by this instance.
+	// Resources consumed by this workload.
 	// +kubebuilder:validation:Required
 	Resources map[hv1.ResourceName]resource.Quantity `json:"resources"`
+
+	// Deprecated: CreationTimestamp is no longer populated. Will be removed once old pods are fully rolled out.
+	// +kubebuilder:validation:Optional
+	CreationTimestamp metav1.Time `json:"creationTimestamp,omitempty"`
 }
 
 // CommittedResourceReservationSpec defines the spec fields specific to committed resource reservations.
@@ -126,12 +136,16 @@ type CommittedResourceReservationSpec struct {
 	// once it has processed the reservation, allowing the CR controller to wait until
 	// all child reservations are up-to-date before accepting.
 	// Zero means the field is not set (syncer-created reservations, no parent CR).
+	//
+	// Deprecated: replaced by conditions[Ready].ObservedGeneration signaling. Will be removed once old pods are fully rolled out.
 	// +kubebuilder:validation:Optional
 	ParentGeneration int64 `json:"parentGeneration,omitempty"`
 
 	// Allocations maps workload identifiers to their allocation details.
 	// Key: Workload UUID (VM UUID for Nova, Pod UID for Pods, Machine UID for IronCore, etc.)
 	// Value: allocation state and metadata
+	//
+	// Deprecated: use status.committedResourceReservation.allocations instead. Will be removed once old pods are fully rolled out.
 	// +kubebuilder:validation:Optional
 	Allocations map[string]CommittedResourceAllocation `json:"allocations,omitempty"`
 }
@@ -248,13 +262,16 @@ type CommittedResourceReservationStatus struct {
 	// ObservedParentGeneration is the Spec.CommittedResourceReservation.ParentGeneration value
 	// that this Reservation controller last processed. When it matches ParentGeneration in spec,
 	// the CR controller knows this reservation is up-to-date for the current CR spec version.
+	//
+	// Deprecated: replaced by conditions[Ready].ObservedGeneration signaling. Will be removed once old pods are fully rolled out.
 	// +kubebuilder:validation:Optional
 	ObservedParentGeneration int64 `json:"observedParentGeneration,omitempty"`
 
-	// Allocations maps VM/instance UUIDs to the host they are currently running on.
-	// Key: VM/instance UUID, Value: Host name where the VM is currently running.
+	// Allocations maps workload identifiers to their allocation details.
+	// Key: workload UUID (vmUUID for virtual machines)
+	// Value: allocation details including resource consumption and object reference.
 	// +kubebuilder:validation:Optional
-	Allocations map[string]string `json:"allocations,omitempty"`
+	Allocations map[string]CommittedResourceAllocation `json:"allocations,omitempty"`
 }
 
 // FailoverReservationStatus defines the status fields specific to failover reservations.

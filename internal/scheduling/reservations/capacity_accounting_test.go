@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -51,59 +52,59 @@ func TestUnusedReservationCapacity(t *testing.T) {
 			wantMemoryBytes: 480 * 1024 * 1024 * 1024,
 		},
 		{
-			name: "CR 1 confirmed VM (240Gi), slot=480Gi: remaining = 240Gi blocked",
+			name: "CR 1 confirmed VM in status.allocations, slot=480Gi: block = max(480Gi-480Gi, 0) = 0",
 			res: &v1alpha1.Reservation{
 				Spec: v1alpha1.ReservationSpec{
-					Type:      v1alpha1.ReservationTypeCommittedResource,
-					Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(480)},
-					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-						Allocations: map[string]v1alpha1.CommittedResourceAllocation{
-							"vm-1": {Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(240)}},
-						},
-					},
+					Type:                         v1alpha1.ReservationTypeCommittedResource,
+					Resources:                    map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(480)},
+					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
 				},
 				Status: v1alpha1.ReservationStatus{
 					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-						Allocations: map[string]string{"vm-1": "host-a"},
-					},
-				},
-			},
-			wantMemoryBytes: 240 * 1024 * 1024 * 1024,
-		},
-		{
-			name: "CR slot fully consumed by confirmed VMs: block = 0",
-			res: &v1alpha1.Reservation{
-				Spec: v1alpha1.ReservationSpec{
-					Type:      v1alpha1.ReservationTypeCommittedResource,
-					Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(480)},
-					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 						Allocations: map[string]v1alpha1.CommittedResourceAllocation{
-							"vm-1": {Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(240)}},
-							"vm-2": {Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(240)}},
+							"vm-1": {
+								ObjectRef: corev1.ObjectReference{Name: "vm-1"},
+								Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(480)},
+							},
 						},
-					},
-				},
-				Status: v1alpha1.ReservationStatus{
-					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-						Allocations: map[string]string{"vm-1": "host-a", "vm-2": "host-a"},
 					},
 				},
 			},
 			wantMemoryBytes: 0,
 		},
 		{
-			name: "CR spec-only VM (240Gi), slot=480Gi, no confirmed: specOnly < remaining → full slot blocked",
+			name: "CR slot fully consumed by 2 confirmed VMs: block = max(480Gi-240Gi-240Gi, 0) = 0",
 			res: &v1alpha1.Reservation{
 				Spec: v1alpha1.ReservationSpec{
-					Type:      v1alpha1.ReservationTypeCommittedResource,
-					Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(480)},
-					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+					Type:                         v1alpha1.ReservationTypeCommittedResource,
+					Resources:                    map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(480)},
+					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
+				},
+				Status: v1alpha1.ReservationStatus{
+					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
 						Allocations: map[string]v1alpha1.CommittedResourceAllocation{
-							"vm-1": {Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(240)}},
+							"vm-1": {
+								ObjectRef: corev1.ObjectReference{Name: "vm-1"},
+								Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(240)},
+							},
+							"vm-2": {
+								ObjectRef: corev1.ObjectReference{Name: "vm-2"},
+								Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(240)},
+							},
 						},
 					},
 				},
-				// vm-1 not in status → spec-only
+			},
+			wantMemoryBytes: 0,
+		},
+		{
+			name: "CR slot with no confirmed VMs: full slot blocked (conservative — per-VM sizes not tracked yet)",
+			res: &v1alpha1.Reservation{
+				Spec: v1alpha1.ReservationSpec{
+					Type:                         v1alpha1.ReservationTypeCommittedResource,
+					Resources:                    map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(480)},
+					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
+				},
 			},
 			wantMemoryBytes: 480 * 1024 * 1024 * 1024,
 		},
@@ -111,19 +112,20 @@ func TestUnusedReservationCapacity(t *testing.T) {
 			name: "CR mid-migration (TargetHost != Status.Host): full slot blocked despite confirmed VMs",
 			res: &v1alpha1.Reservation{
 				Spec: v1alpha1.ReservationSpec{
-					Type:       v1alpha1.ReservationTypeCommittedResource,
-					TargetHost: "new-host",
-					Resources:  map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(480)},
-					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-						Allocations: map[string]v1alpha1.CommittedResourceAllocation{
-							"vm-1": {Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(240)}},
-						},
-					},
+					Type:                         v1alpha1.ReservationTypeCommittedResource,
+					TargetHost:                   "new-host",
+					Resources:                    map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(480)},
+					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
 				},
 				Status: v1alpha1.ReservationStatus{
 					Host: "old-host", // differs from TargetHost → migration in progress
 					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-						Allocations: map[string]string{"vm-1": "old-host"},
+						Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+							"vm-1": {
+								ObjectRef: corev1.ObjectReference{Name: "vm-1"},
+								Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(480)},
+							},
+						},
 					},
 				},
 			},
@@ -133,17 +135,18 @@ func TestUnusedReservationCapacity(t *testing.T) {
 			name: "CR ignoreAllocations=true: full slot blocked regardless of confirmed VMs",
 			res: &v1alpha1.Reservation{
 				Spec: v1alpha1.ReservationSpec{
-					Type:      v1alpha1.ReservationTypeCommittedResource,
-					Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(480)},
-					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-						Allocations: map[string]v1alpha1.CommittedResourceAllocation{
-							"vm-1": {Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(240)}},
-						},
-					},
+					Type:                         v1alpha1.ReservationTypeCommittedResource,
+					Resources:                    map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(480)},
+					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
 				},
 				Status: v1alpha1.ReservationStatus{
 					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-						Allocations: map[string]string{"vm-1": "host-a"},
+						Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+							"vm-1": {
+								ObjectRef: corev1.ObjectReference{Name: "vm-1"},
+								Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(480)},
+							},
+						},
 					},
 				},
 			},
@@ -302,30 +305,31 @@ func TestHostFreeCapacity(t *testing.T) {
 		hv.Status.Allocation = map[hv1.ResourceName]resource.Quantity{
 			hv1.ResourceMemory: gib(256),
 		}
-		// 512 GiB slot with 256 GiB confirmed VM → block = 512-256 = 256 GiB
+		// 512 GiB slot with 1 confirmed VM → block = 0 (VM in HV allocation; slot unblocked)
 		slot := v1alpha1.Reservation{
 			ObjectMeta: metav1.ObjectMeta{Name: "slot-1"},
 			Spec: v1alpha1.ReservationSpec{
-				Type:       v1alpha1.ReservationTypeCommittedResource,
-				TargetHost: "host",
-				Resources:  map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)},
-				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-					Allocations: map[string]v1alpha1.CommittedResourceAllocation{
-						"vm-1": {Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(256)}},
-					},
-				},
+				Type:                         v1alpha1.ReservationTypeCommittedResource,
+				TargetHost:                   "host",
+				Resources:                    map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)},
+				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
 			},
 			Status: v1alpha1.ReservationStatus{
 				Host: "host",
 				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-					Allocations: map[string]string{"vm-1": "host"},
+					Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+						"vm-1": {
+							ObjectRef: corev1.ObjectReference{Name: "vm-1"},
+							Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)},
+						},
+					},
 				},
 			},
 		}
 		free := HostFreeCapacity([]v1alpha1.Reservation{slot}, hv)
-		// 1024 - 256 (alloc/vm) - 256 (remaining slot block) = 512
-		if freeMemGiB(free) != 512 {
-			t.Errorf("expected 512 GiB free, got %d", freeMemGiB(free))
+		// 1024 - 256 (hv.Allocation) - 0 (slot block = 0, VMs confirmed) = 768
+		if freeMemGiB(free) != 768 {
+			t.Errorf("expected 768 GiB free, got %d", freeMemGiB(free))
 		}
 	})
 

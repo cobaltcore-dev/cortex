@@ -18,7 +18,7 @@ const idxCommittedResourceByUUID = "spec.commitmentUUID"
 const idxCommittedResourceByProjectID = "spec.projectID"
 const idxReservationByCommitmentUUID = "spec.committedResourceReservation.commitmentUUID"
 const idxProjectQuotaByProjectID = "spec.projectID"
-const idxReservationByAllocationVMUUID = "spec.committedResourceReservation.allocations"
+const idxReservationByAllocationVMUUID = "status.committedResourceReservation.allocations"
 
 // once guards ensure each field index is registered exactly once.
 // Both CommittedResourceController and UsageReconciler call indexCommittedResourceByUUID;
@@ -131,8 +131,8 @@ func indexProjectQuotaByProjectID(ctx context.Context, mcl *multicluster.Client)
 	return err
 }
 
-// Spec.CommittedResourceReservation.Allocations. This allows the reservation controller
-// to efficiently find all other Reservation CRDs carrying a specific VM UUID without
+// Status.CommittedResourceReservation.Allocations. This allows the reservation controller
+// to efficiently find all Reservation CRDs that have confirmed a specific VM UUID without
 // scanning every reservation in the cluster.
 func indexReservationByAllocationVMUUID(ctx context.Context, mcl *multicluster.Client) (err error) {
 	onceIndexReservationByAllocationVMID.Do(func() {
@@ -147,11 +147,11 @@ func indexReservationByAllocationVMUUID(ctx context.Context, mcl *multicluster.C
 					log.Error(errors.New("unexpected type"), "expected Reservation", "object", obj)
 					return nil
 				}
-				if res.Spec.CommittedResourceReservation == nil {
+				if res.Status.CommittedResourceReservation == nil {
 					return nil
 				}
-				uuids := make([]string, 0, len(res.Spec.CommittedResourceReservation.Allocations))
-				for vmUUID := range res.Spec.CommittedResourceReservation.Allocations {
+				uuids := make([]string, 0, len(res.Status.CommittedResourceReservation.Allocations))
+				for vmUUID := range res.Status.CommittedResourceReservation.Allocations {
 					uuids = append(uuids, vmUUID)
 				}
 				return uuids

@@ -48,7 +48,10 @@ func computeStatusSummary(spec v1alpha1.CommittedResourceSpec, status v1alpha1.C
 
 	// VM count — only meaningful once placement is accepted.
 	if reason == v1alpha1.CommittedResourceReasonAccepted {
-		n := len(status.AssignedInstances)
+		n := 0
+		if status.Billing != nil {
+			n = len(status.Billing.AssignedInstances)
+		}
 		if n == 1 {
 			parts = append(parts, "1 VM")
 		} else {

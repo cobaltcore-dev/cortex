@@ -12,6 +12,7 @@ import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -556,21 +557,23 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 							hv1.ResourceCPU:    resource.MustParse("32"),
 							hv1.ResourceMemory: resource.MustParse("128Gi"),
 						},
-						CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-							Allocations: map[string]v1alpha1.CommittedResourceAllocation{
-								"vm-uuid-1": {
-									Resources: map[hv1.ResourceName]resource.Quantity{
-										hv1.ResourceCPU:    resource.MustParse("8"),
-										hv1.ResourceMemory: resource.MustParse("32Gi"),
-									},
-								},
-							},
-						},
+						CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{},
 					},
 					Status: v1alpha1.ReservationStatus{
 						Host: "node001-bb088",
 						Conditions: []v1.Condition{
 							{Type: v1alpha1.ReservationConditionReady, Status: v1.ConditionTrue},
+						},
+						CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
+							Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+								"vm-uuid-1": {
+									ObjectRef: corev1.ObjectReference{Name: "vm-uuid-1"},
+									Resources: map[hv1.ResourceName]resource.Quantity{
+										hv1.ResourceCPU:    resource.MustParse("32"),
+										hv1.ResourceMemory: resource.MustParse("128Gi"),
+									},
+								},
+							},
 						},
 					},
 				},
@@ -580,13 +583,13 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 				kvmTotalMetric("node001-bb088", "ram", "qa-1a", 549755813888), // 512Gi
 				kvmUsageMetric("node001-bb088", "cpu", "utilized", "qa-1a", 64),
 				kvmUsageMetric("node001-bb088", "ram", "utilized", "qa-1a", 274877906944), // 256Gi
-				// reserved = 32-8=24 CPU, 128Gi-32Gi=96Gi RAM (not in use)
-				kvmUsageMetric("node001-bb088", "cpu", "reserved", "qa-1a", 24),
-				kvmUsageMetric("node001-bb088", "ram", "reserved", "qa-1a", 103079215104), // 96Gi
+				// status.allocations non-empty → slot fully in use → reserved = 0
+				kvmUsageMetric("node001-bb088", "cpu", "reserved", "qa-1a", 0),
+				kvmUsageMetric("node001-bb088", "ram", "reserved", "qa-1a", 0),
 				kvmUsageMetric("node001-bb088", "cpu", "failover", "qa-1a", 0),
 				kvmUsageMetric("node001-bb088", "ram", "failover", "qa-1a", 0),
-				kvmUsageMetric("node001-bb088", "cpu", "available", "qa-1a", 40),           // 128-64-24-0
-				kvmUsageMetric("node001-bb088", "ram", "available", "qa-1a", 171798691840), // 512Gi-256Gi-96Gi-0 = 160Gi
+				kvmUsageMetric("node001-bb088", "cpu", "available", "qa-1a", 64),           // 128-64-0-0
+				kvmUsageMetric("node001-bb088", "ram", "available", "qa-1a", 274877906944), // 512Gi-256Gi-0-0 = 256Gi
 			},
 		},
 		{

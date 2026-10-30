@@ -352,20 +352,22 @@ func printCommitments(crs []v1alpha1.CommittedResource, showUsage bool) {
 		)
 
 		// Line 3 (optional): usage
-		if mem, ok := cr.Status.UsedResources["memory"]; ok {
-			cpu := cr.Status.UsedResources["cpu"]
-			usageAgeStr := gray("—")
-			if cr.Status.LastUsageReconcileAt != nil {
-				usageAgeStr = age(cr.Status.LastUsageReconcileAt)
+		if cr.Status.Billing != nil {
+			if mem, ok := cr.Status.Billing.UsedResources["memory"]; ok {
+				cpu := cr.Status.Billing.UsedResources["cpu"]
+				usageAgeStr := gray("—")
+				if cr.Status.Billing.LastReconcileAt != nil {
+					usageAgeStr = age(cr.Status.Billing.LastReconcileAt)
+				}
+				fmt.Printf("    used=%s  cpu=%s  instances=%d  usage-age=%s\n",
+					mem.String(), cpu.String(), len(cr.Status.Billing.AssignedInstances), usageAgeStr)
 			}
-			fmt.Printf("    used=%s  cpu=%s  instances=%d  usage-age=%s\n",
-				mem.String(), cpu.String(), len(cr.Status.AssignedInstances), usageAgeStr)
-		}
 
-		if showUsage && len(cr.Status.AssignedInstances) > 0 {
-			fmt.Printf("    assigned instances (%d):\n", len(cr.Status.AssignedInstances))
-			for _, inst := range cr.Status.AssignedInstances {
-				fmt.Printf("      %s\n", gray(inst))
+			if showUsage && len(cr.Status.Billing.AssignedInstances) > 0 {
+				fmt.Printf("    assigned instances (%d):\n", len(cr.Status.Billing.AssignedInstances))
+				for _, inst := range cr.Status.Billing.AssignedInstances {
+					fmt.Printf("      %s\n", gray(inst))
+				}
 			}
 		}
 	}
@@ -418,11 +420,10 @@ func printReservations(crs []v1alpha1.CommittedResource, reservations []v1alpha1
 			}
 
 			genOK := ""
-			if s := res.Status.CommittedResourceReservation; s != nil {
-				spec := res.Spec.CommittedResourceReservation
-				if spec != nil && s.ObservedParentGeneration != spec.ParentGeneration {
-					genOK = yellow(fmt.Sprintf(" [gen: spec=%d observed=%d]",
-						spec.ParentGeneration, s.ObservedParentGeneration))
+			if cond := apimeta.FindStatusCondition(res.Status.Conditions, v1alpha1.ReservationConditionReady); cond != nil {
+				if cond.ObservedGeneration != res.Generation {
+					genOK = yellow(fmt.Sprintf(" [gen: resGen=%d condObsGen=%d]",
+						res.Generation, cond.ObservedGeneration))
 				}
 			}
 
@@ -442,43 +443,19 @@ func printReservations(crs []v1alpha1.CommittedResource, reservations []v1alpha1
 			)
 
 			if showAllocations {
-				specAllocs := 0
-				statusAllocs := 0
-				if res.Spec.CommittedResourceReservation != nil {
-					specAllocs = len(res.Spec.CommittedResourceReservation.Allocations)
-				}
-				if res.Status.CommittedResourceReservation != nil {
-					statusAllocs = len(res.Status.CommittedResourceReservation.Allocations)
-				}
-
-				if specAllocs > 0 || statusAllocs > 0 {
-					fmt.Printf("      allocations: spec=%d confirmed=%d\n", specAllocs, statusAllocs)
-					if res.Spec.CommittedResourceReservation != nil {
-						statusAlloc := map[string]string{}
-						if res.Status.CommittedResourceReservation != nil {
-							statusAlloc = res.Status.CommittedResourceReservation.Allocations
-						}
-						for vmUUID, alloc := range res.Spec.CommittedResourceReservation.Allocations {
-							resources := ""
-							var resourcesSb422 strings.Builder
-							for rname, qty := range alloc.Resources {
-								fmt.Fprintf(&resourcesSb422, "%s=%s ", rname, qty.String())
-							}
-							resources += resourcesSb422.String()
-							confirmedHost, confirmed := statusAlloc[vmUUID]
-							state := ""
-							if confirmed {
-								state = green("confirmed on " + confirmedHost)
-							} else {
-								state = yellow(fmt.Sprintf("spec-only (grace since %s)", age(&alloc.CreationTimestamp)))
-							}
-							fmt.Printf("        vm=%s  %s  %s\n",
-								truncate(vmUUID, 36),
-								gray(strings.TrimSpace(resources)),
-								state,
-							)
-						}
+				if res.Status.CommittedResourceReservation != nil &&
+					len(res.Status.CommittedResourceReservation.Allocations) > 0 {
+					fmt.Printf("      allocations: confirmed=%d\n",
+						len(res.Status.CommittedResourceReservation.Allocations))
+					for vmUUID, alloc := range res.Status.CommittedResourceReservation.Allocations {
+						fmt.Printf("        vm=%s  %s\n",
+							truncate(vmUUID, 36),
+							green("confirmed (ref="+alloc.ObjectRef.Name+")"),
+						)
 					}
+				} else if candidateVM := res.Annotations[v1alpha1.AnnotationCandidateAllocation]; candidateVM != "" {
+					fmt.Printf("      allocations: candidate=%s (pending HV confirmation)\n",
+						truncate(candidateVM, 36))
 				}
 			}
 		}

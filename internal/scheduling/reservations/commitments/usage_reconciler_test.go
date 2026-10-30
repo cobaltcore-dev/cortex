@@ -97,8 +97,8 @@ func TestAcceptedGenerationPredicate_Update(t *testing.T) {
 			new: &v1alpha1.CommittedResource{
 				ObjectMeta: metav1.ObjectMeta{Generation: 1},
 				Status: v1alpha1.CommittedResourceStatus{
-					Conditions:              []metav1.Condition{readyCond},
-					UsageObservedGeneration: i64ptr(1),
+					Conditions: []metav1.Condition{readyCond},
+					Billing:    &v1alpha1.BillingStatus{ObservedGeneration: i64ptr(1)},
 				},
 			},
 			want: false,
@@ -109,8 +109,7 @@ func TestAcceptedGenerationPredicate_Update(t *testing.T) {
 			new: &v1alpha1.CommittedResource{
 				ObjectMeta: metav1.ObjectMeta{Generation: 1},
 				Status: v1alpha1.CommittedResourceStatus{
-					Conditions:              []metav1.Condition{readyCond},
-					UsageObservedGeneration: nil,
+					Conditions: []metav1.Condition{readyCond},
 				},
 			},
 			want: true,
@@ -121,8 +120,8 @@ func TestAcceptedGenerationPredicate_Update(t *testing.T) {
 			new: &v1alpha1.CommittedResource{
 				ObjectMeta: metav1.ObjectMeta{Generation: 1},
 				Status: v1alpha1.CommittedResourceStatus{
-					Conditions:              []metav1.Condition{readyCond},
-					UsageObservedGeneration: i64ptr(0), // lags behind Ready.ObservedGeneration=1
+					Conditions: []metav1.Condition{readyCond},
+					Billing:    &v1alpha1.BillingStatus{ObservedGeneration: i64ptr(0)}, // lags behind Ready.ObservedGeneration=1
 				},
 			},
 			want: true,
@@ -174,8 +173,10 @@ func TestUsageReconciler_Reconcile_Gates(t *testing.T) {
 	t.Run("non-active state with stale data: clears AssignedInstances and timestamps", func(t *testing.T) {
 		now := metav1.Now()
 		cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusExpired)
-		cr.Status.AssignedInstances = []string{"vm-1", "vm-2"}
-		cr.Status.LastUsageReconcileAt = &now
+		cr.Status.Billing = &v1alpha1.BillingStatus{
+			AssignedInstances: []string{"vm-1", "vm-2"},
+			LastReconcileAt:   &now,
+		}
 
 		k8sClient := newCRTestClient(scheme, cr)
 		r := newUsageReconciler(k8sClient, cooldown)
@@ -188,11 +189,11 @@ func TestUsageReconciler_Reconcile_Gates(t *testing.T) {
 		if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: cr.Name}, &updated); err != nil {
 			t.Fatalf("get CR: %v", err)
 		}
-		if len(updated.Status.AssignedInstances) != 0 {
-			t.Errorf("AssignedInstances = %v, want nil", updated.Status.AssignedInstances)
+		if updated.Status.Billing != nil && len(updated.Status.Billing.AssignedInstances) != 0 {
+			t.Errorf("AssignedInstances = %v, want nil", updated.Status.Billing.AssignedInstances)
 		}
-		if updated.Status.LastUsageReconcileAt != nil {
-			t.Errorf("LastUsageReconcileAt = %v, want nil", updated.Status.LastUsageReconcileAt)
+		if updated.Status.Billing != nil && updated.Status.Billing.LastReconcileAt != nil {
+			t.Errorf("LastReconcileAt = %v, want nil", updated.Status.Billing.LastReconcileAt)
 		}
 	})
 
@@ -201,8 +202,10 @@ func TestUsageReconciler_Reconcile_Gates(t *testing.T) {
 		pastTime := metav1.NewTime(time.Now().Add(-1 * time.Minute))
 		cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusConfirmed)
 		cr.Spec.EndTime = &pastTime
-		cr.Status.AssignedInstances = []string{"vm-1"}
-		cr.Status.LastUsageReconcileAt = &now
+		cr.Status.Billing = &v1alpha1.BillingStatus{
+			AssignedInstances: []string{"vm-1"},
+			LastReconcileAt:   &now,
+		}
 
 		k8sClient := newCRTestClient(scheme, cr)
 		r := newUsageReconciler(k8sClient, cooldown)
@@ -215,11 +218,11 @@ func TestUsageReconciler_Reconcile_Gates(t *testing.T) {
 		if err := k8sClient.Get(context.Background(), types.NamespacedName{Name: cr.Name}, &updated); err != nil {
 			t.Fatalf("get CR: %v", err)
 		}
-		if len(updated.Status.AssignedInstances) != 0 {
-			t.Errorf("AssignedInstances = %v, want nil", updated.Status.AssignedInstances)
+		if updated.Status.Billing != nil && len(updated.Status.Billing.AssignedInstances) != 0 {
+			t.Errorf("AssignedInstances = %v, want nil", updated.Status.Billing.AssignedInstances)
 		}
-		if updated.Status.LastUsageReconcileAt != nil {
-			t.Errorf("LastUsageReconcileAt = %v, want nil", updated.Status.LastUsageReconcileAt)
+		if updated.Status.Billing != nil && updated.Status.Billing.LastReconcileAt != nil {
+			t.Errorf("LastReconcileAt = %v, want nil", updated.Status.Billing.LastReconcileAt)
 		}
 	})
 
@@ -278,8 +281,10 @@ func TestUsageReconciler_Reconcile_Gates(t *testing.T) {
 			ObservedGeneration: 1,
 			Reason:             v1alpha1.CommittedResourceReasonAccepted,
 		}}
-		cr.Status.LastUsageReconcileAt = &now
-		cr.Status.UsageObservedGeneration = i64ptr(1) // up to date → generationAdvanced=false
+		cr.Status.Billing = &v1alpha1.BillingStatus{
+			LastReconcileAt:    &now,
+			ObservedGeneration: i64ptr(1), // up to date → generationAdvanced=false
+		}
 
 		r := newUsageReconciler(newCRTestClient(scheme, cr), cooldown)
 		result, err := r.Reconcile(context.Background(), reconcileReq(cr.Name))
@@ -466,19 +471,22 @@ func TestUsageReconciler_WriteUsageStatus(t *testing.T) {
 			t.Fatalf("get CR: %v", err)
 		}
 
-		if len(updated.Status.AssignedInstances) != 2 {
-			t.Errorf("AssignedInstances len = %d, want 2", len(updated.Status.AssignedInstances))
+		if updated.Status.Billing == nil {
+			t.Fatal("Billing is nil")
 		}
-		if updated.Status.LastUsageReconcileAt == nil {
-			t.Errorf("LastUsageReconcileAt not set")
+		if len(updated.Status.Billing.AssignedInstances) != 2 {
+			t.Errorf("AssignedInstances len = %d, want 2", len(updated.Status.Billing.AssignedInstances))
 		}
-		if updated.Status.UsageObservedGeneration == nil || *updated.Status.UsageObservedGeneration != 1 {
-			t.Errorf("UsageObservedGeneration = %v, want 1", updated.Status.UsageObservedGeneration)
+		if updated.Status.Billing.LastReconcileAt == nil {
+			t.Errorf("LastReconcileAt not set")
 		}
-		if _, ok := updated.Status.UsedResources["memory"]; !ok {
+		if updated.Status.Billing.ObservedGeneration == nil || *updated.Status.Billing.ObservedGeneration != 1 {
+			t.Errorf("ObservedGeneration = %v, want 1", updated.Status.Billing.ObservedGeneration)
+		}
+		if _, ok := updated.Status.Billing.UsedResources["memory"]; !ok {
 			t.Errorf("UsedResources[memory] not set")
 		}
-		if _, ok := updated.Status.UsedResources["cpu"]; !ok {
+		if _, ok := updated.Status.Billing.UsedResources["cpu"]; !ok {
 			t.Errorf("UsedResources[cpu] not set")
 		}
 	})
