@@ -40,6 +40,16 @@ func TestUnusedReservationCapacity(t *testing.T) {
 			wantMemoryBytes: 480 * 1024 * 1024 * 1024,
 		},
 		{
+			name: "failover host: nothing blocked (not yet counted as reserved)",
+			res: &v1alpha1.Reservation{
+				Spec: v1alpha1.ReservationSpec{
+					Type:      v1alpha1.ReservationTypeFailoverHost,
+					Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(480)},
+				},
+			},
+			wantMemoryBytes: 0,
+		},
+		{
 			name: "CR no allocations: full slot blocked",
 			res: &v1alpha1.Reservation{
 				Spec: v1alpha1.ReservationSpec{
