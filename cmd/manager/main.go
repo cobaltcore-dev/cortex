@@ -602,8 +602,6 @@ func main() {
 
 	if slices.Contains(mainConfig.EnabledControllers, "committed-resource-reservations-controller") {
 		setupLog.Info("enabling controller", "controller", "committed-resource-reservations-controller")
-		monitor := reservations.NewMonitor(multiclusterClient)
-		metrics.Registry.MustRegister(&monitor)
 
 		if err := (&commitments.CommitmentReservationController{
 			Client: multiclusterClient,

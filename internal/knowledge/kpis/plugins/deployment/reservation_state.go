@@ -5,6 +5,7 @@ package deployment
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -33,12 +34,18 @@ type ReservationStateKPIOpts struct {
 // carries the condition's Reason so that alerts can target specific failure
 // modes (e.g. reason="InstanceNotFound" for in-flight reservations whose VM
 // has not spawned on any hypervisor yet).
+//
+// All metrics are filtered to the configured ReservationSchedulingDomain.
 type ReservationStateKPI struct {
 	// Common base for all KPIs that provides standard functionality.
 	plugins.BaseKPI[ReservationStateKPIOpts]
 
 	// Prometheus descriptor for the reservation state metric.
 	counter *prometheus.Desc
+	// Prometheus descriptor for the reservation count metric.
+	reservationCount *prometheus.Desc
+	// Prometheus descriptor for the reserved resources metric.
+	allocatedResources *prometheus.Desc
 }
 
 func (ReservationStateKPI) GetName() string { return "reservation_state_kpi" }
@@ -54,11 +61,27 @@ func (k *ReservationStateKPI) Init(db *db.DB, client client.Client, opts conf.Ra
 		[]string{"domain", "type", "state", "reason"},
 		nil,
 	)
+	k.reservationCount = prometheus.NewDesc(
+		"cortex_reservation_count",
+		"Number of reservations by type, readiness and error status.",
+		[]string{"domain", "type", "status_ready", "status_error"},
+		nil,
+	)
+	k.allocatedResources = prometheus.NewDesc(
+		"cortex_reservation_allocated_resources",
+		"Resource units allocated across reservations, by type, host and resource type.",
+		[]string{"domain", "type", "status_ready", "status_error", "host", "resource"},
+		nil,
+	)
 	return nil
 }
 
-// Conform to the prometheus collector interface by providing the descriptor.
-func (k *ReservationStateKPI) Describe(ch chan<- *prometheus.Desc) { ch <- k.counter }
+// Conform to the prometheus collector interface by providing the descriptors.
+func (k *ReservationStateKPI) Describe(ch chan<- *prometheus.Desc) {
+	ch <- k.counter
+	ch <- k.reservationCount
+	ch <- k.allocatedResources
+}
 
 // Collect the reservation state metrics.
 func (k *ReservationStateKPI) Collect(ch chan<- prometheus.Metric) {
@@ -74,44 +97,88 @@ func (k *ReservationStateKPI) Collect(ch chan<- prometheus.Metric) {
 		reservationStateKPILogger.Error(err, "Failed to list reservations")
 		return
 	}
-	// Aggregate counts by (type, state, reason) so that we emit one time
-	// series per bucket rather than one per reservation. This keeps metric
-	// cardinality bounded regardless of how many reservations exist.
-	type bucket struct {
+	domain := string(k.Options.ReservationSchedulingDomain)
+
+	// Aggregate counts by (type, state, reason) for cortex_reservation_state, by
+	// (type, ready, error) for cortex_reservation_count, and by (type, ready, error,
+	// host, resource) for cortex_reservation_allocated_resources. Aggregating keeps
+	// metric cardinality bounded regardless of how many reservations exist.
+	type stateBucket struct {
 		reservationType string
 		state           string
 		reason          string
 	}
-	counts := map[bucket]float64{}
+	type countBucket struct {
+		reservationType string
+		statusReady     string
+		statusError     string
+	}
+	type resourceBucket struct {
+		reservationType string
+		statusReady     string
+		statusError     string
+		host            string
+		resource        string
+	}
+	stateCounts := map[stateBucket]float64{}
+	reservationCounts := map[countBucket]float64{}
+	allocatedResources := map[resourceBucket]uint64{}
 	for _, r := range reservationList.Items {
 		if r.Spec.SchedulingDomain != k.Options.ReservationSchedulingDomain {
 			continue
 		}
+		reservationType := string(r.Spec.Type)
+
+		// Condition-derived labels. "state" mirrors the ready condition for
+		// cortex_reservation_state; "statusReady"/"statusError" carry the raw
+		// condition status and message for the ported count/resource metrics.
 		state := "unknown"
 		reason := ""
+		statusReady := "Unknown"
+		statusError := ""
 		cond := meta.FindStatusCondition(r.Status.Conditions, v1alpha1.ReservationConditionReady)
 		if cond != nil {
 			reason = cond.Reason
+			statusReady = string(cond.Status)
 			switch cond.Status {
 			case metav1.ConditionTrue:
 				state = "ready"
 			case metav1.ConditionFalse:
 				state = "error"
+				statusError = strings.ReplaceAll(cond.Message, ",", ";")
 			default:
 				state = "unknown"
 			}
 		}
-		counts[bucket{
-			reservationType: string(r.Spec.Type),
-			state:           state,
-			reason:          reason,
-		}]++
+
+		stateCounts[stateBucket{reservationType: reservationType, state: state, reason: reason}]++
+		reservationCounts[countBucket{reservationType: reservationType, statusReady: statusReady, statusError: statusError}]++
+		for resourceName, resourceQuantity := range r.Spec.Resources {
+			allocatedResources[resourceBucket{
+				reservationType: reservationType,
+				statusReady:     statusReady,
+				statusError:     statusError,
+				host:            r.Status.Host,
+				resource:        string(resourceName),
+			}] += resourceQuantity.AsDec().UnscaledBig().Uint64()
+		}
 	}
-	for b, v := range counts {
+	for b, v := range stateCounts {
 		ch <- prometheus.MustNewConstMetric(
 			k.counter, prometheus.GaugeValue, v,
-			string(k.Options.ReservationSchedulingDomain),
-			b.reservationType, b.state, b.reason,
+			domain, b.reservationType, b.state, b.reason,
+		)
+	}
+	for b, v := range reservationCounts {
+		ch <- prometheus.MustNewConstMetric(
+			k.reservationCount, prometheus.GaugeValue, v,
+			domain, b.reservationType, b.statusReady, b.statusError,
+		)
+	}
+	for b, v := range allocatedResources {
+		ch <- prometheus.MustNewConstMetric(
+			k.allocatedResources, prometheus.GaugeValue, float64(v),
+			domain, b.reservationType, b.statusReady, b.statusError, b.host, b.resource,
 		)
 	}
 }
