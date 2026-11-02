@@ -1080,3 +1080,435 @@ func TestCRTReconciler_Terminal(t *testing.T) {
 		})
 	}
 }
+
+// ============================================================================
+// TestCRTReconciler_RollingBack
+// ============================================================================
+
+// driveToRollingBack drives a CRC to RollingBack by having a CR reject placement.
+func driveToRollingBack(t *testing.T, r *CommittedResourceChangeReconciler, c client.Client, txName, crName string) {
+	t.Helper()
+	driveToPhase(t, r, c, txName, v1alpha1.ChangePhaseAwaitingScheduling)
+	setCRReady(t, c, crName, metav1.ConditionFalse, v1alpha1.CommittedResourceReasonRejected, "no capacity")
+	driveToPhase(t, r, c, txName, v1alpha1.ChangePhaseRollingBack)
+}
+
+func TestCRTReconciler_RollingBack(t *testing.T) {
+	tests := []struct {
+		name                  string
+		preObjects            []client.Object
+		txSpec                v1alpha1.CommittedResourceChangeSpec
+		reconcilerOpt         func(r *CommittedResourceChangeReconciler)
+		afterRollingBack      func(t *testing.T, c client.Client, txName string)
+		wantPhase             v1alpha1.ChangePhase
+		wantFinishedReason    string
+		wantProgressingStatus metav1.ConditionStatus
+		wantProgressingReason string
+		// crName is derived as commitment-<uuid> from txSpec.NewState (single-entry tests).
+		// For multi-CR tests the check is done inline.
+	}{
+		{
+			name: "nil snapshot: new CR is deleted and rollback completes",
+			txSpec: v1alpha1.CommittedResourceChangeSpec{
+				AvailabilityZone: "az-1",
+				Source:           v1alpha1.TxSourceAPI,
+				AllowRejection:   true,
+				NewState:         map[string]*v1alpha1.CommittedResourceSpec{"uuid-rb1": minimalCRSpec("az-1")},
+			},
+			// SnapshotBefore[uuid-rb1] = nil (CR did not exist before).
+			// After rollback, the CR must be deleted; no settlement gate.
+			wantPhase:             v1alpha1.ChangePhaseRejected,
+			wantFinishedReason:    string(v1alpha1.ChangePhaseRejected),
+			wantProgressingStatus: metav1.ConditionFalse,
+			wantProgressingReason: string(v1alpha1.ChangePhaseRejected),
+		},
+		{
+			name: "non-nil snapshot: existing CR spec is restored and rollback completes",
+			preObjects: []client.Object{
+				&v1alpha1.CommittedResource{
+					ObjectMeta: metav1.ObjectMeta{Name: "commitment-uuid-rb2"},
+					Spec:       *minimalCRSpec("az-old"),
+				},
+			},
+			txSpec: v1alpha1.CommittedResourceChangeSpec{
+				AvailabilityZone: "az-1",
+				Source:           v1alpha1.TxSourceAPI,
+				AllowRejection:   true,
+				NewState:         map[string]*v1alpha1.CommittedResourceSpec{"uuid-rb2": minimalCRSpec("az-new")},
+			},
+			// SnapshotBefore[uuid-rb2] = minimalCRSpec("az-old").
+			// After rollback, commitment-uuid-rb2 must have spec az-old.
+			// Simulate CR controller settling the restored spec.
+			afterRollingBack: func(t *testing.T, c client.Client, _ string) {
+				setCRReady(t, c, "commitment-uuid-rb2", metav1.ConditionTrue, v1alpha1.CommittedResourceReasonAccepted, "")
+			},
+			wantPhase:             v1alpha1.ChangePhaseRejected,
+			wantFinishedReason:    string(v1alpha1.ChangePhaseRejected),
+			wantProgressingStatus: metav1.ConditionFalse,
+			wantProgressingReason: string(v1alpha1.ChangePhaseRejected),
+		},
+		{
+			name: "CRs not yet settled: stays in RollingBack",
+			preObjects: []client.Object{
+				&v1alpha1.CommittedResource{
+					ObjectMeta: metav1.ObjectMeta{Name: "commitment-uuid-rb3"},
+					Spec:       *minimalCRSpec("az-old"),
+				},
+			},
+			txSpec: v1alpha1.CommittedResourceChangeSpec{
+				AvailabilityZone: "az-1",
+				Source:           v1alpha1.TxSourceAPI,
+				AllowRejection:   true,
+				NewState:         map[string]*v1alpha1.CommittedResourceSpec{"uuid-rb3": minimalCRSpec("az-new")},
+			},
+			// The fake client does not increment Generation on spec updates, so we must explicitly
+			// stale the condition to simulate "CR controller has not yet processed the restored spec".
+			afterRollingBack: func(t *testing.T, c client.Client, _ string) {
+				setCRReadyStaleGen(t, c, "commitment-uuid-rb3")
+			},
+			wantPhase:             v1alpha1.ChangePhaseRollingBack,
+			wantProgressingStatus: metav1.ConditionTrue,
+			wantProgressingReason: "Advancing",
+		},
+		{
+			name: "rollback timeout: terminates with RollbackFailed",
+			preObjects: []client.Object{
+				&v1alpha1.CommittedResource{
+					ObjectMeta: metav1.ObjectMeta{Name: "commitment-uuid-rb4"},
+					Spec:       *minimalCRSpec("az-old"),
+				},
+			},
+			txSpec: v1alpha1.CommittedResourceChangeSpec{
+				AvailabilityZone: "az-1",
+				Source:           v1alpha1.TxSourceAPI,
+				AllowRejection:   true,
+				NewState:         map[string]*v1alpha1.CommittedResourceSpec{"uuid-rb4": minimalCRSpec("az-new")},
+			},
+			reconcilerOpt: func(r *CommittedResourceChangeReconciler) {
+				r.RollbackTimeout = 50 * time.Millisecond
+			},
+			// Stale the CR condition AND backdate the Progressing timestamp to trigger the timeout.
+			afterRollingBack: func(t *testing.T, c client.Client, txName string) {
+				setCRReadyStaleGen(t, c, "commitment-uuid-rb4")
+				backdateProgressingCondition(t, c, txName, 1*time.Second)
+			},
+			wantPhase:             v1alpha1.ChangePhaseRejected,
+			wantFinishedReason:    v1alpha1.ChangeReasonRollbackFailed,
+			wantProgressingStatus: metav1.ConditionFalse,
+			wantProgressingReason: v1alpha1.ChangeReasonRetryExhausted,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := testScheme(t)
+			txName := "tx-rb-" + tt.name[:5]
+			tx := &v1alpha1.CommittedResourceChange{
+				ObjectMeta: metav1.ObjectMeta{Name: txName},
+				Spec:       tt.txSpec,
+			}
+			objs := append([]client.Object{tx}, tt.preObjects...)
+			c := testClient(t, scheme, objs...)
+			r := testReconciler(c, scheme)
+			if tt.reconcilerOpt != nil {
+				tt.reconcilerOpt(r)
+			}
+
+			// Pick the first UUID for the rejection trigger (single-CR tests).
+			var crName string
+			for uuid := range tt.txSpec.NewState {
+				crName = commitmentName(uuid)
+				break
+			}
+
+			driveToRollingBack(t, r, c, txName, crName)
+
+			if tt.afterRollingBack != nil {
+				tt.afterRollingBack(t, c, txName)
+			}
+
+			doReconcile(t, r, txName)
+
+			tx = getTx(t, c, txName)
+			if tx.Status.Phase != tt.wantPhase {
+				t.Errorf("phase: want %q, got %q", tt.wantPhase, tx.Status.Phase)
+			}
+			if tt.wantFinishedReason != "" {
+				assertCondition(t, tx.Status.Conditions, v1alpha1.ChangeConditionFinished, metav1.ConditionTrue, tt.wantFinishedReason)
+			}
+			if tt.wantProgressingStatus != "" {
+				assertCondition(t, tx.Status.Conditions, v1alpha1.ChangeConditionProgressing, tt.wantProgressingStatus, tt.wantProgressingReason)
+			}
+		})
+	}
+}
+
+// TestCRTReconciler_RollingBack_MultiCR verifies that all non-nil SnapshotBefore entries must
+// have settled (observedGeneration == generation) before the CRC advances to Rejected.
+func TestCRTReconciler_RollingBack_MultiCR(t *testing.T) {
+	const txName = "tx-rb-multi"
+	scheme := testScheme(t)
+	tx := &v1alpha1.CommittedResourceChange{
+		ObjectMeta: metav1.ObjectMeta{Name: txName},
+		Spec: v1alpha1.CommittedResourceChangeSpec{
+			AvailabilityZone: "az-1",
+			Source:           v1alpha1.TxSourceAPI,
+			AllowRejection:   true,
+			NewState: map[string]*v1alpha1.CommittedResourceSpec{
+				"uuid-m1": minimalCRSpec("az-new"),
+				"uuid-m2": minimalCRSpec("az-new"),
+			},
+		},
+	}
+	// Both CRs pre-exist so their snapshots are non-nil; rollback must restore both.
+	preObjects := []client.Object{
+		&v1alpha1.CommittedResource{ObjectMeta: metav1.ObjectMeta{Name: "commitment-uuid-m1"}, Spec: *minimalCRSpec("az-old")},
+		&v1alpha1.CommittedResource{ObjectMeta: metav1.ObjectMeta{Name: "commitment-uuid-m2"}, Spec: *minimalCRSpec("az-old")},
+	}
+	objs := append([]client.Object{tx}, preObjects...)
+	c := testClient(t, scheme, objs...)
+	r := testReconciler(c, scheme)
+
+	driveToPhase(t, r, c, txName, v1alpha1.ChangePhaseAwaitingScheduling)
+	setCRReady(t, c, "commitment-uuid-m1", metav1.ConditionFalse, v1alpha1.CommittedResourceReasonRejected, "no capacity")
+	driveToPhase(t, r, c, txName, v1alpha1.ChangePhaseRollingBack)
+
+	// Stale both CRs to simulate the CR controller not having processed the restored spec yet.
+	// (The fake client does not increment Generation on spec writes.)
+	setCRReadyStaleGen(t, c, "commitment-uuid-m1")
+	setCRReadyStaleGen(t, c, "commitment-uuid-m2")
+
+	// Neither CR settled — must stay in RollingBack.
+	doReconcile(t, r, txName)
+	if got := getTx(t, c, txName).Status.Phase; got != v1alpha1.ChangePhaseRollingBack {
+		t.Fatalf("after first rollback reconcile: want RollingBack, got %q", got)
+	}
+
+	// Settle only the first CR — still waiting on the second.
+	setCRReady(t, c, "commitment-uuid-m1", metav1.ConditionTrue, v1alpha1.CommittedResourceReasonAccepted, "")
+	doReconcile(t, r, txName)
+	if got := getTx(t, c, txName).Status.Phase; got != v1alpha1.ChangePhaseRollingBack {
+		t.Fatalf("after one CR settled: want RollingBack, got %q", got)
+	}
+
+	// Settle the second CR — now all restored.
+	setCRReady(t, c, "commitment-uuid-m2", metav1.ConditionTrue, v1alpha1.CommittedResourceReasonAccepted, "")
+	doReconcile(t, r, txName)
+	if got := getTx(t, c, txName).Status.Phase; got != v1alpha1.ChangePhaseRejected {
+		t.Errorf("after all CRs settled: want Rejected, got %q", got)
+	}
+}
+
+// TestCRTReconciler_RollingBack_Idempotent verifies that re-running RollingBack multiple
+// times after restoration is safe and produces a stable Rejected terminal state.
+func TestCRTReconciler_RollingBack_Idempotent(t *testing.T) {
+	const txName = "tx-rb-idem"
+	scheme := testScheme(t)
+	tx := &v1alpha1.CommittedResourceChange{
+		ObjectMeta: metav1.ObjectMeta{Name: txName},
+		Spec: v1alpha1.CommittedResourceChangeSpec{
+			AvailabilityZone: "az-1",
+			Source:           v1alpha1.TxSourceAPI,
+			AllowRejection:   true,
+			NewState:         map[string]*v1alpha1.CommittedResourceSpec{"uuid-idem-rb": minimalCRSpec("az-1")},
+		},
+	}
+	c := testClient(t, scheme, tx)
+	r := testReconciler(c, scheme)
+
+	// nil snapshot entry — CR was new, rollback deletes it. No settlement gate needed.
+	driveToRollingBack(t, r, c, txName, "commitment-uuid-idem-rb")
+
+	reconcileN(t, r, txName, 3)
+
+	if got := getTx(t, c, txName).Status.Phase; got != v1alpha1.ChangePhaseRejected {
+		t.Errorf("phase: want Rejected, got %q", got)
+	}
+}
+
+// ============================================================================
+// TestCRTReconciler_DryRunCleanup
+// ============================================================================
+
+// driveToDryRunCleanup drives a DryRun CRC to DryRunCleanup.
+func driveToDryRunCleanup(t *testing.T, r *CommittedResourceChangeReconciler, c client.Client, txName, crName string) {
+	t.Helper()
+	driveToPhase(t, r, c, txName, v1alpha1.ChangePhaseAwaitingScheduling)
+	setCRReady(t, c, crName, metav1.ConditionTrue, v1alpha1.CommittedResourceReasonAccepted, "")
+	driveToPhase(t, r, c, txName, v1alpha1.ChangePhaseDryRunCleanup)
+}
+
+func TestCRTReconciler_DryRunCleanup(t *testing.T) {
+	tests := []struct {
+		name                  string
+		preObjects            []client.Object
+		txSpec                v1alpha1.CommittedResourceChangeSpec
+		reconcilerOpt         func(r *CommittedResourceChangeReconciler)
+		afterDryRunCleanup    func(t *testing.T, c client.Client, txName string)
+		wantPhase             v1alpha1.ChangePhase
+		wantFinishedReason    string
+		wantProgressingStatus metav1.ConditionStatus
+		wantProgressingReason string
+	}{
+		{
+			name: "nil snapshot: new CR deleted and dry-run completes as Accepted",
+			txSpec: v1alpha1.CommittedResourceChangeSpec{
+				AvailabilityZone: "az-1",
+				Source:           v1alpha1.TxSourceAPI,
+				AllowRejection:   true,
+				DryRun:           true,
+				NewState:         map[string]*v1alpha1.CommittedResourceSpec{"uuid-dry1": minimalCRSpec("az-1")},
+			},
+			wantPhase:             v1alpha1.ChangePhaseAccepted,
+			wantFinishedReason:    string(v1alpha1.ChangePhaseAccepted),
+			wantProgressingStatus: metav1.ConditionFalse,
+			wantProgressingReason: string(v1alpha1.ChangePhaseAccepted),
+		},
+		{
+			name: "non-nil snapshot: existing CR spec restored and dry-run completes as Accepted",
+			preObjects: []client.Object{
+				&v1alpha1.CommittedResource{
+					ObjectMeta: metav1.ObjectMeta{Name: "commitment-uuid-dry2"},
+					Spec:       *minimalCRSpec("az-old"),
+				},
+			},
+			txSpec: v1alpha1.CommittedResourceChangeSpec{
+				AvailabilityZone: "az-1",
+				Source:           v1alpha1.TxSourceAPI,
+				AllowRejection:   true,
+				DryRun:           true,
+				NewState:         map[string]*v1alpha1.CommittedResourceSpec{"uuid-dry2": minimalCRSpec("az-new")},
+			},
+			afterDryRunCleanup: func(t *testing.T, c client.Client, _ string) {
+				setCRReady(t, c, "commitment-uuid-dry2", metav1.ConditionTrue, v1alpha1.CommittedResourceReasonAccepted, "")
+			},
+			wantPhase:             v1alpha1.ChangePhaseAccepted,
+			wantFinishedReason:    string(v1alpha1.ChangePhaseAccepted),
+			wantProgressingStatus: metav1.ConditionFalse,
+			wantProgressingReason: string(v1alpha1.ChangePhaseAccepted),
+		},
+		{
+			name: "CRs not yet settled: stays in DryRunCleanup",
+			preObjects: []client.Object{
+				&v1alpha1.CommittedResource{
+					ObjectMeta: metav1.ObjectMeta{Name: "commitment-uuid-dry3"},
+					Spec:       *minimalCRSpec("az-old"),
+				},
+			},
+			txSpec: v1alpha1.CommittedResourceChangeSpec{
+				AvailabilityZone: "az-1",
+				Source:           v1alpha1.TxSourceAPI,
+				AllowRejection:   true,
+				DryRun:           true,
+				NewState:         map[string]*v1alpha1.CommittedResourceSpec{"uuid-dry3": minimalCRSpec("az-new")},
+			},
+			// Stale the condition to simulate "CR controller has not yet processed the restored spec".
+			afterDryRunCleanup: func(t *testing.T, c client.Client, _ string) {
+				setCRReadyStaleGen(t, c, "commitment-uuid-dry3")
+			},
+			wantPhase:             v1alpha1.ChangePhaseDryRunCleanup,
+			wantProgressingStatus: metav1.ConditionTrue,
+			wantProgressingReason: "Advancing",
+		},
+		{
+			name: "dry-run cleanup timeout: terminates with RollbackFailed",
+			preObjects: []client.Object{
+				&v1alpha1.CommittedResource{
+					ObjectMeta: metav1.ObjectMeta{Name: "commitment-uuid-dry4"},
+					Spec:       *minimalCRSpec("az-old"),
+				},
+			},
+			txSpec: v1alpha1.CommittedResourceChangeSpec{
+				AvailabilityZone: "az-1",
+				Source:           v1alpha1.TxSourceAPI,
+				AllowRejection:   true,
+				DryRun:           true,
+				NewState:         map[string]*v1alpha1.CommittedResourceSpec{"uuid-dry4": minimalCRSpec("az-new")},
+			},
+			reconcilerOpt: func(r *CommittedResourceChangeReconciler) {
+				r.RollbackTimeout = 50 * time.Millisecond
+			},
+			afterDryRunCleanup: func(t *testing.T, c client.Client, txName string) {
+				setCRReadyStaleGen(t, c, "commitment-uuid-dry4")
+				backdateProgressingCondition(t, c, txName, 1*time.Second)
+			},
+			wantPhase:             v1alpha1.ChangePhaseRejected,
+			wantFinishedReason:    v1alpha1.ChangeReasonRollbackFailed,
+			wantProgressingStatus: metav1.ConditionFalse,
+			wantProgressingReason: v1alpha1.ChangeReasonRetryExhausted,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := testScheme(t)
+			txName := "tx-dry-" + tt.name[:5]
+			tx := &v1alpha1.CommittedResourceChange{
+				ObjectMeta: metav1.ObjectMeta{Name: txName},
+				Spec:       tt.txSpec,
+			}
+			objs := append([]client.Object{tx}, tt.preObjects...)
+			c := testClient(t, scheme, objs...)
+			r := testReconciler(c, scheme)
+			if tt.reconcilerOpt != nil {
+				tt.reconcilerOpt(r)
+			}
+
+			var crName string
+			for uuid := range tt.txSpec.NewState {
+				crName = commitmentName(uuid)
+				break
+			}
+
+			driveToDryRunCleanup(t, r, c, txName, crName)
+
+			if tt.afterDryRunCleanup != nil {
+				tt.afterDryRunCleanup(t, c, txName)
+			}
+
+			doReconcile(t, r, txName)
+
+			tx = getTx(t, c, txName)
+			if tx.Status.Phase != tt.wantPhase {
+				t.Errorf("phase: want %q, got %q", tt.wantPhase, tx.Status.Phase)
+			}
+			if tt.wantFinishedReason != "" {
+				assertCondition(t, tx.Status.Conditions, v1alpha1.ChangeConditionFinished, metav1.ConditionTrue, tt.wantFinishedReason)
+			}
+			if tt.wantProgressingStatus != "" {
+				assertCondition(t, tx.Status.Conditions, v1alpha1.ChangeConditionProgressing, tt.wantProgressingStatus, tt.wantProgressingReason)
+			}
+		})
+	}
+}
+
+// TestCRTReconciler_DryRun_WouldReject verifies that DryRun=true + rejection follows
+// the RollingBack path and terminates as Rejected (not Accepted).
+func TestCRTReconciler_DryRun_WouldReject(t *testing.T) {
+	const txName = "tx-dry-reject"
+	scheme := testScheme(t)
+	tx := &v1alpha1.CommittedResourceChange{
+		ObjectMeta: metav1.ObjectMeta{Name: txName},
+		Spec: v1alpha1.CommittedResourceChangeSpec{
+			AvailabilityZone: "az-1",
+			Source:           v1alpha1.TxSourceAPI,
+			AllowRejection:   true,
+			DryRun:           true,
+			NewState:         map[string]*v1alpha1.CommittedResourceSpec{"uuid-dr": minimalCRSpec("az-1")},
+		},
+	}
+	c := testClient(t, scheme, tx)
+	r := testReconciler(c, scheme)
+
+	driveToPhase(t, r, c, txName, v1alpha1.ChangePhaseAwaitingScheduling)
+	// Reject placement → must go to RollingBack (not DryRunCleanup).
+	setCRReady(t, c, "commitment-uuid-dr", metav1.ConditionFalse, v1alpha1.CommittedResourceReasonRejected, "no capacity")
+	driveToPhase(t, r, c, txName, v1alpha1.ChangePhaseRollingBack)
+
+	// nil snapshot → delete CR → settle immediately → Rejected.
+	doReconcile(t, r, txName)
+	if got := getTx(t, c, txName).Status.Phase; got != v1alpha1.ChangePhaseRejected {
+		t.Errorf("DryRun would-reject: want Rejected, got %q", got)
+	}
+	assertCondition(t, getTx(t, c, txName).Status.Conditions, v1alpha1.ChangeConditionFinished, metav1.ConditionTrue, string(v1alpha1.ChangePhaseRejected))
+}
