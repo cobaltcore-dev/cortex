@@ -621,7 +621,7 @@ func (m *ReservationManager) newPaygReservation(
 	return reservation, nil
 }
 
-func primaryResourceForCommitment(rt v1alpha1.CommittedResourceType) hv1.ResourceName {
+func primaryResourceForCommitment(rt v1alpha1.CommittedResourceType) hv1.ResourceName { //nolint:unparam
 	switch rt {
 	case v1alpha1.CommittedResourceTypeMemory:
 		return hv1.ResourceMemory

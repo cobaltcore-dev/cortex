@@ -382,7 +382,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		vmUUIDs = append(vmUUIDs, vmUUID)
 	}
 	// add VM id from annotation if present
-	if candidateVMUUID := res.Annotations[v1alpha1.AnnotationCandidateAllocation]; candidateVMUUID != "" && slices.Contains(vmUUIDs, candidateVMUUID) == false {
+	if candidateVMUUID := res.Annotations[v1alpha1.AnnotationCandidateAllocation]; candidateVMUUID != "" && !slices.Contains(vmUUIDs, candidateVMUUID) {
 		logger.Info("adding candidate VM from annotation",
 			"vm", candidateVMUUID,
 			"reservation", res.Name)
@@ -425,6 +425,9 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 	remainingSpare := make(map[hv1.ResourceName]resource.Quantity, len(res.Spec.Resources))
 	for rn, qty := range res.Spec.Resources {
 		remainingSpare[rn] = qty.DeepCopy()
+	}
+	if len(remainingSpare) == 0 {
+		logger.Info("Spec.Resources is empty — skipping allocation computation; no VMs will be confirmed", "reservation", res.Name)
 	}
 	zero := resource.MustParse("0")
 
@@ -511,6 +514,7 @@ func (r *CommitmentReservationController) computeAlreadyAssignedElsewhere(
 	res *v1alpha1.Reservation,
 	vmUUID string,
 ) (map[hv1.ResourceName]resource.Quantity, error) {
+
 	var conflicts v1alpha1.ReservationList
 	if err := r.List(ctx, &conflicts, client.MatchingFields{idxReservationByAllocationVMUUID: vmUUID}); err != nil {
 		return nil, fmt.Errorf("failed to query allocation index for vm %s: %w", vmUUID, err)
@@ -526,8 +530,7 @@ func (r *CommitmentReservationController) computeAlreadyAssignedElsewhere(
 			continue
 		}
 		if other.Status.Host != res.Status.Host {
-			// looks like another reservation still has the vm in its allocation of a different host, queue for reconciliation
-			// TODO not so nice to queue other res here for reconciliation, because of side effect of function, but maybe return wrongly such reservations as conflicting?
+			// stale allocation on a different-host slot — skip; it will self-correct when that slot next reconciles.
 			continue // only same-host slots contribute
 		}
 		if alloc, ok := other.Status.CommittedResourceReservation.Allocations[vmUUID]; ok {
