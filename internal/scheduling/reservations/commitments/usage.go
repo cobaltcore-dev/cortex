@@ -14,6 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
 	"github.com/sapcc/go-api-declarations/liquid"
 	. "go.xyrillian.de/gg/option"
@@ -277,10 +278,10 @@ func getProjectVMs(
 
 		memoryMB := uint64(0)
 		vcpus := uint64(0)
-		if qty, ok := vm.Resources["memory"]; ok {
+		if qty, ok := vm.Resources[string(hv1.ResourceMemory)]; ok {
 			memoryMB = uint64(qty.Value()) / (1024 * 1024) //nolint:gosec
 		}
-		if qty, ok := vm.Resources["vcpus"]; ok {
+		if qty, ok := vm.Resources[string(hv1.ResourceCPU)]; ok {
 			vcpus = uint64(qty.Value()) //nolint:gosec
 		}
 

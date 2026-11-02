@@ -14,6 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 // Pipeline names for failover reservation scheduling
@@ -225,10 +226,10 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 	// Get memory and vcpus from VM resources
 	var memoryMB uint64
 	var vcpus uint64
-	if memory, ok := vm.Resources["memory"]; ok {
+	if memory, ok := vm.Resources[string(hv1.ResourceMemory)]; ok {
 		memoryMB = uint64(memory.Value() / (1024 * 1024)) //nolint:gosec // memory values won't overflow
 	}
-	if vcpusRes, ok := vm.Resources["vcpus"]; ok {
+	if vcpusRes, ok := vm.Resources[string(hv1.ResourceCPU)]; ok {
 		vcpus = uint64(vcpusRes.Value()) //nolint:gosec // vcpus values won't overflow
 	}
 

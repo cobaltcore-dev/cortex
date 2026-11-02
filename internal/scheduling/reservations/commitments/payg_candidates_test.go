@@ -92,7 +92,7 @@ func vmOnHV(uuid, hvName, flavorName string, memMB uint64) reservations.VM { //n
 		FlavorName:        flavorName,
 		CurrentHypervisor: hvName,
 		Resources: map[string]resource.Quantity{
-			"memory": *resource.NewQuantity(int64(memMB)*1024*1024, resource.BinarySI), //nolint:gosec
+			string(hv1.ResourceMemory): *resource.NewQuantity(int64(memMB)*1024*1024, resource.BinarySI), //nolint:gosec
 		},
 	}
 }

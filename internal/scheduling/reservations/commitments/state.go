@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
@@ -345,7 +346,7 @@ func FromReservations(reservations []v1alpha1.Reservation) (*CommitmentState, er
 			continue
 		}
 
-		memoryQuantity := res.Spec.Resources["memory"]
+		memoryQuantity := res.Spec.Resources[hv1.ResourceMemory]
 		memoryBytes := memoryQuantity.Value()
 		state.TotalMemoryBytes += memoryBytes
 	}

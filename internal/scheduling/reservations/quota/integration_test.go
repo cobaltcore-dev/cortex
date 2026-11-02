@@ -166,8 +166,8 @@ func TestIntegration(t *testing.T) {
 							ProjectID: "project-a", AvailabilityZone: "az-1",
 							CreatedAt: "2099-01-01T00:00:00Z", // far future, always AFTER last reconcile
 							Resources: map[string]resource.Quantity{
-								"memory": resource.MustParse("34359738368"), // 32768 MiB = 32 GiB
-								"vcpus":  resource.MustParse("8"),
+								string(hv1.ResourceMemory): resource.MustParse("34359738368"), // 32768 MiB = 32 GiB
+								string(hv1.ResourceCPU):    resource.MustParse("8"),
 							},
 						},
 					),
@@ -397,8 +397,8 @@ func TestIntegration(t *testing.T) {
 					UUID: "vm-unknown", FlavorName: "nonexistent-flavor",
 					ProjectID: "project-x", AvailabilityZone: "az-1",
 					Resources: map[string]resource.Quantity{
-						"memory": resource.MustParse("4294967296"),
-						"vcpus":  resource.MustParse("2"),
+						string(hv1.ResourceMemory): resource.MustParse("4294967296"),
+						string(hv1.ResourceCPU):    resource.MustParse("2"),
 					},
 				},
 			},
@@ -540,8 +540,8 @@ func TestIntegration(t *testing.T) {
 							ProjectID: "project-a", AvailabilityZone: "az-1",
 							CreatedAt: "2099-01-01T00:00:00Z", // after last reconcile
 							Resources: map[string]resource.Quantity{
-								"memory": resource.MustParse("34359738368"), // 32768 MiB = 32 GiB
-								"vcpus":  resource.MustParse("8"),
+								string(hv1.ResourceMemory): resource.MustParse("34359738368"), // 32768 MiB = 32 GiB
+								string(hv1.ResourceCPU):    resource.MustParse("8"),
 							},
 						},
 					),
@@ -638,8 +638,8 @@ func TestIntegration(t *testing.T) {
 							ProjectID: "project-a", AvailabilityZone: "az-1",
 							CreatedAt: "2099-01-01T00:00:00Z",
 							Resources: map[string]resource.Quantity{
-								"memory": resource.MustParse("34359738368"), // 32768 MiB = 32 GiB
-								"vcpus":  resource.MustParse("8"),
+								string(hv1.ResourceMemory): resource.MustParse("34359738368"), // 32768 MiB = 32 GiB
+								string(hv1.ResourceCPU):    resource.MustParse("8"),
 							},
 						},
 					),
@@ -671,8 +671,8 @@ func TestIntegration(t *testing.T) {
 							ProjectID: "project-b", AvailabilityZone: "az-1",
 							CreatedAt: "2099-01-01T00:00:00Z",
 							Resources: map[string]resource.Quantity{
-								"memory": resource.MustParse("4294967296"), // 4096 MiB = 4 GiB
-								"vcpus":  resource.MustParse("2"),
+								string(hv1.ResourceMemory): resource.MustParse("4294967296"), // 4096 MiB = 4 GiB
+								string(hv1.ResourceCPU):    resource.MustParse("2"),
 							},
 						},
 					),
@@ -706,8 +706,8 @@ func TestIntegration(t *testing.T) {
 							ProjectID: "project-a", AvailabilityZone: "az-1",
 							CreatedAt: "2099-01-01T00:00:00Z",
 							Resources: map[string]resource.Quantity{
-								"memory": resource.MustParse("34359738368"),
-								"vcpus":  resource.MustParse("8"),
+								string(hv1.ResourceMemory): resource.MustParse("34359738368"),
+								string(hv1.ResourceCPU):    resource.MustParse("8"),
 							},
 						},
 					),
@@ -737,8 +737,8 @@ func TestIntegration(t *testing.T) {
 							ProjectID: "project-a", AvailabilityZone: "az-1",
 							CreatedAt: "2099-01-01T00:00:00Z",
 							Resources: map[string]resource.Quantity{
-								"memory": resource.MustParse("34359738368"),
-								"vcpus":  resource.MustParse("8"),
+								string(hv1.ResourceMemory): resource.MustParse("34359738368"),
+								string(hv1.ResourceCPU):    resource.MustParse("8"),
 							},
 						},
 					},
@@ -777,8 +777,8 @@ func TestIntegration(t *testing.T) {
 							ProjectID: "project-a", AvailabilityZone: "az-1",
 							CreatedAt: "2099-01-01T00:00:00Z",
 							Resources: map[string]resource.Quantity{
-								"memory": resource.MustParse("34359738368"),
-								"vcpus":  resource.MustParse("8"),
+								string(hv1.ResourceMemory): resource.MustParse("34359738368"),
+								string(hv1.ResourceCPU):    resource.MustParse("8"),
 							},
 						},
 					),
@@ -960,8 +960,8 @@ var testVMs = []reservations.VM{
 		ProjectID: "project-a", AvailabilityZone: "az-1",
 		CreatedAt: "2025-12-01T00:00:00Z",
 		Resources: map[string]resource.Quantity{
-			"memory": resource.MustParse("34359738368"), // 32768 MiB
-			"vcpus":  resource.MustParse("8"),
+			string(hv1.ResourceMemory): resource.MustParse("34359738368"), // 32768 MiB
+			string(hv1.ResourceCPU):    resource.MustParse("8"),
 		},
 	},
 	// vm-2: hana_v2, 64 GiB RAM (65536/1024), 16 cores
@@ -970,8 +970,8 @@ var testVMs = []reservations.VM{
 		ProjectID: "project-a", AvailabilityZone: "az-1",
 		CreatedAt: "2025-12-01T00:00:00Z",
 		Resources: map[string]resource.Quantity{
-			"memory": resource.MustParse("68719476736"), // 65536 MiB
-			"vcpus":  resource.MustParse("16"),
+			string(hv1.ResourceMemory): resource.MustParse("68719476736"), // 65536 MiB
+			string(hv1.ResourceCPU):    resource.MustParse("16"),
 		},
 	},
 	// vm-3: hana_v2, 32 GiB RAM (32768/1024), 8 cores
@@ -980,8 +980,8 @@ var testVMs = []reservations.VM{
 		ProjectID: "project-a", AvailabilityZone: "az-2",
 		CreatedAt: "2025-12-01T00:00:00Z",
 		Resources: map[string]resource.Quantity{
-			"memory": resource.MustParse("34359738368"), // 32768 MiB
-			"vcpus":  resource.MustParse("8"),
+			string(hv1.ResourceMemory): resource.MustParse("34359738368"), // 32768 MiB
+			string(hv1.ResourceCPU):    resource.MustParse("8"),
 		},
 	},
 	// vm-4: general, 4 GiB RAM (4096/1024), 2 cores
@@ -990,8 +990,8 @@ var testVMs = []reservations.VM{
 		ProjectID: "project-a", AvailabilityZone: "az-1",
 		CreatedAt: "2025-12-01T00:00:00Z",
 		Resources: map[string]resource.Quantity{
-			"memory": resource.MustParse("4294967296"), // 4096 MiB
-			"vcpus":  resource.MustParse("2"),
+			string(hv1.ResourceMemory): resource.MustParse("4294967296"), // 4096 MiB
+			string(hv1.ResourceCPU):    resource.MustParse("2"),
 		},
 	},
 	// vm-5: general, 4 GiB RAM (4096/1024), 2 cores
@@ -1000,8 +1000,8 @@ var testVMs = []reservations.VM{
 		ProjectID: "project-b", AvailabilityZone: "az-1",
 		CreatedAt: "2025-12-01T00:00:00Z",
 		Resources: map[string]resource.Quantity{
-			"memory": resource.MustParse("4294967296"), // 4096 MiB
-			"vcpus":  resource.MustParse("2"),
+			string(hv1.ResourceMemory): resource.MustParse("4294967296"), // 4096 MiB
+			string(hv1.ResourceCPU):    resource.MustParse("2"),
 		},
 	},
 }
@@ -1446,11 +1446,11 @@ func usedResourcesFromMultiples(resourceType v1alpha1.CommittedResourceType, fla
 		}
 		bytesVal := multiples * 1024 * 1024 * 1024
 		return map[string]resource.Quantity{
-			"memory": *resource.NewQuantity(bytesVal, resource.BinarySI),
+			string(hv1.ResourceMemory): *resource.NewQuantity(bytesVal, resource.BinarySI),
 		}
 	case v1alpha1.CommittedResourceTypeCores:
 		return map[string]resource.Quantity{
-			"cpu": *resource.NewQuantity(multiples, resource.DecimalSI),
+			string(hv1.ResourceCPU): *resource.NewQuantity(multiples, resource.DecimalSI),
 		}
 	default:
 		return nil

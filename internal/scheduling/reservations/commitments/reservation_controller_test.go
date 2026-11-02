@@ -271,7 +271,7 @@ func TestReconcileAllocations(t *testing.T) {
 			name: "confirmed VM present on expected host",
 			res:  withAlloc(crSlot("test-reservation", "host-1", 8, nil), "vm-1", 8),
 			vms: map[string]*reservations.VM{
-				"vm-1": {UUID: "vm-1", CurrentHypervisor: "host-1", Resources: map[string]resource.Quantity{"memory": testGiB(8)}},
+				"vm-1": {UUID: "vm-1", CurrentHypervisor: "host-1", Resources: map[string]resource.Quantity{string(hv1.ResourceMemory): testGiB(8)}},
 			},
 			wantAllocKeys: []string{"vm-1"},
 			wantAllocGiB:  map[string]int64{"vm-1": 8},
@@ -280,7 +280,7 @@ func TestReconcileAllocations(t *testing.T) {
 			name: "confirmed inactive VM still counted (stopped/shelved)",
 			res:  withAlloc(crSlot("test-reservation", "host-1", 8, nil), "vm-stopped", 8),
 			vms: map[string]*reservations.VM{
-				"vm-stopped": {UUID: "vm-stopped", CurrentHypervisor: "host-1", Resources: map[string]resource.Quantity{"memory": testGiB(8)}},
+				"vm-stopped": {UUID: "vm-stopped", CurrentHypervisor: "host-1", Resources: map[string]resource.Quantity{string(hv1.ResourceMemory): testGiB(8)}},
 			},
 			wantAllocKeys: []string{"vm-stopped"},
 		},
@@ -299,7 +299,7 @@ func TestReconcileAllocations(t *testing.T) {
 			name: "confirmed VM stays confirmed — idempotent re-reconcile",
 			res:  withAlloc(crSlot("res-winning", "host-1", 8, nil), "vm-confirmed-uuid", 8),
 			vms: map[string]*reservations.VM{
-				"vm-confirmed-uuid": {UUID: "vm-confirmed-uuid", CurrentHypervisor: "host-1", Resources: map[string]resource.Quantity{"memory": testGiB(8)}},
+				"vm-confirmed-uuid": {UUID: "vm-confirmed-uuid", CurrentHypervisor: "host-1", Resources: map[string]resource.Quantity{string(hv1.ResourceMemory): testGiB(8)}},
 			},
 			wantAllocKeys: []string{"vm-confirmed-uuid"},
 			wantAllocGiB:  map[string]int64{"vm-confirmed-uuid": 8},
@@ -310,13 +310,13 @@ func TestReconcileAllocations(t *testing.T) {
 				v1alpha1.AnnotationCandidateAllocation: "vm-new-candidate",
 			}),
 			vms: map[string]*reservations.VM{
-				"vm-new-candidate": {UUID: "vm-new-candidate", CurrentHypervisor: "host-1", Resources: map[string]resource.Quantity{"memory": testGiB(8)}},
+				"vm-new-candidate": {UUID: "vm-new-candidate", CurrentHypervisor: "host-1", Resources: map[string]resource.Quantity{string(hv1.ResourceMemory): testGiB(8)}},
 			},
 			wantAllocKeys: []string{"vm-new-candidate"},
 			wantObjectRef: map[string]string{"vm-new-candidate": "vm-new-candidate"},
 		},
 		{
-			// S02: min taken per resource dimension; slot caps vcpus even though VM has more.
+			// S02: min taken per resource dimension; slot caps cpu even though VM has more.
 			name: "S02 multi-dimensional resources — min taken per dimension",
 			res: &v1alpha1.Reservation{
 				ObjectMeta: metav1.ObjectMeta{
@@ -327,8 +327,8 @@ func TestReconcileAllocations(t *testing.T) {
 					Type:       v1alpha1.ReservationTypeCommittedResource,
 					TargetHost: "host-1",
 					Resources: map[hv1.ResourceName]resource.Quantity{
-						hv1.ResourceMemory:        testGiB(8),
-						hv1.ResourceName("vcpus"): resource.MustParse("4"),
+						hv1.ResourceMemory: testGiB(8),
+						hv1.ResourceCPU:    resource.MustParse("4"),
 					},
 					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 						ProjectID: "p-1", ResourceName: "test-flavor", PrimaryResource: hv1.ResourceMemory,
@@ -341,8 +341,8 @@ func TestReconcileAllocations(t *testing.T) {
 			},
 			vms: map[string]*reservations.VM{
 				"vm-multi": {UUID: "vm-multi", CurrentHypervisor: "host-1", Resources: map[string]resource.Quantity{
-					"memory": testGiB(8),
-					"vcpus":  resource.MustParse("8"),
+					string(hv1.ResourceMemory): testGiB(8),
+					string(hv1.ResourceCPU):    resource.MustParse("8"),
 				}},
 			},
 			wantAllocKeys: []string{"vm-multi"},
@@ -354,9 +354,9 @@ func TestReconcileAllocations(t *testing.T) {
 					t.Fatalf("get slot-a: %v", err)
 				}
 				alloc := updated.Status.CommittedResourceReservation.Allocations["vm-multi"]
-				got := alloc.Resources[hv1.ResourceName("vcpus")]
+				got := alloc.Resources[hv1.ResourceCPU]
 				if got.Cmp(resource.MustParse("4")) != 0 {
-					t.Errorf("vcpus alloc: want 4, got %s", got.String())
+					t.Errorf("cpu alloc: want 4, got %s", got.String())
 				}
 			},
 		},
@@ -1150,7 +1150,7 @@ func memVM(uuid, host string, memGiB int64) *reservations.VM {
 	return &reservations.VM{
 		UUID:              uuid,
 		CurrentHypervisor: host,
-		Resources:         map[string]resource.Quantity{"memory": testGiB(memGiB)},
+		Resources:         map[string]resource.Quantity{string(hv1.ResourceMemory): testGiB(memGiB)},
 	}
 }
 

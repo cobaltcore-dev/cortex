@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -353,8 +354,8 @@ func printCommitments(crs []v1alpha1.CommittedResource, showUsage bool) {
 
 		// Line 3 (optional): usage
 		if cr.Status.Billing != nil {
-			if mem, ok := cr.Status.Billing.UsedResources["memory"]; ok {
-				cpu := cr.Status.Billing.UsedResources["cpu"]
+			if mem, ok := cr.Status.Billing.UsedResources[string(hv1.ResourceMemory)]; ok {
+				cpu := cr.Status.Billing.UsedResources[string(hv1.ResourceCPU)]
 				usageAgeStr := gray("—")
 				if cr.Status.Billing.LastReconcileAt != nil {
 					usageAgeStr = age(cr.Status.Billing.LastReconcileAt)

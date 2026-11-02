@@ -483,10 +483,10 @@ func TestUsageReconciler_WriteUsageStatus(t *testing.T) {
 		if updated.Status.Billing.ObservedGeneration == nil || *updated.Status.Billing.ObservedGeneration != 1 {
 			t.Errorf("ObservedGeneration = %v, want 1", updated.Status.Billing.ObservedGeneration)
 		}
-		if _, ok := updated.Status.Billing.UsedResources["memory"]; !ok {
+		if _, ok := updated.Status.Billing.UsedResources[string(hv1.ResourceMemory)]; !ok {
 			t.Errorf("UsedResources[memory] not set")
 		}
-		if _, ok := updated.Status.Billing.UsedResources["cpu"]; !ok {
+		if _, ok := updated.Status.Billing.UsedResources[string(hv1.ResourceCPU)]; !ok {
 			t.Errorf("UsedResources[cpu] not set")
 		}
 	})

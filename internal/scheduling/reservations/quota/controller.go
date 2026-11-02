@@ -834,7 +834,7 @@ func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavo
 		switch spec.ResourceType {
 		case v1alpha1.CommittedResourceTypeMemory:
 			resourceName = commitments.ResourceNameRAM(spec.FlavorGroupName)
-			memQty, ok := cr.Status.Billing.UsedResources["memory"]
+			memQty, ok := cr.Status.Billing.UsedResources[string(hv1.ResourceMemory)]
 			if !ok {
 				continue
 			}
@@ -850,7 +850,7 @@ func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavo
 			usedAmount = usedBytes / (1024 * 1024 * 1024)
 		case v1alpha1.CommittedResourceTypeCores:
 			resourceName = commitments.ResourceNameCores(spec.FlavorGroupName)
-			cpuQty, ok := cr.Status.Billing.UsedResources["cpu"]
+			cpuQty, ok := cr.Status.Billing.UsedResources[string(hv1.ResourceCPU)]
 			if !ok {
 				continue
 			}
@@ -1094,10 +1094,10 @@ func buildLimesSummary(values map[string]int64, flavorGroups map[string]compute.
 
 // vmResourceUnits computes RAM commitment units (GiB) and cores from a VM's resources.
 func vmResourceUnits(resources map[string]resource.Quantity) (ramGiB, cores int64) {
-	memQty := resources["memory"]
+	memQty := resources[string(hv1.ResourceMemory)]
 	serverRAMMiB := memQty.Value() / (1024 * 1024) // bytes to MiB
 	ramGiB = serverRAMMiB / 1024                   // MiB to GiB (1 GiB per unit)
-	vcpuQty := resources["vcpus"]
+	vcpuQty := resources[string(hv1.ResourceCPU)]
 	cores = vcpuQty.Value()
 	return ramGiB, cores
 }

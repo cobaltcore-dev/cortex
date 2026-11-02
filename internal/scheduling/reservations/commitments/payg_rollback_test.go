@@ -10,6 +10,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,7 +35,7 @@ func TestCRLifecycle_PAYGRollback(t *testing.T) {
 		UUID:              "vm-payg-rollback",
 		FlavorName:        "test-flavor",
 		CurrentHypervisor: "host-1",
-		Resources:         map[string]resource.Quantity{"memory": resource.MustParse("4Gi")},
+		Resources:         map[string]resource.Quantity{string(hv1.ResourceMemory): resource.MustParse("4Gi")},
 	}}})
 	defer env.close()
 

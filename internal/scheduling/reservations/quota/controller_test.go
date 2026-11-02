@@ -45,8 +45,8 @@ func TestComputeTotalUsage(t *testing.T) {
 			ProjectID:        "project-a",
 			AvailabilityZone: "az-1",
 			Resources: map[string]resource.Quantity{
-				"memory": resource.MustParse("34359738368"), // 32768 MiB in bytes
-				"vcpus":  resource.MustParse("8"),
+				string(hv1.ResourceMemory): resource.MustParse("34359738368"), // 32768 MiB in bytes
+				string(hv1.ResourceCPU):    resource.MustParse("8"),
 			},
 		},
 		{
@@ -55,8 +55,8 @@ func TestComputeTotalUsage(t *testing.T) {
 			ProjectID:        "project-a",
 			AvailabilityZone: "az-1",
 			Resources: map[string]resource.Quantity{
-				"memory": resource.MustParse("68719476736"), // 65536 MiB in bytes
-				"vcpus":  resource.MustParse("16"),
+				string(hv1.ResourceMemory): resource.MustParse("68719476736"), // 65536 MiB in bytes
+				string(hv1.ResourceCPU):    resource.MustParse("16"),
 			},
 		},
 		{
@@ -65,8 +65,8 @@ func TestComputeTotalUsage(t *testing.T) {
 			ProjectID:        "project-a",
 			AvailabilityZone: "az-2",
 			Resources: map[string]resource.Quantity{
-				"memory": resource.MustParse("34359738368"),
-				"vcpus":  resource.MustParse("8"),
+				string(hv1.ResourceMemory): resource.MustParse("34359738368"),
+				string(hv1.ResourceCPU):    resource.MustParse("8"),
 			},
 		},
 		{
@@ -75,8 +75,8 @@ func TestComputeTotalUsage(t *testing.T) {
 			ProjectID:        "project-b",
 			AvailabilityZone: "az-1",
 			Resources: map[string]resource.Quantity{
-				"memory": resource.MustParse("4294967296"), // 4096 MiB in bytes
-				"vcpus":  resource.MustParse("2"),
+				string(hv1.ResourceMemory): resource.MustParse("4294967296"), // 4096 MiB in bytes
+				string(hv1.ResourceCPU):    resource.MustParse("2"),
 			},
 		},
 		{
@@ -85,8 +85,8 @@ func TestComputeTotalUsage(t *testing.T) {
 			ProjectID:        "project-c",
 			AvailabilityZone: "az-1",
 			Resources: map[string]resource.Quantity{
-				"memory": resource.MustParse("4294967296"),
-				"vcpus":  resource.MustParse("2"),
+				string(hv1.ResourceMemory): resource.MustParse("4294967296"),
+				string(hv1.ResourceCPU):    resource.MustParse("2"),
 			},
 		},
 	}
@@ -166,7 +166,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusConfirmed,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("5Gi")}},
+				Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{string(hv1.ResourceMemory): resource.MustParse("5Gi")}},
 			},
 		},
 		{
@@ -178,7 +178,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusGuaranteed,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("3Gi")}},
+				Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{string(hv1.ResourceMemory): resource.MustParse("3Gi")}},
 			},
 		},
 		{
@@ -190,7 +190,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusConfirmed,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"cpu": resource.MustParse("2")}},
+				Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{string(hv1.ResourceCPU): resource.MustParse("2")}},
 			},
 		},
 		// Different project — should be excluded by groupCRsByProject
@@ -203,7 +203,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusConfirmed,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("5Gi")}},
+				Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{string(hv1.ResourceMemory): resource.MustParse("5Gi")}},
 			},
 		},
 		// Pending state — should be excluded by state filter
@@ -216,7 +216,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusPending,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("2Gi")}},
+				Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{string(hv1.ResourceMemory): resource.MustParse("2Gi")}},
 			},
 		},
 	}
@@ -486,8 +486,8 @@ func TestAccumulateAddedVM_UnknownFlavor(t *testing.T) {
 				ProjectID:        "project-a",
 				AvailabilityZone: "az-1",
 				Resources: map[string]resource.Quantity{
-					"memory": resource.MustParse("4294967296"),
-					"vcpus":  resource.MustParse("2"),
+					string(hv1.ResourceMemory): resource.MustParse("4294967296"),
+					string(hv1.ResourceCPU):    resource.MustParse("2"),
 				},
 			}, nil
 		},
@@ -550,8 +550,8 @@ func TestAccumulateAddedVM_KnownFlavor(t *testing.T) {
 				AvailabilityZone: "az-1",
 				CreatedAt:        vmCreatedAt,
 				Resources: map[string]resource.Quantity{
-					"memory": resource.MustParse("34359738368"), // 32768 MiB
-					"vcpus":  resource.MustParse("8"),
+					string(hv1.ResourceMemory): resource.MustParse("34359738368"), // 32768 MiB
+					string(hv1.ResourceCPU):    resource.MustParse("8"),
 				},
 			}, nil
 		},

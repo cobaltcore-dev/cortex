@@ -626,8 +626,8 @@ func (m *mockVMSource) addVM(vm *TestVMUsage) {
 		OSType:            osType,
 		ProjectID:         vm.ProjectID,
 		Resources: map[string]resource.Quantity{
-			"memory": *resource.NewQuantity(vm.Flavor.MemoryMB*1024*1024, resource.BinarySI),
-			"vcpus":  *resource.NewQuantity(vm.Flavor.VCPUs, resource.DecimalSI),
+			string(hv1.ResourceMemory): *resource.NewQuantity(vm.Flavor.MemoryMB*1024*1024, resource.BinarySI),
+			string(hv1.ResourceCPU):    *resource.NewQuantity(vm.Flavor.VCPUs, resource.DecimalSI),
 		},
 	}
 	m.vms[vm.ProjectID] = append(m.vms[vm.ProjectID], v)
@@ -1104,8 +1104,8 @@ func (tr *UsageTestReservation) toK8sReservation(number int) *v1alpha1.Reservati
 	spec := v1alpha1.ReservationSpec{
 		Type: v1alpha1.ReservationTypeCommittedResource,
 		Resources: map[hv1.ResourceName]resource.Quantity{
-			"memory": resource.MustParse(strconv.FormatInt(memoryMB, 10) + "Mi"),
-			"cpu":    resource.MustParse(strconv.FormatInt(tr.Flavor.VCPUs, 10)),
+			hv1.ResourceMemory: resource.MustParse(strconv.FormatInt(memoryMB, 10) + "Mi"),
+			hv1.ResourceCPU:    resource.MustParse(strconv.FormatInt(tr.Flavor.VCPUs, 10)),
 		},
 		CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 			CommitmentUUID: tr.CommitmentID,

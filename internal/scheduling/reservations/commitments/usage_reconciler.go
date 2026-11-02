@@ -214,8 +214,8 @@ func (r *UsageReconciler) writeUsageStatus(ctx context.Context, state *Commitmen
 	target.Status.Billing = &v1alpha1.BillingStatus{
 		AssignedInstances: state.AssignedInstances,
 		UsedResources: map[string]resource.Quantity{
-			"memory": *usedQty,
-			"cpu":    *usedCores,
+			string(hv1.ResourceMemory): *usedQty,
+			string(hv1.ResourceCPU):    *usedCores,
 		},
 		LastReconcileAt:    &now,
 		ObservedGeneration: &target.Generation,

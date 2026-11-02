@@ -258,7 +258,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 
 			for deltaMemoryBytes > 0 && len(allCandidates) > 0 {
 				// Largest candidate that fits the delta (candidates sorted descending).
-				// If none fit, pick the smallest to minimise waste on the undersized slot.
+				// If none fit, pick the smallest to minimize waste on the undersized slot.
 				idx := len(allCandidates) - 1
 				for i, c := range allCandidates {
 					if int64(c.MemoryMB)*1024*1024 <= deltaMemoryBytes { //nolint:gosec // bounded by flavor specs
