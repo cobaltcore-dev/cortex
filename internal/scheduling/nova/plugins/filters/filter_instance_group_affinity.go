@@ -9,49 +9,50 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
 type FilterInstanceGroupAffinityStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Select hosts in spec.instance_group.
 func (s *FilterInstanceGroupAffinityStep) Run(
 	traceLog logr.Logger,
-	request api.ExternalSchedulerRequest,
+	request compute.SchedulerRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 
 	result := s.IncludeAllHostsFromRequest(request)
 	// Instance group hints are only present in user-initiated VM placement requests;
-	if intent, err := request.GetIntent(); err == nil && slices.Contains([]v1alpha1.SchedulingIntent{
+	if slices.Contains([]v1alpha1.SchedulingIntent{
 		api.ReserveForFailoverIntent,
 		api.ReuseFailoverReservationIntent,
 		api.ReserveForCommittedResourceIntent,
 		api.CapacityProbeIntent,
-	}, intent) {
+	}, request.Intent) {
 		return result, nil
 	}
 
-	ig := request.Spec.Data.InstanceGroup
+	ig := request.InstanceGroup
 	if ig == nil {
 		traceLog.V(1).Info("no instance group in request, skipping filter")
 		return result, nil
 	}
-	policy := ig.Data.Policy
+	policy := ig.Policy
 	if policy != "affinity" {
 		traceLog.V(1).Info("instance group policy is not 'affinity', skipping filter")
 		return result, nil
 	}
 
-	if len(ig.Data.Hosts) == 0 {
+	if len(ig.Hosts) == 0 {
 		// Nothing to do.
 		traceLog.V(1).Info("instance group has no hosts, skipping filter")
 		return result, nil
 	}
 
 	for host := range result.Activations {
-		if slices.Contains(ig.Data.Hosts, host) {
+		if slices.Contains(ig.Hosts, host) {
 			traceLog.V(1).Info("host is in instance group, keeping", "host", host)
 			continue
 		}

@@ -12,6 +12,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	resv "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -36,7 +37,7 @@ type FilterHasEnoughCapacityOpts struct {
 func (FilterHasEnoughCapacityOpts) Validate() error { return nil }
 
 type FilterHasEnoughCapacity struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, FilterHasEnoughCapacityOpts]
+	lib.BaseFilter[compute.SchedulerRequest, FilterHasEnoughCapacityOpts]
 }
 
 // Filter hosts that don't have enough capacity to run the requested flavor.
@@ -63,7 +64,7 @@ type FilterHasEnoughCapacity struct {
 // known at this point.
 //
 // Please also note that disk space is currently not considered by this filter.
-func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	opts := request.GetOptions()
 	result := s.IncludeAllHostsFromRequest(request)
 
@@ -157,22 +158,21 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 				// Check if this is a CR reservation scheduling request.
 				// If so, we should NOT unlock any CR reservations to prevent overbooking.
 				// CR capacity should only be unlocked for actual VM scheduling.
-				intent, err := request.GetIntent()
 				switch {
-				case err == nil && intent == api.ReserveForCommittedResourceIntent:
+				case request.Intent == api.ReserveForCommittedResourceIntent:
 					traceLog.V(1).Info("keeping CR reservation locked for CR reservation scheduling",
 						"reservation", reservation.Name,
-						"intent", intent)
+						"intent", request.Intent)
 					// Don't continue - fall through to block the resources
 				case !s.Options.LockReserved && !opts.LockReservations &&
 					// For committed resource reservations: unlock resources only if:
 					// 1. Project ID matches
 					// 2. ResourceGroup matches the flavor's hw_version
-					reservation.Spec.CommittedResourceReservation.MatchesGroup(request.Spec.Data.ProjectID, request.Spec.Data.Flavor.Data.ExtraSpecs["quota:hw_version"]):
+					reservation.Spec.CommittedResourceReservation.MatchesGroup(request.ProjectID, request.HardwareVersion):
 					traceLog.V(1).Info("unlocking resources reserved by matching committed resource reservation with allocation",
 						"reservation", reservation.Name,
-						"instanceUUID", request.Spec.Data.InstanceUUID,
-						"projectID", request.Spec.Data.ProjectID,
+						"instanceUUID", request.InstanceUUID,
+						"projectID", request.ProjectID,
 						"resourceGroup", reservation.Spec.CommittedResourceReservation.ResourceGroup)
 					continue
 				}
@@ -184,25 +184,22 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 				// 1. Failover reservations are specifically for HA/evacuation scenarios.
 				// 2. During live migrations or other operations, we don't want to use failover capacity.
 				// Note: we cannot use failover reservations from other VMs, as that can invalidate our HA guarantees.
-				intent, err := request.GetIntent()
-				if err == nil {
-					switch intent {
-					case api.EvacuateIntent:
-						if reservation.Status.FailoverReservation != nil {
-							if _, contained := reservation.Status.FailoverReservation.Allocations[request.Spec.Data.InstanceUUID]; contained {
-								traceLog.V(1).Info("unlocking resources reserved by failover reservation for VM in allocations (evacuation)",
-									"reservation", reservation.Name,
-									"instanceUUID", request.Spec.Data.InstanceUUID)
-								continue
-							}
+				switch request.Intent {
+				case api.EvacuateIntent:
+					if reservation.Status.FailoverReservation != nil {
+						if _, contained := reservation.Status.FailoverReservation.Allocations[request.InstanceUUID]; contained {
+							traceLog.V(1).Info("unlocking resources reserved by failover reservation for VM in allocations (evacuation)",
+								"reservation", reservation.Name,
+								"instanceUUID", request.InstanceUUID)
+							continue
 						}
-					case api.ReuseFailoverReservationIntent:
-						// Reuse check: the reservation already pre-blocks the right capacity for this VM.
-						// Don't subtract it from free capacity to avoid double-counting.
-						traceLog.V(1).Info("skipping failover reservation block for reuse compatibility check",
-							"reservation", reservation.Name)
-						continue
 					}
+				case api.ReuseFailoverReservationIntent:
+					// Reuse check: the reservation already pre-blocks the right capacity for this VM.
+					// Don't subtract it from free capacity to avoid double-counting.
+					traceLog.V(1).Info("skipping failover reservation block for reuse compatibility check",
+						"reservation", reservation.Name)
+					continue
 				}
 				traceLog.V(1).Info("processing failover reservation", "reservation", reservation.Name)
 			}
@@ -283,7 +280,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 		hostsEncountered[host] = struct{}{}
 
 		// Check cpu capacity.
-		if request.Spec.Data.Flavor.Data.VCPUs == 0 {
+		if request.Flavor.VCPUs == 0 {
 			return nil, errors.New("flavor has 0 vcpus")
 		}
 		freeCPU, ok := free["cpu"]
@@ -298,11 +295,11 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 		// Calculate how many instances can fit on this host, based on cpu.
 		//nolint:gosec // We're checking for underflows above (< 0).
 		vcpuSlots := uint64(freeCPU.Value()) /
-			request.Spec.Data.Flavor.Data.VCPUs
-		if vcpuSlots < request.Spec.Data.NumInstances {
+			request.Flavor.VCPUs
+		if vcpuSlots < request.NumInstances {
 			traceLog.V(1).Info(
 				"filtering host due to insufficient CPU capacity",
-				"host", host, "requested", request.Spec.Data.Flavor.Data.VCPUs,
+				"host", host, "requested", request.Flavor.VCPUs,
 				"available", freeCPU.String(),
 			)
 			delete(result.Activations, host)
@@ -310,7 +307,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 		}
 
 		// Check memory capacity.
-		if request.Spec.Data.Flavor.Data.MemoryMB == 0 {
+		if request.Flavor.Memory.IsZero() {
 			return nil, errors.New("flavor has 0 memory")
 		}
 		freeMemory, ok := free["memory"]
@@ -323,25 +320,23 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 			continue
 		}
 		// Calculate how many instances can fit on this host, based on memory.
-		// Nova's memory_mb field is named "megabytes" in the API docs, but the values
-		// are in mebibytes (1 MiB = 2^20 bytes). Multiply by 1<<20 to convert to bytes.
+		// Flavor.Memory is already in bytes (resource.Quantity).
 		//nolint:gosec // We're checking for underflows above (< 0).
-		memorySlots := uint64(freeMemory.Value()) /
-			(request.Spec.Data.Flavor.Data.MemoryMB * (1 << 20))
-		if memorySlots < request.Spec.Data.NumInstances {
+		memorySlots := uint64(freeMemory.Value()) / uint64(request.Flavor.Memory.Value())
+		if memorySlots < request.NumInstances {
 			traceLog.V(1).Info(
 				"filtering host due to insufficient RAM capacity",
-				"host", host, "requested_mb", request.Spec.Data.Flavor.Data.MemoryMB,
-				"available_mb", freeMemory.String(),
+				"host", host, "requested_memory", request.Flavor.Memory.String(),
+				"available_memory", freeMemory.String(),
 			)
 			delete(result.Activations, host)
 			continue
 		}
 		traceLog.V(1).Info(
 			"host has enough capacity", "host", host,
-			"requested_cpus", request.Spec.Data.Flavor.Data.VCPUs,
+			"requested_cpus", request.Flavor.VCPUs,
 			"available_cpus", freeCPU.String(),
-			"requested_memory_mb", request.Spec.Data.Flavor.Data.MemoryMB,
+			"requested_memory", request.Flavor.Memory.String(),
 			"available_memory", freeMemory.String(),
 		)
 	}

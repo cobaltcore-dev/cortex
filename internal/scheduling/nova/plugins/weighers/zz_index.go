@@ -4,11 +4,11 @@
 package weighers
 
 import (
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
-type NovaWeigher = lib.Weigher[api.ExternalSchedulerRequest]
+type NovaWeigher = lib.Weigher[compute.SchedulerRequest]
 
 // Configuration of weighers supported by the nova scheduler.
 var Index = map[string]func() NovaWeigher{}

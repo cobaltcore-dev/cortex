@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"slices"
 
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
@@ -65,11 +65,11 @@ func (o KVMBinpackStepOpts) Validate() error {
 // Explanation of the algorithm: https://volcano.sh/en/docs/plugins/#binpack
 type KVMBinpackStep struct {
 	// Base weigher providing common functionality.
-	lib.BaseWeigher[api.ExternalSchedulerRequest, KVMBinpackStepOpts]
+	lib.BaseWeigher[compute.SchedulerRequest, KVMBinpackStepOpts]
 }
 
 // Run this weigher in the pipeline after filters have been executed.
-func (s *KVMBinpackStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMBinpackStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	result.Statistics["binpack score"] = s.PrepareStats(request, "float")
 
@@ -141,14 +141,13 @@ func (s *KVMBinpackStep) Run(traceLog logr.Logger, request api.ExternalScheduler
 }
 
 // calcVMResources calculates the total resource requests for the VM to be scheduled.
-func (s *KVMBinpackStep) calcVMResources(req api.ExternalSchedulerRequest) map[hv1.ResourceName]resource.Quantity {
+func (s *KVMBinpackStep) calcVMResources(req compute.SchedulerRequest) map[hv1.ResourceName]resource.Quantity {
 	resources := make(map[hv1.ResourceName]resource.Quantity)
-	resourcesMemBytes := int64(req.Spec.Data.Flavor.Data.MemoryMB) * (1024 * 1024) //nolint:gosec // memory values are bounded by Nova
-	resourcesMemBytes *= int64(req.Spec.Data.NumInstances)                         //nolint:gosec // instance count is bounded by Nova
+	resourcesMemBytes := req.Flavor.Memory.Value() * int64(req.NumInstances) //nolint:gosec // instance count is bounded by Nova
 	resources[hv1.ResourceMemory] = *resource.
 		NewQuantity(resourcesMemBytes, resource.BinarySI)
-	resourcesCPU := int64(req.Spec.Data.Flavor.Data.VCPUs) //nolint:gosec // vCPU values are bounded by Nova
-	resourcesCPU *= int64(req.Spec.Data.NumInstances)      //nolint:gosec // instance count is bounded by Nova
+	resourcesCPU := int64(req.Flavor.VCPUs) //nolint:gosec // vCPU values are bounded by Nova
+	resourcesCPU *= int64(req.NumInstances) //nolint:gosec // instance count is bounded by Nova
 	resources[hv1.ResourceCPU] = *resource.
 		NewQuantity(resourcesCPU, resource.DecimalSI)
 	return resources

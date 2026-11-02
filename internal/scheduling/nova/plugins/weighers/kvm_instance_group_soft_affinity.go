@@ -7,7 +7,7 @@ import (
 	"context"
 	"slices"
 
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
@@ -23,19 +23,19 @@ import (
 // respectively, for the scheduler to choose that host for new instances of
 // the same group.
 type KVMInstanceGroupSoftAffinityStep struct {
-	lib.BaseWeigher[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseWeigher[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
-func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	result.Statistics["affinity"] = s.PrepareStats(request, "float")
 
-	ig := request.Spec.Data.InstanceGroup
+	ig := request.InstanceGroup
 	if ig == nil {
 		traceLog.V(1).Info("no instance group in request, skipping weigher")
 		return result, nil
 	}
-	policy := ig.Data.Policy
+	policy := ig.Policy
 	var factor float64
 	switch policy {
 	case "soft-anti-affinity":
@@ -46,7 +46,7 @@ func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog logr.Logger, request api
 		traceLog.V(1).Info("instance group policy is not 'soft-affinity' or 'soft-anti-affinity', skipping weigher", "policy", policy)
 		return result, nil
 	}
-	if len(ig.Data.Members) == 0 {
+	if len(ig.Members) == 0 {
 		traceLog.V(1).Info("instance group has no members, skipping weigher")
 		return result, nil
 	}
@@ -72,7 +72,7 @@ func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog logr.Logger, request api
 		}
 		count := 0
 		for _, instance := range hv.Status.Instances {
-			if slices.Contains(ig.Data.Members, instance.ID) {
+			if slices.Contains(ig.Members, instance.ID) {
 				count++
 			}
 		}

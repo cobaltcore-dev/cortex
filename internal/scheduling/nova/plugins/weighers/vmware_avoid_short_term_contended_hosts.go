@@ -9,9 +9,9 @@ import (
 
 	"github.com/go-logr/logr"
 
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	extractorcompute "github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,7 +47,7 @@ func (o VMwareAvoidShortTermContendedHostsStepOpts) Validate() error {
 // Step to avoid recently contended hosts by downvoting them.
 type VMwareAvoidShortTermContendedHostsStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	lib.BaseWeigher[api.ExternalSchedulerRequest, VMwareAvoidShortTermContendedHostsStepOpts]
+	lib.BaseWeigher[compute.SchedulerRequest, VMwareAvoidShortTermContendedHostsStepOpts]
 }
 
 // Initialize the step and validate that all required knowledges are ready.
@@ -62,7 +62,7 @@ func (s *VMwareAvoidShortTermContendedHostsStep) Init(ctx context.Context, clien
 }
 
 // Downvote hosts that are highly contended.
-func (s *VMwareAvoidShortTermContendedHostsStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *VMwareAvoidShortTermContendedHostsStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
@@ -77,7 +77,7 @@ func (s *VMwareAvoidShortTermContendedHostsStep) Run(traceLog logr.Logger, reque
 		return nil, err
 	}
 	highlyContendedHosts, err := v1alpha1.
-		UnboxFeatureList[compute.VROpsHostsystemContentionShortTerm](knowledge.Status.Raw)
+		UnboxFeatureList[extractorcompute.VROpsHostsystemContentionShortTerm](knowledge.Status.Raw)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +110,7 @@ func (s *VMwareAvoidShortTermContendedHostsStep) Run(traceLog logr.Logger, reque
 }
 
 func init() {
-	Index["vmware_avoid_short_term_contended_hosts"] = func() lib.Weigher[api.ExternalSchedulerRequest] {
+	Index["vmware_avoid_short_term_contended_hosts"] = func() lib.Weigher[compute.SchedulerRequest] {
 		return &VMwareAvoidShortTermContendedHostsStep{}
 	}
 }

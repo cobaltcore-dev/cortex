@@ -11,6 +11,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
@@ -73,25 +74,24 @@ func (o KVMFailoverReservationConsolidationOpts) GetSameSpecPenalty() float64 {
 //
 // This produces bounded output (~0 to 1) that plays nicely with other weighers.
 type KVMFailoverReservationConsolidationStep struct {
-	lib.BaseWeigher[api.ExternalSchedulerRequest, KVMFailoverReservationConsolidationOpts]
+	lib.BaseWeigher[compute.SchedulerRequest, KVMFailoverReservationConsolidationOpts]
 }
 
 // Run the weigher step.
 // For reserve_for_failover requests, hosts are scored based on existing failover reservation density
 // and same-spec diversity. For all other request types, this weigher has no effect.
-func (s *KVMFailoverReservationConsolidationStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMFailoverReservationConsolidationStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
-	intent, err := request.GetIntent()
-	if err != nil || intent != api.ReserveForFailoverIntent {
+	if request.Intent != api.ReserveForFailoverIntent {
 		traceLog.V(1).Info("skipping failover reservation consolidation weigher for non-failover-reservation request")
-		return result, nil //nolint:nilerr // intentionally skip weigher on error
+		return result, nil
 	}
 
-	// Extract the resource group from the scheduler hint.
+	// Extract the resource group from the request.
 	// This identifies which "spec group" the incoming reservation belongs to.
-	// If the hint is missing, requestResourceGroup will be empty and the same-group penalty is skipped.
-	requestResourceGroup, _ := request.Spec.Data.GetSchedulerHintStr(api.HintKeyResourceGroup) //nolint:errcheck // missing hint is fine, same-group penalty is simply skipped
+	// If it is empty, the same-group penalty is skipped.
+	requestResourceGroup := request.ResourceGroup
 
 	// Fetch all reservations.
 	var reservations v1alpha1.ReservationList

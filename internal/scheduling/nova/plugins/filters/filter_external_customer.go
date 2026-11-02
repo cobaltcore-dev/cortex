@@ -12,6 +12,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
@@ -29,29 +30,29 @@ func (opts FilterExternalCustomerStepOpts) Validate() error {
 }
 
 type FilterExternalCustomerStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, FilterExternalCustomerStepOpts]
+	lib.BaseFilter[compute.SchedulerRequest, FilterExternalCustomerStepOpts]
 }
 
 // Prefix-match the domain name for external customer domains and filter out hosts
 // that are not intended for external customers.
-func (s *FilterExternalCustomerStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterExternalCustomerStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	// Failover and capacity probe calls are not associated with a user domain;
 	// domain-based host restrictions don't apply. CR scheduling does carry a real domain
 	// and must be checked.
-	if intent, err := request.GetIntent(); err == nil && slices.Contains([]v1alpha1.SchedulingIntent{
+	if slices.Contains([]v1alpha1.SchedulingIntent{
 		api.ReserveForFailoverIntent,
 		api.ReuseFailoverReservationIntent,
 		api.CapacityProbeIntent,
-	}, intent) {
-		traceLog.V(1).Info("skipping external customer filter for non-placement intent", "intent", intent)
+	}, request.Intent) {
+		traceLog.V(1).Info("skipping external customer filter for non-placement intent", "intent", request.Intent)
 		return result, nil
 	}
 
-	domainName, err := request.Spec.Data.GetSchedulerHintStr("domain_name")
-	if err != nil {
-		traceLog.Error(err, "failed to get domain_name scheduler hint, skipping filter")
+	domainName := request.DomainName
+	if domainName == "" {
+		traceLog.V(1).Info("no domain name in request, skipping filter")
 		return result, nil
 	}
 	if slices.Contains(s.Options.CustomerIgnoredDomainNames, domainName) {

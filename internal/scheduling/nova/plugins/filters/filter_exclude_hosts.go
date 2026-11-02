@@ -6,7 +6,7 @@ package filters
 import (
 	"github.com/go-logr/logr"
 
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
@@ -14,7 +14,7 @@ import (
 // This step is useful to circumvent scheduling issues on specific hosts by
 // excluding them from all scheduling decisions.
 type FilterExcludeHostsStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, FilterExcludeHostsStepOpts]
+	lib.BaseFilter[compute.SchedulerRequest, FilterExcludeHostsStepOpts]
 }
 
 type FilterExcludeHostsStepOpts struct {
@@ -29,7 +29,7 @@ func (opts FilterExcludeHostsStepOpts) Validate() error { return nil }
 
 func (s *FilterExcludeHostsStep) Run(
 	traceLog logr.Logger,
-	request api.ExternalSchedulerRequest,
+	request compute.SchedulerRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 
 	result := s.IncludeAllHostsFromRequest(request)

@@ -9,9 +9,9 @@ import (
 
 	"github.com/go-logr/logr"
 
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -38,7 +38,7 @@ func (o VMwareAntiAffinityNoisyProjectsStepOpts) Validate() error {
 // Step to avoid noisy projects by downvoting the hosts they are running on.
 type VMwareAntiAffinityNoisyProjectsStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	lib.BaseWeigher[api.ExternalSchedulerRequest, VMwareAntiAffinityNoisyProjectsStepOpts]
+	lib.BaseWeigher[sched.SchedulerRequest, VMwareAntiAffinityNoisyProjectsStepOpts]
 }
 
 // Initialize the step and validate that all required knowledges are ready.
@@ -53,7 +53,7 @@ func (s *VMwareAntiAffinityNoisyProjectsStep) Init(ctx context.Context, client c
 }
 
 // Downvote the hosts a project is currently running on if it's noisy.
-func (s *VMwareAntiAffinityNoisyProjectsStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *VMwareAntiAffinityNoisyProjectsStep) Run(traceLog logr.Logger, request sched.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	result.Statistics["avg cpu usage of this project"] = s.PrepareStats(request, "%")
@@ -72,7 +72,7 @@ func (s *VMwareAntiAffinityNoisyProjectsStep) Run(traceLog logr.Logger, request 
 		return nil, err
 	}
 	for _, p := range projectNoisinessOnHosts {
-		if p.Project != request.Spec.Data.ProjectID {
+		if p.Project != request.ProjectID {
 			continue
 		}
 		// Only modify the weight if the host is in the scenario.
@@ -92,7 +92,7 @@ func (s *VMwareAntiAffinityNoisyProjectsStep) Run(traceLog logr.Logger, request 
 }
 
 func init() {
-	Index["vmware_anti_affinity_noisy_projects"] = func() lib.Weigher[api.ExternalSchedulerRequest] {
+	Index["vmware_anti_affinity_noisy_projects"] = func() lib.Weigher[sched.SchedulerRequest] {
 		return &VMwareAntiAffinityNoisyProjectsStep{}
 	}
 }

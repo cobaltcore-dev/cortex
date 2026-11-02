@@ -11,12 +11,13 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 type FilterRequestedDestinationStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // processRequestedAggregates filters hosts based on the requested aggregates.
@@ -101,23 +102,23 @@ func (s *FilterRequestedDestinationStep) processRequestedHost(
 // The requested destination can include a specific host, aggregates, or both.
 // When both are specified, aggregate filtering is applied first, followed by
 // host filtering.
-func (s *FilterRequestedDestinationStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterRequestedDestinationStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	// The requested_destination hint is only set by Nova for user-directed placement;
-	if intent, err := request.GetIntent(); err == nil && slices.Contains([]v1alpha1.SchedulingIntent{
+	if slices.Contains([]v1alpha1.SchedulingIntent{
 		api.ReserveForFailoverIntent,
 		api.ReuseFailoverReservationIntent,
 		api.ReserveForCommittedResourceIntent,
 		api.CapacityProbeIntent,
-	}, intent) {
+	}, request.Intent) {
 		return result, nil
 	}
-	rd := request.Spec.Data.RequestedDestination
+	rd := request.RequestedDestination
 	if rd == nil {
 		traceLog.V(1).Info("no requested_destination in request, skipping filter")
 		return result, nil
 	}
-	if len(rd.Data.Aggregates) == 0 && rd.Data.Host == "" {
+	if len(rd.Aggregates) == 0 && rd.Host == "" {
 		traceLog.V(1).Info("requested_destination has no host or aggregates, skipping filter")
 		return result, nil
 	}
@@ -133,8 +134,8 @@ func (s *FilterRequestedDestinationStep) Run(traceLog logr.Logger, request api.E
 		}
 		hvsByName[hv.Name] = hv
 	}
-	s.processRequestedAggregates(traceLog, rd.Data.Aggregates, hvsByName, result.Activations)
-	s.processRequestedHost(traceLog, rd.Data.Host, result.Activations)
+	s.processRequestedAggregates(traceLog, rd.Aggregates, hvsByName, result.Activations)
+	s.processRequestedHost(traceLog, rd.Host, result.Activations)
 	return result, nil
 }
 

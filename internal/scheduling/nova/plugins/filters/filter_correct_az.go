@@ -7,20 +7,20 @@ import (
 	"context"
 	"github.com/go-logr/logr"
 
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 )
 
 type FilterCorrectAZStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Only get hosts in the requested az.
-func (s *FilterCorrectAZStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterCorrectAZStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
-	if request.Spec.Data.AvailabilityZone == "" {
+	if request.AvailabilityZone == "" {
 		traceLog.V(1).Info("no availability zone requested, skipping filter_correct_az step")
 		return result, nil
 	}
@@ -42,7 +42,7 @@ func (s *FilterCorrectAZStep) Run(traceLog logr.Logger, request api.ExternalSche
 			traceLog.V(1).Info("host missing zone label, keeping", "host", hv.Name)
 			continue
 		}
-		if az == request.Spec.Data.AvailabilityZone {
+		if az == request.AvailabilityZone {
 			// We always assume the name of the resource corresponds
 			// to the compute host name.
 			computeHostsInAZ[hv.Name] = struct{}{}
@@ -51,7 +51,7 @@ func (s *FilterCorrectAZStep) Run(traceLog logr.Logger, request api.ExternalSche
 
 	traceLog.V(1).Info(
 		"hosts inside requested az",
-		"availabilityZone", request.Spec.Data.AvailabilityZone,
+		"availabilityZone", request.AvailabilityZone,
 		"hosts", computeHostsInAZ,
 	)
 	for host := range result.Activations {
