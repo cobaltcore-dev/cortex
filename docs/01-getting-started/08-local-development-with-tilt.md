@@ -66,7 +66,30 @@ loop, narrow it with `ACTIVE_DEPLOYMENTS`:
 export ACTIVE_DEPLOYMENTS=nova
 ```
 
-## Step 4 — Start Tilt
+## Step 4 — Safe-context guard
+
+Before deploying, the Tiltfile validates the active `kubectl` context against a list of known-local
+context names. If the context is not on the list, `tilt up` (and `tilt down`) will refuse to proceed,
+protecting shared or production clusters from accidental deployments.
+
+The built-in safe list is:
+
+`kind`, `kind-kind`, `docker-desktop`, `minikube`, `rancher-desktop`, `orbstack`, `k3d`, `colima`
+
+Because the cluster created above has the context `kind-cortex-dev`, you must add it via the
+`TILT_SAFE_CONTEXTS` environment variable (comma-separated):
+
+```bash
+export TILT_SAFE_CONTEXTS=kind-cortex-dev
+```
+
+You can add more than one context at a time:
+
+```bash
+export TILT_SAFE_CONTEXTS="kind-cortex-dev,my-sandbox"
+```
+
+## Step 5 — Start Tilt
 
 ```bash
 tilt up
@@ -89,7 +112,7 @@ NAME                                                    READY   STATUS    RESTAR
 cortex-nova-scheduling-controller-manager-...           1/1     Running   0          1m
 ```
 
-## Step 5 — Make a change and watch it reload
+## Step 6 — Make a change and watch it reload
 
 Edit any Go source under the manager's packages — for example, add a log line to a reconciler — and
 save. Tilt detects the change, rebuilds the image, and redeploys automatically. In the Tilt UI the
@@ -101,7 +124,7 @@ kubectl logs deploy/cortex-nova-scheduling-controller-manager --follow
 
 This is the core inner loop: edit, save, and let Tilt reconcile the running deployment.
 
-## Step 6 — Clean up
+## Step 7 — Clean up
 
 Stop Tilt with `Ctrl-C`, then remove the cluster:
 
