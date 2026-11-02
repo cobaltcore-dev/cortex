@@ -25,8 +25,9 @@ it when the resource goes away.
 > endpoint** — the same endpoint that carries the sync and reconcile metrics. Scrape that, and the KPI
 > gauges are alongside everything else.
 
-Like extractors, KPIs are dispatched by a hand-maintained map — `supportedKPIs` in
-`internal/knowledge/kpis/supported_kpis.go`. Registering a new KPI means adding it there; see
+Like extractors, KPIs self-register via `func init()` into the package-level `Index` map declared in
+`internal/knowledge/kpis/plugins/zz_index.go`. Registering a new KPI means adding an `init()` that
+inserts a factory function into that map; see
 [Extend Cortex](../02-external-scheduler-api/07-extending-cortex.md).
 
 ## Four plugin families
