@@ -750,7 +750,7 @@ func setPhase(t *testing.T, c client.Client, txName string, phase v1alpha1.Chang
 }
 
 // reconcileN calls doReconcile exactly n times without inspecting the phase between calls.
-func reconcileN(t *testing.T, r *CommittedResourceChangeReconciler, name string, n int) {
+func reconcileN(t *testing.T, r *CommittedResourceChangeReconciler, name string, n int) { //nolint:unparam // n is always 3 today but kept as a parameter for future callers
 	t.Helper()
 	for range n {
 		doReconcile(t, r, name)
