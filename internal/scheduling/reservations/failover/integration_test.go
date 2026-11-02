@@ -1156,8 +1156,7 @@ func newIntegrationTestEnv(t *testing.T, vms []reservations.VM, hypervisors []*h
 			Pipelines:       make(map[string]lib.FilterWeigherPipeline[compute.SchedulerRequest]),
 			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 		},
-		Monitor:  getSharedMonitor(),
-		Gatherer: passthroughGatherer{},
+		Monitor: getSharedMonitor(),
 	}
 	// Register all pipelines needed for testing
 	pipelines := []v1alpha1.Pipeline{
@@ -1233,7 +1232,7 @@ func newIntegrationTestEnv(t *testing.T, vms []reservations.VM, hypervisors []*h
 		novaController.PipelineConfigs[pipeline.Name] = pipeline
 	}
 
-	api := &testHTTPAPI{scheduler: compute.NewScheduler(novaController, novaController.Gatherer)}
+	api := &testHTTPAPI{scheduler: compute.NewScheduler(novaController, passthroughGatherer{})}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/scheduler/nova/external", api.NovaExternalScheduler)
 	server := httptest.NewServer(mux)
@@ -1334,8 +1333,7 @@ func newIntegrationTestEnvWithTraitsFilter(t *testing.T, vms []reservations.VM, 
 			Pipelines:       make(map[string]lib.FilterWeigherPipeline[compute.SchedulerRequest]),
 			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 		},
-		Monitor:  getSharedMonitor(),
-		Gatherer: passthroughGatherer{},
+		Monitor: getSharedMonitor(),
 	}
 	pipelines := []v1alpha1.Pipeline{
 		{
@@ -1412,7 +1410,7 @@ func newIntegrationTestEnvWithTraitsFilter(t *testing.T, vms []reservations.VM, 
 		novaController.PipelineConfigs[pipeline.Name] = pipeline
 	}
 
-	api := &testHTTPAPI{scheduler: compute.NewScheduler(novaController, novaController.Gatherer)}
+	api := &testHTTPAPI{scheduler: compute.NewScheduler(novaController, passthroughGatherer{})}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/scheduler/nova/external", api.NovaExternalScheduler)
 	server := httptest.NewServer(mux)

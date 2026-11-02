@@ -23,6 +23,13 @@ type CandidateGatherer interface {
 // for Nova scheduling requests.
 type candidateGatherer struct{ client.Client }
 
+// NewCandidateGatherer builds the default Nova candidate gatherer backed by the
+// given client. It is handed to the compute.Scheduler, which invokes it when a
+// request opts into gathering all placement candidates.
+func NewCandidateGatherer(c client.Client) CandidateGatherer {
+	return &candidateGatherer{Client: c}
+}
+
 // MutateWithAllCandidates gathers all placement candidates and mutates
 // the request accordingly.
 func (g *candidateGatherer) MutateWithAllCandidates(ctx context.Context, request *compute.SchedulerRequest) error {

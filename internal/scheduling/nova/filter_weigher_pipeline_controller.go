@@ -23,19 +23,16 @@ import (
 
 // FilterWeigherPipelineController owns the Nova filter-weigher pipelines: it
 // watches Pipeline and Knowledge resources to (re)configure the pipelines, and
-// exposes them via GetPipeline for the compute.Scheduler to run. It also provides
-// the candidate Gatherer. Placement requests no longer flow through this
-// controller — the compute.Scheduler, driven by the external-scheduler HTTP API
-// and the reservation controllers, is the entrypoint.
+// exposes them via GetPipeline for the compute.Scheduler to run. Placement
+// requests no longer flow through this controller — the compute.Scheduler,
+// driven by the external-scheduler HTTP API and the reservation controllers, is
+// the entrypoint.
 type FilterWeigherPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
 	lib.BasePipelineController[lib.FilterWeigherPipeline[compute.SchedulerRequest]]
 
 	// Monitor to pass down to all pipelines.
 	Monitor lib.FilterWeigherPipelineMonitor
-	// Candidate gatherer to get all placement candidates if needed. Exported so
-	// it can be handed to the compute.Scheduler.
-	Gatherer CandidateGatherer
 }
 
 // The type of pipeline this controller manages.
@@ -59,7 +56,6 @@ func (c *FilterWeigherPipelineController) InitPipeline(
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainNova
-	c.Gatherer = &candidateGatherer{Client: mcl}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}

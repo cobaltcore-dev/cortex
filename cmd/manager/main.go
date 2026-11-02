@@ -435,7 +435,7 @@ func main() {
 		// Shared in-process scheduler: owns the scheduling lock and runs the
 		// pipeline. The Nova HTTP API and the reservation controllers call it
 		// directly (no self-directed HTTP).
-		novaScheduler := compute.NewScheduler(filterWeigherController, filterWeigherController.Gatherer)
+		novaScheduler := compute.NewScheduler(filterWeigherController, nova.NewCandidateGatherer(multiclusterClient))
 		vmHandler := &nova.VirtualMachineHandler{Client: multiclusterClient}
 		crRecorder := crs.Recorder{
 			Client:             multiclusterClient,

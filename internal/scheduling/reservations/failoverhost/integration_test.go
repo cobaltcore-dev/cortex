@@ -277,9 +277,6 @@ func newIntegrationTestEnv(t *testing.T, hypervisors []*hv1.Hypervisor, flavors 
 			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 		},
 		Monitor: sharedPipelineMonitor(),
-		// KVM requests trigger candidate gathering; the test seeds its own
-		// eligible hosts, so use a passthrough gatherer that preserves them.
-		Gatherer: passthroughGatherer{},
 	}
 	// Mirror the production KVM pipeline for the dimensions that shape a failover
 	// partition: AZ, trait compatibility and whole-host capacity.
@@ -306,7 +303,9 @@ func newIntegrationTestEnv(t *testing.T, hypervisors []*hv1.Hypervisor, flavors 
 	controller.Pipelines[pipeline.Name] = result.Pipeline
 	controller.PipelineConfigs[pipeline.Name] = pipeline
 
-	api := &integrationHTTPAPI{scheduler: sched.NewScheduler(controller, controller.Gatherer)}
+	// KVM requests trigger candidate gathering; the test seeds its own eligible
+	// hosts, so use a passthrough gatherer that preserves them.
+	api := &integrationHTTPAPI{scheduler: sched.NewScheduler(controller, passthroughGatherer{})}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/scheduler/nova/external", api.handle)
 	server := httptest.NewServer(mux)
