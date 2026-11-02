@@ -175,7 +175,7 @@ func TestComputeCRUsage(t *testing.T) {
 				FlavorGroupName:  "hana_v2",
 				AvailabilityZone: "az-1",
 				ResourceType:     v1alpha1.CommittedResourceTypeMemory,
-				State:            v1alpha1.CommitmentStatusGuaranteed,
+				State:            v1alpha1.CommitmentStatusConfirmed,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
 				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("3Gi")},
@@ -225,7 +225,7 @@ func TestComputeCRUsage(t *testing.T) {
 	crsByProject := groupCRsByProject(allCRs)
 	result := ctrl.computeCRUsage(crsByProject["project-a"], testFlavorGroups)
 
-	// Should include confirmed + guaranteed for project-a only
+		// Should include confirmed CRs for project-a only
 	ramUsage := result["hw_version_hana_v2_ram"]
 	if ramUsage["az-1"] != 8 { // 5 + 3
 		t.Errorf("expected cr ram usage az-1 = 8, got %d", ramUsage["az-1"])
@@ -395,8 +395,8 @@ func TestIsCRStateIncluded(t *testing.T) {
 	if !ctrl.isCRStateIncluded(v1alpha1.CommitmentStatusConfirmed) {
 		t.Error("expected confirmed to be included")
 	}
-	if !ctrl.isCRStateIncluded(v1alpha1.CommitmentStatusGuaranteed) {
-		t.Error("expected guaranteed to be included")
+	if ctrl.isCRStateIncluded(v1alpha1.CommitmentStatusGuaranteed) {
+		t.Error("expected guaranteed to NOT be included")
 	}
 	if ctrl.isCRStateIncluded(v1alpha1.CommitmentStatusPending) {
 		t.Error("expected pending to NOT be included")

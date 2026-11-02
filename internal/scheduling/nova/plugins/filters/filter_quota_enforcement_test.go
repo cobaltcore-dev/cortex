@@ -57,8 +57,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 		objects []client.Object
 		request api.ExternalSchedulerRequest
 		enforce bool
-		// crStateFilter sets Options.CRStateFilter; nil exercises the default
-		// (confirmed + guaranteed).
+		// crStateFilter sets Options.CRStateFilter; nil exercises the default (confirmed).
 		crStateFilter []v1alpha1.CommitmentStatus
 
 		expectAccept bool
@@ -101,7 +100,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			expectFG:       "hana_v2",
 		},
 		{
-			name: "ACCEPT: CR has exact headroom (guaranteed state)",
+			name: "ACCEPT: CR has exact headroom (confirmed state)",
 			objects: []client.Object{
 				&v1alpha1.CommittedResource{
 					ObjectMeta: metav1.ObjectMeta{Name: "cr-1"},
@@ -110,7 +109,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 						AvailabilityZone: "az-1",
 						FlavorGroupName:  "hana_v2",
 						ResourceType:     v1alpha1.CommittedResourceTypeMemory,
-						State:            v1alpha1.CommitmentStatusGuaranteed,
+						State:            v1alpha1.CommitmentStatusConfirmed,
 						Amount:           resource.MustParse("100Gi"),
 					},
 					Status: v1alpha1.CommittedResourceStatus{
@@ -447,16 +446,16 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			expectFG:       "hana_v2",
 		},
 		{
-			name: "guaranteed CR is deducted from PAYG headroom under default filter (reject)",
+			name: "confirmed CR is deducted from PAYG headroom (reject)",
 			objects: []client.Object{
 				&v1alpha1.CommittedResource{
-					ObjectMeta: metav1.ObjectMeta{Name: "cr-guaranteed-full"},
+					ObjectMeta: metav1.ObjectMeta{Name: "cr-confirmed-full"},
 					Spec: v1alpha1.CommittedResourceSpec{
 						ProjectID:        "project-1",
 						AvailabilityZone: "az-1",
 						FlavorGroupName:  "hana_v2",
 						ResourceType:     v1alpha1.CommittedResourceTypeMemory,
-						State:            v1alpha1.CommitmentStatusGuaranteed,
+						State:            v1alpha1.CommitmentStatusConfirmed,
 						Amount:           resource.MustParse("100Gi"),
 					},
 					// Fully used, so it provides no CR headroom itself — the request
@@ -477,7 +476,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 					},
 				},
 			},
-			// headroom = 150 - 100 (guaranteed CR) - 45 = 5 < 10 requested → reject.
+			// headroom = 150 - 100 (confirmed CR) - 45 = 5 < 10 requested → reject.
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
 			expectAccept:   false,
 			enforce:        true,
@@ -488,7 +487,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			expectFG:       "hana_v2",
 		},
 		{
-			name: "guaranteed CR is ignored when CRStateFilter is confirmed-only (accept)",
+			name: "guaranteed CR is excluded from PAYG headroom under default filter (accept)",
 			objects: []client.Object{
 				&v1alpha1.CommittedResource{
 					ObjectMeta: metav1.ObjectMeta{Name: "cr-guaranteed-full"},
@@ -516,9 +515,8 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 					},
 				},
 			},
-			// Confirmed-only filter excludes the guaranteed CR from the deduction:
+			// Default filter (confirmed only) excludes the guaranteed CR:
 			// headroom = 150 - 0 - 45 = 105 >= 10 requested → accept via PAYG.
-			crStateFilter:  []v1alpha1.CommitmentStatus{v1alpha1.CommitmentStatusConfirmed},
 			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
 			expectAccept:   true,
 			enforce:        true,

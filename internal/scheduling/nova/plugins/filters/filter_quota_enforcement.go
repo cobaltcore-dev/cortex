@@ -36,16 +36,14 @@ type FilterQuotaEnforcementOpts struct {
 	// (headroom = Quota - sum(CR amounts) - PaygUsage). It MUST mirror the quota
 	// controller's crStateFilter (see internal/scheduling/reservations/quota/config.go)
 	// so the filter's CR deduction and the controller's PaygUsage derivation agree
-	// on what quota already accounts for. Empty means the shared default set
-	// (confirmed + guaranteed).
+	// on what quota already accounts for. Empty means the shared default (confirmed).
 	CRStateFilter []v1alpha1.CommitmentStatus `json:"crStateFilter,omitempty"`
 }
 
 // defaultCRStateFilter mirrors the quota controller's default
-// (internal/scheduling/reservations/quota/config.go): confirmed + guaranteed.
+// (internal/scheduling/reservations/quota/config.go): confirmed only.
 var defaultCRStateFilter = []v1alpha1.CommitmentStatus{
 	v1alpha1.CommitmentStatusConfirmed,
-	v1alpha1.CommitmentStatusGuaranteed,
 }
 
 // crStateIncluded reports whether a CR in the given state counts toward the CR
