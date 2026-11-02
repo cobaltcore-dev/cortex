@@ -19,8 +19,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/machines/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/machines/plugins/weighers"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,9 +29,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// The decision pipeline controller takes decision resources containing a
-// machine ref and runs the scheduling pipeline to make a decision.
-// This decision is then written back to the decision resource status.
+// The machine pipeline controller watches for new machines and runs the
+// scheduling pipeline to assign each a machine pool. The result is written back
+// directly to the machine's MachinePoolRef.
 //
 // Additionally, the controller watches for pipeline and step changes to
 // reconfigure the pipelines as needed.
@@ -53,75 +51,28 @@ func (c *FilterWeigherPipelineController) PipelineType() v1alpha1.PipelineType {
 	return v1alpha1.PipelineTypeFilterWeigher
 }
 
-func (c *FilterWeigherPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	c.processMu.Lock()
-	defer c.processMu.Unlock()
-
-	// Determine if this is a decision or machine reconciliation.
-	decision := &v1alpha1.Decision{}
-	if err := c.Get(ctx, req.NamespacedName, decision); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-	old := decision.DeepCopy()
-	if err := c.process(ctx, decision); err != nil {
-		return ctrl.Result{}, err
-	}
-	patch := client.MergeFrom(old)
-	if err := c.Status().Patch(ctx, decision, patch); err != nil {
-		return ctrl.Result{}, err
-	}
+// Reconcile is a no-op: this controller schedules machines through its Machine
+// watch handler and reconfigures pipelines through its Pipeline watch handler.
+// A Reconcile method is required to satisfy the controller builder.
+func (c *FilterWeigherPipelineController) Reconcile(context.Context, ctrl.Request) (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
 
 func (c *FilterWeigherPipelineController) ProcessNewMachine(ctx context.Context, machine *ironcorev1alpha1.Machine) error {
 	c.processMu.Lock()
 	defer c.processMu.Unlock()
-
-	// Create a decision resource to schedule the machine.
-	decision := &v1alpha1.Decision{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "machine-",
-		},
-		Spec: v1alpha1.DecisionSpec{
-			SchedulingDomain: v1alpha1.SchedulingDomainMachines,
-			ResourceID:       machine.Name,
-			PipelineRef: corev1.ObjectReference{
-				Name: "machines-scheduler",
-			},
-			MachineRef: &corev1.ObjectReference{
-				Name:      machine.Name,
-				Namespace: machine.Namespace,
-			},
-		},
-	}
-
-	err := c.process(ctx, decision)
-	if err != nil {
-		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DecisionConditionReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "PipelineRunFailed",
-			Message: "pipeline run failed: " + err.Error(),
-		})
-	} else {
-		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DecisionConditionReady,
-			Status:  metav1.ConditionTrue,
-			Reason:  "PipelineRunSucceeded",
-			Message: "pipeline run succeeded",
-		})
-	}
-	return err
+	return c.process(ctx, machine)
 }
 
-func (c *FilterWeigherPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) error {
+func (c *FilterWeigherPipelineController) process(ctx context.Context, machine *ironcorev1alpha1.Machine) error {
 	log := ctrl.LoggerFrom(ctx)
 	startedAt := time.Now() // So we can measure sync duration.
 
-	pipeline, ok := c.GetPipeline(decision.Spec.PipelineRef.Name)
+	const pipelineName = "machines-scheduler"
+	pipeline, ok := c.GetPipeline(pipelineName)
 	if !ok {
-		log.Error(nil, "pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
-		return fmt.Errorf("pipeline not found or not ready: %q", decision.Spec.PipelineRef.Name)
+		log.Error(nil, "pipeline not found or not ready", "pipelineName", pipelineName)
+		return fmt.Errorf("pipeline not found or not ready: %q", pipelineName)
 	}
 
 	// Find all available machine pools.
@@ -136,28 +87,12 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	// Execute the scheduling pipeline.
 	request := ironcore.MachinePipelineRequest{Pools: pools.Items}
 	result, err := pipeline.Run(request)
-	if err == nil {
-		decision.Status.Result = &result
-	}
-	// Record a human-readable explanation of the decision for downstream
-	// consumers. On error the result is nil and the explanation carries the
-	// failure reason.
-	decision.Status.Explanation = lib.GenerateExplanation(decision.Status.Result, err)
 	if err != nil {
 		log.V(1).Error(err, "failed to run scheduler pipeline")
 		return errors.New("failed to run scheduler pipeline")
 	}
 	log.Info("decision processed successfully", "duration", time.Since(startedAt))
 
-	// Set the machine pool ref on the machine.
-	machine := &ironcorev1alpha1.Machine{}
-	if err := c.Get(ctx, client.ObjectKey{
-		Name:      decision.Spec.MachineRef.Name,
-		Namespace: decision.Spec.MachineRef.Namespace,
-	}, machine); err != nil {
-		log.Error(err, "failed to fetch machine for decision")
-		return err
-	}
 	// Assign the first machine pool returned by the pipeline.
 	old := machine.DeepCopy()
 	machine.Spec.MachinePoolRef = &corev1.LocalObjectReference{Name: *result.TargetHost}
@@ -249,25 +184,6 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 				return false
 			}
 			return pipeline.Spec.Type == c.PipelineType()
-		}),
-	)
-	if err != nil {
-		return err
-	}
-	// Watch decision changes across all clusters.
-	bldr, err = bldr.WatchesMulticluster(
-		&v1alpha1.Decision{},
-		&handler.EnqueueRequestForObject{},
-		predicate.NewPredicateFuncs(func(obj client.Object) bool {
-			decision := obj.(*v1alpha1.Decision)
-			if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainMachines {
-				return false
-			}
-			// Ignore already decided schedulings.
-			if decision.Status.Result != nil {
-				return false
-			}
-			return true
 		}),
 	)
 	if err != nil {

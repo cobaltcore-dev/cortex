@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 )
 
 // maxHostsInExplanation caps how many host names are listed per line in a
@@ -24,13 +22,12 @@ func joinHostsCapped(hosts []string, maxHosts int) string {
 	return fmt.Sprintf("%s (and %d more)", strings.Join(hosts[:maxHosts], ", "), len(hosts)-maxHosts)
 }
 
-// GenerateExplanation produces a human-readable explanation from a decision
+// GenerateExplanation produces a human-readable explanation from a pipeline
 // result. On failure it includes the error. On success it describes which
 // pipeline steps filtered out which hosts and, for the surviving hosts, how the
-// weighers ranked them (via ExplainWeighing). The result is written to
-// Decision.Status.Explanation so it propagates to the scheduled resource (e.g.
-// the VM CortexSpec.Explanation).
-func GenerateExplanation(result *v1alpha1.DecisionResult, pipelineErr error) string {
+// weighers ranked them (via ExplainWeighing). Consumers propagate the result to
+// the scheduled resource (e.g. the Nova VM's CortexSpec.Explanation).
+func GenerateExplanation(result *PipelineResult, pipelineErr error) string {
 	if pipelineErr != nil {
 		return fmt.Sprintf("Pipeline run failed: %s.", pipelineErr.Error())
 	}

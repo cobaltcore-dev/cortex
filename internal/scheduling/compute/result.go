@@ -5,17 +5,14 @@ package compute
 
 import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
 // SchedulerResult is the well-defined output of a scheduling pipeline run:
 // ordered hosts, the target host, and the input/output weights plus per-step
-// activations used to rank them.
-//
-// It is currently an alias of v1alpha1.DecisionResult, the struct the generic
-// pipeline returns today. Once the Decision CRD is removed the underlying type
-// moves to lib.PipelineResult and this alias is re-pointed there; callers that
-// read compute.SchedulerResult are unaffected by that move.
-type SchedulerResult = v1alpha1.DecisionResult
+// activations used to rank them. It is an alias of lib.PipelineResult, the
+// domain-neutral type the generic pipeline returns.
+type SchedulerResult = lib.PipelineResult
 
 // MatchedReservation records a reservation that matched a candidate host during
 // the run, for observability and downstream consumers.

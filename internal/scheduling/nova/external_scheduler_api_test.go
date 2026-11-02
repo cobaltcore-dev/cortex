@@ -14,12 +14,9 @@ import (
 	"testing"
 
 	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	scheduling "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // mockRunner is a test double for the scheduler the HTTP API depends on. runFunc
@@ -172,7 +169,7 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 		method             string
 		body               string
 		processDecisionErr error
-		decisionResult     *v1alpha1.Decision
+		result             *compute.SchedulerResult
 		expectedStatus     int
 		expectedHosts      []string
 	}{
@@ -211,12 +208,8 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 				}
 				return string(data)
 			}(),
-			decisionResult: &v1alpha1.Decision{
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						OrderedHosts: []string{"host1"},
-					},
-				},
+			result: &compute.SchedulerResult{
+				OrderedHosts: []string{"host1"},
 			},
 			expectedStatus: http.StatusOK,
 			expectedHosts:  []string{"host1"},
@@ -272,18 +265,8 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 				}
 				return string(data)
 			}(),
-			decisionResult: &v1alpha1.Decision{
-				Status: v1alpha1.DecisionStatus{
-					Conditions: []metav1.Condition{
-						{
-							Type:   v1alpha1.DecisionConditionReady,
-							Status: metav1.ConditionFalse,
-							Reason: "SchedulingError",
-						},
-					},
-				},
-			},
-			expectedStatus: http.StatusInternalServerError,
+			processDecisionErr: errors.New("scheduling failed"),
+			expectedStatus:     http.StatusInternalServerError,
 		},
 	}
 
@@ -294,12 +277,8 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 					if tt.processDecisionErr != nil {
 						return compute.RunOutcome{}, tt.processDecisionErr
 					}
-					if tt.decisionResult != nil {
-						if tt.decisionResult.Status.Result != nil {
-							return compute.RunOutcome{Result: *tt.decisionResult.Status.Result}, nil
-						}
-						// A decisionResult without a Result models a failed run.
-						return compute.RunOutcome{}, errors.New("scheduling failed")
+					if tt.result != nil {
+						return compute.RunOutcome{Result: *tt.result}, nil
 					}
 					return compute.RunOutcome{}, nil
 				},

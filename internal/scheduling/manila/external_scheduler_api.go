@@ -7,29 +7,24 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/manila"
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
 	scheduling "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/go-logr/logr"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 var log = logf.Log.WithName("manila-scheduler-api")
 
-type HTTPAPIDelegate interface {
-	// Process the decision from the API. Should create and return the updated decision.
-	ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error
+// Scheduler runs a manila pipeline for a request and returns the result and a
+// human-readable explanation. *FilterWeigherPipelineController satisfies it.
+type Scheduler interface {
+	Schedule(ctx context.Context, pipelineName string, request api.ExternalSchedulerRequest) (scheduling.PipelineResult, string, error)
 }
 
 type HTTPAPI interface {
@@ -38,14 +33,14 @@ type HTTPAPI interface {
 }
 
 type httpAPI struct {
-	monitor  scheduling.APIMonitor
-	delegate HTTPAPIDelegate
+	monitor   scheduling.APIMonitor
+	scheduler Scheduler
 }
 
-func NewAPI(delegate HTTPAPIDelegate) HTTPAPI {
+func NewAPI(scheduler Scheduler) HTTPAPI {
 	return &httpAPI{
-		monitor:  scheduling.NewSchedulerMonitor(),
-		delegate: delegate,
+		monitor:   scheduling.NewSchedulerMonitor(),
+		scheduler: scheduler,
 	}
 }
 
@@ -109,7 +104,6 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 		c.Respond(logr.Logger{}, http.StatusInternalServerError, err, "failed to read request body")
 		return
 	}
-	raw := runtime.RawExtension{Raw: body}
 	var requestData api.ExternalSchedulerRequest
 	// Copy the raw body to a io.Reader for json deserialization.
 	cp := body
@@ -138,36 +132,12 @@ func (httpAPI *httpAPI) ManilaExternalScheduler(w http.ResponseWriter, r *http.R
 		logger.V(1).Info("inferred pipeline name", "pipeline", requestData.Pipeline)
 	}
 
-	// Create the decision object in kubernetes.
-	decision := &v1alpha1.Decision{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "manila-",
-		},
-		Spec: v1alpha1.DecisionSpec{
-			SchedulingDomain: v1alpha1.SchedulingDomainManila,
-			PipelineRef: corev1.ObjectReference{
-				Name: requestData.Pipeline,
-			},
-			ResourceID: "", // TODO model out the spec.
-			ManilaRaw:  &raw,
-			Intent:     v1alpha1.SchedulingIntentUnknown,
-		},
-	}
-	ctx := r.Context()
-	if err := httpAPI.delegate.ProcessNewDecisionFromAPI(ctx, decision); err != nil {
+	result, _, err := httpAPI.scheduler.Schedule(r.Context(), requestData.Pipeline, requestData)
+	if err != nil {
 		c.Respond(logger, http.StatusInternalServerError, err, fmt.Sprintf("failed to process scheduling decision: %v", err))
 		return
 	}
-	// Check if the decision contains status conditions indicating an error.
-	if meta.IsStatusConditionFalse(decision.Status.Conditions, v1alpha1.DecisionConditionReady) {
-		c.Respond(logger, http.StatusInternalServerError, errors.New("decision contains error condition"), "decision failed")
-		return
-	}
-	if decision.Status.Result == nil {
-		c.Respond(logger, http.StatusInternalServerError, errors.New("decision didn't produce a result"), "decision failed")
-		return
-	}
-	hosts := decision.Status.Result.OrderedHosts
+	hosts := result.OrderedHosts
 	// Ensure we always return an array, never null. The schema requires hosts
 	// to be an array, and a nil slice would serialize to null.
 	if hosts == nil {

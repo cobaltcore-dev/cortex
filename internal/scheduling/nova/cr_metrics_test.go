@@ -355,7 +355,6 @@ func TestFeatureGate_CommittedResourceTracking(t *testing.T) {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(flavorKnowledge).
-				WithStatusSubresource(&v1alpha1.Decision{}).
 				Build()
 
 			counter := crs.NewNoHostFoundCounter()
