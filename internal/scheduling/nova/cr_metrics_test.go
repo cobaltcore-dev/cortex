@@ -4,14 +4,16 @@
 package nova
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -235,13 +237,10 @@ func TestLogNoHostFound(t *testing.T) {
 			reg := prometheus.NewRegistry()
 			reg.MustRegister(counter)
 
-			controller := &FilterWeigherPipelineController{
-				CRRecorder: crs.Recorder{
-					Client:             fakeClient,
-					NoHostFoundCounter: counter,
-				},
+			recorder := crs.Recorder{
+				Client:             fakeClient,
+				NoHostFoundCounter: counter,
 			}
-			controller.Client = fakeClient
 
 			requestFlavorName := flavorName
 			if tt.payg {
@@ -259,11 +258,7 @@ func TestLogNoHostFound(t *testing.T) {
 				Context: api.NovaRequestContext{ProjectID: projectID},
 				Hosts:   tt.requestHosts,
 			}
-			decision := &v1alpha1.Decision{
-				Spec: v1alpha1.DecisionSpec{Intent: api.CreateIntent},
-			}
-
-			controller.CRRecorder.RecordNoHostFound(context.Background(), decision, request)
+			recorder.RecordNoHostFound(context.Background(), api.CreateIntent, request)
 
 			if tt.expectedCase == "" {
 				total := testutil.ToFloat64(counter.WithLabelValues("no_cr", flavorGroup, string(api.CreateIntent))) +
@@ -373,11 +368,7 @@ func TestFeatureGate_CommittedResourceTracking(t *testing.T) {
 					Pipelines:       make(map[string]lib.FilterWeigherPipeline[sched.SchedulerRequest]),
 					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 				},
-				FeatureGates: FeatureGates{CommittedResourceTracking: enabled},
-				CRRecorder: crs.Recorder{
-					Client:             fakeClient,
-					NoHostFoundCounter: counter,
-				},
+				Gatherer: passthroughGatherer{},
 			}
 			controller.PipelineConfigs["test-pipeline"] = pipelineConf
 			initResult := controller.InitPipeline(context.Background(), pipelineConf)
@@ -386,18 +377,20 @@ func TestFeatureGate_CommittedResourceTracking(t *testing.T) {
 			}
 			controller.Pipelines["test-pipeline"] = initResult.Pipeline
 
-			decision := &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-decision", Namespace: "default"},
-				Spec: v1alpha1.DecisionSpec{
-					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					PipelineRef:      corev1.ObjectReference{Name: "test-pipeline"},
-					NovaRaw:          &runtime.RawExtension{Raw: novaRaw},
-				},
-			}
+			// Drive the committed-resource tracking path through the real HTTP API
+			// handler, where the feature gate now lives (as a post-hook).
+			scheduler := sched.NewScheduler(controller, controller.Gatherer)
+			crRecorder := crs.Recorder{Client: fakeClient, NoHostFoundCounter: counter}
+			api := newTestAPIWithScheduler(
+				HTTPAPIConfig{},
+				scheduler,
+				crRecorder,
+				FeatureGates{CommittedResourceTracking: enabled},
+			)
 
-			if err := controller.ProcessNewDecisionFromAPI(context.Background(), decision); err != nil {
-				t.Fatalf("ProcessNewDecisionFromAPI: %v", err)
-			}
+			req := httptest.NewRequest(http.MethodPost, "/scheduler/nova/external", bytes.NewReader(novaRaw))
+			w := httptest.NewRecorder()
+			api.NovaExternalScheduler(w, req)
 
 			count := testutil.CollectAndCount(counter)
 			if enabled && count == 0 {

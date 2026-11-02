@@ -23,7 +23,6 @@ import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -307,7 +306,7 @@ func newIntegrationTestEnv(t *testing.T, hypervisors []*hv1.Hypervisor, flavors 
 	controller.Pipelines[pipeline.Name] = result.Pipeline
 	controller.PipelineConfigs[pipeline.Name] = pipeline
 
-	api := &integrationHTTPAPI{delegate: controller}
+	api := &integrationHTTPAPI{scheduler: sched.NewScheduler(controller, controller.Gatherer)}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/scheduler/nova/external", api.handle)
 	server := httptest.NewServer(mux)
@@ -446,7 +445,7 @@ const evacProbePipeline = "kvm-general-purpose-load-balancing"
 // filter/weigher pipeline — the same shape the failover package's integration
 // tests use. It does NOT shuffle, so the probe answers are stable.
 type integrationHTTPAPI struct {
-	delegate nova.HTTPAPIDelegate
+	scheduler *sched.Scheduler
 }
 
 func (a *integrationHTTPAPI) handle(w http.ResponseWriter, r *http.Request) {
@@ -456,38 +455,20 @@ func (a *integrationHTTPAPI) handle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "decode", http.StatusBadRequest)
 		return
 	}
-	rawBytes, err := json.Marshal(reqData)
-	if err != nil {
-		http.Error(w, "marshal", http.StatusInternalServerError)
-		return
-	}
 	// Resolve intent from the request hints, mirroring the production handler;
 	// the pipeline reads the resolved intent off the typed request.
 	intent, err := reqData.GetIntent()
 	if err != nil {
 		intent = novaapi.CreateIntent
 	}
-	decision := &v1alpha1.Decision{
-		TypeMeta:   metav1.TypeMeta{Kind: "Decision", APIVersion: "cortex.cloud/v1alpha1"},
-		ObjectMeta: metav1.ObjectMeta{GenerateName: "nova-"},
-		Spec: v1alpha1.DecisionSpec{
-			SchedulingDomain: v1alpha1.SchedulingDomainNova,
-			PipelineRef:      corev1.ObjectReference{Name: evacProbePipeline},
-			ResourceID:       reqData.Spec.Data.InstanceUUID,
-			NovaRaw:          &runtime.RawExtension{Raw: rawBytes},
-			Intent:           intent,
-		},
-	}
-	if err := a.delegate.ProcessNewDecisionFromAPI(r.Context(), decision); err != nil {
+	req := nova.ToSchedulerRequest(reqData, intent, evacProbePipeline)
+	out, err := a.scheduler.Run(r.Context(), req, nil, nil)
+	if err != nil {
 		http.Error(w, "process", http.StatusInternalServerError)
 		return
 	}
-	if decision.Status.Result == nil {
-		http.Error(w, "no result", http.StatusInternalServerError)
-		return
-	}
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(novaapi.ExternalSchedulerResponse{Hosts: decision.Status.Result.OrderedHosts}); err != nil {
+	if err := json.NewEncoder(w).Encode(novaapi.ExternalSchedulerResponse{Hosts: out.Result.OrderedHosts}); err != nil {
 		http.Error(w, "encode", http.StatusInternalServerError)
 	}
 }

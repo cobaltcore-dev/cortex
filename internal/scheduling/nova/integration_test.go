@@ -17,6 +17,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/weighers"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -286,12 +287,15 @@ func NewIntegrationTestServer(t *testing.T, pipelineConfig PipelineConfig, objec
 	controller.Pipelines[testPipeline.Name] = result.Pipeline
 	controller.PipelineConfigs[testPipeline.Name] = testPipeline
 
-	// Create the HTTP API with the controller as delegate - skip metrics registration
-	// Set EvacuationShuffleK=0 to disable shuffle for deterministic test results
+	// Create the HTTP API backed by a real compute.Scheduler over the controller.
+	// Set EvacuationShuffleK=0 to disable shuffle for deterministic test results.
+	scheduler := compute.NewScheduler(controller, controller.Gatherer)
 	api := &httpAPI{
-		config:   HTTPAPIConfig{EvacuationShuffleK: 0},
-		monitor:  lib.NewSchedulerMonitor(), // Create new monitor but don't register
-		delegate: controller,
+		config:     HTTPAPIConfig{EvacuationShuffleK: 0},
+		monitor:    lib.NewSchedulerMonitor(), // Create new monitor but don't register
+		scheduler:  scheduler,
+		vmHandler:  &VirtualMachineHandler{Client: k8sClient},
+		crRecorder: crs.Recorder{Client: k8sClient},
 	}
 
 	// Create test server

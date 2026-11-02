@@ -12,6 +12,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	vmv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -33,21 +34,22 @@ type VirtualMachineHandler struct {
 }
 
 // Upsert creates or patches the VirtualMachine resource described by the
-// decision and request. Region and AZ are immutable on the CRD and only written
-// on create; mutable fields (target host, cortex spec, labels) are patched on
-// updates.
-func (h *VirtualMachineHandler) Upsert(ctx context.Context, decision *v1alpha1.Decision, request api.ExternalSchedulerRequest) error {
+// scheduling result and request. Region and AZ are immutable on the CRD and only
+// written on create; mutable fields (target host, cortex spec, labels) are
+// patched on updates. The explanation and intent are recorded on the VM's cortex
+// spec.
+func (h *VirtualMachineHandler) Upsert(ctx context.Context, result compute.SchedulerResult, explanation string, request api.ExternalSchedulerRequest, intent v1alpha1.SchedulingIntent) error {
 	log := ctrl.LoggerFrom(ctx)
 
-	if decision.Status.Result == nil || decision.Status.Result.TargetHost == nil {
-		log.V(1).Info("skipping virtual machine upsert, no target host in decision")
+	if result.TargetHost == nil {
+		log.V(1).Info("skipping virtual machine upsert, no target host in result")
 		return nil
 	}
 
 	// We derive hierarchical location information (region and az) from the
 	// target host (i.e. the first host in the list). This assumes that all
 	// hosts in the list share the same region and availability zone.
-	targetHost := *decision.Status.Result.TargetHost
+	targetHost := *result.TargetHost
 	targetHv := &hv1.Hypervisor{}
 	if err := h.Get(ctx, client.ObjectKey{Name: targetHost}, targetHv); err != nil {
 		return fmt.Errorf("failed to get hypervisor %q: %w", targetHost, err)
@@ -136,20 +138,18 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, decision *v1alpha1.D
 		}
 	}
 
-	// Read intent from the decision, which was already resolved by the API layer
-	// (including a graceful fallback to CreateIntent for initial placements).
-	intent := decision.Spec.Intent
-
-	// Write the cortex spec (our scheduling result).
+	// Write the cortex spec (our scheduling result). The intent was resolved by
+	// the API layer (with a graceful fallback to CreateIntent for initial
+	// placements) and passed in.
 	vm.Spec.Cortex = &vmv1alpha1.CortexSpec{}
-	for _, host := range decision.Status.Result.OrderedHosts {
+	for _, host := range result.OrderedHosts {
 		vm.Spec.Cortex.HostCandidates = append(vm.Spec.Cortex.HostCandidates, vmv1alpha1.HostRef{
 			APIVersion: hv1.GroupVersion.String(),
 			Kind:       "Hypervisor",
 			Name:       host,
 		})
 	}
-	vm.Spec.Cortex.Explanation = decision.Status.Explanation
+	vm.Spec.Cortex.Explanation = explanation
 	vm.Spec.Cortex.Intent = string(intent)
 
 	// Write the ConditionTypeScheduled condition to indicate that the VM has

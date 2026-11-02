@@ -15,47 +15,74 @@ import (
 
 	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
+	scheduling "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type mockHTTPAPIDelegate struct {
-	processDecisionFunc func(ctx context.Context, decision *v1alpha1.Decision) error
+// mockRunner is a test double for the scheduler the HTTP API depends on. runFunc
+// receives the mapped request and may invoke the post-hook to exercise the
+// handler's side-effect path; it returns the outcome/error the handler sees.
+type mockRunner struct {
+	runFunc func(ctx context.Context, req compute.SchedulerRequest, post compute.PostHook) (compute.RunOutcome, error)
 }
 
-func (m *mockHTTPAPIDelegate) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error {
-	if m.processDecisionFunc != nil {
-		return m.processDecisionFunc(ctx, decision)
+func (m *mockRunner) Run(ctx context.Context, req compute.SchedulerRequest, _ compute.PreHook, post compute.PostHook) (compute.RunOutcome, error) {
+	if m.runFunc != nil {
+		return m.runFunc(ctx, req, post)
 	}
+	return compute.RunOutcome{}, nil
+}
+
+// newTestAPI builds an *httpAPI with the given config and mock runner, leaving
+// the side-effect handlers nil (the handler tests that need them set runFunc to
+// not invoke the post-hook, or provide their own).
+func newTestAPI(config HTTPAPIConfig, r runner) *httpAPI {
+	return &httpAPI{
+		monitor:   scheduling.NewSchedulerMonitor(),
+		scheduler: r,
+		config:    config,
+	}
+}
+
+// newTestAPIWithScheduler builds an *httpAPI over a real compute.Scheduler plus
+// the CR recorder and feature gates, for tests that exercise the committed-
+// resource post-hook end-to-end.
+func newTestAPIWithScheduler(config HTTPAPIConfig, scheduler runner, crRecorder crs.Recorder, featureGates FeatureGates) *httpAPI {
+	return &httpAPI{
+		monitor:      scheduling.NewSchedulerMonitor(),
+		scheduler:    scheduler,
+		crRecorder:   crRecorder,
+		featureGates: featureGates,
+		config:       config,
+	}
+}
+
+// passthroughGatherer is a CandidateGatherer that leaves the request's hosts
+// unchanged (tests seed their own host sets).
+type passthroughGatherer struct{}
+
+func (passthroughGatherer) MutateWithAllCandidates(context.Context, *compute.SchedulerRequest) error {
 	return nil
 }
 
 func TestNewAPI(t *testing.T) {
-	delegate := &mockHTTPAPIDelegate{}
+	r := &mockRunner{}
 
-	api := NewAPI(HTTPAPIConfig{}, delegate)
+	httpAPI := newTestAPI(HTTPAPIConfig{}, r)
 
-	if api == nil {
-		t.Fatal("NewAPI returned nil")
+	if httpAPI.scheduler != r {
+		t.Error("scheduler (runner) not set correctly")
 	}
-
-	httpAPI, ok := api.(*httpAPI)
-	if !ok {
-		t.Fatal("NewAPI did not return httpAPI type")
-	}
-
-	if httpAPI.delegate != delegate {
-		t.Error("Delegate not set correctly")
-	}
-
 	if httpAPI.monitor.ApiRequestsTimer == nil {
 		t.Error("Monitor not initialized")
 	}
 }
 
 func TestHTTPAPI_Init(t *testing.T) {
-	delegate := &mockHTTPAPIDelegate{}
-	api := NewAPI(HTTPAPIConfig{}, delegate)
+	var api HTTPAPI = newTestAPI(HTTPAPIConfig{}, &mockRunner{})
 
 	mux := http.NewServeMux()
 	api.Init(mux)
@@ -72,8 +99,7 @@ func TestHTTPAPI_Init(t *testing.T) {
 }
 
 func TestHTTPAPI_canRunScheduler(t *testing.T) {
-	delegate := &mockHTTPAPIDelegate{}
-	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
+	api := newTestAPI(HTTPAPIConfig{}, &mockRunner{})
 
 	tests := []struct {
 		name        string
@@ -263,20 +289,23 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			delegate := &mockHTTPAPIDelegate{
-				processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
+			r := &mockRunner{
+				runFunc: func(_ context.Context, _ compute.SchedulerRequest, _ compute.PostHook) (compute.RunOutcome, error) {
 					if tt.processDecisionErr != nil {
-						return tt.processDecisionErr
+						return compute.RunOutcome{}, tt.processDecisionErr
 					}
 					if tt.decisionResult != nil {
-						decision.Status = tt.decisionResult.Status
-						return nil
+						if tt.decisionResult.Status.Result != nil {
+							return compute.RunOutcome{Result: *tt.decisionResult.Status.Result}, nil
+						}
+						// A decisionResult without a Result models a failed run.
+						return compute.RunOutcome{}, errors.New("scheduling failed")
 					}
-					return nil
+					return compute.RunOutcome{}, nil
 				},
 			}
 
-			api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
+			api := newTestAPI(HTTPAPIConfig{}, r)
 
 			var body *strings.Reader
 			if tt.body != "" {
@@ -318,15 +347,12 @@ func TestHTTPAPI_NovaExternalScheduler_EmptyHostsSerializedAsArray(t *testing.T)
 	// When the pipeline filters out all hosts, OrderedHosts is nil. The
 	// response must serialize hosts as an empty array, not null, since Nova's
 	// schema requires an array.
-	delegate := &mockHTTPAPIDelegate{
-		processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
-			decision.Status = v1alpha1.DecisionStatus{
-				Result: &v1alpha1.DecisionResult{OrderedHosts: nil},
-			}
-			return nil
+	r := &mockRunner{
+		runFunc: func(context.Context, compute.SchedulerRequest, compute.PostHook) (compute.RunOutcome, error) {
+			return compute.RunOutcome{Result: compute.SchedulerResult{OrderedHosts: nil}}, nil
 		},
 	}
-	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
+	api := newTestAPI(HTTPAPIConfig{}, r)
 
 	req := novaapi.ExternalSchedulerRequest{
 		Spec: novaapi.NovaObject[novaapi.NovaSpec]{
@@ -357,20 +383,16 @@ func TestHTTPAPI_NovaExternalScheduler_EmptyHostsSerializedAsArray(t *testing.T)
 	}
 }
 
-func TestHTTPAPI_NovaExternalScheduler_DecisionCreation(t *testing.T) {
-	var capturedDecision *v1alpha1.Decision
-	delegate := &mockHTTPAPIDelegate{
-		processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
-			capturedDecision = decision
-			// Set a successful result to avoid "decision didn't produce a result" error
-			decision.Status.Result = &v1alpha1.DecisionResult{
-				OrderedHosts: []string{"host1"},
-			}
-			return nil
+func TestHTTPAPI_NovaExternalScheduler_RequestMapping(t *testing.T) {
+	var captured compute.SchedulerRequest
+	r := &mockRunner{
+		runFunc: func(_ context.Context, req compute.SchedulerRequest, _ compute.PostHook) (compute.RunOutcome, error) {
+			captured = req
+			return compute.RunOutcome{Result: compute.SchedulerResult{OrderedHosts: []string{"host1"}}}, nil
 		},
 	}
 
-	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
+	api := newTestAPI(HTTPAPIConfig{}, r)
 
 	requestData := novaapi.ExternalSchedulerRequest{
 		Spec: novaapi.NovaObject[novaapi.NovaSpec]{
@@ -400,29 +422,16 @@ func TestHTTPAPI_NovaExternalScheduler_DecisionCreation(t *testing.T) {
 		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
 	}
 
-	if capturedDecision == nil {
-		t.Fatal("Decision was not captured")
+	// Verify the handler mapped the wire request into the typed scheduler request.
+	if captured.Pipeline != "test-pipeline" {
+		t.Errorf("Expected pipeline 'test-pipeline', got %s", captured.Pipeline)
 	}
-
-	// Verify decision fields
-	if capturedDecision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
-		t.Errorf("Expected scheduling domain %s, got %s", v1alpha1.SchedulingDomainNova, capturedDecision.Spec.SchedulingDomain)
+	if captured.InstanceUUID != "test-uuid-123" {
+		t.Errorf("Expected instance UUID 'test-uuid-123', got %s", captured.InstanceUUID)
 	}
-
-	if capturedDecision.Spec.PipelineRef.Name != "test-pipeline" {
-		t.Errorf("Expected pipeline 'test-pipeline', got %s", capturedDecision.Spec.PipelineRef.Name)
-	}
-
-	if capturedDecision.Spec.ResourceID != "test-uuid-123" {
-		t.Errorf("Expected resource ID 'test-uuid-123', got %s", capturedDecision.Spec.ResourceID)
-	}
-
-	if capturedDecision.GenerateName != "nova-" {
-		t.Errorf("Expected generate name 'nova-', got %s", capturedDecision.GenerateName)
-	}
-
-	if capturedDecision.Spec.NovaRaw == nil {
-		t.Error("NovaRaw should not be nil")
+	// No explicit _nova_check_type hint means the handler defaults to the create intent.
+	if captured.Intent != novaapi.CreateIntent {
+		t.Errorf("Expected intent %s, got %s", novaapi.CreateIntent, captured.Intent)
 	}
 }
 
@@ -445,14 +454,14 @@ func TestHTTPAPI_NovaExternalScheduler_ForcedDestination(t *testing.T) {
 		},
 	}
 
-	delegateCalled := false
-	delegate := &mockHTTPAPIDelegate{
-		processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
-			delegateCalled = true
-			return nil
+	schedulerCalled := false
+	r := &mockRunner{
+		runFunc: func(context.Context, compute.SchedulerRequest, compute.PostHook) (compute.RunOutcome, error) {
+			schedulerCalled = true
+			return compute.RunOutcome{}, nil
 		},
 	}
-	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
+	api := newTestAPI(HTTPAPIConfig{}, r)
 
 	body, err := json.Marshal(requestData)
 	if err != nil {
@@ -466,8 +475,8 @@ func TestHTTPAPI_NovaExternalScheduler_ForcedDestination(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("Expected status %d, got %d", http.StatusOK, w.Code)
 	}
-	if delegateCalled {
-		t.Error("delegate should not be called for forced destination requests")
+	if schedulerCalled {
+		t.Error("scheduler should not be called for forced destination requests")
 	}
 	var response novaapi.ExternalSchedulerResponse
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
@@ -495,14 +504,14 @@ func TestHTTPAPI_NovaExternalScheduler_ForcedDestinationNoWeights(t *testing.T) 
 		// for forced-destination requests.
 	}
 
-	delegateCalled := false
-	delegate := &mockHTTPAPIDelegate{
-		processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
-			delegateCalled = true
-			return nil
+	schedulerCalled := false
+	r := &mockRunner{
+		runFunc: func(context.Context, compute.SchedulerRequest, compute.PostHook) (compute.RunOutcome, error) {
+			schedulerCalled = true
+			return compute.RunOutcome{}, nil
 		},
 	}
-	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
+	api := newTestAPI(HTTPAPIConfig{}, r)
 
 	body, err := json.Marshal(requestData)
 	if err != nil {
@@ -516,8 +525,8 @@ func TestHTTPAPI_NovaExternalScheduler_ForcedDestinationNoWeights(t *testing.T) 
 	if w.Code != http.StatusOK {
 		t.Fatalf("Expected status %d, got %d (forced destination with no weights must not be rejected)", http.StatusOK, w.Code)
 	}
-	if delegateCalled {
-		t.Error("delegate should not be called for forced destination requests")
+	if schedulerCalled {
+		t.Error("scheduler should not be called for forced destination requests")
 	}
 	var response novaapi.ExternalSchedulerResponse
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
@@ -548,15 +557,15 @@ func TestHTTPAPI_NovaExternalScheduler_ForcedDestinationDisabled(t *testing.T) {
 		Pipeline: "test-pipeline",
 	}
 
-	delegateCalled := false
-	delegate := &mockHTTPAPIDelegate{
-		processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
-			delegateCalled = true
-			return nil
+	schedulerCalled := false
+	r := &mockRunner{
+		runFunc: func(context.Context, compute.SchedulerRequest, compute.PostHook) (compute.RunOutcome, error) {
+			schedulerCalled = true
+			return compute.RunOutcome{}, nil
 		},
 	}
 	disabled := false
-	api := NewAPI(HTTPAPIConfig{ForcedDestinationEnabled: &disabled}, delegate).(*httpAPI)
+	api := newTestAPI(HTTPAPIConfig{ForcedDestinationEnabled: &disabled}, r)
 
 	body, err := json.Marshal(requestData)
 	if err != nil {
@@ -567,8 +576,8 @@ func TestHTTPAPI_NovaExternalScheduler_ForcedDestinationDisabled(t *testing.T) {
 
 	api.NovaExternalScheduler(w, req)
 
-	if !delegateCalled {
-		t.Error("delegate should be called when forced destination is disabled")
+	if !schedulerCalled {
+		t.Error("scheduler should be called when forced destination is disabled")
 	}
 }
 
@@ -804,8 +813,7 @@ func TestShuffleTopHosts(t *testing.T) {
 }
 
 func TestHTTPAPI_inferPipelineName(t *testing.T) {
-	delegate := &mockHTTPAPIDelegate{}
-	api := NewAPI(HTTPAPIConfig{}, delegate).(*httpAPI)
+	api := newTestAPI(HTTPAPIConfig{}, &mockRunner{})
 
 	tests := []struct {
 		name           string

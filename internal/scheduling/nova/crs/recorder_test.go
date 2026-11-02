@@ -271,7 +271,7 @@ func TestRecordCRAllocation(t *testing.T) {
 				PlacementCounter: counter,
 			}
 
-			recorder.RecordPlacement(context.Background(), tt.decision, tt.request)
+			recorder.RecordPlacement(context.Background(), *tt.decision.Status.Result, tt.decision.Spec.Intent, tt.request)
 
 			var res v1alpha1.Reservation
 			if err := fakeClient.Get(context.Background(), client.ObjectKey{Name: tt.checkSlot}, &res); err != nil {

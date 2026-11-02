@@ -54,6 +54,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/external"
 
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	schedulinglib "github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/machines"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/manila"
@@ -421,27 +422,31 @@ func main() {
 		placementCounter := crs.NewPlacementCounter()
 		// Filter-weigher pipeline controller setup.
 		filterWeigherController := &nova.FilterWeigherPipelineController{
-			Monitor:      filterWeigherPipelineMonitor,
-			FeatureGates: featureGates,
-			CRRecorder: crs.Recorder{
-				NoHostFoundCounter: noHostFoundCounter,
-				PlacementCounter:   placementCounter,
-			},
+			Monitor: filterWeigherPipelineMonitor,
 		}
 		metrics.Registry.MustRegister(noHostFoundCounter)
 		metrics.Registry.MustRegister(placementCounter)
 		// Inferred through the base controller.
 		filterWeigherController.Client = multiclusterClient
-		filterWeigherController.CRRecorder.Client = multiclusterClient
 		if err := filterWeigherController.SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "nova FilterWeigherPipelineController")
 			os.Exit(1)
+		}
+		// Shared in-process scheduler: owns the scheduling lock and runs the
+		// pipeline. The Nova HTTP API and the reservation controllers call it
+		// directly (no self-directed HTTP).
+		novaScheduler := compute.NewScheduler(filterWeigherController, filterWeigherController.Gatherer)
+		vmHandler := &nova.VirtualMachineHandler{Client: multiclusterClient}
+		crRecorder := crs.Recorder{
+			Client:             multiclusterClient,
+			NoHostFoundCounter: noHostFoundCounter,
+			PlacementCounter:   placementCounter,
 		}
 		novaAPIConfig := conf.GetConfigOrDie[nova.HTTPAPIConfig]()
 		setupLog.Info("loaded nova API config",
 			"evacuationShuffleK", novaAPIConfig.EvacuationShuffleK,
 			"novaLimitHostsToRequest", novaAPIConfig.NovaLimitHostsToRequest)
-		nova.NewAPI(novaAPIConfig, filterWeigherController).Init(mux)
+		nova.NewAPI(novaAPIConfig, novaScheduler, vmHandler, crRecorder, featureGates).Init(mux)
 
 		// Detector pipeline controller setup.
 		novaClient := nova.NewNovaClient()

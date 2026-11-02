@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	vmopv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -56,15 +56,8 @@ func vmTestRequest() api.ExternalSchedulerRequest {
 	return req
 }
 
-func vmTestDecision(targetHost *string) *v1alpha1.Decision {
-	return &v1alpha1.Decision{
-		Spec: v1alpha1.DecisionSpec{
-			Intent: api.CreateIntent,
-		},
-		Status: v1alpha1.DecisionStatus{
-			Result: &v1alpha1.DecisionResult{TargetHost: targetHost},
-		},
-	}
+func vmTestResult(targetHost *string) compute.SchedulerResult {
+	return compute.SchedulerResult{TargetHost: targetHost}
 }
 
 func vmTestHypervisor(region, az string) *hv1.Hypervisor {
@@ -88,7 +81,7 @@ func TestVirtualMachineHandlerCreate(t *testing.T) {
 	h := &VirtualMachineHandler{Client: fakeClient}
 
 	targetHost := "compute-1"
-	if err := h.Upsert(context.Background(), vmTestDecision(&targetHost), vmTestRequest()); err != nil {
+	if err := h.Upsert(context.Background(), vmTestResult(&targetHost), "", vmTestRequest(), api.CreateIntent); err != nil {
 		t.Fatalf("Upsert: %v", err)
 	}
 
@@ -137,7 +130,7 @@ func TestVirtualMachineHandlerUpdate(t *testing.T) {
 	h := &VirtualMachineHandler{Client: fakeClient}
 
 	targetHost := "compute-1"
-	if err := h.Upsert(context.Background(), vmTestDecision(&targetHost), vmTestRequest()); err != nil {
+	if err := h.Upsert(context.Background(), vmTestResult(&targetHost), "", vmTestRequest(), api.CreateIntent); err != nil {
 		t.Fatalf("Upsert: %v", err)
 	}
 
@@ -162,7 +155,7 @@ func TestVirtualMachineHandlerNoTargetHost(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 	h := &VirtualMachineHandler{Client: fakeClient}
 
-	if err := h.Upsert(context.Background(), vmTestDecision(nil), vmTestRequest()); err != nil {
+	if err := h.Upsert(context.Background(), vmTestResult(nil), "", vmTestRequest(), api.CreateIntent); err != nil {
 		t.Fatalf("Upsert with nil target host should be a no-op, got: %v", err)
 	}
 	var vmList vmopv1alpha1.VirtualMachineList
@@ -183,7 +176,7 @@ func TestVirtualMachineHandlerMissingRegion(t *testing.T) {
 	h := &VirtualMachineHandler{Client: fakeClient}
 
 	targetHost := "compute-1"
-	if err := h.Upsert(context.Background(), vmTestDecision(&targetHost), vmTestRequest()); err == nil {
+	if err := h.Upsert(context.Background(), vmTestResult(&targetHost), "", vmTestRequest(), api.CreateIntent); err == nil {
 		t.Fatal("expected error for missing region label, got nil")
 	}
 	vm := &vmopv1alpha1.VirtualMachine{}

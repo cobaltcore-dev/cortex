@@ -23,14 +23,14 @@ var unsupportedCapabilityOps = []string{
 	"s==", "s!=", "s<", "s<=", "s>", "s>=", "<or>",
 }
 
-// toSchedulerRequest translates the Nova over-the-wire request into the typed,
+// ToSchedulerRequest translates the Nova over-the-wire request into the typed,
 // Nova-agnostic compute.SchedulerRequest the pipeline consumes. This is the one
 // place that reads Nova's loosely-typed scheduler hints and flavor/image extra
 // specs; every downstream filter/weigher sees only resolved typed fields.
 //
 // intent and pipeline are resolved by the caller (the HTTP API layer) and passed
 // in.
-func toSchedulerRequest(
+func ToSchedulerRequest(
 	wire api.ExternalSchedulerRequest,
 	intent v1alpha1.SchedulingIntent,
 	pipeline string,

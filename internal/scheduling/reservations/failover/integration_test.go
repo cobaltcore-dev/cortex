@@ -1233,7 +1233,7 @@ func newIntegrationTestEnv(t *testing.T, vms []reservations.VM, hypervisors []*h
 		novaController.PipelineConfigs[pipeline.Name] = pipeline
 	}
 
-	api := &testHTTPAPI{delegate: novaController}
+	api := &testHTTPAPI{scheduler: compute.NewScheduler(novaController, novaController.Gatherer)}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/scheduler/nova/external", api.NovaExternalScheduler)
 	server := httptest.NewServer(mux)
@@ -1252,7 +1252,7 @@ func newIntegrationTestEnv(t *testing.T, vms []reservations.VM, hypervisors []*h
 // testHTTPAPI is a simplified HTTP API for testing that delegates to the controller.
 // It does NOT shuffle evacuation hosts, ensuring deterministic test results.
 type testHTTPAPI struct {
-	delegate nova.HTTPAPIDelegate
+	scheduler *compute.Scheduler
 }
 
 // NovaExternalScheduler handles the POST request from the Nova scheduler.
@@ -1270,58 +1270,26 @@ func (api *testHTTPAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	rawBytes, err := json.Marshal(requestData)
-	if err != nil {
-		http.Error(w, "failed to marshal request", http.StatusInternalServerError)
-		return
-	}
-	raw := runtime.RawExtension{Raw: rawBytes}
-
 	pipelineName := requestData.Pipeline
 	if pipelineName == "" {
 		pipelineName = "test-filter-pipeline"
 	}
 
 	// Resolve the scheduling intent from the request hints, mirroring the
-	// production handler (external_scheduler_api.go). The pipeline reads the
-	// resolved intent off the typed request, so it must be set on the decision.
+	// production handler (external_scheduler_api.go).
 	intent, err := requestData.GetIntent()
 	if err != nil {
 		intent = novaapi.CreateIntent
 	}
 
-	decision := &v1alpha1.Decision{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Decision",
-			APIVersion: "cortex.cloud/v1alpha1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "nova-",
-		},
-		Spec: v1alpha1.DecisionSpec{
-			SchedulingDomain: v1alpha1.SchedulingDomainNova,
-			PipelineRef: corev1.ObjectReference{
-				Name: pipelineName,
-			},
-			ResourceID: requestData.Spec.Data.InstanceUUID,
-			NovaRaw:    &raw,
-			Intent:     intent,
-		},
-	}
-
-	ctx := r.Context()
-	if err := api.delegate.ProcessNewDecisionFromAPI(ctx, decision); err != nil {
+	req := nova.ToSchedulerRequest(requestData, intent, pipelineName)
+	out, err := api.scheduler.Run(r.Context(), req, nil, nil)
+	if err != nil {
 		http.Error(w, "failed to process scheduling decision", http.StatusInternalServerError)
 		return
 	}
 
-	if decision.Status.Result == nil {
-		http.Error(w, "decision didn't produce a result", http.StatusInternalServerError)
-		return
-	}
-
-	hosts := decision.Status.Result.OrderedHosts
-	response := novaapi.ExternalSchedulerResponse{Hosts: hosts}
+	response := novaapi.ExternalSchedulerResponse{Hosts: out.Result.OrderedHosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
@@ -1444,7 +1412,7 @@ func newIntegrationTestEnvWithTraitsFilter(t *testing.T, vms []reservations.VM, 
 		novaController.PipelineConfigs[pipeline.Name] = pipeline
 	}
 
-	api := &testHTTPAPI{delegate: novaController}
+	api := &testHTTPAPI{scheduler: compute.NewScheduler(novaController, novaController.Gatherer)}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/scheduler/nova/external", api.NovaExternalScheduler)
 	server := httptest.NewServer(mux)
