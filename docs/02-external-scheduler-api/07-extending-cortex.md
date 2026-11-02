@@ -19,14 +19,15 @@ implementation in code, then reference it by name from a custom resource. The mo
 
 ## Choose the right registration style
 
-Cortex uses three registration mechanisms depending on the plugin category:
+All plugin categories use the same `init()` self-registration pattern, differing only in which
+package-level `Index` map they register into:
 
 | Plugin | Registration | Referenced by |
 |---|---|---|
 | Filter / weigher / detector | Self-register via `init()` into a package-level `Index` map of factory functions (e.g. `internal/scheduling/nova/plugins/filters/`) | `Pipeline` CRD step name |
-| Knowledge extractor | Entry in the hand-maintained `supportedExtractors` map (`internal/knowledge/extractor/supported_extractors.go`) | `Knowledge` CRD |
-| KPI | Entry in the hand-maintained `supportedKPIs` map (`internal/knowledge/kpis/supported_kpis.go`) | `KPI` CRD |
-| Datasource | Typed switch / map on datasource kind | `Datasource` CRD |
+| Knowledge extractor | Self-register via `init()` into the `Index` map in `internal/knowledge/extractor/plugins/zz_index.go` | `Knowledge` CRD |
+| KPI | Self-register via `init()` into the `Index` map in `internal/knowledge/kpis/plugins/zz_index.go` | `KPI` CRD |
+| Datasource | Self-register via `init()` into the `Index` map in the datasource plugin package (e.g. `internal/knowledge/datasources/plugins/openstack/zz_index.go`) | `Datasource` CRD |
 
 ## Add a scheduling step (filter / weigher / detector)
 
@@ -66,9 +67,17 @@ result, is the signal your step was picked up. See
 
 ## Add a knowledge extractor or KPI
 
-1. Implement the extractor/KPI.
-2. Add its name to the hand-maintained static map (unlike scheduling steps, these are **not**
-   self-registering — a missing map entry means the name is unavailable).
+1. Implement the extractor/KPI in the appropriate plugin subdirectory.
+2. Add a `func init()` at the bottom of the file that registers a factory function into the
+   package-level `Index` map (declared in `zz_index.go`) — for example:
+
+   ```go
+   func init() {
+       plugins.Index["my_extractor"] = func() plugins.FeatureExtractor { return &MyExtractor{} }
+   }
+   ```
+
+   Because registration happens in `init()`, importing the package is enough — no central list to edit.
 3. Reference it from a `Knowledge` or `KPI` resource.
 
 Verify with the feature/KPI metrics:
@@ -80,11 +89,12 @@ cortex_kpi_state{name="my-kpi"} 1
 
 ## Add a datasource kind
 
-Datasources are dispatched by a typed switch/map on kind. Add the new kind to that dispatch and
-implement its ingestion, then reference it from a `Datasource` resource. The datasource types are the
-`DatasourceType` / `OpenStackDatasourceType` constants in
-`api/v1alpha1/datasource_types.go`, and the dispatch is
-`internal/knowledge/datasources/plugins/openstack/supported_syncers.go`.
+Datasources self-register via `init()` into the `Index` map in their plugin package. Add the new kind
+by implementing its ingestion and registering a factory function in `init()`, then reference it from a
+`Datasource` resource. The datasource types are the `DatasourceType` / `OpenStackDatasourceType`
+constants in `api/v1alpha1/datasource_types.go`, and the `Index` maps are in
+`internal/knowledge/datasources/plugins/openstack/zz_index.go` and
+`internal/knowledge/datasources/plugins/prometheus/zz_index.go`.
 
 ## Build and test locally
 

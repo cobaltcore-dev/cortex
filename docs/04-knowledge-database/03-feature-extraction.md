@@ -20,8 +20,8 @@ Postgres database and the `Knowledge` spec, and `Extract() ([]Feature, error)` r
 compute extractors pair a `.go` file with a `.sql` file — the base helper runs the SQL query against the
 datasource database and boxes the rows into typed features.
 
-Extractors are dispatched by a hand-maintained map, `supportedExtractors`, in
-`internal/knowledge/extractor/supported_extractors.go` — the same static-registration pattern the KPIs use.
+Extractors self-register via `func init()` into the package-level `Index` map declared in
+`internal/knowledge/extractor/plugins/zz_index.go` — the same self-registration pattern the KPIs use.
 There are two plugin families:
 
 - **compute** (`plugins/compute/`) — the bulk of them: `host_utilization_extractor` (joins a hypervisor's
@@ -32,8 +32,9 @@ There are two plugin families:
 - **storage** (`plugins/storage/`) — currently `netapp_storage_pool_cpu_usage_extractor`, the feature behind
   Manila's one weigher.
 
-To add an extractor, implement the interface and register it in `supportedExtractors` under a new name — the
-process in [Extend Cortex](../02-external-scheduler-api/07-extending-cortex.md).
+To add an extractor, implement the interface and add a `func init()` that registers a factory function
+into the `Index` map under a new name — the process in
+[Extend Cortex](../02-external-scheduler-api/07-extending-cortex.md).
 
 ## Declaring inputs and where features live
 

@@ -146,14 +146,16 @@ controllers; a `cortex-cinder` bundle enables the Cinder pipeline controller ins
 
 ### The plugin model
 
-Pipeline steps, knowledge extractors, and datasources are all *named* — a resource references a step
-by name, and the binary resolves the name to code. There are three registration styles:
+Pipeline steps, knowledge extractors, KPIs, and datasources are all *named* — a resource references a
+plugin by name, and the binary resolves the name to code. All categories use the same registration
+pattern: each plugin file has a `func init()` that registers a factory function into a package-level
+`Index` map declared in a `zz_index.go` file. Importing the package is enough — no central list to
+edit. The `Index` maps live in:
 
-- **Scheduling plugins** (filters, weighers, detectors) **self-register** via `init()` into
-  package-level `Index` maps of factory functions. Importing the package registers the step.
-- **Knowledge extractors and KPIs** are registered in **hand-maintained static maps** — a step is
-  available only if it has an entry.
-- **Datasources** are dispatched by a **typed switch / map** keyed on the datasource kind.
+- **Scheduling plugins** — `internal/scheduling/<domain>/plugins/filters/`, `.../weighers/`, `.../detectors/`
+- **Knowledge extractors** — `internal/knowledge/extractor/plugins/zz_index.go`
+- **KPIs** — `internal/knowledge/kpis/plugins/zz_index.go`
+- **Datasources** — e.g. `internal/knowledge/datasources/plugins/openstack/zz_index.go`
 
 A per-domain admission webhook validates a `Pipeline` when it is applied: it **rejects** a step whose
 parameters are invalid or a step of the wrong kind for the pipeline type, but an **unknown step name is
