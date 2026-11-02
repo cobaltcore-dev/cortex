@@ -4,23 +4,18 @@
 package filters
 
 import (
-	"bytes"
-	"strings"
-	"sync"
+	"maps"
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/go-logr/logr"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/testutil"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 func makeQuotaEnforcementRequest(projectID, az, hwVersion string, memoryMB, numInstances uint64, hints map[string]any) api.ExternalSchedulerRequest {
@@ -49,18 +44,6 @@ func makeQuotaEnforcementRequest(projectID, az, hwVersion string, memoryMB, numI
 			{ComputeHost: "host3"},
 		},
 	}
-}
-
-// installFreshMetrics swaps in a fresh QuotaEnforcementMetrics for the duration
-// of a test and restores the previous singleton afterwards. Each case starts
-// from a known-zero state and is fully isolated.
-func installFreshMetrics(t *testing.T) *QuotaEnforcementMetrics {
-	t.Helper()
-	prev := QuotaEnforcementMetricsSingleton
-	m := NewQuotaEnforcementMetrics()
-	QuotaEnforcementMetricsSingleton = m
-	t.Cleanup(func() { QuotaEnforcementMetricsSingleton = prev })
-	return m
 }
 
 func TestFilterQuotaEnforcement_Run(t *testing.T) {
@@ -915,8 +898,6 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := installFreshMetrics(t)
-
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(tt.objects...).
@@ -943,19 +924,37 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 				}
 			}
 
-			// Metric assertions: exactly one increment on the expected label set
-			// and exactly one series in the vector (no stray increments).
-			got := testutil.ToFloat64(m.Decisions.WithLabelValues(
-				tt.expectMode, tt.expectDecision, tt.expectResource, tt.expectAZ, tt.expectFG,
-			))
-			if got != 1 {
-				t.Errorf("expected 1 increment for mode=%q decision=%q resource=%q az=%q flavor_group=%q; got %v",
-					tt.expectMode, tt.expectDecision, tt.expectResource, tt.expectAZ, tt.expectFG, got)
-			}
-			if n := testutil.CollectAndCount(m.Decisions); n != 1 {
-				t.Errorf("expected exactly 1 metric series in vector, got %d", n)
-			}
+			// Event assertions: exactly one quota_enforcement_decision event with
+			// the expected label set (no stray events).
+			assertDecisionEvent(t, result.Events,
+				tt.expectMode, tt.expectDecision, tt.expectResource, tt.expectAZ, tt.expectFG)
 		})
+	}
+}
+
+// assertDecisionEvent checks that events contains exactly one
+// quota_enforcement_decision event carrying the expected labels.
+func assertDecisionEvent(t *testing.T, events []lib.FilterWeigherPipelineStepEvent, mode, decision, resource, az, flavorGroup string) {
+	t.Helper()
+	want := map[string]string{
+		"mode":              mode,
+		"decision":          decision,
+		"resource":          resource,
+		"availability_zone": az,
+		"flavor_group":      flavorGroup,
+	}
+	var matches int
+	for _, ev := range events {
+		if ev.Name != "quota_enforcement_decision" {
+			continue
+		}
+		matches++
+		if !maps.Equal(ev.Labels, want) {
+			t.Errorf("event labels = %v, want %v", ev.Labels, want)
+		}
+	}
+	if matches != 1 {
+		t.Errorf("expected exactly 1 quota_enforcement_decision event, got %d (events: %v)", matches, events)
 	}
 }
 
@@ -985,8 +984,6 @@ func TestFilterQuotaEnforcement_DefaultIsShadow(t *testing.T) {
 		},
 	}
 
-	m := installFreshMetrics(t)
-
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(objects...).
@@ -1012,12 +1009,8 @@ func TestFilterQuotaEnforcement_DefaultIsShadow(t *testing.T) {
 			len(request.Hosts), len(result.Activations))
 	}
 
-	// Decision metric must record mode=shadow with a reject decision.
-	if got := testutil.ToFloat64(m.Decisions.WithLabelValues(
-		"shadow", "reject", "ram", "az-1", "hana_v2",
-	)); got != 1 {
-		t.Errorf("expected exactly 1 increment on shadow-reject metric, got %v", got)
-	}
+	// Decision event must record mode=shadow with a reject decision.
+	assertDecisionEvent(t, result.Events, "shadow", "reject", "ram", "az-1", "hana_v2")
 }
 
 func TestQuantityToGiB(t *testing.T) {
@@ -1039,52 +1032,6 @@ func TestQuantityToGiB(t *testing.T) {
 				t.Errorf("quantityToGiB(%v) = %d, want %d", tt.quantity, got, tt.expected)
 			}
 		})
-	}
-}
-
-func TestNewQuotaEnforcementMetrics(t *testing.T) {
-	m := NewQuotaEnforcementMetrics()
-	if m == nil || m.Decisions == nil {
-		t.Fatal("expected non-nil metrics with non-nil Decisions vec")
-	}
-	// The constructor no longer registers, so the caller is responsible for
-	// registering with a registry. Verify *QuotaEnforcementMetrics implements
-	// prometheus.Collector by registering it.
-	reg := prometheus.NewRegistry()
-	reg.MustRegister(m)
-	// Increment on a label set; verify it lands.
-	m.RecordDecision("shadow", "reject", "ram", "az-1", "hana_v2")
-	got := testutil.ToFloat64(m.Decisions.WithLabelValues("shadow", "reject", "ram", "az-1", "hana_v2"))
-	if got != 1 {
-		t.Errorf("expected 1 after RecordDecision, got %v", got)
-	}
-	// Re-registering the same collector must fail (proves it was registered).
-	if err := reg.Register(m); err == nil {
-		t.Error("expected error re-registering already-registered metric")
-	}
-}
-
-func TestQuotaEnforcementMetrics_RecordDecision_NilWarns(t *testing.T) {
-	// Capture log output to confirm the nil-receiver path warns exactly once,
-	// even when called many times. We freshly arm the package-level sync.Once
-	// so this test deterministically covers the warn path regardless of test
-	// ordering.
-	origOnce := recordDecisionNilOnce
-	recordDecisionNilOnce = &sync.Once{}
-	t.Cleanup(func() { recordDecisionNilOnce = origOnce })
-
-	var buf bytes.Buffer
-	logf.SetLogger(zap.New(zap.WriteTo(&buf), zap.UseDevMode(true)))
-
-	var nilMetrics *QuotaEnforcementMetrics
-	// Must not panic, and must warn exactly once across multiple calls.
-	nilMetrics.RecordDecision("enforce", "reject", "ram", "az-1", "hana_v2")
-	nilMetrics.RecordDecision("enforce", "reject", "ram", "az-1", "hana_v2")
-
-	const msg = "QuotaEnforcementMetrics is nil"
-	if got := strings.Count(buf.String(), msg); got != 1 {
-		t.Errorf("expected warn message %q to appear exactly once, got %d; output: %q",
-			msg, got, buf.String())
 	}
 }
 
