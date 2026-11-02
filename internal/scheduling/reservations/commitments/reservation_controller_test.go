@@ -178,6 +178,73 @@ func TestCommitmentReservationController_Reconcile(t *testing.T) {
 	}
 }
 
+// TestMigrateSpecAllocationsToAnnotation verifies that a blind-scheduler slot that has
+// Spec.CommittedResourceReservation.Allocations populated (old schema) but no
+// AnnotationCandidateAllocation annotation gets the annotation seeded from the first
+// Spec allocation entry on reconcile (one-time upgrade migration path).
+func TestMigrateSpecAllocationsToAnnotation(t *testing.T) {
+	scheme := newCRTestScheme(t)
+
+	res := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "slot-blind",
+		},
+		Spec: v1alpha1.ReservationSpec{
+			Type:       v1alpha1.ReservationTypeCommittedResource,
+			TargetHost: "host-1",
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceMemory: resource.MustParse("8Gi"),
+			},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				ProjectID:    "test-project",
+				ResourceName: "test-flavor",
+				Allocations: map[string]v1alpha1.CommittedResourceAllocation{ //nolint:staticcheck
+					"vm-legacy-b": {ObjectRef: corev1.ObjectReference{Name: "vm-legacy-b"}},
+					"vm-legacy-a": {ObjectRef: corev1.ObjectReference{Name: "vm-legacy-a"}},
+				},
+			},
+		},
+		Status: v1alpha1.ReservationStatus{
+			Host: "host-1",
+			Conditions: []metav1.Condition{
+				{
+					Type:               v1alpha1.ReservationConditionReady,
+					Status:             metav1.ConditionTrue,
+					Reason:             "ReservationActive",
+					ObservedGeneration: 1,
+				},
+			},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{},
+		},
+	}
+
+	k8sClient := newCRTestClient(scheme, res)
+	reconciler := &CommitmentReservationController{
+		Client: k8sClient,
+		Scheme: scheme,
+		Conf: ReservationControllerConfig{
+			RequeueIntervalActive: metav1.Duration{Duration: 5 * time.Minute},
+		},
+		VMSource: &vmSourceByUUID{},
+	}
+
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: res.Name}}
+	if _, err := reconciler.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	var updated v1alpha1.Reservation
+	if err := k8sClient.Get(context.Background(), req.NamespacedName, &updated); err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+
+	// Lexically first UUID is "vm-legacy-a".
+	got := updated.Annotations[v1alpha1.AnnotationCandidateAllocation]
+	if got != "vm-legacy-a" {
+		t.Errorf("expected annotation %s=vm-legacy-a, got %q", v1alpha1.AnnotationCandidateAllocation, got)
+	}
+}
+
 // ============================================================================
 // Test: reconcileAllocations
 // ============================================================================

@@ -127,6 +127,31 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 
 	// Slot is placed and confirmed — verify allocations and keep ObservedGeneration current.
 	if res.Spec.TargetHost != "" && res.Status.Host == res.Spec.TargetHost {
+		// Deprecated: remove when Spec.CommittedResourceReservation.Allocations is removed from the schema.
+		// One-time upgrade migration: blind-scheduler slots populated Spec.Allocations on the old schema.
+		// Seed AnnotationCandidateAllocation from the lexically-first Spec entry so the existing
+		// annotation recovery path re-confirms the VM on the next pass.
+		if res.Spec.CommittedResourceReservation != nil &&
+			res.Annotations[v1alpha1.AnnotationCandidateAllocation] == "" &&
+			len(res.Spec.CommittedResourceReservation.Allocations) > 0 { //nolint:staticcheck
+			keys := make([]string, 0, len(res.Spec.CommittedResourceReservation.Allocations)) //nolint:staticcheck
+			for k := range res.Spec.CommittedResourceReservation.Allocations {                //nolint:staticcheck
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			vmUUID := keys[0]
+			logger.Info("migrating first Spec allocation to annotation (one-time upgrade path)",
+				"vm", vmUUID, "reservation", res.Name)
+			old := res.DeepCopy()
+			if res.Annotations == nil {
+				res.Annotations = make(map[string]string)
+			}
+			res.Annotations[v1alpha1.AnnotationCandidateAllocation] = vmUUID
+			if err := r.Patch(ctx, &res, client.MergeFrom(old)); client.IgnoreNotFound(err) != nil {
+				return ctrl.Result{}, err
+			}
+		}
+
 		logger.V(1).Info("reservation is active, verifying allocations")
 		if err := r.reconcileAllocations(ctx, &res); err != nil {
 			logger.Error(err, "failed to reconcile allocations")
