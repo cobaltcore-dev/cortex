@@ -24,7 +24,8 @@ type FilterQuotaEnforcementOpts struct {
 	// metrics for would-be rejects, but never actually removes hosts from the
 	// result. Set to true to globally reject requests without headroom. The
 	// shadow default is intentional so that operators can observe
-	// cortex_nova_filter_quota_enforcement_decisions_total before opting in to
+	// cortex_filter_weigher_pipeline_step_events_total{event="quota_enforcement_decision"}
+	// before opting in to
 	// enforcement, and so that newly-rolled-out pipelines never silently start
 	// rejecting requests.
 	Enforce bool `json:"enforce,omitempty"`
@@ -63,13 +64,32 @@ func (FilterQuotaEnforcementOpts) Validate() error { return nil }
 //   - Enforce=true: on a no-headroom decision the filter clears all host
 //     activations to globally reject the request.
 //
-// Every accept/reject/skip outcome is recorded as a Prometheus counter:
-// cortex_nova_filter_quota_enforcement_decisions_total{mode,decision,resource,
-// availability_zone,flavor_group}.
+// Every accept/reject/skip outcome is reported as a named pipeline event
+// ("quota_enforcement_decision") and exported by the pipeline step monitor as
+// cortex_filter_weigher_pipeline_step_events_total{pipeline,step,event,mode,
+// decision,resource,availability_zone,flavor_group}.
 //
 // Disabled by default; activated by adding "filter_quota_enforcement" to the pipeline config.
 type FilterQuotaEnforcement struct {
 	lib.BaseFilter[api.ExternalSchedulerRequest, FilterQuotaEnforcementOpts]
+}
+
+// recordDecision appends an accept/reject/skip outcome as a named pipeline
+// event. The pipeline step monitor exports these as
+// cortex_filter_weigher_pipeline_step_events_total, labeled by pipeline, step,
+// event and the labels attached here, so operators can observe quota decisions
+// without a global metrics singleton.
+func recordDecision(result *lib.FilterWeigherPipelineStepResult, mode, decision, resource, az, flavorGroup string) {
+	result.Events = append(result.Events, lib.FilterWeigherPipelineStepEvent{
+		Name: "quota_enforcement_decision",
+		Labels: map[string]string{
+			"mode":              mode,
+			"decision":          decision,
+			"resource":          resource,
+			"availability_zone": az,
+			"flavor_group":      flavorGroup,
+		},
+	})
 }
 
 func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
@@ -90,19 +110,19 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 		switch intent {
 		case api.EvacuateIntent, api.LiveMigrationIntent:
 			traceLog.V(1).Info("skipping quota enforcement for non-consuming intent", "intent", intent)
-			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_intent_migration", "", "", "")
+			recordDecision(result, mode, "accept_skipped_intent_migration", "", "", "")
 			return result, nil
 		case api.ReserveForFailoverIntent, api.ReuseFailoverReservationIntent:
 			traceLog.V(1).Info("skipping quota enforcement for failover reservation intent")
-			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_intent_internal", "", "", "")
+			recordDecision(result, mode, "accept_skipped_intent_internal", "", "", "")
 			return result, nil
 		case api.ReserveForCommittedResourceIntent:
 			traceLog.V(1).Info("skipping quota enforcement for committed resource reservation intent")
-			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_intent_internal", "", "", "")
+			recordDecision(result, mode, "accept_skipped_intent_internal", "", "", "")
 			return result, nil
 		case api.CapacityProbeIntent:
 			traceLog.V(1).Info("skipping quota enforcement for capacity probe intent")
-			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped", "", "", "")
+			recordDecision(result, mode, "accept_skipped", "", "", "")
 			return result, nil
 		}
 	}
@@ -116,17 +136,17 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 
 	if projectID == "" {
 		traceLog.V(1).Info("no project ID in request, skipping quota enforcement")
-		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_missing_data", "", az, hwVersion)
+		recordDecision(result, mode, "accept_skipped_missing_data", "", az, hwVersion)
 		return result, nil
 	}
 	if az == "" {
 		traceLog.V(1).Info("no availability zone in request, skipping quota enforcement")
-		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_missing_data", "", "", hwVersion)
+		recordDecision(result, mode, "accept_skipped_missing_data", "", "", hwVersion)
 		return result, nil
 	}
 	if hwVersion == "" {
 		traceLog.V(1).Info("no hw_version in flavor extra specs, skipping quota enforcement")
-		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_skipped_missing_data", "", az, "")
+		recordDecision(result, mode, "accept_skipped_missing_data", "", az, "")
 		return result, nil
 	}
 
@@ -231,7 +251,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 
 	if crHasHeadroom {
 		traceLog.V(1).Info("quota enforcement ACCEPT: CR headroom available")
-		QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_cr", "ram", az, hwVersion)
+		recordDecision(result, mode, "accept_cr", "ram", az, hwVersion)
 		return result, nil
 	}
 
@@ -244,7 +264,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 		if apierrors.IsNotFound(err) {
 			traceLog.V(1).Info("no ProjectQuota CRD found for project+AZ, skipping enforcement",
 				"projectID", projectID, "az", az)
-			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_no_quota", "", az, hwVersion)
+			recordDecision(result, mode, "accept_no_quota", "", az, hwVersion)
 			return result, nil
 		}
 		traceLog.Error(err, "failed to get ProjectQuota", "name", pqName)
@@ -293,7 +313,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 		)
 
 		if headroom < check.request {
-			QuotaEnforcementMetricsSingleton.RecordDecision(mode, "reject", check.label, az, hwVersion)
+			recordDecision(result, mode, "reject", check.label, az, hwVersion)
 			if !s.Options.Enforce {
 				traceLog.V(1).Info("quota enforcement SHADOW: would reject but enforce=false",
 					"projectID", projectID,
@@ -321,7 +341,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 	}
 
 	traceLog.V(1).Info("quota enforcement ACCEPT: PAYG headroom available")
-	QuotaEnforcementMetricsSingleton.RecordDecision(mode, "accept_payg", "", az, hwVersion)
+	recordDecision(result, mode, "accept_payg", "", az, hwVersion)
 	return result, nil
 }
 
