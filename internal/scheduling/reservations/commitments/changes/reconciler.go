@@ -229,14 +229,22 @@ func (r *CommittedResourceChangeReconciler) reconcileRollingBack(ctx context.Con
 	//   using SSA with fieldManager=txFieldManager.
 	//   nil snapshot entry → CR did not exist before → delete it.
 	//   Gate terminal transition on each CR confirming its spec reverted (check observedGeneration).
-	return ctrl.Result{}, nil
+	logger.Info("WARNING: snapshot restoration not yet implemented (TODO #780), advancing to Rejected without rollback",
+		"az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID)
+	return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseRejected, func(s *v1alpha1.CommittedResourceChangeStatus) {
+		s.Message = "rollback not yet implemented, committed resource specs were not restored to their pre-change state"
+	})
 }
 
 // reconcileDryRunCleanup restores pre-change state after a dry-run would-accept outcome.
 // Re-uses snapshot rollback logic; terminal phase is Accepted (not Rejected).
 func (r *CommittedResourceChangeReconciler) reconcileDryRunCleanup(ctx context.Context, logger logr.Logger, tx *v1alpha1.CommittedResourceChange) (ctrl.Result, error) {
 	// TODO (#780): same convergence as reconcileRollingBack; terminal → advanceTo(Accepted, nil).
-	return ctrl.Result{}, nil
+	logger.Info("WARNING: dry-run cleanup not yet implemented (TODO #780), advancing to Accepted without cleanup",
+		"az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID)
+	return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseAccepted, func(s *v1alpha1.CommittedResourceChangeStatus) {
+		s.Message = "dry-run cleanup not yet implemented, committed resource specs from the dry run were not cleaned up"
+	})
 }
 
 // advanceTo updates the transaction status to the given phase.

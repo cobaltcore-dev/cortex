@@ -628,6 +628,117 @@ func TestCRTReconciler_AwaitingScheduling(t *testing.T) {
 	}
 }
 
+// ============================================================================
+// TestCRTReconciler_RollingBack
+// ============================================================================
+
+func TestCRTReconciler_RollingBack(t *testing.T) {
+	const txName = "tx-rollback"
+	const crName = "commitment-uuid-rb"
+
+	setup := func(t *testing.T) (client.Client, *CommittedResourceChangeReconciler) {
+		t.Helper()
+		scheme := testScheme(t)
+		tx := &v1alpha1.CommittedResourceChange{
+			ObjectMeta: metav1.ObjectMeta{Name: txName},
+			Spec: v1alpha1.CommittedResourceChangeSpec{
+				AvailabilityZone: "az-1",
+				Source:           v1alpha1.TxSourceAPI,
+				AllowRejection:   true,
+				NewState:         map[string]*v1alpha1.CommittedResourceSpec{"uuid-rb": minimalCRSpec("az-1")},
+			},
+		}
+		c := testClient(t, scheme, tx)
+		r := testReconciler(c, scheme)
+		driveToPhase(t, r, c, txName, v1alpha1.ChangePhaseAwaitingScheduling)
+		// Simulate rejection so we enter RollingBack.
+		setCRReady(t, c, crName, metav1.ConditionFalse, v1alpha1.CommittedResourceReasonRejected, "no capacity")
+		doReconcile(t, r, txName) // AwaitingScheduling → RollingBack
+		if got := getTx(t, c, txName).Status.Phase; got != v1alpha1.ChangePhaseRollingBack {
+			t.Fatalf("setup: want RollingBack, got %q", got)
+		}
+		return c, r
+	}
+
+	t.Run("advances to Rejected with rollback-not-implemented message", func(t *testing.T) {
+		c, r := setup(t)
+		doReconcile(t, r, txName) // RollingBack → Rejected
+		tx := getTx(t, c, txName)
+		if tx.Status.Phase != v1alpha1.ChangePhaseRejected {
+			t.Errorf("phase: want Rejected, got %q", tx.Status.Phase)
+		}
+		if !strings.Contains(tx.Status.Message, "rollback not yet implemented") {
+			t.Errorf("message: want substring %q in %q", "rollback not yet implemented", tx.Status.Message)
+		}
+		assertCondition(t, tx.Status.Conditions, v1alpha1.ChangeConditionFinished, metav1.ConditionTrue, string(v1alpha1.ChangePhaseRejected))
+		assertCondition(t, tx.Status.Conditions, v1alpha1.ChangeConditionProgressing, metav1.ConditionFalse, string(v1alpha1.ChangePhaseRejected))
+	})
+
+	t.Run("idempotent: repeated reconciles stay Rejected", func(t *testing.T) {
+		c, r := setup(t)
+		reconcileN(t, r, txName, 3)
+		if got := getTx(t, c, txName).Status.Phase; got != v1alpha1.ChangePhaseRejected {
+			t.Errorf("phase: want Rejected, got %q", got)
+		}
+	})
+}
+
+// ============================================================================
+// TestCRTReconciler_DryRunCleanup
+// ============================================================================
+
+func TestCRTReconciler_DryRunCleanup(t *testing.T) {
+	const txName = "tx-dryrun"
+	const crName = "commitment-uuid-dr"
+
+	setup := func(t *testing.T) (client.Client, *CommittedResourceChangeReconciler) {
+		t.Helper()
+		scheme := testScheme(t)
+		tx := &v1alpha1.CommittedResourceChange{
+			ObjectMeta: metav1.ObjectMeta{Name: txName},
+			Spec: v1alpha1.CommittedResourceChangeSpec{
+				AvailabilityZone: "az-1",
+				Source:           v1alpha1.TxSourceAPI,
+				AllowRejection:   true,
+				DryRun:           true,
+				NewState:         map[string]*v1alpha1.CommittedResourceSpec{"uuid-dr": minimalCRSpec("az-1")},
+			},
+		}
+		c := testClient(t, scheme, tx)
+		r := testReconciler(c, scheme)
+		driveToPhase(t, r, c, txName, v1alpha1.ChangePhaseAwaitingScheduling)
+		// Simulate acceptance so we enter DryRunCleanup.
+		setCRReady(t, c, crName, metav1.ConditionTrue, v1alpha1.CommittedResourceReasonAccepted, "")
+		doReconcile(t, r, txName) // AwaitingScheduling → DryRunCleanup
+		if got := getTx(t, c, txName).Status.Phase; got != v1alpha1.ChangePhaseDryRunCleanup {
+			t.Fatalf("setup: want DryRunCleanup, got %q", got)
+		}
+		return c, r
+	}
+
+	t.Run("advances to Accepted with cleanup-not-implemented message", func(t *testing.T) {
+		c, r := setup(t)
+		doReconcile(t, r, txName) // DryRunCleanup → Accepted
+		tx := getTx(t, c, txName)
+		if tx.Status.Phase != v1alpha1.ChangePhaseAccepted {
+			t.Errorf("phase: want Accepted, got %q", tx.Status.Phase)
+		}
+		if !strings.Contains(tx.Status.Message, "dry-run cleanup not yet implemented") {
+			t.Errorf("message: want substring %q in %q", "dry-run cleanup not yet implemented", tx.Status.Message)
+		}
+		assertCondition(t, tx.Status.Conditions, v1alpha1.ChangeConditionFinished, metav1.ConditionTrue, string(v1alpha1.ChangePhaseAccepted))
+		assertCondition(t, tx.Status.Conditions, v1alpha1.ChangeConditionProgressing, metav1.ConditionFalse, string(v1alpha1.ChangePhaseAccepted))
+	})
+
+	t.Run("idempotent: repeated reconciles stay Accepted", func(t *testing.T) {
+		c, r := setup(t)
+		reconcileN(t, r, txName, 3)
+		if got := getTx(t, c, txName).Status.Phase; got != v1alpha1.ChangePhaseAccepted {
+			t.Errorf("phase: want Accepted, got %q", got)
+		}
+	})
+}
+
 // setPhase directly sets a CRT's phase via Status().Update for test setup.
 func setPhase(t *testing.T, c client.Client, txName string, phase v1alpha1.ChangePhase) {
 	t.Helper()
