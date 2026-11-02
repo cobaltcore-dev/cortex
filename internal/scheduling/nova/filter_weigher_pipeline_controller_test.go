@@ -21,6 +21,7 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
@@ -28,10 +29,10 @@ import (
 type mockCandidateGatherer struct {
 	called        bool
 	err           error
-	gatheredHosts []api.ExternalSchedulerHost
+	gatheredHosts []compute.Host
 }
 
-func (m *mockCandidateGatherer) MutateWithAllCandidates(ctx context.Context, request *api.ExternalSchedulerRequest) error {
+func (m *mockCandidateGatherer) MutateWithAllCandidates(ctx context.Context, request *compute.SchedulerRequest) error {
 	m.called = true
 	if m.err != nil {
 		return m.err
@@ -219,9 +220,9 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 				Build()
 
 			controller := &FilterWeigherPipelineController{
-				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
+				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[compute.SchedulerRequest]]{
 					Client:          client,
-					Pipelines:       make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
+					Pipelines:       make(map[string]lib.FilterWeigherPipeline[compute.SchedulerRequest]),
 					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
@@ -648,9 +649,9 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 				Build()
 
 			controller := &FilterWeigherPipelineController{
-				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
+				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[compute.SchedulerRequest]]{
 					Client:          client,
-					Pipelines:       make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
+					Pipelines:       make(map[string]lib.FilterWeigherPipeline[compute.SchedulerRequest]),
 					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
@@ -710,90 +711,88 @@ func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T)
 	}
 }
 
-func TestFilterWeigherPipelineController_IgnorePreselection(t *testing.T) {
+func TestFilterWeigherPipelineController_GathersCandidatesForKVM(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
 	}
 
-	// Create a request with initial hosts
-	novaRequest := api.ExternalSchedulerRequest{
-		Spec: api.NovaObject[api.NovaSpec]{
-			Name:      "RequestSpec",
-			Namespace: "nova_object",
-			Version:   "1.19",
-			Data: api.NovaSpec{
-				ProjectID:    "test-project",
-				UserID:       "test-user",
-				InstanceUUID: "test-instance-uuid",
-				NumInstances: 1,
+	// Build a Nova request with the given flavor hypervisor type. Whether the
+	// controller gathers all candidates is derived from the hypervisor family in
+	// the adapter (KVM gathers; VMware / unset do not), NOT from pipeline config.
+	makeRaw := func(hypervisorType string) []byte {
+		extraSpecs := map[string]string{}
+		if hypervisorType != "" {
+			extraSpecs["capabilities:hypervisor_type"] = hypervisorType
+		}
+		novaRequest := api.ExternalSchedulerRequest{
+			Spec: api.NovaObject[api.NovaSpec]{
+				Data: api.NovaSpec{
+					ProjectID:    "test-project",
+					UserID:       "test-user",
+					InstanceUUID: "test-instance-uuid",
+					NumInstances: 1,
+					Flavor:       api.NovaObject[api.NovaFlavor]{Data: api.NovaFlavor{ExtraSpecs: extraSpecs}},
+				},
 			},
-		},
-		Context: api.NovaRequestContext{
-			ProjectID:       "test-project",
-			UserID:          "test-user",
-			RequestID:       "req-123",
-			GlobalRequestID: func() *string { s := "global-req-123"; return &s }(),
-		},
-		Hosts: []api.ExternalSchedulerHost{
-			{ComputeHost: "original-host-1", HypervisorHostname: "hv-1"},
-			{ComputeHost: "original-host-2", HypervisorHostname: "hv-2"},
-		},
-		Weights:  map[string]float64{"original-host-1": 1.0, "original-host-2": 0.5},
-		Pipeline: "test-pipeline",
-		Options:  scheduling.Options{},
-	}
-
-	novaRaw, err := json.Marshal(novaRequest)
-	if err != nil {
-		t.Fatalf("Failed to marshal nova request: %v", err)
+			Context: api.NovaRequestContext{RequestID: "req-123"},
+			Hosts: []api.ExternalSchedulerHost{
+				{ComputeHost: "original-host-1", HypervisorHostname: "hv-1"},
+				{ComputeHost: "original-host-2", HypervisorHostname: "hv-2"},
+			},
+			Weights:  map[string]float64{"original-host-1": 1.0, "original-host-2": 0.5},
+			Pipeline: "test-pipeline",
+			Options:  scheduling.Options{},
+		}
+		raw, err := json.Marshal(novaRequest)
+		if err != nil {
+			t.Fatalf("Failed to marshal nova request: %v", err)
+		}
+		return raw
 	}
 
 	tests := []struct {
 		name               string
-		ignorePreselection bool
+		hypervisorType     string
 		gathererErr        error
-		gatheredHosts      []api.ExternalSchedulerHost
+		gatheredHosts      []compute.Host
 		expectGathererCall bool
 		expectError        bool
 		errorContains      string
 	}{
 		{
-			name:               "IgnorePreselection disabled - gatherer not called",
-			ignorePreselection: false,
-			gathererErr:        nil,
-			gatheredHosts:      nil,
+			name:               "VMware request - gatherer not called",
+			hypervisorType:     "vmware vcenter server",
 			expectGathererCall: false,
-			expectError:        false,
 		},
 		{
-			name:               "IgnorePreselection enabled - gatherer called and succeeds",
-			ignorePreselection: true,
-			gathererErr:        nil,
-			gatheredHosts: []api.ExternalSchedulerHost{
+			name:               "unset hypervisor type - gatherer not called",
+			hypervisorType:     "",
+			expectGathererCall: false,
+		},
+		{
+			name:           "KVM request - gatherer called and succeeds",
+			hypervisorType: "qemu",
+			gatheredHosts: []compute.Host{
 				{ComputeHost: "gathered-host-1", HypervisorHostname: "gathered-host-1"},
 				{ComputeHost: "gathered-host-2", HypervisorHostname: "gathered-host-2"},
 				{ComputeHost: "gathered-host-3", HypervisorHostname: "gathered-host-3"},
 			},
 			expectGathererCall: true,
-			expectError:        false,
 		},
 		{
-			name:               "IgnorePreselection enabled - gatherer returns error",
-			ignorePreselection: true,
+			name:               "KVM request - gatherer returns error",
+			hypervisorType:     "qemu",
 			gathererErr:        errGathererFailed,
-			gatheredHosts:      nil,
 			expectGathererCall: true,
 			expectError:        true,
 			errorContains:      "gatherer failed",
 		},
 		{
-			name:               "IgnorePreselection enabled - gatherer returns empty hosts",
-			ignorePreselection: true,
-			gathererErr:        nil,
-			gatheredHosts:      []api.ExternalSchedulerHost{},
+			name:               "KVM request - gatherer returns empty hosts",
+			hypervisorType:     "ch",
+			gatheredHosts:      []compute.Host{},
 			expectGathererCall: true,
-			expectError:        false,
 		},
 	}
 
@@ -810,38 +809,34 @@ func TestFilterWeigherPipelineController_IgnorePreselection(t *testing.T) {
 				Build()
 
 			controller := &FilterWeigherPipelineController{
-				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
+				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[compute.SchedulerRequest]]{
 					Client:          fakeClient,
-					Pipelines:       make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
+					Pipelines:       make(map[string]lib.FilterWeigherPipeline[compute.SchedulerRequest]),
 					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 				},
 				Monitor:  lib.FilterWeigherPipelineMonitor{},
-				gatherer: mockGatherer,
+				Gatherer: mockGatherer,
 			}
 
-			// Setup pipeline config with IgnorePreselection flag
 			pipelineConf := v1alpha1.Pipeline{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-pipeline",
 				},
 				Spec: v1alpha1.PipelineSpec{
-					Type:               v1alpha1.PipelineTypeFilterWeigher,
-					SchedulingDomain:   v1alpha1.SchedulingDomainNova,
-					IgnorePreselection: tt.ignorePreselection,
-					Filters:            []v1alpha1.FilterSpec{},
-					Weighers:           []v1alpha1.WeigherSpec{},
+					Type:             v1alpha1.PipelineTypeFilterWeigher,
+					SchedulingDomain: v1alpha1.SchedulingDomainNova,
+					Filters:          []v1alpha1.FilterSpec{},
+					Weighers:         []v1alpha1.WeigherSpec{},
 				},
 			}
 			controller.PipelineConfigs["test-pipeline"] = pipelineConf
 
-			// Initialize the pipeline
 			initResult := controller.InitPipeline(context.Background(), pipelineConf)
 			if len(initResult.FilterErrors) > 0 || len(initResult.WeigherErrors) > 0 {
 				t.Fatalf("Failed to initialize pipeline: filter errors: %v, weigher errors: %v", initResult.FilterErrors, initResult.WeigherErrors)
 			}
 			controller.Pipelines["test-pipeline"] = initResult.Pipeline
 
-			// Create decision
 			decision := &v1alpha1.Decision{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-decision-preselection",
@@ -853,15 +848,13 @@ func TestFilterWeigherPipelineController_IgnorePreselection(t *testing.T) {
 						Name: "test-pipeline",
 					},
 					NovaRaw: &runtime.RawExtension{
-						Raw: novaRaw,
+						Raw: makeRaw(tt.hypervisorType),
 					},
 				},
 			}
 
-			// Process the decision
 			err := controller.ProcessNewDecisionFromAPI(context.Background(), decision)
 
-			// Verify gatherer was called (or not) as expected
 			if tt.expectGathererCall && !mockGatherer.called {
 				t.Error("Expected gatherer to be called but it was not")
 			}
@@ -869,7 +862,6 @@ func TestFilterWeigherPipelineController_IgnorePreselection(t *testing.T) {
 				t.Error("Expected gatherer not to be called but it was")
 			}
 
-			// Verify error expectations
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
 			}
@@ -880,7 +872,6 @@ func TestFilterWeigherPipelineController_IgnorePreselection(t *testing.T) {
 				t.Errorf("Expected error to contain %q, got: %v", tt.errorContains, err)
 			}
 
-			// Verify result is set when no error
 			if !tt.expectError && decision.Status.Result == nil {
 				t.Error("Expected result to be set but was nil")
 			}

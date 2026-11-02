@@ -15,6 +15,7 @@ import (
 
 	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/weighers"
@@ -248,12 +249,15 @@ func NewIntegrationTestServer(t *testing.T, pipelineConfig PipelineConfig, objec
 
 	// Create the pipeline controller with shared monitor to avoid duplicate registration
 	controller := &FilterWeigherPipelineController{
-		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]]{
+		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[compute.SchedulerRequest]]{
 			Client:          k8sClient,
-			Pipelines:       make(map[string]lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]),
+			Pipelines:       make(map[string]lib.FilterWeigherPipeline[compute.SchedulerRequest]),
 			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 		},
 		Monitor: getSharedMonitor(),
+		// KVM requests trigger candidate gathering; use a passthrough gatherer
+		// (nil gatheredHosts) so the test's preselected hosts are preserved.
+		Gatherer: &mockCandidateGatherer{},
 	}
 
 	// Create and register the test pipeline

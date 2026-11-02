@@ -7,7 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	"testing"
 
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -67,23 +67,14 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		request       api.ExternalSchedulerRequest
+		request       compute.SchedulerRequest
 		expectedHosts []string
 		filteredHosts []string
 	}{
 		{
 			name: "No accelerators requested - all hosts pass",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -95,19 +86,9 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Accelerators requested - filter to hosts with COMPUTE_ACCELERATORS trait",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"accel:device_profile": "gpu-profile",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				AcceleratorsRequested: true,
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -119,19 +100,9 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Accelerators requested with different device profile value",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"accel:device_profile": "fpga-profile",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				AcceleratorsRequested: true,
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host3"},
 					{ComputeHost: "host5"},
@@ -142,19 +113,9 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Accelerators requested - all hosts have the trait",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"accel:device_profile": "gpu-profile",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				AcceleratorsRequested: true,
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host5"},
@@ -165,19 +126,9 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Accelerators requested - no hosts have the trait",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"accel:device_profile": "gpu-profile",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				AcceleratorsRequested: true,
+				Hosts: []compute.Host{
 					{ComputeHost: "host3"},
 					{ComputeHost: "host4"},
 				},
@@ -187,20 +138,8 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Other extra specs present but no accelerator request - all hosts pass",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"hw:cpu_policy":     "dedicated",
-									"quota:vif_inbound": "100000",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host3"},
 					{ComputeHost: "host4"},
@@ -211,19 +150,9 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Accelerators requested with empty device profile value",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"accel:device_profile": "",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				AcceleratorsRequested: true,
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -234,55 +163,26 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Empty host list with accelerators requested",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"accel:device_profile": "gpu-profile",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{},
+			request: compute.SchedulerRequest{
+				AcceleratorsRequested: true,
+				Hosts:                 []compute.Host{},
 			},
 			expectedHosts: []string{},
 			filteredHosts: []string{},
 		},
 		{
 			name: "Empty host list without accelerators requested",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{},
+			request: compute.SchedulerRequest{
+				Hosts: []compute.Host{},
 			},
 			expectedHosts: []string{},
 			filteredHosts: []string{},
 		},
 		{
 			name: "Mixed hosts with and without accelerators trait",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"accel:device_profile": "custom-accelerator",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				AcceleratorsRequested: true,
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -295,21 +195,9 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Accelerators with additional extra specs",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"accel:device_profile": "gpu-profile",
-									"hw:cpu_policy":        "dedicated",
-									"hw:mem_page_size":     "large",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				AcceleratorsRequested: true,
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host3"},
 				},
@@ -319,19 +207,9 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Host not in database with accelerators requested",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"accel:device_profile": "gpu-profile",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				AcceleratorsRequested: true,
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host-unknown"},
 				},

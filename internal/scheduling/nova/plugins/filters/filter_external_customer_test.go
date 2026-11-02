@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -77,7 +79,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 	tests := []struct {
 		name          string
 		opts          FilterExternalCustomerStepOpts
-		request       api.ExternalSchedulerRequest
+		request       compute.SchedulerRequest
 		expectedHosts []string
 		filteredHosts []string
 		expectError   bool
@@ -87,15 +89,9 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"domain_name": "ext-customer1",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				DomainName: "ext-customer1",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -110,15 +106,9 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"domain_name": "internal-customer",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				DomainName: "internal-customer",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -133,15 +123,9 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"external-", "ext-", "customer-"},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"domain_name": "customer-abc",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				DomainName: "customer-abc",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host3"},
 					{ComputeHost: "host4"},
@@ -156,15 +140,9 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 				CustomerDomainNamePrefixes: []string{"ext-"},
 				CustomerIgnoredDomainNames: []string{"ext-special-domain"},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"domain_name": "ext-special-domain",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				DomainName: "ext-special-domain",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -178,15 +156,9 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"domain_name": "ext-customer2",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				DomainName: "ext-customer2",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host5"},
@@ -200,15 +172,9 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"domain_name": "ext-customer3",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				DomainName: "ext-customer3",
+				Hosts: []compute.Host{
 					{ComputeHost: "host3"},
 					{ComputeHost: "host4"},
 				},
@@ -221,15 +187,9 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"domain_name": "ext-customer",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{},
+			request: compute.SchedulerRequest{
+				DomainName: "ext-customer",
+				Hosts:      []compute.Host{},
 			},
 			expectedHosts: []string{},
 			filteredHosts: []string{},
@@ -239,15 +199,9 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"domain_name": []any{"ext-customer", "other"},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				DomainName: "ext-customer",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host3"},
 				},
@@ -260,13 +214,8 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host3"},
 				},
@@ -279,13 +228,8 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: nil,
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -298,15 +242,9 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"domain_name": "EXT-customer",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				DomainName: "EXT-customer",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -320,15 +258,9 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext"},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"domain_name": "ext",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				DomainName: "ext",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host3"},
 				},
@@ -342,15 +274,9 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 				CustomerDomainNamePrefixes: []string{"ext-"},
 				CustomerIgnoredDomainNames: []string{"ext-test", "ext-dev", "ext-staging"},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"domain_name": "ext-dev",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				DomainName: "ext-dev",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host3"},
 				},
@@ -363,16 +289,10 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"_nova_check_type": string(api.ReserveForFailoverIntent),
-							"domain_name":      "ext-customer1",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Intent:     api.ReserveForFailoverIntent,
+				DomainName: "ext-customer1",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host3"},
 				},
@@ -385,15 +305,9 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"_nova_check_type": string(api.ReserveForCommittedResourceIntent),
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Intent: api.ReserveForCommittedResourceIntent,
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host3"},
 				},
@@ -406,16 +320,10 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"_nova_check_type": string(api.ReserveForCommittedResourceIntent),
-							"domain_name":      "ext-customer1",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Intent:     api.ReserveForCommittedResourceIntent,
+				DomainName: "ext-customer1",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host3"},
 					{ComputeHost: "host4"},
@@ -429,15 +337,9 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"domain_name": "ext-customer1",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				DomainName: "ext-customer1",
+				Hosts: []compute.Host{
 					{ComputeHost: "host-custom-trait"},
 					{ComputeHost: "host4"},
 				},
@@ -565,16 +467,10 @@ func TestFilterExternalCustomerStep_SkipsForNonPlacementIntent(t *testing.T) {
 
 	for _, intent := range []string{"reserve_for_failover", "reuse_failover_reservation", "capacity_probe"} {
 		t.Run(intent, func(t *testing.T) {
-			request := api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"domain_name":      "iaas-customer",
-							"_nova_check_type": intent,
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
+			request := compute.SchedulerRequest{
+				Intent:     v1alpha1.SchedulingIntent(intent),
+				DomainName: "iaas-customer",
+				Hosts:      []compute.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
 			}
 			result, err := step.Run(logr.Discard(), request)
 			if err != nil {

@@ -10,6 +10,7 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -248,58 +249,48 @@ func parseMemoryToMB(memory string) uint64 {
 	return uint64(bytes / (1024 * 1024)) //nolint:gosec // test code
 }
 
-func newNovaRequest(instanceUUID, projectID, flavorName, flavorGroup string, vcpus int, memory string, evacuation bool, hosts []string) api.ExternalSchedulerRequest {
+func newNovaRequest(instanceUUID, projectID, flavorName, flavorGroup string, vcpus int, memory string, evacuation bool, hosts []string) compute.SchedulerRequest {
 	return newNovaRequestWithIntent(instanceUUID, projectID, flavorName, flavorGroup, vcpus, memory, "", evacuation, hosts)
 }
 
 // newNovaRequestWithIntent creates a nova request with a specific intent.
 // intentHint can be: "evacuate", "reserve_for_committed_resource", "reserve_for_failover", or "" for create.
-func newNovaRequestWithIntent(instanceUUID, projectID, flavorName, flavorGroup string, vcpus int, memory, intentHint string, evacuation bool, hosts []string) api.ExternalSchedulerRequest {
-	hostList := make([]api.ExternalSchedulerHost, len(hosts))
+func newNovaRequestWithIntent(instanceUUID, projectID, flavorName, flavorGroup string, vcpus int, memory, intentHint string, evacuation bool, hosts []string) compute.SchedulerRequest {
+	hostList := make([]compute.Host, len(hosts))
 	for i, h := range hosts {
-		hostList[i] = api.ExternalSchedulerHost{ComputeHost: h}
+		hostList[i] = compute.Host{ComputeHost: h}
 	}
 
-	extraSpecs := map[string]string{
-		"capabilities:hypervisor_type": "qemu",
-		"quota:hw_version":             flavorGroup,
-	}
-
-	var schedulerHints map[string]any
-	if evacuation {
-		schedulerHints = map[string]any{
-			"_nova_check_type": []any{"evacuate"},
-		}
-	} else if intentHint != "" {
-		schedulerHints = map[string]any{
-			"_nova_check_type": intentHint,
-		}
+	var intent v1alpha1.SchedulingIntent
+	switch {
+	case evacuation:
+		intent = api.EvacuateIntent
+	case intentHint == "reserve_for_committed_resource":
+		intent = api.ReserveForCommittedResourceIntent
+	case intentHint == "reserve_for_failover":
+		intent = api.ReserveForFailoverIntent
 	}
 
 	memoryMB := parseMemoryToMB(memory)
-
-	spec := api.NovaSpec{
-		ProjectID:      projectID,
-		InstanceUUID:   instanceUUID,
-		NumInstances:   1,
-		SchedulerHints: schedulerHints,
-		Flavor: api.NovaObject[api.NovaFlavor]{
-			Data: api.NovaFlavor{
-				Name:       flavorName,
-				VCPUs:      uint64(vcpus), //nolint:gosec // test code
-				MemoryMB:   memoryMB,
-				ExtraSpecs: extraSpecs,
-			},
-		},
-	}
 
 	weights := make(map[string]float64)
 	for _, h := range hosts {
 		weights[h] = 1.0
 	}
 
-	return api.ExternalSchedulerRequest{
-		Spec:    api.NovaObject[api.NovaSpec]{Data: spec},
+	return compute.SchedulerRequest{
+		ProjectID:        projectID,
+		InstanceUUID:     instanceUUID,
+		NumInstances:     1,
+		Intent:           intent,
+		HardwareVersion:  flavorGroup,
+		HypervisorFamily: compute.HypervisorFamilyKVM,
+		HypervisorType:   compute.HypervisorTypeQEMU,
+		Flavor: compute.FlavorSpec{
+			Name:   flavorName,
+			VCPUs:  uint64(vcpus),                                                     //nolint:gosec // test code
+			Memory: *resource.NewQuantity(int64(memoryMB)*(1<<20), resource.BinarySI), //nolint:gosec // test code
+		},
 		Hosts:   hostList,
 		Weights: weights,
 	}
@@ -362,7 +353,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 	tests := []struct {
 		name          string
 		reservations  []*v1alpha1.Reservation
-		request       api.ExternalSchedulerRequest
+		request       compute.SchedulerRequest
 		opts          FilterHasEnoughCapacityOpts
 		expectedHosts []string
 		filteredHosts []string
@@ -774,7 +765,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 		name                    string
 		hypervisors             []*hv1.Hypervisor
 		reservations            []*v1alpha1.Reservation
-		request                 api.ExternalSchedulerRequest
+		request                 compute.SchedulerRequest
 		ignoredReservationTypes []v1alpha1.ReservationType
 		expectedHosts           []string
 		filteredHosts           []string
@@ -1087,7 +1078,7 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 		name          string
 		hypervisors   []*hv1.Hypervisor
 		reservations  []*v1alpha1.Reservation
-		request       api.ExternalSchedulerRequest
+		request       compute.SchedulerRequest
 		opts          FilterHasEnoughCapacityOpts
 		expectedHosts []string
 		filteredHosts []string
@@ -1296,7 +1287,7 @@ func TestFilterHasEnoughCapacity_NilEffectiveCapacityFallback(t *testing.T) {
 	tests := []struct {
 		name          string
 		hypervisors   []*hv1.Hypervisor
-		request       api.ExternalSchedulerRequest
+		request       compute.SchedulerRequest
 		expectedHosts []string
 		filteredHosts []string
 	}{

@@ -7,7 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	"testing"
 
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
@@ -15,15 +15,15 @@ func TestFilterExcludeHostsStep_Run(t *testing.T) {
 	tests := []struct {
 		name          string
 		excludedHosts []string
-		request       api.ExternalSchedulerRequest
+		request       compute.SchedulerRequest
 		expectedHosts []string
 		filteredHosts []string
 	}{
 		{
 			name:          "No excluded hosts - all hosts pass",
 			excludedHosts: []string{},
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -35,8 +35,8 @@ func TestFilterExcludeHostsStep_Run(t *testing.T) {
 		{
 			name:          "Single excluded host",
 			excludedHosts: []string{"host2"},
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -48,8 +48,8 @@ func TestFilterExcludeHostsStep_Run(t *testing.T) {
 		{
 			name:          "Multiple excluded hosts",
 			excludedHosts: []string{"host1", "host3"},
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -62,8 +62,8 @@ func TestFilterExcludeHostsStep_Run(t *testing.T) {
 		{
 			name:          "All hosts excluded",
 			excludedHosts: []string{"host1", "host2", "host3"},
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -75,8 +75,8 @@ func TestFilterExcludeHostsStep_Run(t *testing.T) {
 		{
 			name:          "Excluded host not in request - no effect",
 			excludedHosts: []string{"host-nonexistent"},
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -87,8 +87,8 @@ func TestFilterExcludeHostsStep_Run(t *testing.T) {
 		{
 			name:          "Some excluded hosts in request, some not",
 			excludedHosts: []string{"host1", "host-nonexistent", "host3"},
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -100,8 +100,8 @@ func TestFilterExcludeHostsStep_Run(t *testing.T) {
 		{
 			name:          "Empty host list in request",
 			excludedHosts: []string{"host1", "host2"},
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{},
+			request: compute.SchedulerRequest{
+				Hosts: []compute.Host{},
 			},
 			expectedHosts: []string{},
 			filteredHosts: []string{},
@@ -109,8 +109,8 @@ func TestFilterExcludeHostsStep_Run(t *testing.T) {
 		{
 			name:          "Nil excluded hosts list",
 			excludedHosts: nil,
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -121,8 +121,8 @@ func TestFilterExcludeHostsStep_Run(t *testing.T) {
 		{
 			name:          "Duplicate excluded hosts",
 			excludedHosts: []string{"host1", "host1", "host2"},
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -134,8 +134,8 @@ func TestFilterExcludeHostsStep_Run(t *testing.T) {
 		{
 			name:          "Single host request - excluded",
 			excludedHosts: []string{"host1"},
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 				},
 			},
@@ -145,8 +145,8 @@ func TestFilterExcludeHostsStep_Run(t *testing.T) {
 		{
 			name:          "Single host request - not excluded",
 			excludedHosts: []string{"host2"},
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 				},
 			},
@@ -156,8 +156,8 @@ func TestFilterExcludeHostsStep_Run(t *testing.T) {
 		{
 			name:          "Case sensitive matching",
 			excludedHosts: []string{"Host1", "HOST2"},
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "Host1"},
@@ -169,8 +169,8 @@ func TestFilterExcludeHostsStep_Run(t *testing.T) {
 		{
 			name:          "Hosts with special characters",
 			excludedHosts: []string{"nova-compute-bb123.region.example.com"},
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "nova-compute-bb123.region.example.com"},
 					{ComputeHost: "nova-compute-bb124.region.example.com"},
 				},
@@ -181,8 +181,8 @@ func TestFilterExcludeHostsStep_Run(t *testing.T) {
 		{
 			name:          "Empty string in excluded hosts",
 			excludedHosts: []string{"", "host1"},
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -193,8 +193,8 @@ func TestFilterExcludeHostsStep_Run(t *testing.T) {
 		{
 			name:          "Large number of excluded hosts",
 			excludedHosts: []string{"host1", "host2", "host3", "host4", "host5", "host6", "host7", "host8", "host9", "host10"},
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host5"},
 					{ComputeHost: "host10"},
@@ -210,8 +210,8 @@ func TestFilterExcludeHostsStep_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &FilterExcludeHostsStep{
-				BaseFilter: lib.BaseFilter[api.ExternalSchedulerRequest, FilterExcludeHostsStepOpts]{
-					BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[api.ExternalSchedulerRequest, FilterExcludeHostsStepOpts]{},
+				BaseFilter: lib.BaseFilter[compute.SchedulerRequest, FilterExcludeHostsStepOpts]{
+					BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[compute.SchedulerRequest, FilterExcludeHostsStepOpts]{},
 				},
 			}
 			step.Options = FilterExcludeHostsStepOpts{

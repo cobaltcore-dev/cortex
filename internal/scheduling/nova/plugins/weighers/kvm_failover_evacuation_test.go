@@ -9,6 +9,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -112,48 +113,36 @@ func parseMemoryToMB(memory string) uint64 {
 	return uint64(bytes / (1024 * 1024)) //nolint:gosec // test code
 }
 
-func newNovaRequest(instanceUUID string, evacuation bool, hosts []string) api.ExternalSchedulerRequest { //nolint:unparam // instanceUUID varies in real usage
-	hostList := make([]api.ExternalSchedulerHost, len(hosts))
+func newNovaRequest(instanceUUID string, evacuation bool, hosts []string) compute.SchedulerRequest { //nolint:unparam // instanceUUID varies in real usage
+	hostList := make([]compute.Host, len(hosts))
 	for i, h := range hosts {
-		hostList[i] = api.ExternalSchedulerHost{ComputeHost: h}
+		hostList[i] = compute.Host{ComputeHost: h}
 	}
 
-	extraSpecs := map[string]string{
-		"capabilities:hypervisor_type": "qemu",
-	}
-
-	var schedulerHints map[string]any
-	if evacuation {
-		schedulerHints = map[string]any{
-			"_nova_check_type": []any{"evacuate"},
-		}
-	}
-
-	spec := api.NovaSpec{
-		ProjectID:      "project-A",
-		InstanceUUID:   instanceUUID,
-		NumInstances:   1,
-		SchedulerHints: schedulerHints,
-		Flavor: api.NovaObject[api.NovaFlavor]{
-			Data: api.NovaFlavor{
-				Name:       "m1.large",
-				VCPUs:      4,
-				MemoryMB:   parseMemoryToMB("8Gi"),
-				ExtraSpecs: extraSpecs,
-			},
+	req := compute.SchedulerRequest{
+		ProjectID:        "project-A",
+		InstanceUUID:     instanceUUID,
+		NumInstances:     1,
+		HypervisorFamily: compute.HypervisorFamilyKVM,
+		HypervisorType:   compute.HypervisorTypeQEMU,
+		Flavor: compute.FlavorSpec{
+			Name:   "m1.large",
+			VCPUs:  4,
+			Memory: *resource.NewQuantity(int64(parseMemoryToMB("8Gi"))*(1<<20), resource.BinarySI), //nolint:gosec // test code
 		},
+		Hosts: hostList,
+	}
+	if evacuation {
+		req.Intent = api.EvacuateIntent
 	}
 
 	weights := make(map[string]float64)
 	for _, h := range hosts {
 		weights[h] = 1.0
 	}
+	req.Weights = weights
 
-	return api.ExternalSchedulerRequest{
-		Spec:    api.NovaObject[api.NovaSpec]{Data: spec},
-		Hosts:   hostList,
-		Weights: weights,
-	}
+	return req
 }
 
 // ============================================================================
@@ -166,7 +155,7 @@ func TestKVMFailoverEvacuationStep_Run(t *testing.T) {
 	tests := []struct {
 		name            string
 		reservations    []*v1alpha1.Reservation
-		request         api.ExternalSchedulerRequest
+		request         compute.SchedulerRequest
 		opts            KVMFailoverEvacuationOpts
 		expectedWeights map[string]float64
 	}{

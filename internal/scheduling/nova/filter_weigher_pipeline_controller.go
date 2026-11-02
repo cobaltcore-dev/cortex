@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
@@ -38,7 +39,7 @@ import (
 // reconfigure the pipelines as needed.
 type FilterWeigherPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
-	lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]
+	lib.BasePipelineController[lib.FilterWeigherPipeline[compute.SchedulerRequest]]
 
 	// Mutex to only allow one process at a time.
 	// Read-only runs (opts.ReadOnly == true) acquire a read lock; write runs acquire the full lock.
@@ -49,7 +50,7 @@ type FilterWeigherPipelineController struct {
 	// Monitor to pass down to all pipelines.
 	Monitor lib.FilterWeigherPipelineMonitor
 	// Candidate gatherer to get all placement candidates if needed.
-	gatherer CandidateGatherer
+	Gatherer CandidateGatherer
 
 	// vmHandler maps processed decisions into vm-operator VirtualMachine resources.
 	vmHandler *VirtualMachineHandler
@@ -153,24 +154,28 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		log.Error(nil, "skipping decision, no novaRaw spec defined")
 		return nil, errors.New("no novaRaw spec defined")
 	}
-	var request api.ExternalSchedulerRequest
-	if err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &request); err != nil {
+	var wire api.ExternalSchedulerRequest
+	if err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &wire); err != nil {
 		log.Error(err, "failed to unmarshal novaRaw spec")
 		return nil, err
 	}
 
-	// If necessary gather all placement candidates before filtering.
-	// This will override the hosts and weights in the nova request.
-	pipelineConf, ok := c.GetPipelineConfig(decision.Spec.PipelineRef.Name)
-	if !ok {
-		log.Error(nil, "pipeline config not found", "pipelineName", decision.Spec.PipelineRef.Name)
-		return &request, fmt.Errorf("pipeline config not found: %q", decision.Spec.PipelineRef.Name)
-	}
-	if pipelineConf.Spec.IgnorePreselection {
+	// Translate the Nova wire request into the typed pipeline request. Intent was
+	// resolved by the API layer and carried on the decision spec. Whether to
+	// gather all candidates is derived from the hypervisor family inside the
+	// adapter (KVM gathers all; VMware uses the caller's preselection).
+	request := toSchedulerRequest(wire, decision.Spec.Intent, decision.Spec.PipelineRef.Name)
+
+	// If necessary gather all placement candidates before filtering. This
+	// overrides the hosts and weights in the request.
+	if request.GatherAllCandidates {
+		if c.Gatherer == nil {
+			return &wire, errors.New("candidate gathering requested but no gatherer configured")
+		}
 		log.V(1).Info("gathering all placement candidates before filtering")
-		if err := c.gatherer.MutateWithAllCandidates(ctx, &request); err != nil {
+		if err := c.Gatherer.MutateWithAllCandidates(ctx, &request); err != nil {
 			log.Error(err, "failed to gather all placement candidates")
-			return &request, err
+			return &wire, err
 		}
 		log.V(1).Info("gathered all placement candidates", "numHosts", len(request.Hosts))
 	}
@@ -185,7 +190,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 	decision.Status.Explanation = lib.GenerateExplanation(decision.Status.Result, err)
 	// We create a virtual machine resource based on the scheduling decision,
 	// logging the specific reason whenever we skip creation so it can be traced.
-	instanceUUID := request.Spec.Data.InstanceUUID
+	instanceUUID := request.InstanceUUID
 	switch {
 	case err != nil:
 		log.V(1).Info("skipping virtual machine creation, pipeline run failed", "instanceUUID", instanceUUID)
@@ -195,13 +200,13 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		log.V(1).Info("skipping virtual machine creation, feature gate disabled", "instanceUUID", instanceUUID)
 	case !slices.Contains(api.NovaIntents, decision.Spec.Intent):
 		log.V(1).Info("skipping virtual machine creation, intent not triggered by Nova", "instanceUUID", instanceUUID, "intent", decision.Spec.Intent)
-	case !request.IsKVMRequest():
+	case request.HypervisorFamily != compute.HypervisorFamilyKVM:
 		log.V(1).Info("skipping virtual machine creation, unsupported hypervisor type", "instanceUUID", instanceUUID)
 	default:
-		vmUpsertErr := c.vmHandler.Upsert(ctx, decision, request)
+		vmUpsertErr := c.vmHandler.Upsert(ctx, decision, wire)
 		if c.FeatureGates.VirtualMachineCreationMandatory && vmUpsertErr != nil {
 			log.Error(vmUpsertErr, "failed to upsert virtual machine resource and it is mandatory", "instanceUUID", instanceUUID)
-			return &request, vmUpsertErr
+			return &wire, vmUpsertErr
 		}
 		if vmUpsertErr != nil {
 			// Non-fatal: the placement decision itself succeeded.
@@ -211,7 +216,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 
 	if err != nil {
 		log.Error(err, "failed to run pipeline")
-		return &request, err
+		return &wire, err
 	}
 	meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
 		Type:    v1alpha1.DecisionConditionReady,
@@ -220,7 +225,7 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 		Message: "pipeline run succeeded",
 	})
 	log.Info("decision processed successfully", "duration", time.Since(startedAt))
-	return &request, nil
+	return &wire, nil
 }
 
 // peekReadOnly determines whether a decision should use a read lock instead of
@@ -239,7 +244,7 @@ func (c *FilterWeigherPipelineController) peekReadOnly(decision *v1alpha1.Decisi
 func (c *FilterWeigherPipelineController) InitPipeline(
 	ctx context.Context,
 	p v1alpha1.Pipeline,
-) lib.PipelineInitResult[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]] {
+) lib.PipelineInitResult[lib.FilterWeigherPipeline[compute.SchedulerRequest]] {
 
 	return lib.InitNewFilterWeigherPipeline(
 		ctx, c.Client, p.Name,
@@ -252,7 +257,7 @@ func (c *FilterWeigherPipelineController) InitPipeline(
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainNova
-	c.gatherer = &candidateGatherer{Client: mcl}
+	c.Gatherer = &candidateGatherer{Client: mcl}
 	c.vmHandler = &VirtualMachineHandler{Client: mcl}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err

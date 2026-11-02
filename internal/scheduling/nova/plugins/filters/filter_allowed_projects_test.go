@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -67,19 +69,15 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		request       api.ExternalSchedulerRequest
+		request       compute.SchedulerRequest
 		expectedHosts []string
 		filteredHosts []string
 	}{
 		{
 			name: "No project ID in request - all hosts pass",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				ProjectID: "",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -90,13 +88,9 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Project matches allowed projects on host2",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-a",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				ProjectID: "project-a",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -107,13 +101,9 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Project matches allowed projects on host3 only",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-a",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				ProjectID: "project-a",
+				Hosts: []compute.Host{
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
 					{ComputeHost: "host4"},
@@ -124,13 +114,9 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Project does not match any allowed projects",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-d",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				ProjectID: "project-d",
+				Hosts: []compute.Host{
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
 					{ComputeHost: "host4"},
@@ -141,13 +127,9 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Hosts without allowed projects are accessible",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-x",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				ProjectID: "project-x",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host5"},
 				},
@@ -157,13 +139,9 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Mixed hosts - some with empty allowed projects, some with matching project",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-b",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				ProjectID: "project-b",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -175,13 +153,9 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "All hosts filtered out",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-nonexistent",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				ProjectID: "project-nonexistent",
+				Hosts: []compute.Host{
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
 					{ComputeHost: "host4"},
@@ -192,26 +166,18 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Empty host list",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-a",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{},
+			request: compute.SchedulerRequest{
+				ProjectID: "project-a",
+				Hosts:     []compute.Host{},
 			},
 			expectedHosts: []string{},
 			filteredHosts: []string{},
 		},
 		{
 			name: "Project matches on multiple hosts with allowed projects",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-a",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				ProjectID: "project-a",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -224,13 +190,9 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Project matches second item in allowed projects list",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-b",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				ProjectID: "project-b",
+				Hosts: []compute.Host{
 					{ComputeHost: "host2"},
 				},
 			},
@@ -239,13 +201,9 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "All hosts have empty allowed projects",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "any-project",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				ProjectID: "any-project",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host5"},
 				},
@@ -255,13 +213,9 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Mixed allowed projects configuration",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-c",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				ProjectID: "project-c",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -274,13 +228,9 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Case sensitive project matching",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "Project-A",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				ProjectID: "Project-A",
+				Hosts: []compute.Host{
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
 				},
@@ -340,14 +290,10 @@ func TestFilterAllowedProjectsStep_SkipsForCapacityProbeIntent(t *testing.T) {
 	step := &FilterAllowedProjectsStep{}
 	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 
-	request := api.ExternalSchedulerRequest{
-		Spec: api.NovaObject[api.NovaSpec]{
-			Data: api.NovaSpec{
-				ProjectID:      "project-y",
-				SchedulerHints: map[string]any{"_nova_check_type": "capacity_probe"},
-			},
-		},
-		Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
+	request := compute.SchedulerRequest{
+		ProjectID: "project-y",
+		Intent:    api.CapacityProbeIntent,
+		Hosts:     []compute.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
 	}
 	result, err := step.Run(logr.Discard(), request)
 	if err != nil {
@@ -372,18 +318,14 @@ func TestFilterAllowedProjectsStep_AppliesForFailoverIntents(t *testing.T) {
 		},
 	}
 
-	for _, intent := range []string{"reserve_for_failover", "reuse_failover_reservation"} {
-		t.Run(intent, func(t *testing.T) {
+	for _, intent := range []v1alpha1.SchedulingIntent{api.ReserveForFailoverIntent, api.ReuseFailoverReservationIntent} {
+		t.Run(string(intent), func(t *testing.T) {
 			step := &FilterAllowedProjectsStep{}
 			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
-			request := api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID:      "project-y",
-						SchedulerHints: map[string]any{"_nova_check_type": intent},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
+			request := compute.SchedulerRequest{
+				ProjectID: "project-y",
+				Intent:    intent,
+				Hosts:     []compute.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
 			}
 			result, err := step.Run(logr.Discard(), request)
 			if err != nil {

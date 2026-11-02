@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,7 +23,7 @@ import (
 func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 	tests := []struct {
 		name          string
-		request       api.ExternalSchedulerRequest
+		request       compute.SchedulerRequest
 		hypervisors   []hv1.Hypervisor
 		expectedHosts []string
 		filteredHosts []string
@@ -29,13 +31,9 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 	}{
 		{
 			name: "No requested_destination - all hosts pass",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						RequestedDestination: nil,
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				RequestedDestination: nil,
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -61,18 +59,12 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Empty requested_destination - all hosts pass",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
-							Data: api.NovaRequestedDestination{
-								Aggregates: []string{},
-								Host:       "",
-							},
-						},
-					},
+			request: compute.SchedulerRequest{
+				RequestedDestination: &compute.RequestedDestination{
+					Aggregates: []string{},
+					Host:       "",
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -93,17 +85,11 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Filter by specific host",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
-							Data: api.NovaRequestedDestination{
-								Host: "host2",
-							},
-						},
-					},
+			request: compute.SchedulerRequest{
+				RequestedDestination: &compute.RequestedDestination{
+					Host: "host2",
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -129,17 +115,11 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Filter by single aggregate - hosts in spec aggregates",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
-							Data: api.NovaRequestedDestination{
-								Aggregates: []string{"aggregate1"},
-							},
-						},
-					},
+			request: compute.SchedulerRequest{
+				RequestedDestination: &compute.RequestedDestination{
+					Aggregates: []string{"aggregate1"},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -165,17 +145,11 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Filter by single aggregate - hosts in status aggregates",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
-							Data: api.NovaRequestedDestination{
-								Aggregates: []string{"aggregate1"},
-							},
-						},
-					},
+			request: compute.SchedulerRequest{
+				RequestedDestination: &compute.RequestedDestination{
+					Aggregates: []string{"aggregate1"},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -201,18 +175,12 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Filter by multiple aggregates with OR syntax (comma-separated)",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
-							Data: api.NovaRequestedDestination{
-								// "aggregate1,aggregate3" means host must be in aggregate1 OR aggregate3
-								Aggregates: []string{"aggregate1,aggregate3"},
-							},
-						},
-					},
+			request: compute.SchedulerRequest{
+				RequestedDestination: &compute.RequestedDestination{
+					// "aggregate1,aggregate3" means host must be in aggregate1 OR aggregate3
+					Aggregates: []string{"aggregate1,aggregate3"},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -243,18 +211,12 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Filter by multiple aggregates with AND logic",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
-							Data: api.NovaRequestedDestination{
-								// ["aggregate1", "aggregate2"] means host must be in aggregate1 AND aggregate2
-								Aggregates: []string{"aggregate1", "aggregate2"},
-							},
-						},
-					},
+			request: compute.SchedulerRequest{
+				RequestedDestination: &compute.RequestedDestination{
+					// ["aggregate1", "aggregate2"] means host must be in aggregate1 AND aggregate2
+					Aggregates: []string{"aggregate1", "aggregate2"},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -280,18 +242,12 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Filter by mixed AND/OR aggregates",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
-							Data: api.NovaRequestedDestination{
-								// Host must be in (aggregate1 OR aggregate2) AND aggregate3
-								Aggregates: []string{"aggregate1,aggregate2", "aggregate3"},
-							},
-						},
-					},
+			request: compute.SchedulerRequest{
+				RequestedDestination: &compute.RequestedDestination{
+					// Host must be in (aggregate1 OR aggregate2) AND aggregate3
+					Aggregates: []string{"aggregate1,aggregate2", "aggregate3"},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -322,18 +278,12 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Filter by aggregates with OR syntax - hosts in both spec and status",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
-							Data: api.NovaRequestedDestination{
-								// "aggregate1,aggregate2" means host must be in aggregate1 OR aggregate2
-								Aggregates: []string{"aggregate1,aggregate2"},
-							},
-						},
-					},
+			request: compute.SchedulerRequest{
+				RequestedDestination: &compute.RequestedDestination{
+					// "aggregate1,aggregate2" means host must be in aggregate1 OR aggregate2
+					Aggregates: []string{"aggregate1,aggregate2"},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -359,18 +309,12 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Filter by both host and aggregates - host takes precedence",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
-							Data: api.NovaRequestedDestination{
-								Aggregates: []string{"aggregate1"},
-								Host:       "host2",
-							},
-						},
-					},
+			request: compute.SchedulerRequest{
+				RequestedDestination: &compute.RequestedDestination{
+					Aggregates: []string{"aggregate1"},
+					Host:       "host2",
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -396,17 +340,11 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Host not found in hypervisors - filtered out",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
-							Data: api.NovaRequestedDestination{
-								Aggregates: []string{"aggregate1"},
-							},
-						},
-					},
+			request: compute.SchedulerRequest{
+				RequestedDestination: &compute.RequestedDestination{
+					Aggregates: []string{"aggregate1"},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host-nonexistent"},
 					{ComputeHost: "host2"},
@@ -428,17 +366,11 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Host with no aggregates - filtered out when aggregates requested",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
-							Data: api.NovaRequestedDestination{
-								Aggregates: []string{"aggregate1"},
-							},
-						},
-					},
+			request: compute.SchedulerRequest{
+				RequestedDestination: &compute.RequestedDestination{
+					Aggregates: []string{"aggregate1"},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -464,17 +396,11 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "All hosts filtered by aggregate",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
-							Data: api.NovaRequestedDestination{
-								Aggregates: []string{"nonexistent-aggregate"},
-							},
-						},
-					},
+			request: compute.SchedulerRequest{
+				RequestedDestination: &compute.RequestedDestination{
+					Aggregates: []string{"nonexistent-aggregate"},
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -495,17 +421,11 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Requested host not in candidates",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
-							Data: api.NovaRequestedDestination{
-								Host: "host-not-in-list",
-							},
-						},
-					},
+			request: compute.SchedulerRequest{
+				RequestedDestination: &compute.RequestedDestination{
+					Host: "host-not-in-list",
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -530,17 +450,11 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Empty host list",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
-							Data: api.NovaRequestedDestination{
-								Aggregates: []string{"aggregate1"},
-							},
-						},
-					},
+			request: compute.SchedulerRequest{
+				RequestedDestination: &compute.RequestedDestination{
+					Aggregates: []string{"aggregate1"},
 				},
-				Hosts: []api.ExternalSchedulerHost{},
+				Hosts: []compute.Host{},
 			},
 			hypervisors: []hv1.Hypervisor{
 				{
@@ -571,8 +485,8 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 				Build()
 
 			step := &FilterRequestedDestinationStep{
-				BaseFilter: lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
-					BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+				BaseFilter: lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+					BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
 						Client: fakeClient,
 					},
 				},
@@ -740,17 +654,11 @@ func TestFilterRequestedDestinationStep_processRequestedHost(t *testing.T) {
 }
 
 func TestFilterRequestedDestinationStep_Run_ClientError(t *testing.T) {
-	request := api.ExternalSchedulerRequest{
-		Spec: api.NovaObject[api.NovaSpec]{
-			Data: api.NovaSpec{
-				RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
-					Data: api.NovaRequestedDestination{
-						Aggregates: []string{"aggregate1"},
-					},
-				},
-			},
+	request := compute.SchedulerRequest{
+		RequestedDestination: &compute.RequestedDestination{
+			Aggregates: []string{"aggregate1"},
 		},
-		Hosts: []api.ExternalSchedulerHost{
+		Hosts: []compute.Host{
 			{ComputeHost: "host1"},
 		},
 	}
@@ -770,8 +678,8 @@ func TestFilterRequestedDestinationStep_Run_ClientError(t *testing.T) {
 		Build()
 
 	step := &FilterRequestedDestinationStep{
-		BaseFilter: lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
-			BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+		BaseFilter: lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+			BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
 				Client: fakeClient,
 			},
 		},
@@ -796,18 +704,17 @@ func TestFilterRequestedDestinationStep_SkipsForNonPlacementIntent(t *testing.T)
 	step := &FilterRequestedDestinationStep{}
 	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 
-	for _, intent := range []string{"reserve_for_failover", "reuse_failover_reservation", "reserve_for_committed_resource", "capacity_probe"} {
-		t.Run(intent, func(t *testing.T) {
-			request := api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						RequestedDestination: &api.NovaObject[api.NovaRequestedDestination]{
-							Data: api.NovaRequestedDestination{Host: "host1"},
-						},
-						SchedulerHints: map[string]any{"_nova_check_type": intent},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
+	for _, intent := range []v1alpha1.SchedulingIntent{
+		api.ReserveForFailoverIntent,
+		api.ReuseFailoverReservationIntent,
+		api.ReserveForCommittedResourceIntent,
+		api.CapacityProbeIntent,
+	} {
+		t.Run(string(intent), func(t *testing.T) {
+			request := compute.SchedulerRequest{
+				RequestedDestination: &compute.RequestedDestination{Host: "host1"},
+				Intent:               intent,
+				Hosts:                []compute.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
 			}
 			result, err := step.Run(logr.Discard(), request)
 			if err != nil {

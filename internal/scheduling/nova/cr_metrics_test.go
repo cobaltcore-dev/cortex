@@ -21,6 +21,7 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -367,9 +368,9 @@ func TestFeatureGate_CommittedResourceTracking(t *testing.T) {
 			reg.MustRegister(counter)
 
 			controller := &FilterWeigherPipelineController{
-				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
+				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[sched.SchedulerRequest]]{
 					Client:          fakeClient,
-					Pipelines:       make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
+					Pipelines:       make(map[string]lib.FilterWeigherPipeline[sched.SchedulerRequest]),
 					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 				},
 				FeatureGates: FeatureGates{CommittedResourceTracking: enabled},

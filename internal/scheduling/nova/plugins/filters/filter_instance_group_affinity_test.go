@@ -7,25 +7,22 @@ import (
 	"github.com/go-logr/logr"
 	"testing"
 
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 )
 
 func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 	tests := []struct {
 		name          string
-		request       api.ExternalSchedulerRequest
+		request       compute.SchedulerRequest
 		expectedHosts []string
 		filteredHosts []string
 	}{
 		{
 			name: "No instance group - all hosts pass",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						InstanceGroup: nil,
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				InstanceGroup: nil,
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -36,18 +33,9 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		},
 		{
 			name: "Instance group with anti-affinity policy - all hosts pass",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						InstanceGroup: &api.NovaObject[api.NovaInstanceGroup]{
-							Data: api.NovaInstanceGroup{
-								Policy: "anti-affinity",
-								Hosts:  []string{"host1", "host2"},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				InstanceGroup: &compute.InstanceGroupSpec{Policy: "anti-affinity", Hosts: []string{"host1", "host2"}},
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -58,18 +46,9 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		},
 		{
 			name: "Instance group with soft-affinity policy - all hosts pass",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						InstanceGroup: &api.NovaObject[api.NovaInstanceGroup]{
-							Data: api.NovaInstanceGroup{
-								Policy: "soft-affinity",
-								Hosts:  []string{"host1"},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				InstanceGroup: &compute.InstanceGroupSpec{Policy: "soft-affinity", Hosts: []string{"host1"}},
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -79,18 +58,9 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		},
 		{
 			name: "Affinity policy with empty hosts list - all hosts pass",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						InstanceGroup: &api.NovaObject[api.NovaInstanceGroup]{
-							Data: api.NovaInstanceGroup{
-								Policy: "affinity",
-								Hosts:  []string{},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{}},
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -101,18 +71,9 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		},
 		{
 			name: "Affinity policy - only hosts in instance group pass",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						InstanceGroup: &api.NovaObject[api.NovaInstanceGroup]{
-							Data: api.NovaInstanceGroup{
-								Policy: "affinity",
-								Hosts:  []string{"host1", "host3"},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host1", "host3"}},
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -123,18 +84,9 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		},
 		{
 			name: "Affinity policy - single host in group",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						InstanceGroup: &api.NovaObject[api.NovaInstanceGroup]{
-							Data: api.NovaInstanceGroup{
-								Policy: "affinity",
-								Hosts:  []string{"host2"},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host2"}},
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -146,18 +98,9 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		},
 		{
 			name: "Affinity policy - all hosts filtered out",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						InstanceGroup: &api.NovaObject[api.NovaInstanceGroup]{
-							Data: api.NovaInstanceGroup{
-								Policy: "affinity",
-								Hosts:  []string{"host5", "host6"},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host5", "host6"}},
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -168,18 +111,9 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		},
 		{
 			name: "Affinity policy - all hosts in group pass",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						InstanceGroup: &api.NovaObject[api.NovaInstanceGroup]{
-							Data: api.NovaInstanceGroup{
-								Policy: "affinity",
-								Hosts:  []string{"host1", "host2", "host3"},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host1", "host2", "host3"}},
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -190,18 +124,9 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		},
 		{
 			name: "Affinity policy - partial overlap",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						InstanceGroup: &api.NovaObject[api.NovaInstanceGroup]{
-							Data: api.NovaInstanceGroup{
-								Policy: "affinity",
-								Hosts:  []string{"host2", "host3", "host5"},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host2", "host3", "host5"}},
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -213,36 +138,18 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		},
 		{
 			name: "Affinity policy - empty request hosts",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						InstanceGroup: &api.NovaObject[api.NovaInstanceGroup]{
-							Data: api.NovaInstanceGroup{
-								Policy: "affinity",
-								Hosts:  []string{"host1", "host2"},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{},
+			request: compute.SchedulerRequest{
+				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host1", "host2"}},
+				Hosts:         []compute.Host{},
 			},
 			expectedHosts: []string{},
 			filteredHosts: []string{},
 		},
 		{
 			name: "Affinity policy - case sensitive host matching",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						InstanceGroup: &api.NovaObject[api.NovaInstanceGroup]{
-							Data: api.NovaInstanceGroup{
-								Policy: "affinity",
-								Hosts:  []string{"Host1", "HOST2"},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"Host1", "HOST2"}},
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -253,23 +160,11 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		},
 		{
 			name: "Affinity policy - with instance UUID and project ID",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						InstanceUUID: "vm-uuid-123",
-						ProjectID:    "project-abc",
-						InstanceGroup: &api.NovaObject[api.NovaInstanceGroup]{
-							Data: api.NovaInstanceGroup{
-								UUID:      "ig-uuid-456",
-								Policy:    "affinity",
-								Hosts:     []string{"host1", "host2"},
-								Members:   []string{"vm-uuid-789"},
-								ProjectID: "project-abc",
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				InstanceUUID:  "vm-uuid-123",
+				ProjectID:     "project-abc",
+				InstanceGroup: &compute.InstanceGroupSpec{UUID: "ig-uuid-456", Policy: "affinity", Hosts: []string{"host1", "host2"}, Members: []string{"vm-uuid-789"}},
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -281,18 +176,9 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		},
 		{
 			name: "Affinity policy - duplicate hosts in group list",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						InstanceGroup: &api.NovaObject[api.NovaInstanceGroup]{
-							Data: api.NovaInstanceGroup{
-								Policy: "affinity",
-								Hosts:  []string{"host1", "host2", "host1", "host2"},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host1", "host2", "host1", "host2"}},
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -303,18 +189,9 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		},
 		{
 			name: "Affinity policy - single host scenario",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						InstanceGroup: &api.NovaObject[api.NovaInstanceGroup]{
-							Data: api.NovaInstanceGroup{
-								Policy: "affinity",
-								Hosts:  []string{"host1"},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.SchedulerRequest{
+				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host1"}},
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 				},
 			},
@@ -358,10 +235,8 @@ func TestFilterInstanceGroupAffinityStep_SkipsForNonPlacementIntent(t *testing.T
 	for _, intent := range []string{"reserve_for_failover", "reuse_failover_reservation", "reserve_for_committed_resource", "capacity_probe"} {
 		t.Run(intent, func(t *testing.T) {
 			request := newNovaRequest("vm", "proj", "m1.small", "gp", 1, "1Gi", false, []string{"host1", "host2"})
-			request.Spec.Data.InstanceGroup = &api.NovaObject[api.NovaInstanceGroup]{
-				Data: api.NovaInstanceGroup{Policy: "affinity", Hosts: []string{"host1"}},
-			}
-			request.Spec.Data.SchedulerHints = map[string]any{"_nova_check_type": intent}
+			request.InstanceGroup = &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host1"}}
+			request.Intent = v1alpha1.SchedulingIntent(intent)
 			step := &FilterInstanceGroupAffinityStep{}
 
 			result, err := step.Run(logr.Discard(), request)

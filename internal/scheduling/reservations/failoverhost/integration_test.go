@@ -15,6 +15,7 @@ import (
 	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
@@ -25,6 +26,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// passthroughGatherer is a nova.CandidateGatherer that leaves the request's
+// preselected hosts unchanged. The integration tests seed their own eligible
+// hosts, so gathering is a no-op here.
+type passthroughGatherer struct{}
+
+func (passthroughGatherer) MutateWithAllCandidates(context.Context, *sched.SchedulerRequest) error {
+	return nil
+}
 
 // ============================================================================
 // Integration Tests
@@ -262,12 +272,15 @@ func newIntegrationTestEnv(t *testing.T, hypervisors []*hv1.Hypervisor, flavors 
 	k8sClient := newTestClient(t, objects...)
 
 	controller := &nova.FilterWeigherPipelineController{
-		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]]{
+		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[sched.SchedulerRequest]]{
 			Client:          k8sClient,
-			Pipelines:       make(map[string]lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]),
+			Pipelines:       make(map[string]lib.FilterWeigherPipeline[sched.SchedulerRequest]),
 			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 		},
 		Monitor: sharedPipelineMonitor(),
+		// KVM requests trigger candidate gathering; the test seeds its own
+		// eligible hosts, so use a passthrough gatherer that preserves them.
+		Gatherer: passthroughGatherer{},
 	}
 	// Mirror the production KVM pipeline for the dimensions that shape a failover
 	// partition: AZ, trait compatibility and whole-host capacity.
@@ -448,6 +461,12 @@ func (a *integrationHTTPAPI) handle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "marshal", http.StatusInternalServerError)
 		return
 	}
+	// Resolve intent from the request hints, mirroring the production handler;
+	// the pipeline reads the resolved intent off the typed request.
+	intent, err := reqData.GetIntent()
+	if err != nil {
+		intent = novaapi.CreateIntent
+	}
 	decision := &v1alpha1.Decision{
 		TypeMeta:   metav1.TypeMeta{Kind: "Decision", APIVersion: "cortex.cloud/v1alpha1"},
 		ObjectMeta: metav1.ObjectMeta{GenerateName: "nova-"},
@@ -456,6 +475,7 @@ func (a *integrationHTTPAPI) handle(w http.ResponseWriter, r *http.Request) {
 			PipelineRef:      corev1.ObjectReference{Name: evacProbePipeline},
 			ResourceID:       reqData.Spec.Data.InstanceUUID,
 			NovaRaw:          &runtime.RawExtension{Raw: rawBytes},
+			Intent:           intent,
 		},
 	}
 	if err := a.delegate.ProcessNewDecisionFromAPI(r.Context(), decision); err != nil {

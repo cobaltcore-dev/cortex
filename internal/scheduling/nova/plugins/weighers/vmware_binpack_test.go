@@ -7,10 +7,11 @@ import (
 	"github.com/go-logr/logr"
 	"testing"
 
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -156,25 +157,19 @@ func TestVMwareBinpackStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name                string
-		request             api.ExternalSchedulerRequest
+		request             sched.SchedulerRequest
 		expectedHigherScore string
 		expectedLowerScore  string
 	}{
 		{
 			name: "binpack prefers hosts with higher utilization",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						NumInstances: 1,
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								MemoryMB: 1000, // 1GB
-								VCPUs:    1,
-							},
-						},
-					},
+			request: sched.SchedulerRequest{
+				NumInstances: 1,
+				Flavor: sched.FlavorSpec{
+					Memory: *resource.NewQuantity(1000*(1<<20), resource.BinarySI), // 1GB
+					VCPUs:  1,
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []sched.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -187,19 +182,13 @@ func TestVMwareBinpackStep_Run(t *testing.T) {
 		},
 		{
 			name: "handles missing host data gracefully",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						NumInstances: 1,
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								MemoryMB: 1000,
-								VCPUs:    1,
-							},
-						},
-					},
+			request: sched.SchedulerRequest{
+				NumInstances: 1,
+				Flavor: sched.FlavorSpec{
+					Memory: *resource.NewQuantity(1000*(1<<20), resource.BinarySI),
+					VCPUs:  1,
 				},
-				Hosts: []api.ExternalSchedulerHost{
+				Hosts: []sched.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "unknown_host"}, // No utilization data
 				},
@@ -292,23 +281,17 @@ func TestVMwareBinpackStep_CalcVMResources(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		request        api.ExternalSchedulerRequest
+		request        sched.SchedulerRequest
 		expectedMemory int64
 		expectedCPU    int64
 	}{
 		{
 			name: "single instance",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						NumInstances: 1,
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								MemoryMB: 2048,
-								VCPUs:    4,
-							},
-						},
-					},
+			request: sched.SchedulerRequest{
+				NumInstances: 1,
+				Flavor: sched.FlavorSpec{
+					Memory: *resource.NewQuantity(2048*(1<<20), resource.BinarySI),
+					VCPUs:  4,
 				},
 			},
 			expectedMemory: 2048 * (1 << 20), // 2048 MiB in bytes
@@ -316,17 +299,11 @@ func TestVMwareBinpackStep_CalcVMResources(t *testing.T) {
 		},
 		{
 			name: "multiple instances",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						NumInstances: 3,
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								MemoryMB: 1024,
-								VCPUs:    2,
-							},
-						},
-					},
+			request: sched.SchedulerRequest{
+				NumInstances: 3,
+				Flavor: sched.FlavorSpec{
+					Memory: *resource.NewQuantity(1024*(1<<20), resource.BinarySI),
+					VCPUs:  2,
 				},
 			},
 			expectedMemory: 3 * 1024 * (1 << 20), // 3 instances * 1024 MiB in bytes

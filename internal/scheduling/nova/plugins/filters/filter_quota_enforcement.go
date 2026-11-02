@@ -6,8 +6,9 @@ package filters
 import (
 	"context"
 	"fmt"
-	"github.com/go-logr/logr"
 	"time"
+
+	"github.com/go-logr/logr"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -155,7 +156,6 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request compute.Sched
 	vcpus := request.Flavor.VCPUs
 	// Total requested RAM across all instances, converted to GiB (ceiling, so we
 	// never under-count headroom demand). Flavor.Memory is bytes per instance.
-	//nolint:gosec // instance count and flavor memory are bounded by Nova.
 	totalMemBytes := request.Flavor.Memory.Value() * int64(numInstances)
 	requestRAM := (totalMemBytes + (1 << 30) - 1) / (1 << 30)
 	requestCores := int64(vcpus * numInstances) //nolint:gosec // VCPUs from flavor specs, realistically bounded

@@ -18,6 +18,7 @@ import (
 
 	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
@@ -31,6 +32,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+// passthroughGatherer is a nova.CandidateGatherer that leaves the request's
+// preselected hosts unchanged (the tests seed their own eligible hosts).
+type passthroughGatherer struct{}
+
+func (passthroughGatherer) MutateWithAllCandidates(context.Context, *compute.SchedulerRequest) error {
+	return nil
+}
 
 // ============================================================================
 // Integration Tests
@@ -1142,12 +1151,13 @@ func newIntegrationTestEnv(t *testing.T, vms []reservations.VM, hypervisors []*h
 		Build()
 
 	novaController := &nova.FilterWeigherPipelineController{
-		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]]{
+		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[compute.SchedulerRequest]]{
 			Client:          k8sClient,
-			Pipelines:       make(map[string]lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]),
+			Pipelines:       make(map[string]lib.FilterWeigherPipeline[compute.SchedulerRequest]),
 			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 		},
-		Monitor: getSharedMonitor(),
+		Monitor:  getSharedMonitor(),
+		Gatherer: passthroughGatherer{},
 	}
 	// Register all pipelines needed for testing
 	pipelines := []v1alpha1.Pipeline{
@@ -1272,6 +1282,14 @@ func (api *testHTTPAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		pipelineName = "test-filter-pipeline"
 	}
 
+	// Resolve the scheduling intent from the request hints, mirroring the
+	// production handler (external_scheduler_api.go). The pipeline reads the
+	// resolved intent off the typed request, so it must be set on the decision.
+	intent, err := requestData.GetIntent()
+	if err != nil {
+		intent = novaapi.CreateIntent
+	}
+
 	decision := &v1alpha1.Decision{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Decision",
@@ -1287,6 +1305,7 @@ func (api *testHTTPAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 			},
 			ResourceID: requestData.Spec.Data.InstanceUUID,
 			NovaRaw:    &raw,
+			Intent:     intent,
 		},
 	}
 
@@ -1342,12 +1361,13 @@ func newIntegrationTestEnvWithTraitsFilter(t *testing.T, vms []reservations.VM, 
 		Build()
 
 	novaController := &nova.FilterWeigherPipelineController{
-		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]]{
+		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[compute.SchedulerRequest]]{
 			Client:          k8sClient,
-			Pipelines:       make(map[string]lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]),
+			Pipelines:       make(map[string]lib.FilterWeigherPipeline[compute.SchedulerRequest]),
 			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 		},
-		Monitor: getSharedMonitor(),
+		Monitor:  getSharedMonitor(),
+		Gatherer: passthroughGatherer{},
 	}
 	pipelines := []v1alpha1.Pipeline{
 		{

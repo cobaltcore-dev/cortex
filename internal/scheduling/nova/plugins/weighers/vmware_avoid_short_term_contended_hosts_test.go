@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -218,13 +218,13 @@ func TestVMwareAvoidShortTermContendedHostsStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		request  api.ExternalSchedulerRequest
+		request  sched.SchedulerRequest
 		expected map[string]float64
 	}{
 		{
 			name: "Avoid contended hosts",
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: sched.SchedulerRequest{
+				Hosts: []sched.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -240,8 +240,8 @@ func TestVMwareAvoidShortTermContendedHostsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Missing data",
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: sched.SchedulerRequest{
+				Hosts: []sched.Host{
 					{ComputeHost: "host4"},
 					{ComputeHost: "host5"}, // No data for host5
 				},

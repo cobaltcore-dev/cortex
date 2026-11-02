@@ -77,6 +77,8 @@ const (
 	ImageHypervisorTypeKVM ImageHypervisorType = "kvm"
 	// ImageHypervisorTypeUnset indicates no image hypervisor type was declared.
 	ImageHypervisorTypeUnset ImageHypervisorType = ""
+	// ImageHypervisorTypeUnparseable indicates an image hypervisor type was declared but could not be parsed.
+	ImageHypervisorTypeUnparseable ImageHypervisorType = "unparseable"
 )
 
 // Host is a placement candidate. For KVM hosts the compute host name and the
@@ -234,8 +236,10 @@ type SchedulerRequest struct {
 	// rather than guessing.
 	HypervisorType HypervisorType
 	// ImageHypervisorType is the hypervisor type declared by the image. The empty
-	// value (ImageHypervisorTypeUnset) means the image declared none, which the
-	// image-properties filter treats as "no image constraint".
+	// value (ImageHypervisorTypeUnset) means the image declared none ("no image
+	// constraint"); ImageHypervisorTypeUnparseable means it declared one that
+	// could not be parsed, which the image-properties filter surfaces as a
+	// diagnostic.
 	ImageHypervisorType ImageHypervisorType
 	// HardwareVersion is resolved from the "quota:hw_version" extra spec. Empty
 	// means no hardware-version constraint.

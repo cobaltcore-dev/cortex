@@ -6,9 +6,8 @@ package nova
 import (
 	"context"
 	"fmt"
-	"strings"
 
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -17,7 +16,7 @@ import (
 // for a given Nova scheduling request.
 type CandidateGatherer interface {
 	// Gather all placement candidates and mutate the request accordingly.
-	MutateWithAllCandidates(ctx context.Context, request *api.ExternalSchedulerRequest) error
+	MutateWithAllCandidates(ctx context.Context, request *compute.SchedulerRequest) error
 }
 
 // candidateGatherer is the default implementation of CandidateGatherer
@@ -26,23 +25,12 @@ type candidateGatherer struct{ client.Client }
 
 // MutateWithAllCandidates gathers all placement candidates and mutates
 // the request accordingly.
-func (g *candidateGatherer) MutateWithAllCandidates(ctx context.Context, request *api.ExternalSchedulerRequest) error {
+func (g *candidateGatherer) MutateWithAllCandidates(ctx context.Context, request *compute.SchedulerRequest) error {
 	// Currently we can only get candidates for kvm placements.
-	hvType, ok := request.Spec.Data.Flavor.Data.ExtraSpecs["capabilities:hypervisor_type"]
-	if !ok {
+	if request.HypervisorFamily != compute.HypervisorFamilyKVM {
 		return fmt.Errorf(
-			"missing hypervisor_type in flavor extra specs: %v",
-			request.Spec.Data.Flavor.Data.ExtraSpecs,
-		)
-	}
-	switch strings.ToLower(hvType) {
-	case "qemu", "ch":
-		// Supported hypervisor type.
-	default:
-		// Unsupported hypervisor type, do nothing.
-		return fmt.Errorf(
-			"cannot gather all placement candidates for hypervisor type %q",
-			request.Spec.Data.Flavor.Data.ExtraSpecs["capabilities:hypervisor_type"],
+			"cannot gather all placement candidates for hypervisor family %q",
+			request.HypervisorFamily,
 		)
 	}
 
@@ -51,10 +39,10 @@ func (g *candidateGatherer) MutateWithAllCandidates(ctx context.Context, request
 	if err := g.List(ctx, hypervisorList); err != nil {
 		return err
 	}
-	hosts := make([]api.ExternalSchedulerHost, 0, len(hypervisorList.Items))
+	hosts := make([]compute.Host, 0, len(hypervisorList.Items))
 	weights := make(map[string]float64, len(hypervisorList.Items))
 	for _, hv := range hypervisorList.Items {
-		host := api.ExternalSchedulerHost{
+		host := compute.Host{
 			// For KVM hosts, compute host name and hypervisor hostname is identical.
 			ComputeHost:        hv.Name,
 			HypervisorHostname: hv.Name,
