@@ -363,6 +363,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		Weights:             weights,
 		Intent:              schedulerdelegationapi.ReserveForCommittedResourceIntent,
 		InstanceUUID:        res.Name,
+		NumInstances:        1, // one reservation slot; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
 		ProjectID:           projectID,
 		AvailabilityZone:    availabilityZone,
 		DomainName:          domainName,

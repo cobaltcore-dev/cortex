@@ -829,6 +829,7 @@ func (c *Reconciler) probeScheduler(
 		Weights:             probeWeights,
 		Intent:              schedulerapi.CapacityProbeIntent,
 		InstanceUUID:        "capacity-" + flavor.Name,
+		NumInstances:        1, // probe a single flavor slot; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
 		ProjectID:           "cortex-capacity-probe",
 		AvailabilityZone:    az,
 		Flavor: sched.FlavorSpec{

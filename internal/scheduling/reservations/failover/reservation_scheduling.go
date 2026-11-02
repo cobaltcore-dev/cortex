@@ -135,6 +135,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		Options:             opts,
 		Intent:              intent,
 		InstanceUUID:        vm.UUID,
+		NumInstances:        1, // one reservation per VM; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
 		ProjectID:           vm.ProjectID,
 		AvailabilityZone:    vm.AvailabilityZone,
 		IgnoreHosts:         ignoreHypervisors,
@@ -291,6 +292,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		Options:             evacuateOpts,
 		Intent:              api.EvacuateIntent,
 		InstanceUUID:        vm.UUID,
+		NumInstances:        1, // validating one VM; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
 		ProjectID:           vm.ProjectID,
 		AvailabilityZone:    vm.AvailabilityZone,
 		IgnoreHosts:         []string{vm.CurrentHypervisor},
