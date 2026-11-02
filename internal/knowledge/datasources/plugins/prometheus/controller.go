@@ -79,7 +79,7 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 		log.V(1).Info("first reconcile this process lifetime, forcing sync despite timestamp", "name", datasource.Name)
 	}
 
-	newSyncerFunc, ok := supportedMetricSyncers[datasource.Spec.Prometheus.Type]
+	newSyncerFunc, ok := Index[datasource.Spec.Prometheus.Type]
 	if !ok {
 		log.V(1).Info("skipping datasource, unsupported metric type", "metricType", datasource.Spec.Prometheus.Type)
 		old := datasource.DeepCopy()

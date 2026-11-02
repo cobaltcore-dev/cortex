@@ -12,6 +12,10 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
+	// Register all supported feature extractors through their func init().
+	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/storage"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -59,7 +63,7 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{RequeueAfter: waitFor}, nil
 	}
 
-	extractor, ok := supportedExtractors[knowledge.Spec.Extractor.Name]
+	newExtractor, ok := plugins.Index[knowledge.Spec.Extractor.Name]
 	if !ok {
 		log.V(1).Info("skipping knowledge extraction, unsupported extractor", "name", knowledge.Spec.Extractor.Name)
 		old := knowledge.DeepCopy()
@@ -145,6 +149,7 @@ func (r *KnowledgeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Initialize and run the extractor.
+	extractor := newExtractor()
 	wrapped := monitorFeatureExtractor(knowledge.Spec.Extractor.Name, extractor, r.Monitor)
 	if err := wrapped.Init(authenticatedDatasourceDB, r.Client, knowledge.Spec); err != nil {
 		log.Error(err, "failed to initialize feature extractor", "name", knowledge.Spec)

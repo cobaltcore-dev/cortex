@@ -91,3 +91,7 @@ func (k *DecisionStateKPI) Collect(ch chan<- prometheus.Metric) {
 		string(k.Options.DecisionSchedulingDomain), "success",
 	)
 }
+
+func init() {
+	plugins.Index["decision_state_kpi"] = func() plugins.KPI { return &DecisionStateKPI{} }
+}

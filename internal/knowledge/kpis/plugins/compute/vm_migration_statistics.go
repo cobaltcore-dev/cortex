@@ -88,3 +88,7 @@ func (k *VMMigrationStatisticsKPI) Collect(ch chan<- prometheus.Metric) {
 		)
 	}
 }
+
+func init() {
+	plugins.Index["vm_migration_statistics_kpi"] = func() plugins.KPI { return &VMMigrationStatisticsKPI{} }
+}

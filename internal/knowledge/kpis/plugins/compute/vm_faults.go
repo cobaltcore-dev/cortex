@@ -149,3 +149,7 @@ func (k *VMFaultsKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 	vmFaultsKPIlogger.V(1).Info("collected metrics", "nMetrics", len(counts))
 }
+
+func init() {
+	plugins.Index["vm_faults_kpi"] = func() plugins.KPI { return &VMFaultsKPI{} }
+}

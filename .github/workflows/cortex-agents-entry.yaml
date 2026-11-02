@@ -267,7 +267,14 @@ jobs:
 
   release-gate:
     needs: config
-    if: needs.config.outputs.release_active == 'true' && github.event_name == 'pull_request_target'
+    # Only react to the PR being opened or reopened, never to synchronize: the
+    # release agent is a one-shot per PR that itself pushes release-prep commits,
+    # and reacting to those pushes retriggered a second, redundant release run
+    # (often after the PR had already merged/closed).
+    if: >-
+      needs.config.outputs.release_active == 'true' &&
+      github.event_name == 'pull_request_target' &&
+      (github.event.action == 'opened' || github.event.action == 'reopened')
     runs-on: ubuntu-latest
     permissions:
       contents: read

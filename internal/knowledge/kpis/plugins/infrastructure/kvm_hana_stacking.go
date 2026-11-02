@@ -117,3 +117,7 @@ func (k *KVMHanaStackingKPI) queryHanaStacking() ([]kvmHanaStackingRow, error) {
 	}
 	return rows, nil
 }
+
+func init() {
+	plugins.Index["kvm_hana_stacking_kpi"] = func() plugins.KPI { return &KVMHanaStackingKPI{} }
+}

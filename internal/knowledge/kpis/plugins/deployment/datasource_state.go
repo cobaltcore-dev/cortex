@@ -123,3 +123,7 @@ func (k *DatasourceStateKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 	datasourceStateKPILogger.V(1).Info("Collected datasource state metrics", "count", len(datasources))
 }
+
+func init() {
+	plugins.Index["datasource_state_kpi"] = func() plugins.KPI { return &DatasourceStateKPI{} }
+}

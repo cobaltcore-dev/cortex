@@ -113,3 +113,7 @@ func (k *VMwareHostCapacityKPI) getHostUtilizations() (map[string]compute.HostUt
 	}
 	return m, nil
 }
+
+func init() {
+	plugins.Index["vmware_host_capacity_kpi"] = func() plugins.KPI { return &VMwareHostCapacityKPI{} }
+}

@@ -301,3 +301,7 @@ func (k *VMwareProjectCommitmentsKPI) getProjectsWithDomains() (map[string]proje
 	}
 	return projectMap, nil
 }
+
+func init() {
+	plugins.Index["vmware_project_commitments_kpi"] = func() plugins.KPI { return &VMwareProjectCommitmentsKPI{} }
+}

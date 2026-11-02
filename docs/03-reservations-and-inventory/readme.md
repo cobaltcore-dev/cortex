@@ -13,8 +13,9 @@ Cortex intends to become the authority for inventory itself.
 
 The chapter opens with an overview of the three reservation kinds, then goes deep on committed
 resources (customer commitments synced from Limes, plus the quota and capacity controllers that
-support them) and failover reservations (headroom for evacuating workloads when a host fails). It
-then covers the concurrency problem all reservations share — keeping parallel scheduling requests from
+support them) and failover reservations (headroom for evacuating workloads when a host fails) — both
+the deprecated slot-based system and the whole-host system that replaces it. It then covers the
+concurrency problem all reservations share — keeping parallel scheduling requests from
 double-spending the same slot — and closes with the **Placement API shim**, the
 OpenStack-Placement-compatible front through which Cortex will eventually serve inventory for the hosts
 it understands.
@@ -23,9 +24,10 @@ it understands.
 
 1. [Reservations overview](01-reservations-overview.md) — committed, failover, and in-flight reservations.
 2. [Committed-resource reservations and Limes quota/capacity](02-committed-resource-reservations.md) — commitments, `FlavorGroupCapacity`, `ProjectQuota`, and the LIQUID API.
-3. [Failover reservations for KVM HA](03-failover-reservations.md) — shared, best-effort evacuation headroom.
-4. [Concurrency and in-flight reservations](04-concurrency-and-in-flight-reservations.md) — how parallel requests avoid double-spending capacity.
-5. [The Placement API shim](05-placement-api-shim.md) — passthrough today, KVM-backed inventory planned.
+3. [Failover reservations for KVM HA](03-failover-reservations.md) — shared, best-effort evacuation headroom (**deprecated**).
+4. [Failover host reservations](04-failover-host-reservations.md) — whole-host evacuation targets grouped into discovered failover partitions.
+5. [Concurrency and in-flight reservations](05-concurrency-and-in-flight-reservations.md) — how parallel requests avoid double-spending capacity.
+6. [The Placement API shim](06-placement-api-shim.md) — passthrough today, KVM-backed inventory planned.
 
 ## Next
 

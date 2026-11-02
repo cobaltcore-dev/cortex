@@ -46,7 +46,9 @@ are checked arithmetically against headroom. This is the subject of
 These reserve **headroom for evacuation**: if a host fails, its workloads need somewhere to land. Cortex
 pre-clears space to absorb up to `m` simultaneous host failures, shared across the protected workloads
 rather than duplicated per workload. This is the subject of
-[Failover reservations for KVM HA](03-failover-reservations.md).
+[Failover reservations for KVM HA](03-failover-reservations.md) — now **deprecated** in favour of the
+whole-host approach in [Failover host reservations](04-failover-host-reservations.md), which keeps entire
+hosts empty as gang-evacuation targets.
 
 ### In-flight reservations
 
@@ -59,7 +61,7 @@ in-flight reservation blocks that capacity from "decided" until "running", then 
 > The reasoning here is pessimistic by necessity: because concurrent requests race, Cortex assumes a slot
 > it just recommended is already taken until the placement is realized or abandoned. In-flight
 > reservations are the persistence layer behind the scheduler's concurrency handling —
-> [Concurrency and in-flight reservations](04-concurrency-and-in-flight-reservations.md) explains the
+> [Concurrency and in-flight reservations](05-concurrency-and-in-flight-reservations.md) explains the
 > races they defend against and how the scheduler serializes around them.
 
 ## Inspecting reservations

@@ -122,7 +122,7 @@ pay-as-you-go placement and is not slotted. This is how a committed reservation 
 > confirmed location — and several Nova requests can be in flight at once. How Cortex reserves for its
 > candidates before the next request scores, and how it reconciles against what Nova actually did, is the
 > subject of
-> [Concurrency and in-flight reservations](../03-reservations-and-inventory/04-concurrency-and-in-flight-reservations.md).
+> [Concurrency and in-flight reservations](../03-reservations-and-inventory/05-concurrency-and-in-flight-reservations.md).
 
 ## Closing the loop: descheduling
 

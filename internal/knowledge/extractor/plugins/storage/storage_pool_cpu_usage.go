@@ -35,3 +35,9 @@ var storagePoolCPUUsageQuery string
 func (e *StoragePoolCPUUsageExtractor) Extract() ([]plugins.Feature, error) {
 	return e.ExtractSQL(storagePoolCPUUsageQuery)
 }
+
+func init() {
+	plugins.Index["netapp_storage_pool_cpu_usage_extractor"] = func() plugins.FeatureExtractor {
+		return &StoragePoolCPUUsageExtractor{}
+	}
+}

@@ -23,7 +23,7 @@ func NewLogMetricsMonitor() LogMetricsMonitor {
 		counter: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Namespace: "cortex",
 			Name:      "log_messages_total",
-			Help:      "Total number of log messages emitted at warn or error level.",
+			Help:      "Total number of log messages emitted at info, warn or error level.",
 		}, []string{"level", "file"}),
 	}
 }
@@ -58,10 +58,13 @@ func shortFilePath(file string) string {
 // increment the log-message counter for warn and error entries.
 func WrapCoreWithLogMetrics(monitor *LogMetricsMonitor, core zapcore.Core) zapcore.Core {
 	return zapcore.RegisterHooks(core, func(e zapcore.Entry) error {
-		if e.Level >= zapcore.WarnLevel {
-			level := "warn"
-			if e.Level >= zapcore.ErrorLevel {
+		if e.Level >= zapcore.InfoLevel {
+			level := "info"
+			switch {
+			case e.Level >= zapcore.ErrorLevel:
 				level = "error"
+			case e.Level >= zapcore.WarnLevel:
+				level = "warn"
 			}
 			file := "unknown"
 			if e.Caller.Defined {

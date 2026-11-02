@@ -8,7 +8,9 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
+	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/go-gorp/gorp"
 )
 
@@ -67,4 +69,21 @@ func (s *ManilaSyncer) SyncAllStoragePools(ctx context.Context) (int64, error) {
 		counter.Inc()
 	}
 	return int64(len(pools)), nil
+}
+
+func init() {
+	openstack.Index[v1alpha1.OpenStackDatasourceTypeManila] = func(
+		datasource v1alpha1.Datasource,
+		authenticatedDB *db.DB,
+		authenticatedKeystone keystone.KeystoneClient,
+		monitor datasources.Monitor,
+	) openstack.Syncer {
+
+		return &ManilaSyncer{
+			DB:   *authenticatedDB,
+			Mon:  monitor,
+			Conf: datasource.Spec.OpenStack.Manila,
+			API:  NewManilaAPI(monitor, authenticatedKeystone, datasource.Spec.OpenStack.Manila),
+		}
+	}
 }

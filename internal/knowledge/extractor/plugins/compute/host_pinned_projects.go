@@ -45,3 +45,9 @@ var hostPinnedProjectsQuery string
 func (e *HostPinnedProjectsExtractor) Extract() ([]plugins.Feature, error) {
 	return e.ExtractSQL(hostPinnedProjectsQuery)
 }
+
+func init() {
+	plugins.Index["host_pinned_projects_extractor"] = func() plugins.FeatureExtractor {
+		return &HostPinnedProjectsExtractor{}
+	}
+}
