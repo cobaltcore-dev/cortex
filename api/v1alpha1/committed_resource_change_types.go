@@ -58,6 +58,8 @@ const (
 	ChangeRequestReasonAccepted   = "Accepted"
 	ChangeRequestReasonRejected   = "Rejected"
 	ChangeRequestReasonSuperseded = "Superseded"
+	// ChangeReasonRollbackFailed is the Finished reason when rollback exhausted its timeout.
+	ChangeReasonRollbackFailed = "RollbackFailed"
 )
 
 // CommittedResourceChangeSpec defines the desired change for a CommittedResourceChange.
