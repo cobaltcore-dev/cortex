@@ -116,8 +116,8 @@ spec:
         Rejects all hosts if neither tier has headroom.
 
         Runs in shadow mode by default: the filter logs and emits the
-        cortex_nova_filter_quota_enforcement_decisions_total metric for
-        would-be rejects but never actually removes hosts. To globally reject
+        cortex_filter_weigher_pipeline_step_events_total{event="quota_enforcement_decision"}
+        metric for would-be rejects but never actually removes hosts. To globally reject
         requests without headroom, add `params: [{key: enforce, boolValue: true}]`
         to this step. The shadow default is intentional so that newly-rolled-out
         releases never silently start rejecting requests.
@@ -290,8 +290,8 @@ spec:
         Rejects all hosts if neither tier has headroom.
 
         Runs in shadow mode by default: the filter logs and emits the
-        cortex_nova_filter_quota_enforcement_decisions_total metric for
-        would-be rejects but never actually removes hosts. To globally reject
+        cortex_filter_weigher_pipeline_step_events_total{event="quota_enforcement_decision"}
+        metric for would-be rejects but never actually removes hosts. To globally reject
         requests without headroom, add `params: [{key: enforce, boolValue: true}]`
         to this step. The shadow default is intentional so that newly-rolled-out
         releases never silently start rejecting requests.
