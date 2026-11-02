@@ -503,12 +503,13 @@ func (m *ReservationManager) newReservation(
 			),
 		},
 		CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-			ProjectID:      state.ProjectID,
-			CommitmentUUID: state.CommitmentUUID,
-			DomainID:       state.DomainID,
-			ResourceGroup:  state.FlavorGroupName,
-			ResourceName:   flavorInGroup.Name,
-			Creator:        creator,
+			ProjectID:       state.ProjectID,
+			CommitmentUUID:  state.CommitmentUUID,
+			DomainID:        state.DomainID,
+			ResourceGroup:   state.FlavorGroupName,
+			ResourceName:    flavorInGroup.Name,
+			Creator:         creator,
+			PrimaryResource: primaryResourceForCommitment(state.ResourceType),
 		},
 	}
 
@@ -580,12 +581,13 @@ func (m *ReservationManager) newPaygReservation(
 			hv1.ResourceCPU:    *resource.NewQuantity(cpus, resource.DecimalSI),
 		},
 		CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-			ProjectID:      state.ProjectID,
-			CommitmentUUID: state.CommitmentUUID,
-			DomainID:       state.DomainID,
-			ResourceGroup:  state.FlavorGroupName,
-			ResourceName:   candidate.FlavorName,
-			Creator:        creator,
+			ProjectID:       state.ProjectID,
+			CommitmentUUID:  state.CommitmentUUID,
+			DomainID:        state.DomainID,
+			ResourceGroup:   state.FlavorGroupName,
+			ResourceName:    candidate.FlavorName,
+			Creator:         creator,
+			PrimaryResource: primaryResourceForCommitment(state.ResourceType),
 		},
 	}
 	if state.AvailabilityZone != "" {
@@ -617,4 +619,13 @@ func (m *ReservationManager) newPaygReservation(
 		}
 	}
 	return reservation, nil
+}
+
+func primaryResourceForCommitment(rt v1alpha1.CommittedResourceType) hv1.ResourceName {
+	switch rt {
+	case v1alpha1.CommittedResourceTypeMemory:
+		return hv1.ResourceMemory
+	default:
+		return hv1.ResourceMemory
+	}
 }

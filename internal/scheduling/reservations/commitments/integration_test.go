@@ -479,8 +479,9 @@ func newIntgEnv(t *testing.T, initialObjects []client.Object, schedulerFn http.H
 	}
 	monitor := NewReservationControllerMonitor()
 	resCtrl := &CommitmentReservationController{
-		Client: k8sClient,
-		Scheme: scheme,
+		Client:   k8sClient,
+		Scheme:   scheme,
+		VMSource: vmSource,
 		Conf: ReservationControllerConfig{
 			SchedulerURL:                              schedulerSrv.URL,
 			RequeueIntervalActive:                     metav1.Duration{Duration: 5 * time.Minute},

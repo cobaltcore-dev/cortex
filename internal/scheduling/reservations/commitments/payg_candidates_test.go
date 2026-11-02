@@ -37,7 +37,12 @@ func (f *fakeVMSource) ListVMsByProject(_ context.Context, _ string) ([]reservat
 func (f *fakeVMSource) ListVMsOnHypervisors(_ context.Context, _ *hv1.HypervisorList, _ bool) ([]reservations.VM, error) {
 	return f.vms, f.err
 }
-func (f *fakeVMSource) GetVM(_ context.Context, _ string) (*reservations.VM, error) {
+func (f *fakeVMSource) GetVM(_ context.Context, uuid string) (*reservations.VM, error) {
+	for i := range f.vms {
+		if f.vms[i].UUID == uuid {
+			return &f.vms[i], nil
+		}
+	}
 	return nil, nil
 }
 func (f *fakeVMSource) IsServerActive(_ context.Context, _ string) (bool, error) {

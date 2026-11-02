@@ -200,6 +200,12 @@ spec:
                       Deprecated: replaced by conditions[Ready].ObservedGeneration signaling. Will be removed once old pods are fully rolled out.
                     format: int64
                     type: integer
+                  primaryResource:
+                    description: |-
+                      PrimaryResource is the resource dimension that drives allocation tracking
+                      (e.g. hv1.ResourceMemory for memory commitments). Other dimensions in
+                      alloc.Resources are recorded for bookkeeping but do not gate allocation decisions.
+                    type: string
                   projectID:
                     type: string
                   resourceGroup:

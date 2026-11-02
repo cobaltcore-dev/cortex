@@ -1350,3 +1350,20 @@ func TestSelectFlavor(t *testing.T) {
 		})
 	}
 }
+
+func TestPrimaryResourceForCommitment(t *testing.T) {
+	tests := []struct {
+		rt   v1alpha1.CommittedResourceType
+		want hv1.ResourceName
+	}{
+		{v1alpha1.CommittedResourceTypeMemory, hv1.ResourceMemory},
+		{"unknown", hv1.ResourceMemory},
+		{"", hv1.ResourceMemory},
+	}
+	for _, tt := range tests {
+		got := primaryResourceForCommitment(tt.rt)
+		if got != tt.want {
+			t.Errorf("primaryResourceForCommitment(%q) = %q, want %q", tt.rt, got, tt.want)
+		}
+	}
+}

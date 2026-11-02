@@ -141,6 +141,12 @@ type CommittedResourceReservationSpec struct {
 	// +kubebuilder:validation:Optional
 	ParentGeneration int64 `json:"parentGeneration,omitempty"`
 
+	// PrimaryResource is the resource dimension that drives allocation tracking
+	// (e.g. hv1.ResourceMemory for memory commitments). Other dimensions in
+	// alloc.Resources are recorded for bookkeeping but do not gate allocation decisions.
+	// +kubebuilder:validation:Optional
+	PrimaryResource hv1.ResourceName `json:"primaryResource,omitempty"`
+
 	// Allocations maps workload identifiers to their allocation details.
 	// Key: Workload UUID (VM UUID for Nova, Pod UID for Pods, Machine UID for IronCore, etc.)
 	// Value: allocation state and metadata

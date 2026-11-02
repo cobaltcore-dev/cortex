@@ -59,6 +59,10 @@ sequenceDiagram
     CRC->>CRCD: read CR.status.Ready + observedGeneration, advance to Accepted or RollingBack
 ```
 
+## CR Reservation slot model
+
+Each CR reservation slot has a fixed capacity. Each reservation slots tracks VM usage in an allocation map. Each entry records the resources *this slot* covers for that VM — which may be less than the VM's full size. This supports multi-slot spanning of the same VM, and also partially covered VMs by a slot.
+
 ## CRC state machine
 
 ```mermaid

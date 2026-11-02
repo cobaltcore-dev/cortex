@@ -34,6 +34,7 @@ func TestCRLifecycle_PAYGRollback(t *testing.T) {
 		UUID:              "vm-payg-rollback",
 		FlavorName:        "test-flavor",
 		CurrentHypervisor: "host-1",
+		Resources:         map[string]resource.Quantity{"memory": resource.MustParse("4Gi")},
 	}}})
 	defer env.close()
 
