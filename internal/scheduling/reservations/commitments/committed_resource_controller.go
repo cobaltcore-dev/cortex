@@ -52,10 +52,9 @@ func (r *CommittedResourceController) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	ctx = WithNewGlobalRequestID(ctx)
-	logger := LoggerFromContext(ctx).WithValues(
-		"committedResource", req.Name,
-	)
+	ctx = WithNewReconcileID(ctx)
+	ctx = reservations.WithRequestID(ctx, req.Name)
+	logger := LoggerFromContext(ctx)
 
 	// Timing anchor: shows which generation the cache served when this reconcile fired.
 	// Missing for a specific generation means the CR controller never dequeued that gen.

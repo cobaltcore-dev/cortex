@@ -414,6 +414,7 @@ type ReservationStatus struct {
 // +kubebuilder:printcolumn:name="Host",type="string",JSONPath=".status.host"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:printcolumn:name="ObservedGen",type="integer",JSONPath=".status.conditions[?(@.type=='Ready')].observedGeneration",priority=1
+// +kubebuilder:printcolumn:name="Gen",type="integer",JSONPath=".metadata.generation",priority=1
 // +kubebuilder:printcolumn:name="ResourceGroup",type="string",JSONPath=".spec.*.resourceGroup",priority=1
 // +kubebuilder:printcolumn:name="ResourceName",type="string",JSONPath=".spec.*.resourceName",priority=1
 // +kubebuilder:printcolumn:name="Project",type="string",JSONPath=".spec.*.projectID",priority=1

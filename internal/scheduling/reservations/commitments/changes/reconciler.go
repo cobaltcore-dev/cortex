@@ -38,8 +38,9 @@ type CommittedResourceChangeReconciler struct {
 }
 
 func (r *CommittedResourceChangeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx = commitments.WithNewGlobalRequestID(ctx)
-	logger := commitments.LoggerFromContext(ctx).WithValues("committedResourceChangeRequest", req.Name)
+	ctx = commitments.WithNewReconcileID(ctx)
+	ctx = reservations.WithRequestID(ctx, req.Name)
+	logger := commitments.LoggerFromContext(ctx)
 
 	var tx v1alpha1.CommittedResourceChange
 	if err := r.Get(ctx, req.NamespacedName, &tx); err != nil {

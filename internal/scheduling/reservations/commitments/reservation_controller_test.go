@@ -597,7 +597,7 @@ func TestReconcileAllocations(t *testing.T) {
 				Conf:     ReservationControllerConfig{},
 				VMSource: vmSrc,
 			}
-			ctx := WithNewGlobalRequestID(context.Background())
+			ctx := WithNewReconcileID(context.Background())
 
 			if err := controller.reconcileAllocations(ctx, tt.res); err != nil {
 				t.Fatalf("reconcileAllocations: %v", err)

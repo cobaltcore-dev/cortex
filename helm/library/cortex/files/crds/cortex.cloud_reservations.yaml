@@ -28,6 +28,10 @@ spec:
       name: ObservedGen
       priority: 1
       type: integer
+    - jsonPath: .metadata.generation
+      name: Gen
+      priority: 1
+      type: integer
     - jsonPath: .spec.*.resourceGroup
       name: ResourceGroup
       priority: 1

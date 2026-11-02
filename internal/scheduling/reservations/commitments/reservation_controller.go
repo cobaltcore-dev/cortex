@@ -70,9 +70,9 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	ctx = WithNewGlobalRequestID(ctx)
+	ctx = WithNewReconcileID(ctx)
 	ctx = reservations.WithRequestID(ctx, req.Name)
-	logger := LoggerFromContext(ctx).WithValues("reservation", req.Name)
+	logger := LoggerFromContext(ctx)
 
 	// filter for CR reservations
 	resourceName := ""
