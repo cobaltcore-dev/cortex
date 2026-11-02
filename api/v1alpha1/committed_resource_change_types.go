@@ -112,6 +112,12 @@ type CommittedResourceChangeStatus struct {
 	// +kubebuilder:validation:Optional
 	UpsertedCommitments []corev1.ObjectReference `json:"upsertedCommitments,omitempty"`
 
+	// RollbackStartedAt is the time the CRC entered RollingBack or DryRunCleanup.
+	// Used to measure RollbackTimeout from the correct starting point rather than relying on
+	// the Progressing condition's LastTransitionTime, which is only updated on Status changes.
+	// +kubebuilder:validation:Optional
+	RollbackStartedAt *metav1.Time `json:"rollbackStartedAt,omitempty"`
+
 	// Conditions holds Progressing and Finished conditions.
 	// +kubebuilder:validation:Optional
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`

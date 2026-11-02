@@ -158,6 +158,18 @@ func backdateProgressingCondition(t *testing.T, c client.Client, txName string, 
 	}
 }
 
+// backdateRollbackStartedAt sets RollbackStartedAt to simulate a rollback that has been running
+// for the given duration. Used to trigger the RollbackTimeout check in tests.
+func backdateRollbackStartedAt(t *testing.T, c client.Client, txName string, age time.Duration) {
+	t.Helper()
+	tx := getTx(t, c, txName)
+	past := metav1.NewTime(time.Now().Add(-age))
+	tx.Status.RollbackStartedAt = &past
+	if err := c.Status().Update(testCtx, tx); err != nil {
+		t.Fatalf("backdate RollbackStartedAt on %q: %v", txName, err)
+	}
+}
+
 // assertCondition verifies a condition in the given list by type, status, and optional reason.
 // Pass an empty wantReason to skip the reason check.
 func assertCondition(t *testing.T, conditions []metav1.Condition, condType string, wantStatus metav1.ConditionStatus, wantReason string) {
@@ -1187,10 +1199,10 @@ func TestCRTReconciler_RollingBack(t *testing.T) {
 			reconcilerOpt: func(r *CommittedResourceChangeReconciler) {
 				r.RollbackTimeout = 50 * time.Millisecond
 			},
-			// Stale the CR condition AND backdate the Progressing timestamp to trigger the timeout.
+			// Stale the CR condition AND backdate RollbackStartedAt to trigger the timeout.
 			afterRollingBack: func(t *testing.T, c client.Client, txName string) {
 				setCRReadyStaleGen(t, c, "commitment-uuid-rb4")
-				backdateProgressingCondition(t, c, txName, 1*time.Second)
+				backdateRollbackStartedAt(t, c, txName, 1*time.Second)
 			},
 			wantPhase:             v1alpha1.ChangePhaseRejected,
 			wantFinishedReason:    v1alpha1.ChangeReasonRollbackFailed,
@@ -1430,7 +1442,7 @@ func TestCRTReconciler_DryRunCleanup(t *testing.T) {
 			},
 			afterDryRunCleanup: func(t *testing.T, c client.Client, txName string) {
 				setCRReadyStaleGen(t, c, "commitment-uuid-dry4")
-				backdateProgressingCondition(t, c, txName, 1*time.Second)
+				backdateRollbackStartedAt(t, c, txName, 1*time.Second)
 			},
 			wantPhase:             v1alpha1.ChangePhaseRejected,
 			wantFinishedReason:    v1alpha1.ChangeReasonRollbackFailed,

@@ -189,6 +189,8 @@ func (r *CommittedResourceChangeReconciler) reconcileAwaitingScheduling(ctx cont
 			logger.Info("CR rejected, rolling back", "cr", ref.Name, "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "message", cond.Message)
 			return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseRollingBack, func(s *v1alpha1.CommittedResourceChangeStatus) {
 				s.Message = fmt.Sprintf("CR %s rejected: %s", ref.Name, cond.Message)
+				now := metav1.Now()
+				s.RollbackStartedAt = &now
 			})
 		default:
 			// Still transitioning — wait.
@@ -204,6 +206,8 @@ func (r *CommittedResourceChangeReconciler) reconcileAwaitingScheduling(ctx cont
 				logger.Info("timed out waiting for scheduling, rolling back", "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "timeout", r.AwaitingSchedulingTimeout)
 				return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseRollingBack, func(s *v1alpha1.CommittedResourceChangeStatus) {
 					s.Message = "timed out waiting for scheduling"
+					now := metav1.Now()
+					s.RollbackStartedAt = &now
 					meta.SetStatusCondition(&s.Conditions, metav1.Condition{
 						Type:               v1alpha1.ChangeConditionProgressing,
 						Status:             metav1.ConditionFalse,
@@ -220,7 +224,10 @@ func (r *CommittedResourceChangeReconciler) reconcileAwaitingScheduling(ctx cont
 	}
 
 	if tx.Spec.DryRun {
-		return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseDryRunCleanup, nil)
+		return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseDryRunCleanup, func(s *v1alpha1.CommittedResourceChangeStatus) {
+			now := metav1.Now()
+			s.RollbackStartedAt = &now
+		})
 	}
 	return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseAccepted, nil)
 }
@@ -234,12 +241,9 @@ func (r *CommittedResourceChangeReconciler) reconcileRollingBack(ctx context.Con
 		return ctrl.Result{}, err
 	}
 	if !allSettled {
-		if r.RollbackTimeout > 0 {
-			progressingCond := meta.FindStatusCondition(tx.Status.Conditions, v1alpha1.ChangeConditionProgressing)
-			if progressingCond != nil && time.Since(progressingCond.LastTransitionTime.Time) > r.RollbackTimeout {
-				logger.Info("rollback timed out, terminalizing", "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "timeout", r.RollbackTimeout)
-				return r.terminateWithRollbackFailed(ctx, tx, "timed out restoring pre-change state")
-			}
+		if r.RollbackTimeout > 0 && tx.Status.RollbackStartedAt != nil && time.Since(tx.Status.RollbackStartedAt.Time) > r.RollbackTimeout {
+			logger.Info("rollback timed out, terminalizing", "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "timeout", r.RollbackTimeout)
+			return r.terminateWithRollbackFailed(ctx, tx, "timed out restoring pre-change state")
 		}
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
@@ -254,12 +258,9 @@ func (r *CommittedResourceChangeReconciler) reconcileDryRunCleanup(ctx context.C
 		return ctrl.Result{}, err
 	}
 	if !allSettled {
-		if r.RollbackTimeout > 0 {
-			progressingCond := meta.FindStatusCondition(tx.Status.Conditions, v1alpha1.ChangeConditionProgressing)
-			if progressingCond != nil && time.Since(progressingCond.LastTransitionTime.Time) > r.RollbackTimeout {
-				logger.Info("dry-run cleanup timed out, terminalizing", "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "timeout", r.RollbackTimeout)
-				return r.terminateWithRollbackFailed(ctx, tx, "timed out restoring pre-change state after dry run")
-			}
+		if r.RollbackTimeout > 0 && tx.Status.RollbackStartedAt != nil && time.Since(tx.Status.RollbackStartedAt.Time) > r.RollbackTimeout {
+			logger.Info("dry-run cleanup timed out, terminalizing", "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "timeout", r.RollbackTimeout)
+			return r.terminateWithRollbackFailed(ctx, tx, "timed out restoring pre-change state after dry run")
 		}
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
