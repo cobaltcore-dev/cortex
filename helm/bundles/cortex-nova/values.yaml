@@ -230,7 +230,7 @@ cortex-scheduling-controllers:
         "*": "kvm-general-purpose-load-balancing"
       pipelineDefault: "kvm-general-purpose-load-balancing"
       # How often to re-verify active Reservation CRDs (healthy state)
-      requeueIntervalActive: "5m"
+      requeueIntervalActive: "30m"
       # Back-off interval when knowledge is unavailable
       requeueIntervalRetry: "1m"
       # How long to wait after detecting host over-subscription before evicting reservation slots.

@@ -169,7 +169,6 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 		}
 		return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
 	}
-	logger.Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
 	initialGen := cr.Generation
 	if err := r.setAccepted(ctx, cr); err != nil {
 		return ctrl.Result{}, err
@@ -304,7 +303,6 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 		}
 		return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
 	}
-	logger.Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
 	// setAccepted mutates cr in-place via the Patch response (server returns the latest object,
 	// which may already carry a newer generation from a concurrent spec write).
 	// Capture initialGen before the mutation so the comparison below is correct.
@@ -596,6 +594,7 @@ func (r *CommittedResourceController) setAccepted(ctx context.Context, cr *v1alp
 	if err := r.Status().Patch(ctx, cr, client.MergeFrom(old)); err != nil {
 		return client.IgnoreNotFound(err)
 	}
+	LoggerFromContext(ctx).Info("committed resource accepted", "generation", cr.Generation, "amount", cr.Spec.Amount.String())
 	return nil
 }
 

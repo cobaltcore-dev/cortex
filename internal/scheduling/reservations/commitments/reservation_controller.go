@@ -13,6 +13,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -408,7 +409,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 	}
 	// add VM id from annotation if present
 	if candidateVMUUID := res.Annotations[v1alpha1.AnnotationCandidateAllocation]; candidateVMUUID != "" && !slices.Contains(vmUUIDs, candidateVMUUID) {
-		logger.Info("adding candidate VM from annotation",
+		logger.V(1).Info("adding candidate VM from annotation",
 			"vm", candidateVMUUID,
 			"reservation", res.Name)
 		vmUUIDs = append(vmUUIDs, candidateVMUUID)
@@ -421,7 +422,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		if err != nil {
 			// a failure of a VM lookup should not block the reconciliation of the reservation
 			// instead, remove VM from allocations; if it was temporary failure, the VM will be consumed by some reservation eventually
-			logger.Info("failed to get VM, removing from allocations",
+			logger.V(1).Info("failed to get VM, removing from allocations",
 				"vm", vmUUID,
 				"reservation", res.Name,
 				"err", err)
@@ -435,7 +436,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 					"expectedHost", expectedHost)
 			}
 			if vmUUID == res.Annotations[v1alpha1.AnnotationCandidateAllocation] {
-				logger.Info("candidate VM not found on expected host",
+				logger.V(1).Info("candidate VM not found on expected host",
 					"vm", vmUUID,
 					"reservation", res.Name,
 					"expectedHost", expectedHost)
@@ -472,7 +473,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		newAlloc := minResourceQuantities(remainingSpare, vmRemaining)
 		newAllocPrimary := newAlloc[primaryResource]
 		if len(newAlloc) == 0 || newAllocPrimary.IsZero() {
-			logger.Info("removing VM allocation: fully covered by other slots",
+			logger.V(1).Info("removing VM allocation: fully covered by other slots",
 				"vm", vmUUID, "reservation", res.Name)
 			continue
 		}
@@ -492,7 +493,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		}
 		// is the VM fully covered by slots, or do we need more reservations?
 		if vmRemainingPrimary := vmRemaining[primaryResource]; len(vmRemaining) == 0 || vmRemainingPrimary.Cmp(newAllocPrimary) > 0 {
-			logger.Info("VM not fully covered by slots, may need more reservations",
+			logger.V(1).Info("VM not fully covered by slots, may need more reservations",
 				"vm", vmUUID,
 				"reservation", res.Name,
 				"vmRemaining", vmRemaining,
@@ -503,6 +504,11 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 
 	// Single status patch.
 	old := res.DeepCopy()
+	// Skip the status patch when allocations have not changed.
+	if apiequality.Semantic.DeepEqual(res.Status.CommittedResourceReservation.Allocations, newStatusAllocations) {
+		logger.V(1).Info("reconciled allocations, nothing has changed")
+		return nil
+	}
 	res.Status.CommittedResourceReservation.Allocations = newStatusAllocations
 	if err := r.Status().Patch(ctx, res, client.MergeFrom(old)); err != nil {
 		if client.IgnoreNotFound(err) == nil {

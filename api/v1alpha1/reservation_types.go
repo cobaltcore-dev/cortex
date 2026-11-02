@@ -415,14 +415,14 @@ type ReservationStatus struct {
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:printcolumn:name="ObservedGen",type="integer",JSONPath=".status.conditions[?(@.type=='Ready')].observedGeneration",priority=1
 // +kubebuilder:printcolumn:name="Gen",type="integer",JSONPath=".metadata.generation",priority=1
-// +kubebuilder:printcolumn:name="ResourceGroup",type="string",JSONPath=".spec.*.resourceGroup",priority=1
-// +kubebuilder:printcolumn:name="ResourceName",type="string",JSONPath=".spec.*.resourceName",priority=1
+// +kubebuilder:printcolumn:name="ResourceGroup",type="string",JSONPath=".spec.*.resourceGroup"
+// +kubebuilder:printcolumn:name="ResourceName",type="string",JSONPath=".spec.*.resourceName"
 // +kubebuilder:printcolumn:name="Project",type="string",JSONPath=".spec.*.projectID",priority=1
 // +kubebuilder:printcolumn:name="CommitmentID",type="string",JSONPath=".spec.committedResourceReservation.commitmentUUID",priority=1
-// +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone",priority=1
+// +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone"
 // +kubebuilder:printcolumn:name="StartTime",type="string",JSONPath=".spec.startTime",priority=1
 // +kubebuilder:printcolumn:name="EndTime",type="string",JSONPath=".spec.endTime",priority=1
-// +kubebuilder:printcolumn:name="Resources",type="string",JSONPath=".spec.resources",priority=1
+// +kubebuilder:printcolumn:name="Resources",type="string",JSONPath=".spec.resources"
 // +kubebuilder:printcolumn:name="LastChanged",type="date",JSONPath=".status.failoverReservation.lastChanged",priority=1
 // +kubebuilder:printcolumn:name="AcknowledgedAt",type="date",JSONPath=".status.failoverReservation.acknowledgedAt",priority=1
 // +kubebuilder:printcolumn:name="CR alloc VMs",type="string",JSONPath=".status.committedResourceReservation.allocations.*.objectRef.name",priority=1
