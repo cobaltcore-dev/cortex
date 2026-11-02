@@ -14,25 +14,29 @@ committed.
 
 ## The default target
 
-Running `make` with no argument runs the full local loop:
+Running `make` with no argument runs a phase runner that iterates over `PHASES` in order:
 
 ```make
-all: crds deepcopy lint-fix format lint test
+PHASES ?= crds deepcopy lint-fix format test
 ```
 
-In order, that regenerates CRDs and deepcopy code, applies lint autofixes, formats, lints, and runs
-the tests. It is the "did I break anything" command — run it before opening a pull request.
+For each phase the runner prints a concise `▶ phase ok` or `▶ phase FAILED` status line, capturing
+the full output per phase and only showing it when a phase fails. It stops on the first failure. The
+separate `lint` target is not in the default list because `lint-fix` already runs `golangci-lint`
+with `--fix`, which reports and fixes in one pass.
+
+This is the "did I break anything" command — run it before opening a pull request.
 
 ## The targets, one by one
 
 | Target | What it does |
 |---|---|
-| `all` | The full loop above. The default. |
+| `all` | Phase runner that executes `PHASES` in order, printing concise status per phase and stopping on the first failure. |
 | `generate` | `deepcopy` + `crds` — regenerate everything derived from the Go types. |
 | `crds` | Regenerate CRD manifests from the `api/v1alpha1` types (via `controller-gen`). |
 | `deepcopy` | Regenerate the `zz_generated.deepcopy.go` files (via `controller-gen`). |
 | `format` | `gofmt -w .` — rewrite Go files in place. |
-| `lint` | `golangci-lint run` — report issues without changing files. |
+| `lint` | `golangci-lint run` — report issues without changing files. Not part of the default `make all` run. |
 | `lint-fix` | `golangci-lint run --fix` — apply the autofixable subset. |
 | `test` | `go test ./...`. |
 | `testsum` | The tests via `gotestsum` for a nicer, grouped summary. |
@@ -45,8 +49,8 @@ same on your machine and in CI:
 
 | Tool | Pinned version |
 |---|---|
-| `controller-gen` | v0.22.0 |
-| `golangci-lint` | v2.13.2 |
+| `controller-gen` | v0.23.0 |
+| `golangci-lint` | v2.15.0 |
 | `gotestsum` | v1.13.0 |
 
 `./bin` is git-ignored; deleting it just triggers a re-install on the next `make`.
