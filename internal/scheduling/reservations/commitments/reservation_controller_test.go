@@ -5,11 +5,8 @@ package commitments
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"strconv"
 	"testing"
 	"time"
@@ -25,8 +22,37 @@ import (
 
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
+
+// fakePipeline returns a fixed ordered-host list (modelling a scheduler run).
+type fakePipeline struct{ hosts []string }
+
+func (p fakePipeline) Run(sched.SchedulerRequest) (sched.SchedulerResult, error) {
+	return sched.SchedulerResult{OrderedHosts: p.hosts}, nil
+}
+
+// fakePipelineProvider serves a fakePipeline for every pipeline name, returning
+// the configured host list.
+type fakePipelineProvider struct{ hosts []string }
+
+func (f fakePipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.SchedulerRequest], bool) {
+	return fakePipeline(f), true
+}
+
+// fakeGatherer is a no-op gatherer (tests supply their own hosts).
+type fakeGatherer struct{}
+
+func (fakeGatherer) MutateWithAllCandidates(context.Context, *sched.SchedulerRequest) error {
+	return nil
+}
+
+// newMockScheduler builds an in-process compute.Scheduler whose pipeline returns
+// the given host list. Replaces the former httptest mock scheduler server.
+func newMockScheduler(hosts []string) *sched.Scheduler {
+	return sched.NewScheduler(fakePipelineProvider{hosts: hosts}, fakeGatherer{})
+}
 
 // mockDomainResolver is a test double for DomainResolver.
 type mockDomainResolver struct {
@@ -780,44 +806,11 @@ func TestCommitmentReservationController_reconcileInstanceReservation_Success(t 
 
 	k8sClient := newCRTestClient(scheme, reservation, newTestFlavorKnowledge(), hypervisor1, hypervisor2)
 
-	// Create a mock server that returns a successful response
-	mockResponse := &schedulerdelegationapi.ExternalSchedulerResponse{
-		Hosts: []string{"test-host-1", "test-host-2"},
-	}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify the request body
-		var req schedulerdelegationapi.ExternalSchedulerRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Errorf("Failed to decode request: %v", err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		// Verify request structure
-		if req.Spec.Data.NumInstances != 1 {
-			t.Errorf("Expected NumInstances to be 1, got %d", req.Spec.Data.NumInstances)
-		}
-
-		if err := json.NewEncoder(w).Encode(mockResponse); err != nil {
-			t.Fatalf("failed to write response: %v", err)
-		}
-	}))
-	defer server.Close()
-
-	config := ReservationControllerConfig{
-		SchedulerURL: server.URL,
-	}
-
 	reconciler := &CommitmentReservationController{
-		Client: k8sClient,
-		Scheme: scheme,
-		Conf:   config,
-	}
-
-	// Initialize the reconciler (this sets up SchedulerClient)
-	if err := reconciler.Init(context.Background(), config); err != nil {
-		t.Fatalf("Failed to initialize reconciler: %v", err)
+		Client:    k8sClient,
+		Scheme:    scheme,
+		Conf:      ReservationControllerConfig{},
+		Scheduler: newMockScheduler([]string{"test-host-1", "test-host-2"}),
 	}
 
 	req := ctrl.Request{
@@ -876,20 +869,19 @@ func TestCommitmentReservationController_reconcileInstanceReservation_Success(t 
 // Test: domain_name scheduler hint
 // ============================================================================
 
-// newTestSchedulerServer captures the decoded request and returns a single host.
-func newTestSchedulerServer(t *testing.T, captured *schedulerdelegationapi.ExternalSchedulerRequest) *httptest.Server {
-	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := json.NewDecoder(r.Body).Decode(captured); err != nil {
-			t.Errorf("failed to decode scheduler request: %v", err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		resp := schedulerdelegationapi.ExternalSchedulerResponse{Hosts: []string{"test-host-1"}}
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			t.Fatalf("failed to write scheduler response: %v", err)
-		}
-	}))
+// capturingPipeline records the SchedulerRequest it was run with and returns a
+// single host, so tests can assert on the request the reconciler built.
+type capturingPipeline struct{ captured *sched.SchedulerRequest }
+
+func (p capturingPipeline) Run(req sched.SchedulerRequest) (sched.SchedulerResult, error) {
+	*p.captured = req
+	return sched.SchedulerResult{OrderedHosts: []string{"test-host-1"}}, nil
+}
+
+type capturingPipelineProvider struct{ captured *sched.SchedulerRequest }
+
+func (f capturingPipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.SchedulerRequest], bool) {
+	return capturingPipeline(f), true
 }
 
 func TestCommitmentReservationController_DomainNameHint(t *testing.T) {
@@ -938,16 +930,13 @@ func TestCommitmentReservationController_DomainNameHint(t *testing.T) {
 			k8sClient := newCRTestClient(scheme, reservation, newTestFlavorKnowledge(),
 				&hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "test-host-1"}})
 
-			var captured schedulerdelegationapi.ExternalSchedulerRequest
-			server := newTestSchedulerServer(t, &captured)
-			defer server.Close()
-
+			var captured sched.SchedulerRequest
 			reconciler := &CommitmentReservationController{
-				Client:          k8sClient,
-				Scheme:          scheme,
-				Conf:            ReservationControllerConfig{SchedulerURL: server.URL},
-				SchedulerClient: reservations.NewSchedulerClient(server.URL),
-				DomainResolver:  tt.resolver,
+				Client:         k8sClient,
+				Scheme:         scheme,
+				Conf:           ReservationControllerConfig{},
+				Scheduler:      sched.NewScheduler(capturingPipelineProvider{captured: &captured}, fakeGatherer{}),
+				DomainResolver: tt.resolver,
 			}
 
 			if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
@@ -964,25 +953,14 @@ func TestCommitmentReservationController_DomainNameHint(t *testing.T) {
 				}
 			}
 
-			// Verify domain_name hint.
-			gotDomain, err := captured.Spec.Data.GetSchedulerHintStr("domain_name")
-			if tt.wantDomainName == "" {
-				if err == nil {
-					t.Errorf("expected domain_name hint absent, got %q", gotDomain)
-				}
-			} else {
-				if err != nil {
-					t.Fatalf("expected domain_name hint %q, got error: %v", tt.wantDomainName, err)
-				}
-				if gotDomain != tt.wantDomainName {
-					t.Errorf("expected domain_name hint %q, got %q", tt.wantDomainName, gotDomain)
-				}
+			// Verify domain_name hint (now the typed request field).
+			if captured.DomainName != tt.wantDomainName {
+				t.Errorf("expected domain name %q, got %q", tt.wantDomainName, captured.DomainName)
 			}
 
-			// _nova_check_type must always be present regardless of resolver outcome.
-			gotIntent, err := captured.Spec.Data.GetSchedulerHintStr("_nova_check_type")
-			if err != nil || gotIntent != string(schedulerdelegationapi.ReserveForCommittedResourceIntent) {
-				t.Errorf("expected _nova_check_type=%q, got %q (err=%v)", schedulerdelegationapi.ReserveForCommittedResourceIntent, gotIntent, err)
+			// Intent must always be set regardless of resolver outcome.
+			if captured.Intent != schedulerdelegationapi.ReserveForCommittedResourceIntent {
+				t.Errorf("expected Intent=%q, got %q", schedulerdelegationapi.ReserveForCommittedResourceIntent, captured.Intent)
 			}
 		})
 	}

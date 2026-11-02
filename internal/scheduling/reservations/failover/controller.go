@@ -14,6 +14,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -40,21 +41,21 @@ var log = ctrl.Log.WithName("failover-reservation-controller").WithValues("modul
 // 2. Watch-based per-reservation reconciliation (Reconcile) - handles acknowledgment and validation of individual reservations
 type FailoverReservationController struct {
 	client.Client
-	VMSource        reservations.VMSource
-	Config          FailoverConfig
-	SchedulerClient *reservations.SchedulerClient
-	Recorder        events.EventRecorder // Event recorder for emitting Kubernetes events
-	Monitor         *FailoverMonitor
-	reconcileCount  int64 // Track reconciliation count for rotating VM selection
+	VMSource       reservations.VMSource
+	Config         FailoverConfig
+	Scheduler      *sched.Scheduler
+	Recorder       events.EventRecorder // Event recorder for emitting Kubernetes events
+	Monitor        *FailoverMonitor
+	reconcileCount int64 // Track reconciliation count for rotating VM selection
 }
 
-func NewFailoverReservationController(c client.Client, vmSource reservations.VMSource, config FailoverConfig, schedulerClient *reservations.SchedulerClient, monitor *FailoverMonitor) *FailoverReservationController {
+func NewFailoverReservationController(c client.Client, vmSource reservations.VMSource, config FailoverConfig, scheduler *sched.Scheduler, monitor *FailoverMonitor) *FailoverReservationController {
 	return &FailoverReservationController{
-		Client:          c,
-		VMSource:        vmSource,
-		Config:          config,
-		SchedulerClient: schedulerClient,
-		Monitor:         monitor,
+		Client:    c,
+		VMSource:  vmSource,
+		Config:    config,
+		Scheduler: scheduler,
+		Monitor:   monitor,
 	}
 }
 
@@ -881,7 +882,6 @@ func (c *FailoverReservationController) Start(ctx context.Context) error {
 		"maxFailuresForShortInterval", c.Config.MaxFailuresForShortInterval,
 		"creator", c.Config.Creator,
 		"datasourceName", c.Config.DatasourceName,
-		"schedulerURL", c.Config.SchedulerURL,
 		"flavorFailoverRequirements", c.Config.FlavorFailoverRequirements,
 		"maxVMsToProcess", c.Config.MaxVMsToProcess,
 		"trustHypervisorLocation", c.Config.TrustHypervisorLocation,

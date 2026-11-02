@@ -5,14 +5,12 @@ package failover
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -477,22 +475,40 @@ func buildSchedulingTestVMWithResources(uuid, hypervisor string, memoryMB, vcpus
 	}
 }
 
-// captureSchedulerRequest spins up a test HTTP server that captures one scheduler request
-// and returns a single host. The captured request is written into *out.
-func captureSchedulerRequest(t *testing.T, host string, out *novaapi.ExternalSchedulerRequest) *httptest.Server {
-	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := json.NewDecoder(r.Body).Decode(out); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		resp := novaapi.ExternalSchedulerResponse{Hosts: []string{host}}
-		_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
-	}))
+// capturingPipeline records the last SchedulerRequest it ran and returns a
+// single fixed host, so tests can assert the options the controller built.
+type capturingPipeline struct {
+	host     string
+	captured *sched.SchedulerRequest
 }
 
-// buildMinimalController returns a FailoverReservationController wired to a scheduler at the given URL.
-func buildMinimalController(t *testing.T, schedulerURL string) *FailoverReservationController {
+func (p *capturingPipeline) Run(req sched.SchedulerRequest) (sched.SchedulerResult, error) {
+	*p.captured = req
+	return sched.SchedulerResult{OrderedHosts: []string{p.host}}, nil
+}
+
+// capturingProvider serves the same capturingPipeline for every pipeline name.
+type capturingProvider struct{ pipeline *capturingPipeline }
+
+func (f capturingProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.SchedulerRequest], bool) {
+	return f.pipeline, true
+}
+
+// capturingGatherer is a no-op gatherer (the tests preselect their own hosts).
+type capturingGatherer struct{}
+
+func (capturingGatherer) MutateWithAllCandidates(context.Context, *sched.SchedulerRequest) error {
+	return nil
+}
+
+// newCapturingScheduler builds an in-process scheduler whose pipeline returns
+// the given host and records every request it ran into *out.
+func newCapturingScheduler(host string, out *sched.SchedulerRequest) *sched.Scheduler {
+	return sched.NewScheduler(capturingProvider{pipeline: &capturingPipeline{host: host, captured: out}}, capturingGatherer{})
+}
+
+// buildMinimalController returns a FailoverReservationController wired to the given scheduler.
+func buildMinimalController(t *testing.T, scheduler *sched.Scheduler) *FailoverReservationController {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
@@ -502,10 +518,9 @@ func buildMinimalController(t *testing.T, schedulerURL string) *FailoverReservat
 		t.Fatalf("add hv1 to scheme: %v", err)
 	}
 	k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	schedulerClient := reservations.NewSchedulerClient(schedulerURL + "/scheduler/nova/external")
 	config := FailoverConfig{}
 	config.ApplyDefaults()
-	return NewFailoverReservationController(k8sClient, nil, config, schedulerClient, nil)
+	return NewFailoverReservationController(k8sClient, nil, config, scheduler, nil)
 }
 
 // ============================================================================
@@ -561,11 +576,10 @@ func TestFailoverSchedulerOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var capturedReq novaapi.ExternalSchedulerRequest
-			server := captureSchedulerRequest(t, "host-2", &capturedReq)
-			defer server.Close()
+			var capturedReq sched.SchedulerRequest
+			scheduler := newCapturingScheduler("host-2", &capturedReq)
 
-			tt.call(buildMinimalController(t, server.URL), context.Background())
+			tt.call(buildMinimalController(t, scheduler), context.Background())
 
 			if capturedReq.Options.ReadOnly != tt.wantReadOnly {
 				t.Errorf("ReadOnly = %v, want %v", capturedReq.Options.ReadOnly, tt.wantReadOnly)

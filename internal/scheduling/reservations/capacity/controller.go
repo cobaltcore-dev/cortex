@@ -29,6 +29,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/go-logr/logr"
@@ -102,20 +103,20 @@ func capacityMapsEqual(a, b map[hv1.ResourceName]resource.Quantity) bool {
 // periodic floor timer. All watch events are coalesced into a single reconcile key so
 // rapid changes produce at most one queued reconcile.
 type Reconciler struct {
-	client          client.Client
-	vmSource        reservations.VMSource
-	schedulerClient *reservations.SchedulerClient
-	config          Config
+	client    client.Client
+	vmSource  reservations.VMSource
+	scheduler *sched.Scheduler
+	config    Config
 
 	lastReconcileAt time.Time
 }
 
-func NewController(c client.Client, config Config, vmSource reservations.VMSource) *Reconciler {
+func NewController(c client.Client, config Config, vmSource reservations.VMSource, scheduler *sched.Scheduler) *Reconciler {
 	return &Reconciler{
-		client:          c,
-		vmSource:        vmSource,
-		schedulerClient: reservations.NewSchedulerClient(config.SchedulerURL),
-		config:          config,
+		client:    c,
+		vmSource:  vmSource,
+		scheduler: scheduler,
+		config:    config,
 	}
 }
 
@@ -814,29 +815,40 @@ func (c *Reconciler) probeScheduler(
 		}
 	}
 
-	resp, err := c.schedulerClient.ScheduleReservation(ctx, reservations.ScheduleReservationRequest{
-		InstanceUUID:     "capacity-" + flavor.Name,
-		ProjectID:        "cortex-capacity-probe",
-		FlavorName:       flavor.Name,
-		MemoryMB:         flavor.MemoryMB,
-		VCPUs:            flavor.VCPUs,
-		FlavorExtraSpecs: flavor.ExtraSpecs,
-		AvailabilityZone: az,
-		Pipeline:         pipeline,
-		EligibleHosts:    eligibleHosts,
-		SchedulerHints:   map[string]any{"_nova_check_type": string(schedulerapi.CapacityProbeIntent)},
-	}, scheduling.Options{
-		ReadOnly:                      true,
-		AssumeEmptyHosts:              ignoreAllocations,
-		IgnoredReservationTypes:       ignoredReservationTypes,
-		SkipInflight:                  true,
-		SkipCommittedResourceTracking: true,
-	})
+	probeHosts := make([]sched.Host, 0, len(eligibleHosts))
+	probeWeights := make(map[string]float64, len(eligibleHosts))
+	for _, h := range eligibleHosts {
+		probeHosts = append(probeHosts, sched.Host{ComputeHost: h.ComputeHost, HypervisorHostname: h.HypervisorHostname})
+		probeWeights[h.ComputeHost] = 0.0
+	}
+	out, err := c.scheduler.RunWithoutLock(ctx, sched.SchedulerRequest{
+		Pipeline:            pipeline,
+		GatherAllCandidates: true,
+		HypervisorFamily:    sched.HypervisorFamilyKVM,
+		Hosts:               probeHosts,
+		Weights:             probeWeights,
+		Intent:              schedulerapi.CapacityProbeIntent,
+		InstanceUUID:        "capacity-" + flavor.Name,
+		ProjectID:           "cortex-capacity-probe",
+		AvailabilityZone:    az,
+		Flavor: sched.FlavorSpec{
+			Name:   flavor.Name,
+			VCPUs:  flavor.VCPUs,
+			Memory: *resource.NewQuantity(int64(flavor.MemoryMB)*(1<<20), resource.BinarySI), //nolint:gosec // flavor memory bounded by specs
+		},
+		Options: scheduling.Options{
+			ReadOnly:                      true,
+			AssumeEmptyHosts:              ignoreAllocations,
+			IgnoredReservationTypes:       ignoredReservationTypes,
+			SkipInflight:                  true,
+			SkipCommittedResourceTracking: true,
+		},
+	}, nil, nil)
 	if err != nil {
 		return 0, 0, nil, fmt.Errorf("scheduler call failed (pipeline=%s): %w", pipeline, err)
 	}
 
-	for _, hostName := range resp.Hosts {
+	for _, hostName := range out.Result.OrderedHosts {
 		hv, ok := hvByName[hostName]
 		if !ok {
 			continue

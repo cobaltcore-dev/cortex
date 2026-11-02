@@ -704,7 +704,9 @@ func (env *IntegrationTestEnv) LogStateSummary() {
 func (env *IntegrationTestEnv) TriggerFailoverReconcile(flavorRequirements map[string]int) error {
 	env.T.Helper()
 
-	schedulerClient := reservations.NewSchedulerClient(env.SchedulerBaseURL + "/scheduler/nova/external")
+	// Drive the same in-process pipeline the testHTTPAPI uses, so the failover
+	// reservation flow exercises the real scheduler over the env's nova controller.
+	scheduler := compute.NewScheduler(env.NovaController, passthroughGatherer{})
 
 	config := FailoverConfig{
 		ReconcileInterval:          metav1.Duration{Duration: time.Minute},
@@ -717,7 +719,7 @@ func (env *IntegrationTestEnv) TriggerFailoverReconcile(flavorRequirements map[s
 		env.K8sClient,
 		env.VMSource,
 		config,
-		schedulerClient,
+		scheduler,
 		nil,
 	)
 

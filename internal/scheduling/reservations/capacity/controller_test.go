@@ -5,9 +5,7 @@ package capacity
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
+	"errors"
 	"regexp"
 	"sort"
 	"testing"
@@ -25,6 +23,8 @@ import (
 	schedulerapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 )
 
@@ -99,38 +99,98 @@ func newHypervisor(name, az string, memoryBytes int64) *hv1.Hypervisor {
 	return hv
 }
 
-// newMockSchedulerServer creates an httptest server that always returns the given host list.
-func newMockSchedulerServer(t *testing.T, hosts []string) *httptest.Server {
-	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		resp := schedulerapi.ExternalSchedulerResponse{Hosts: hosts}
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			t.Errorf("mock scheduler: failed to encode response: %v", err)
-		}
-	}))
+// fakePipeline returns a fixed ordered-host list (modelling a scheduler run).
+type fakePipeline struct{ hosts []string }
+
+func (p fakePipeline) Run(sched.SchedulerRequest) (sched.SchedulerResult, error) {
+	return sched.SchedulerResult{OrderedHosts: p.hosts}, nil
 }
 
-// newMockSchedulerServerPerPipeline returns different candidate hosts depending on the request's
-// pipeline, so a test can model a host that passes the total (empty-datacenter) probe but drops
-// out of the placeable probe because it is fully occupied.
-func newMockSchedulerServerPerPipeline(t *testing.T, hostsByPipeline map[string][]string) *httptest.Server {
-	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req schedulerapi.ExternalSchedulerRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Errorf("mock scheduler: failed to decode request: %v", err)
-		}
-		resp := schedulerapi.ExternalSchedulerResponse{Hosts: hostsByPipeline[req.Pipeline]}
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			t.Errorf("mock scheduler: failed to encode response: %v", err)
-		}
-	}))
+// fakePipelineProvider serves a fakePipeline per pipeline name, returning the
+// per-pipeline host list configured for the test. When allPipelines is set it
+// returns that host list for every pipeline name regardless of hostsByPipeline.
+type fakePipelineProvider struct {
+	hostsByPipeline map[string][]string
+	allPipelines    []string
+	useAll          bool
 }
 
-// newController is a test helper that creates a Reconciler with a nil VMSource.
-func newController(t *testing.T, c client.Client, cfg Config) *Reconciler {
+func (f fakePipelineProvider) GetPipeline(name string) (lib.FilterWeigherPipeline[sched.SchedulerRequest], bool) {
+	if f.useAll {
+		return fakePipeline{hosts: f.allPipelines}, true
+	}
+	return fakePipeline{hosts: f.hostsByPipeline[name]}, true
+}
+
+// fakeGatherer is a no-op gatherer (tests preselect their own hosts).
+type fakeGatherer struct{}
+
+func (fakeGatherer) MutateWithAllCandidates(context.Context, *sched.SchedulerRequest) error {
+	return nil
+}
+
+// newMockScheduler builds an in-process compute.Scheduler whose pipelines return
+// the given per-pipeline host lists. Replaces the former httptest mock server.
+func newMockScheduler(hostsByPipeline map[string][]string) *sched.Scheduler {
+	return sched.NewScheduler(fakePipelineProvider{hostsByPipeline: hostsByPipeline}, fakeGatherer{})
+}
+
+// newMockSchedulerHosts is a convenience for a scheduler that returns the same
+// host list regardless of pipeline.
+func newMockSchedulerHosts(hosts []string) *sched.Scheduler {
+	return sched.NewScheduler(fakePipelineProvider{allPipelines: hosts, useAll: true}, fakeGatherer{})
+}
+
+// fakeErrPipeline models a scheduler run that fails (replaces the former
+// HTTP 500 mock server).
+type fakeErrPipeline struct{}
+
+func (fakeErrPipeline) Run(sched.SchedulerRequest) (sched.SchedulerResult, error) {
+	return sched.SchedulerResult{}, errors.New("boom")
+}
+
+type fakeErrPipelineProvider struct{}
+
+func (fakeErrPipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.SchedulerRequest], bool) {
+	return fakeErrPipeline{}, true
+}
+
+// newErrScheduler builds a scheduler whose pipeline always returns an error.
+func newErrScheduler() *sched.Scheduler {
+	return sched.NewScheduler(fakeErrPipelineProvider{}, fakeGatherer{})
+}
+
+// capturePipeline records the request it is run with and returns a fixed host list.
+type capturePipeline struct {
+	captured *sched.SchedulerRequest
+	hosts    []string
+}
+
+func (p capturePipeline) Run(req sched.SchedulerRequest) (sched.SchedulerResult, error) {
+	*p.captured = req
+	return sched.SchedulerResult{OrderedHosts: p.hosts}, nil
+}
+
+type capturePipelineProvider struct {
+	captured *sched.SchedulerRequest
+	hosts    []string
+}
+
+func (f capturePipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.SchedulerRequest], bool) {
+	return capturePipeline(f), true
+}
+
+// captureScheduler builds a scheduler that records the request it is run with
+// into captured and returns the given hosts.
+func captureScheduler(captured *sched.SchedulerRequest, hosts []string) *sched.Scheduler {
+	return sched.NewScheduler(capturePipelineProvider{captured: captured, hosts: hosts}, fakeGatherer{})
+}
+
+// newController is a test helper that creates a Reconciler with a nil VMSource
+// and the given scheduler.
+func newController(t *testing.T, c client.Client, cfg Config, scheduler *sched.Scheduler) *Reconciler {
 	t.Helper()
-	return NewController(c, cfg, nil)
+	return NewController(c, cfg, nil, scheduler)
 }
 
 // --- unit tests for pure helper functions ---
@@ -224,14 +284,12 @@ func TestReconcileAZ_CreatesCRD(t *testing.T) {
 		Build()
 
 	// Both probes return host-1 → total capacity = floor(4GiB/4GiB) = 1, placeable = 1.
-	schedulerServer := newMockSchedulerServer(t, []string{"host-1"})
-	defer schedulerServer.Close()
+	scheduler := newMockSchedulerHosts([]string{"host-1"})
 
 	ctrl := newController(t, fakeClient, Config{
-		SchedulerURL:      schedulerServer.URL,
 		TotalPipeline:     "kvm-report-capacity",
 		PlaceablePipeline: "kvm-general-purpose",
-	})
+	}, scheduler)
 
 	smallFlavor := compute.FlavorInGroup{Name: groupName + "-small", MemoryMB: memMB, VCPUs: 2}
 	groupData := compute.FlavorGroupFeature{
@@ -311,17 +369,15 @@ func TestReconcileAZ_RawCapacityIncludesOccupiedHosts(t *testing.T) {
 
 	// Total probe sees both hosts (empty-datacenter); placeable probe sees only host-1 because
 	// host-2 is fully occupied and the smallest flavor no longer fits.
-	schedulerServer := newMockSchedulerServerPerPipeline(t, map[string][]string{
+	scheduler := newMockScheduler(map[string][]string{
 		totalPipe:     {"host-1", "host-2"},
 		placeablePipe: {"host-1"},
 	})
-	defer schedulerServer.Close()
 
 	ctrl := newController(t, fakeClient, Config{
-		SchedulerURL:      schedulerServer.URL,
 		TotalPipeline:     totalPipe,
 		PlaceablePipeline: placeablePipe,
-	})
+	}, scheduler)
 
 	smallFlavor := compute.FlavorInGroup{Name: groupName + "-small", MemoryMB: memMB, VCPUs: 2}
 	groupData := compute.FlavorGroupFeature{
@@ -370,14 +426,12 @@ func TestReconcileAZ_WritesReservedCapacity(t *testing.T) {
 		WithStatusSubresource(&v1alpha1.FlavorGroupCapacity{}, &v1alpha1.Knowledge{}).
 		Build()
 
-	schedulerServer := newMockSchedulerServer(t, []string{"host-1"})
-	defer schedulerServer.Close()
+	scheduler := newMockSchedulerHosts([]string{"host-1"})
 
 	ctrl := newController(t, fakeClient, Config{
-		SchedulerURL:      schedulerServer.URL,
 		TotalPipeline:     "kvm-report-capacity",
 		PlaceablePipeline: "kvm-general-purpose",
-	})
+	}, scheduler)
 
 	smallFlavor := compute.FlavorInGroup{Name: groupName + "-small", MemoryMB: memMB, VCPUs: flavorCPUs}
 	groupData := compute.FlavorGroupFeature{SmallestFlavor: smallFlavor, Flavors: []compute.FlavorInGroup{smallFlavor}}
@@ -495,7 +549,7 @@ func TestReservedResourcesByGroupAZ(t *testing.T) {
 		WithObjects(committedA, failoverB, failoverAByFlavor, pending, inflight).
 		Build()
 
-	c := newController(t, fakeClient, Config{})
+	c := newController(t, fakeClient, Config{}, newMockSchedulerHosts(nil))
 
 	flavorA := compute.FlavorInGroup{Name: "group-a-small", MemoryMB: 4096, VCPUs: flavorCPUs}
 	flavorB := compute.FlavorInGroup{Name: "group-b-small", MemoryMB: 4096, VCPUs: flavorCPUs}
@@ -546,17 +600,11 @@ func TestReconcileAZ_SkipsCRDWriteOnSchedulerError(t *testing.T) {
 		WithStatusSubresource(&v1alpha1.FlavorGroupCapacity{}, &v1alpha1.Knowledge{}).
 		Build()
 
-	// Scheduler returns 500 to simulate error.
-	failServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer failServer.Close()
-
+	// Scheduler returns an error to simulate a failed probe.
 	ctrl := newController(t, fakeClient, Config{
-		SchedulerURL:      failServer.URL,
 		TotalPipeline:     "kvm-report-capacity",
 		PlaceablePipeline: "kvm-general-purpose",
-	})
+	}, newErrScheduler())
 
 	smallFlavor := compute.FlavorInGroup{Name: groupName + "-small", MemoryMB: memMB, VCPUs: 2}
 	groupData := compute.FlavorGroupFeature{
@@ -616,17 +664,11 @@ func TestReconcileAZ_MarksExistingCRDNotReadyOnSchedulerError(t *testing.T) {
 		t.Fatalf("failed to set Ready=True: %v", err)
 	}
 
-	// Scheduler returns 500 to simulate error.
-	failServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer failServer.Close()
-
+	// Scheduler returns an error to simulate a failed probe.
 	ctrl := newController(t, fakeClient, Config{
-		SchedulerURL:      failServer.URL,
 		TotalPipeline:     "kvm-report-capacity",
 		PlaceablePipeline: "kvm-general-purpose",
-	})
+	}, newErrScheduler())
 
 	smallFlavor := compute.FlavorInGroup{Name: groupName + "-small", MemoryMB: memMB, VCPUs: 2}
 	groupData := compute.FlavorGroupFeature{
@@ -685,14 +727,12 @@ func TestReconcileAZ_IdempotentUpdate(t *testing.T) {
 		WithStatusSubresource(&v1alpha1.FlavorGroupCapacity{}, &v1alpha1.Knowledge{}).
 		Build()
 
-	schedulerServer := newMockSchedulerServer(t, []string{"host-1"})
-	defer schedulerServer.Close()
+	scheduler := newMockSchedulerHosts([]string{"host-1"})
 
 	ctrl := newController(t, fakeClient, Config{
-		SchedulerURL:      schedulerServer.URL,
 		TotalPipeline:     "kvm-report-capacity",
 		PlaceablePipeline: "kvm-general-purpose",
-	})
+	}, scheduler)
 
 	smallFlavor := compute.FlavorInGroup{Name: groupName + "-small", MemoryMB: memMB, VCPUs: 2}
 	groupData := compute.FlavorGroupFeature{
@@ -731,10 +771,9 @@ func TestReconcileAll_SkipsGroupsWithNoAZs(t *testing.T) {
 		Build()
 
 	ctrl := newController(t, fakeClient, Config{
-		SchedulerURL:      "http://localhost:9999", // unreachable; not called
 		TotalPipeline:     "kvm-report-capacity",
 		PlaceablePipeline: "kvm-general-purpose",
-	})
+	}, newMockSchedulerHosts(nil)) // scheduler not called (no AZs)
 
 	if err := ctrl.reconcileAll(context.Background()); err != nil {
 		t.Errorf("reconcileAll with no hypervisors returned error: %v", err)
@@ -760,10 +799,9 @@ func TestProbeScheduler_CapacityCalculation(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	// Scheduler returns both hosts.
-	srv := newMockSchedulerServer(t, []string{"host-1", "host-2"})
-	defer srv.Close()
+	scheduler := newMockSchedulerHosts([]string{"host-1", "host-2"})
 
-	c := newController(t, fakeClient, Config{SchedulerURL: srv.URL})
+	c := newController(t, fakeClient, Config{}, scheduler)
 	hvByName := map[string]hv1.Hypervisor{
 		"host-1": *hv1Obj,
 		"host-2": *hv2Obj,
@@ -810,10 +848,9 @@ func TestProbeScheduler_SubtractsAllocationsWhenNotIgnored(t *testing.T) {
 	}
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	srv := newMockSchedulerServer(t, []string{"host-1"})
-	defer srv.Close()
+	scheduler := newMockSchedulerHosts([]string{"host-1"})
 
-	c := newController(t, fakeClient, Config{SchedulerURL: srv.URL})
+	c := newController(t, fakeClient, Config{}, scheduler)
 	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
 	flavor := compute.FlavorInGroup{Name: "test-flavor", MemoryMB: memMB}
 
@@ -853,14 +890,12 @@ func TestReconcileAll_MultipleGroupsAndAZs(t *testing.T) {
 		WithStatusSubresource(&v1alpha1.FlavorGroupCapacity{}, &v1alpha1.Knowledge{}).
 		Build()
 
-	srv := newMockSchedulerServer(t, []string{})
-	defer srv.Close()
+	scheduler := newMockSchedulerHosts([]string{})
 
 	c := newController(t, fakeClient, Config{
-		SchedulerURL:      srv.URL,
 		TotalPipeline:     "kvm-report-capacity",
 		PlaceablePipeline: "kvm-general-purpose",
-	})
+	}, scheduler)
 
 	if err := c.reconcileAll(context.Background()); err != nil {
 		t.Fatalf("reconcileAll failed: %v", err)
@@ -908,10 +943,9 @@ func TestReconcileAll_FlavorGroupsKnowledgeNotReady(t *testing.T) {
 		Build()
 
 	c := newController(t, fakeClient, Config{
-		SchedulerURL:      "http://localhost:9999",
 		TotalPipeline:     "kvm-report-capacity",
 		PlaceablePipeline: "kvm-general-purpose",
-	})
+	}, newMockSchedulerHosts(nil)) // scheduler not called (knowledge not ready)
 
 	// Should return an error when knowledge is not ready.
 	if err := c.reconcileAll(context.Background()); err == nil {
@@ -925,7 +959,7 @@ func TestReconcileAZ_ZeroMemoryFlavorSkipped(t *testing.T) {
 		WithScheme(scheme).
 		WithStatusSubresource(&v1alpha1.FlavorGroupCapacity{}).
 		Build()
-	c := newController(t, fakeClient, Config{})
+	c := newController(t, fakeClient, Config{}, newMockSchedulerHosts(nil))
 
 	groupData := compute.FlavorGroupFeature{
 		SmallestFlavor: compute.FlavorInGroup{Name: "bad-flavor", MemoryMB: 0},
@@ -1075,12 +1109,6 @@ func TestComputeTotalCapacity(t *testing.T) {
 	}
 }
 
-// Verify that the module-level log variable from reservations package doesn't
-// collide with the one in this package.
-func TestPackageLogVar(t *testing.T) {
-	_ = reservations.NewSchedulerClient("http://localhost")
-}
-
 func TestSumCommittedCapacity(t *testing.T) {
 	const (
 		groupName = "hana-v2"
@@ -1131,7 +1159,7 @@ func TestSumCommittedCapacity(t *testing.T) {
 		WithObjects(objects...).
 		Build()
 
-	c := newController(t, fakeClient, Config{})
+	c := newController(t, fakeClient, Config{}, newMockSchedulerHosts(nil))
 	// smallestFlavorBytes = 4GiB → cr1 = 8GiB/4GiB = 2 slots, cr2 = 4GiB/4GiB = 1 slot → total = 3.
 	got, err := c.sumCommittedCapacity(context.Background(), groupName, az, memBytes)
 	if err != nil {
@@ -1217,17 +1245,15 @@ func TestComputeVMUsage_ZerosOutWhenAllVMsRemoved(t *testing.T) {
 	}
 
 	// Scheduler returns host-1 so probes succeed.
-	schedulerServer := newMockSchedulerServer(t, []string{"host-1"})
-	defer schedulerServer.Close()
+	scheduler := newMockSchedulerHosts([]string{"host-1"})
 
 	// VMSource returns empty list (all VMs removed).
 	vmSource := &mockVMSource{vms: []reservations.VM{}}
 
 	ctrl := NewController(fakeClient, Config{
-		SchedulerURL:      schedulerServer.URL,
 		TotalPipeline:     "kvm-report-capacity",
 		PlaceablePipeline: "kvm-general-purpose",
-	}, vmSource)
+	}, vmSource, scheduler)
 
 	smallFlavor := compute.FlavorInGroup{Name: groupName + "-small", MemoryMB: memMB, VCPUs: 2}
 	groupData := compute.FlavorGroupFeature{
@@ -1284,10 +1310,9 @@ func TestProbeScheduler_SubtractsReservationBlocksWhenNotIgnored(t *testing.T) {
 	}
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	srv := newMockSchedulerServer(t, []string{"host-1"})
-	defer srv.Close()
+	scheduler := newMockSchedulerHosts([]string{"host-1"})
 
-	c := newController(t, fakeClient, Config{SchedulerURL: srv.URL})
+	c := newController(t, fakeClient, Config{}, scheduler)
 	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
 	flavor := compute.FlavorInGroup{Name: "test-flavor", MemoryMB: memMB}
 
@@ -1317,32 +1342,23 @@ func TestProbeScheduler_SetsCapacityProbeIntent(t *testing.T) {
 	scheme := newTestScheme(t)
 	hv := newHypervisor("host-1", "az-a", 4096*1024*1024)
 
-	var capturedReq schedulerapi.ExternalSchedulerRequest
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := json.NewDecoder(r.Body).Decode(&capturedReq); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		json.NewEncoder(w).Encode(schedulerapi.ExternalSchedulerResponse{Hosts: []string{"host-1"}}) //nolint:errcheck
-	}))
-	defer srv.Close()
+	// Capture the request the scheduler receives so we can assert the probe
+	// intent and project are set.
+	var capturedReq sched.SchedulerRequest
+	captured := captureScheduler(&capturedReq, []string{"host-1"})
 
-	c := NewController(fake.NewClientBuilder().WithScheme(scheme).Build(), Config{SchedulerURL: srv.URL}, nil)
+	c := NewController(fake.NewClientBuilder().WithScheme(scheme).Build(), Config{}, nil, captured)
 	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
 	flavor := compute.FlavorInGroup{Name: "test-flavor", MemoryMB: 4096}
 
 	if _, _, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "test-pipeline", hvByName, true, nil); err != nil {
 		t.Fatalf("probeScheduler failed: %v", err)
 	}
-	hint, err := capturedReq.Spec.Data.GetSchedulerHintStr("_nova_check_type")
-	if err != nil {
-		t.Fatalf("failed to get _nova_check_type hint: %v", err)
+	if capturedReq.Intent != schedulerapi.CapacityProbeIntent {
+		t.Errorf("capacity probe must set Intent=%q, got %q", schedulerapi.CapacityProbeIntent, capturedReq.Intent)
 	}
-	if hint != string(schedulerapi.CapacityProbeIntent) {
-		t.Errorf("capacity probe must set _nova_check_type=%q, got %q", schedulerapi.CapacityProbeIntent, hint)
-	}
-	if capturedReq.Spec.Data.ProjectID != "cortex-capacity-probe" {
-		t.Errorf("capacity probe must send ProjectID cortex-capacity-probe, got %q", capturedReq.Spec.Data.ProjectID)
+	if capturedReq.ProjectID != "cortex-capacity-probe" {
+		t.Errorf("capacity probe must send ProjectID cortex-capacity-probe, got %q", capturedReq.ProjectID)
 	}
 }
 
@@ -1367,16 +1383,14 @@ func TestReconcile_ReactsToKnowledgeChange(t *testing.T) {
 		WithStatusSubresource(&v1alpha1.FlavorGroupCapacity{}, &v1alpha1.Knowledge{}).
 		Build()
 
-	schedulerServer := newMockSchedulerServer(t, []string{"host-1"})
-	defer schedulerServer.Close()
+	scheduler := newMockSchedulerHosts([]string{"host-1"})
 
 	r := NewController(fakeClient, Config{
-		SchedulerURL:         schedulerServer.URL,
 		TotalPipeline:        "kvm-report-capacity",
 		PlaceablePipeline:    "kvm-general-purpose",
 		ReconcileInterval:    metav1.Duration{Duration: 5 * time.Minute},
 		MinReconcileInterval: metav1.Duration{Duration: 30 * time.Second},
-	}, nil)
+	}, nil, scheduler)
 
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: coalescedKey}}
 	result, err := r.Reconcile(context.Background(), req)
@@ -1418,17 +1432,15 @@ func TestReconcile_MinIntervalEarlyReturn(t *testing.T) {
 		WithStatusSubresource(&v1alpha1.FlavorGroupCapacity{}, &v1alpha1.Knowledge{}).
 		Build()
 
-	schedulerServer := newMockSchedulerServer(t, []string{"host-1"})
-	defer schedulerServer.Close()
+	scheduler := newMockSchedulerHosts([]string{"host-1"})
 
 	minInterval := 30 * time.Second
 	r := NewController(fakeClient, Config{
-		SchedulerURL:         schedulerServer.URL,
 		TotalPipeline:        "kvm-report-capacity",
 		PlaceablePipeline:    "kvm-general-purpose",
 		ReconcileInterval:    metav1.Duration{Duration: 5 * time.Minute},
 		MinReconcileInterval: metav1.Duration{Duration: minInterval},
-	}, nil)
+	}, nil, scheduler)
 
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: coalescedKey}}
 

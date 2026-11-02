@@ -416,6 +416,12 @@ func main() {
 		commitmentsAPI.Init(mux, metrics.Registry, ctrl.Log.WithName("commitments-api"))
 	}
 
+	// novaScheduler is the shared in-process scheduler. Built when the
+	// nova-pipeline-controllers are enabled and consumed in-process by the Nova
+	// HTTP API and the reservation/commitment/capacity/failover controllers (which
+	// must run in the same process — see the cortex-nova-scheduling deployment).
+	var novaScheduler *compute.Scheduler
+
 	if slices.Contains(mainConfig.EnabledControllers, "nova-pipeline-controllers") {
 		featureGates := conf.GetConfigOrDie[nova.FeatureGates]()
 		noHostFoundCounter := crs.NewNoHostFoundCounter()
@@ -435,7 +441,7 @@ func main() {
 		// Shared in-process scheduler: owns the scheduling lock and runs the
 		// pipeline. The Nova HTTP API and the reservation controllers call it
 		// directly (no self-directed HTTP).
-		novaScheduler := compute.NewScheduler(filterWeigherController, nova.NewCandidateGatherer(multiclusterClient))
+		novaScheduler = compute.NewScheduler(filterWeigherController, nova.NewCandidateGatherer(multiclusterClient))
 		vmHandler := &nova.VirtualMachineHandler{Client: multiclusterClient}
 		crRecorder := crs.Recorder{
 			Client:             multiclusterClient,
@@ -609,10 +615,15 @@ func main() {
 	if slices.Contains(mainConfig.EnabledControllers, "committed-resource-reservations-controller") {
 		setupLog.Info("enabling controller", "controller", "committed-resource-reservations-controller")
 
+		if novaScheduler == nil {
+			setupLog.Error(nil, "committed-resource-reservations-controller requires nova-pipeline-controllers (in-process scheduler) to be enabled")
+			os.Exit(1)
+		}
 		if err := (&commitments.CommitmentReservationController{
-			Client: multiclusterClient,
-			Scheme: mgr.GetScheme(),
-			Conf:   commitmentsConfig.ReservationController,
+			Client:    multiclusterClient,
+			Scheme:    mgr.GetScheme(),
+			Conf:      commitmentsConfig.ReservationController,
+			Scheduler: novaScheduler,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "CommitmentReservation")
 			os.Exit(1)
@@ -730,9 +741,10 @@ func main() {
 			setupLog.Error(nil, "failover-reservations-controller requires datasourceName to be configured")
 			os.Exit(1)
 		}
-
-		// The scheduler client calls the nova external scheduler API to get placement decisions
-		schedulerClient := reservations.NewSchedulerClient(failoverConfig.SchedulerURL)
+		if novaScheduler == nil {
+			setupLog.Error(nil, "failover-reservations-controller requires nova-pipeline-controllers (in-process scheduler) to be enabled")
+			os.Exit(1)
+		}
 
 		failoverMonitor := failover.NewFailoverMonitor()
 		if err := metrics.Registry.Register(failoverMonitor); err != nil {
@@ -764,7 +776,7 @@ func main() {
 				multiclusterClient,
 				vmSource,
 				failoverConfig,
-				schedulerClient,
+				novaScheduler,
 				failoverMonitor,
 			)
 
@@ -776,7 +788,6 @@ func main() {
 
 			setupLog.Info("failover-reservations-controller starting",
 				"datasourceName", failoverConfig.DatasourceName,
-				"schedulerURL", failoverConfig.SchedulerURL,
 				"reconcileInterval", failoverConfig.ReconcileInterval,
 				"revalidationInterval", failoverConfig.RevalidationInterval)
 
@@ -788,7 +799,6 @@ func main() {
 		}
 		setupLog.Info("failover-reservations-controller registered",
 			"datasourceName", failoverConfig.DatasourceName,
-			"schedulerURL", failoverConfig.SchedulerURL,
 			"reconcileInterval", failoverConfig.ReconcileInterval,
 			"revalidationInterval", failoverConfig.RevalidationInterval,
 			"trustHypervisorLocation", failoverConfig.TrustHypervisorLocation,
@@ -828,18 +838,21 @@ func main() {
 			os.Exit(1)
 		}
 
+		if novaScheduler == nil {
+			setupLog.Error(nil, "capacity-controller requires nova-pipeline-controllers (in-process scheduler) to be enabled")
+			os.Exit(1)
+		}
 		capacityMonitor := capacity.NewMonitor(multiclusterClient)
 		if err := metrics.Registry.Register(&capacityMonitor); err != nil {
 			setupLog.Error(err, "failed to register capacity monitor metrics, continuing without metrics")
 		}
 
-		if err := capacity.NewController(multiclusterClient, capacityConfig, commitmentsVMSource).
+		if err := capacity.NewController(multiclusterClient, capacityConfig, commitmentsVMSource, novaScheduler).
 			SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "capacity")
 			os.Exit(1)
 		}
 		setupLog.Info("capacity-controller registered",
-			"schedulerURL", capacityConfig.SchedulerURL,
 			"reconcileInterval", capacityConfig.ReconcileInterval,
 			"minReconcileInterval", capacityConfig.MinReconcileInterval,
 			"totalPipeline", capacityConfig.TotalPipeline,
