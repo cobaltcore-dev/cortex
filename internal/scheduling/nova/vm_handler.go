@@ -13,6 +13,7 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	vmv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -36,15 +37,19 @@ type VirtualMachineHandler struct {
 // Upsert creates or patches the VirtualMachine resource described by the
 // scheduling result and request. Region and AZ are immutable on the CRD and only
 // written on create; mutable fields (target host, cortex spec, labels) are
-// patched on updates. The explanation and intent are recorded on the VM's cortex
-// spec.
-func (h *VirtualMachineHandler) Upsert(ctx context.Context, result compute.SchedulerResult, explanation string, request api.ExternalSchedulerRequest, intent v1alpha1.SchedulingIntent) error {
+// patched on updates. A human-readable explanation of the result and the intent
+// are recorded on the VM's cortex spec.
+func (h *VirtualMachineHandler) Upsert(ctx context.Context, result compute.SchedulerResult, request api.ExternalSchedulerRequest, intent v1alpha1.SchedulingIntent) error {
 	log := ctrl.LoggerFrom(ctx)
 
 	if result.TargetHost == nil {
 		log.V(1).Info("skipping virtual machine upsert, no target host in result")
 		return nil
 	}
+
+	// The explanation is a VM-creation concern, so it is generated here from the
+	// pipeline result and recorded on the VM's cortex spec.
+	explanation := lib.GenerateExplanation(&result, nil)
 
 	// We derive hierarchical location information (region and az) from the
 	// target host (i.e. the first host in the list). This assumes that all

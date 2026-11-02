@@ -81,7 +81,7 @@ func TestFilterWeigherPipelineController_Schedule(t *testing.T) {
 				controller.Pipelines["test-pipeline"] = initResult.Pipeline
 			}
 
-			result, explanation, err := controller.Schedule(t.Context(), tt.pipelineName, request)
+			result, err := controller.Schedule(t.Context(), tt.pipelineName, request)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -92,9 +92,6 @@ func TestFilterWeigherPipelineController_Schedule(t *testing.T) {
 			if !tt.expectError {
 				if len(result.OrderedHosts) == 0 {
 					t.Error("Expected ordered hosts but got none")
-				}
-				if explanation == "" {
-					t.Error("Expected a non-empty explanation")
 				}
 			}
 		})

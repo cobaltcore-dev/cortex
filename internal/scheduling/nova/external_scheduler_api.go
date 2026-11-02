@@ -292,8 +292,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		case schedReq.HypervisorFamily != compute.HypervisorFamilyKVM:
 			logger.V(1).Info("skipping virtual machine creation, unsupported hypervisor type", "instanceUUID", requestData.Spec.Data.InstanceUUID)
 		default:
-			explanation := scheduling.GenerateExplanation(&out.Result, nil)
-			if upsertErr := httpAPI.vmHandler.Upsert(ctx, out.Result, explanation, requestData, intent); upsertErr != nil {
+			if upsertErr := httpAPI.vmHandler.Upsert(ctx, out.Result, requestData, intent); upsertErr != nil {
 				if httpAPI.featureGates.VirtualMachineCreationMandatory {
 					return fmt.Errorf("failed to upsert virtual machine resource: %w", upsertErr)
 				}

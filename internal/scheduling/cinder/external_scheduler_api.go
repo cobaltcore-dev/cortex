@@ -21,10 +21,10 @@ import (
 
 var log = logf.Log.WithName("cinder-scheduler-api")
 
-// Scheduler runs a cinder pipeline for a request and returns the result and a
-// human-readable explanation. *FilterWeigherPipelineController satisfies it.
+// Scheduler runs a cinder pipeline for a request and returns the result.
+// *FilterWeigherPipelineController satisfies it.
 type Scheduler interface {
-	Schedule(ctx context.Context, pipelineName string, request api.ExternalSchedulerRequest) (scheduling.PipelineResult, string, error)
+	Schedule(ctx context.Context, pipelineName string, request api.ExternalSchedulerRequest) (scheduling.PipelineResult, error)
 }
 
 type HTTPAPI interface {
@@ -132,7 +132,7 @@ func (httpAPI *httpAPI) CinderExternalScheduler(w http.ResponseWriter, r *http.R
 		logger.V(1).Info("inferred pipeline name", "pipeline", requestData.Pipeline)
 	}
 
-	result, _, err := httpAPI.scheduler.Schedule(r.Context(), requestData.Pipeline, requestData)
+	result, err := httpAPI.scheduler.Schedule(r.Context(), requestData.Pipeline, requestData)
 	if err != nil {
 		c.Respond(logger, http.StatusInternalServerError, err, fmt.Sprintf("failed to process scheduling decision: %v", err))
 		return

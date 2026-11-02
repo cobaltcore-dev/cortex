@@ -18,14 +18,14 @@ import (
 )
 
 type mockScheduler struct {
-	scheduleFunc func(ctx context.Context, pipelineName string, request cinderapi.ExternalSchedulerRequest) (lib.PipelineResult, string, error)
+	scheduleFunc func(ctx context.Context, pipelineName string, request cinderapi.ExternalSchedulerRequest) (lib.PipelineResult, error)
 }
 
-func (m *mockScheduler) Schedule(ctx context.Context, pipelineName string, request cinderapi.ExternalSchedulerRequest) (lib.PipelineResult, string, error) {
+func (m *mockScheduler) Schedule(ctx context.Context, pipelineName string, request cinderapi.ExternalSchedulerRequest) (lib.PipelineResult, error) {
 	if m.scheduleFunc != nil {
 		return m.scheduleFunc(ctx, pipelineName, request)
 	}
-	return lib.PipelineResult{}, "", nil
+	return lib.PipelineResult{}, nil
 }
 
 func TestNewAPI(t *testing.T) {
@@ -190,8 +190,8 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			scheduler := &mockScheduler{
-				scheduleFunc: func(ctx context.Context, pipelineName string, request cinderapi.ExternalSchedulerRequest) (lib.PipelineResult, string, error) {
-					return tt.scheduleResult, "", tt.scheduleErr
+				scheduleFunc: func(ctx context.Context, pipelineName string, request cinderapi.ExternalSchedulerRequest) (lib.PipelineResult, error) {
+					return tt.scheduleResult, tt.scheduleErr
 				},
 			}
 
@@ -286,10 +286,10 @@ func TestHTTPAPI_CinderExternalScheduler_InfersPipeline(t *testing.T) {
 	var capturedPipeline string
 	var capturedRequest cinderapi.ExternalSchedulerRequest
 	scheduler := &mockScheduler{
-		scheduleFunc: func(ctx context.Context, pipelineName string, request cinderapi.ExternalSchedulerRequest) (lib.PipelineResult, string, error) {
+		scheduleFunc: func(ctx context.Context, pipelineName string, request cinderapi.ExternalSchedulerRequest) (lib.PipelineResult, error) {
 			capturedPipeline = pipelineName
 			capturedRequest = request
-			return lib.PipelineResult{OrderedHosts: []string{"host1"}}, "", nil
+			return lib.PipelineResult{OrderedHosts: []string{"host1"}}, nil
 		},
 	}
 

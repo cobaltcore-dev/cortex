@@ -50,9 +50,9 @@ func (c *FilterWeigherPipelineController) Reconcile(context.Context, ctrl.Reques
 	return ctrl.Result{}, nil
 }
 
-// Schedule runs the named pipeline for the given request and returns the result
-// plus a human-readable explanation. It serializes runs with the process lock.
-func (c *FilterWeigherPipelineController) Schedule(ctx context.Context, pipelineName string, request api.ExternalSchedulerRequest) (lib.PipelineResult, string, error) {
+// Schedule runs the named pipeline for the given request and returns the
+// result. It serializes runs with the process lock.
+func (c *FilterWeigherPipelineController) Schedule(ctx context.Context, pipelineName string, request api.ExternalSchedulerRequest) (lib.PipelineResult, error) {
 	c.processMu.Lock()
 	defer c.processMu.Unlock()
 	log := ctrl.LoggerFrom(ctx)
@@ -61,23 +61,16 @@ func (c *FilterWeigherPipelineController) Schedule(ctx context.Context, pipeline
 	pipeline, ok := c.GetPipeline(pipelineName)
 	if !ok {
 		log.Error(nil, "pipeline not found or not ready", "pipelineName", pipelineName)
-		return lib.PipelineResult{}, "", fmt.Errorf("pipeline not found or not ready: %q", pipelineName)
+		return lib.PipelineResult{}, fmt.Errorf("pipeline not found or not ready: %q", pipelineName)
 	}
 
 	result, err := pipeline.Run(request)
-	// A human-readable explanation of the decision for downstream consumers. On
-	// error the result is zero and the explanation carries the failure reason.
-	var resultPtr *lib.PipelineResult
-	if err == nil {
-		resultPtr = &result
-	}
-	explanation := lib.GenerateExplanation(resultPtr, err)
 	if err != nil {
 		log.Error(err, "failed to run pipeline")
-		return lib.PipelineResult{}, explanation, err
+		return lib.PipelineResult{}, err
 	}
 	log.Info("decision processed successfully", "duration", time.Since(startedAt))
-	return result, explanation, nil
+	return result, nil
 }
 
 // The base controller will delegate the pipeline creation down to this method.
