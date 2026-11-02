@@ -413,17 +413,21 @@ type ReservationStatus struct {
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".metadata.labels['reservations\\.cortex\\.cloud/type']"
 // +kubebuilder:printcolumn:name="Host",type="string",JSONPath=".status.host"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
-// +kubebuilder:printcolumn:name="ResourceGroup",type="string",JSONPath=".spec.committedResourceReservation.resourceGroup",priority=1
-// +kubebuilder:printcolumn:name="HA ResourceGroup",type="string",JSONPath=".spec.failoverReservation.resourceGroup",priority=1
-// +kubebuilder:printcolumn:name="Project",type="string",JSONPath=".spec.committedResourceReservation.projectID",priority=1
+// +kubebuilder:printcolumn:name="ObservedGen",type="integer",JSONPath=".status.conditions[?(@.type=='Ready')].observedGeneration",priority=1
+// +kubebuilder:printcolumn:name="ResourceGroup",type="string",JSONPath=".spec.*.resourceGroup",priority=1
+// +kubebuilder:printcolumn:name="ResourceName",type="string",JSONPath=".spec.*.resourceName",priority=1
+// +kubebuilder:printcolumn:name="Project",type="string",JSONPath=".spec.*.projectID",priority=1
+// +kubebuilder:printcolumn:name="CommitmentID",type="string",JSONPath=".spec.committedResourceReservation.commitmentUUID",priority=1
 // +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone",priority=1
 // +kubebuilder:printcolumn:name="StartTime",type="string",JSONPath=".spec.startTime",priority=1
 // +kubebuilder:printcolumn:name="EndTime",type="string",JSONPath=".spec.endTime",priority=1
 // +kubebuilder:printcolumn:name="Resources",type="string",JSONPath=".spec.resources",priority=1
 // +kubebuilder:printcolumn:name="LastChanged",type="date",JSONPath=".status.failoverReservation.lastChanged",priority=1
 // +kubebuilder:printcolumn:name="AcknowledgedAt",type="date",JSONPath=".status.failoverReservation.acknowledgedAt",priority=1
-// +kubebuilder:printcolumn:name="CR Allocations",type="string",JSONPath=".status.committedResourceReservation.allocations",priority=1
+// +kubebuilder:printcolumn:name="CR alloc VMs",type="string",JSONPath=".status.committedResourceReservation.allocations.*.objectRef.name",priority=1
+// +kubebuilder:printcolumn:name="CR alloc resources",type="string",JSONPath=".status.committedResourceReservation.allocations.*.resources",priority=1
 // +kubebuilder:printcolumn:name="HA Allocations",type="string",JSONPath=".status.failoverReservation.allocations",priority=1
+// +kubebuilder:printcolumn:name="CR CandidateVM",type="string",JSONPath=".metadata.annotations['reservations\\.cortex\\.cloud/candidate-allocation']",priority=1
 
 // Reservation is the Schema for the reservations API
 type Reservation struct {

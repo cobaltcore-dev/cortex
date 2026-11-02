@@ -24,16 +24,24 @@ spec:
     - jsonPath: .status.conditions[?(@.type=='Ready')].status
       name: Ready
       type: string
-    - jsonPath: .spec.committedResourceReservation.resourceGroup
+    - jsonPath: .status.conditions[?(@.type=='Ready')].observedGeneration
+      name: ObservedGen
+      priority: 1
+      type: integer
+    - jsonPath: .spec.*.resourceGroup
       name: ResourceGroup
       priority: 1
       type: string
-    - jsonPath: .spec.failoverReservation.resourceGroup
-      name: HA ResourceGroup
+    - jsonPath: .spec.*.resourceName
+      name: ResourceName
       priority: 1
       type: string
-    - jsonPath: .spec.committedResourceReservation.projectID
+    - jsonPath: .spec.*.projectID
       name: Project
+      priority: 1
+      type: string
+    - jsonPath: .spec.committedResourceReservation.commitmentUUID
+      name: CommitmentID
       priority: 1
       type: string
     - jsonPath: .spec.availabilityZone
@@ -60,12 +68,20 @@ spec:
       name: AcknowledgedAt
       priority: 1
       type: date
-    - jsonPath: .status.committedResourceReservation.allocations
-      name: CR Allocations
+    - jsonPath: .status.committedResourceReservation.allocations.*.objectRef.name
+      name: CR alloc VMs
+      priority: 1
+      type: string
+    - jsonPath: .status.committedResourceReservation.allocations.*.resources
+      name: CR alloc resources
       priority: 1
       type: string
     - jsonPath: .status.failoverReservation.allocations
       name: HA Allocations
+      priority: 1
+      type: string
+    - jsonPath: .metadata.annotations['reservations\.cortex\.cloud/candidate-allocation']
+      name: CR CandidateVM
       priority: 1
       type: string
     name: v1alpha1
