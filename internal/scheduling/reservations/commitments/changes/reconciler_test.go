@@ -1444,7 +1444,7 @@ func TestCRTReconciler_DryRunCleanup(t *testing.T) {
 				setCRReadyStaleGen(t, c, "commitment-uuid-dry4")
 				backdateRollbackStartedAt(t, c, txName, 1*time.Second)
 			},
-			wantPhase:             v1alpha1.ChangePhaseRejected,
+			wantPhase:             v1alpha1.ChangePhaseAccepted,
 			wantFinishedReason:    v1alpha1.ChangeReasonRollbackFailed,
 			wantProgressingStatus: metav1.ConditionFalse,
 			wantProgressingReason: v1alpha1.ChangeReasonRetryExhausted,
