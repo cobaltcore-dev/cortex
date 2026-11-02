@@ -105,3 +105,9 @@ func (e *VROpsHostsystemContentionShortTermExtractor) Extract() ([]plugins.Featu
 
 	return e.Extracted(features)
 }
+
+func init() {
+	plugins.Index["vrops_hostsystem_contention_short_term_extractor"] = func() plugins.FeatureExtractor {
+		return &VROpsHostsystemContentionShortTermExtractor{}
+	}
+}

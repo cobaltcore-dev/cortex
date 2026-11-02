@@ -220,13 +220,12 @@ func (mc *mockController) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI
 	// initialize and register it now.
 	if dependenciesReadyTotal == dependenciesTotal && !registered {
 		log.Info("kpi: registering new kpi", "name", obj.Name)
-		var ok bool
-		registeredKPI, ok = mc.supportedKPIs[obj.Spec.Impl]
+		newKPI, ok := mc.supportedKPIs[obj.Spec.Impl]
 		if !ok {
 			return fmt.Errorf("kpi %s not supported", obj.Name)
 		}
 		// Create a wrapper that logs operations (equivalent to kpilogger)
-		registeredKPI = &mockKPILogger{kpi: registeredKPI}
+		registeredKPI = &mockKPILogger{kpi: newKPI()}
 		// Get joint database connection for all dependencies using mock method.
 		jointDB, err := mc.getJointDB(ctx,
 			obj.Spec.Dependencies.Datasources,
@@ -465,8 +464,8 @@ func TestController_Reconcile(t *testing.T) {
 			baseController := Controller{
 				Client: fakeClient,
 				Config: ControllerConfig{SchedulingDomain: "test-operator"},
-				supportedKPIs: map[string]plugins.KPI{
-					"test_kpi": mockKPIInstance,
+				supportedKPIs: map[string]func() plugins.KPI{
+					"test_kpi": func() plugins.KPI { return mockKPIInstance },
 				},
 				registeredKPIsByResourceName: make(map[string]plugins.KPI),
 			}
@@ -545,8 +544,8 @@ func TestController_Reconcile_KPIDeleted(t *testing.T) {
 	controller := &Controller{
 		Client: fakeClient,
 		Config: ControllerConfig{SchedulingDomain: "test-operator"},
-		supportedKPIs: map[string]plugins.KPI{
-			"test_kpi": mockKPIInstance,
+		supportedKPIs: map[string]func() plugins.KPI{
+			"test_kpi": func() plugins.KPI { return mockKPIInstance },
 		},
 		registeredKPIsByResourceName: map[string]plugins.KPI{
 			"deleted-kpi": mockKPIInstance,
@@ -758,8 +757,8 @@ func TestController_handleKPIChange(t *testing.T) {
 			mockKPIInstance := &mockKPI{name: "test_kpi", initError: tt.mockInitError}
 			baseController := Controller{
 				Client: fakeClient,
-				supportedKPIs: map[string]plugins.KPI{
-					"test_kpi": mockKPIInstance,
+				supportedKPIs: map[string]func() plugins.KPI{
+					"test_kpi": func() plugins.KPI { return mockKPIInstance },
 				},
 				registeredKPIsByResourceName: make(map[string]plugins.KPI),
 			}
@@ -970,8 +969,8 @@ func TestController_InitAllKPIs(t *testing.T) {
 	baseController := Controller{
 		Client: fakeClient,
 		Config: ControllerConfig{SchedulingDomain: "test-operator"},
-		supportedKPIs: map[string]plugins.KPI{
-			"test_kpi": mockKPIInstance,
+		supportedKPIs: map[string]func() plugins.KPI{
+			"test_kpi": func() plugins.KPI { return mockKPIInstance },
 		},
 	}
 

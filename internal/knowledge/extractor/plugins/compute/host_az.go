@@ -31,3 +31,9 @@ var hostAZQuery string
 func (e *HostAZExtractor) Extract() ([]plugins.Feature, error) {
 	return e.ExtractSQL(hostAZQuery)
 }
+
+func init() {
+	plugins.Index["host_az_extractor"] = func() plugins.FeatureExtractor {
+		return &HostAZExtractor{}
+	}
+}

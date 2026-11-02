@@ -104,3 +104,7 @@ func (k *VMLifeSpanKPI) collectVMBuckets(ch chan<- prometheus.Metric, deleted bo
 		)
 	}
 }
+
+func init() {
+	plugins.Index["vm_life_span_kpi"] = func() plugins.KPI { return &VMLifeSpanKPI{} }
+}

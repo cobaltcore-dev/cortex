@@ -133,4 +133,4 @@ Placement API shim.
 
 ## Next
 
-[Prev: Failover reservations](03-failover-reservations.md) · [Next: The Placement API shim »](05-placement-api-shim.md)
+[Prev: Failover host reservations](04-failover-host-reservations.md) · [Next: The Placement API shim »](06-placement-api-shim.md)

@@ -193,3 +193,7 @@ func labelValueForSnakeKey(snakeKey string, labels map[string]string) string {
 	}
 	return ""
 }
+
+func init() {
+	plugins.Index["multicluster_object_count_kpi"] = func() plugins.KPI { return &MulticlusterObjectCountKPI{} }
+}

@@ -6,7 +6,7 @@
 
 # The `supervisor` package
 
-The [Placement API shim](../03-reservations-and-inventory/05-placement-api-shim.md) sits on a hot path:
+The [Placement API shim](../03-reservations-and-inventory/06-placement-api-shim.md) sits on a hot path:
 schedulers hit it constantly, and it forwards most of that traffic to upstream OpenStack Placement. That
 request path must stay up *even when the shim's Kubernetes controller-manager cannot* — for instance when
 it loses connectivity to a local or remote apiserver. `pkg/shim/supervisor` is what decouples the two, so
@@ -56,7 +56,7 @@ So a lost apiserver connection becomes a *degraded* state (the manager loops, re
 > by the pod going unready.
 
 The package is deliberately shim-agnostic so future shims can reuse it; today the
-[Placement API shim](../03-reservations-and-inventory/05-placement-api-shim.md) is its user, enabled by
+[Placement API shim](../03-reservations-and-inventory/06-placement-api-shim.md) is its user, enabled by
 `--self-heal` (on by default). It is the resilience half of the shim's design: the shim page explains
 *what* the shim serves, this package explains *why a control-plane hiccup does not stop it serving*. That
 closes the tour of `pkg/` — and the book. From here, the code and its generated CRD/godoc reference are

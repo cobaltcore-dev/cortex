@@ -134,7 +134,7 @@ warning and then ignored** at run time, so a pipeline can safely reference a ste
 add without breaking the rollout. What the webhook *does* reject is a known step whose parameters are
 invalid, or a step of the wrong kind for the pipeline `type` (a detector in a filter-weigher pipeline, or
 a filter/weigher in a detector pipeline), or an unknown `type`. The next section shows both outcomes in
-practice. (Knowledge extractors and KPIs use hand-maintained maps instead — see
+practice. (Knowledge extractors, KPIs, and datasources use the same `init()` self-registration pattern — see
 [Architecture at a glance](../01-getting-started/02-architecture-at-a-glance.md).)
 
 ## Inspecting and editing a pipeline

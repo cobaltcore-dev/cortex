@@ -39,6 +39,13 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack"
+	// Register all supported OpenStack syncers through their func init().
+	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/cinder"
+	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
+	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/limes"
+	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/manila"
+	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
+	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/placement"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/prometheus"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor"
@@ -52,13 +59,13 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/manila"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
-	novafilters "github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/capacity"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	commitmentsapi "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments/api"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failoverhost"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/inflight"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/quota"
 	"github.com/cobaltcore-dev/cortex/pkg/cache"
@@ -397,12 +404,6 @@ func main() {
 	detectorPipelineMonitor := schedulinglib.NewDetectorPipelineMonitor()
 	metrics.Registry.MustRegister(&detectorPipelineMonitor)
 
-	// Filter-specific metrics that don't fit the generic per-step monitor (e.g.
-	// custom labels). Register them globally so they're available wherever the
-	// filter runs.
-	novafilters.QuotaEnforcementMetricsSingleton = novafilters.NewQuotaEnforcementMetrics()
-	metrics.Registry.MustRegister(novafilters.QuotaEnforcementMetricsSingleton)
-
 	// Initialize commitments API for LIQUID interface (Postgres-backed usage reporting).
 	commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
 	var commitmentsVMSource reservations.VMSource
@@ -602,8 +603,6 @@ func main() {
 
 	if slices.Contains(mainConfig.EnabledControllers, "committed-resource-reservations-controller") {
 		setupLog.Info("enabling controller", "controller", "committed-resource-reservations-controller")
-		monitor := reservations.NewMonitor(multiclusterClient)
-		metrics.Registry.MustRegister(&monitor)
 
 		if err := (&commitments.CommitmentReservationController{
 			Client: multiclusterClient,
@@ -790,6 +789,30 @@ func main() {
 			"trustHypervisorLocation", failoverConfig.TrustHypervisorLocation,
 			"maxVMsToProcess", failoverConfig.MaxVMsToProcess,
 			"vmSelectionRotationInterval", failoverConfig.VMSelectionRotationInterval)
+	}
+	if slices.Contains(mainConfig.EnabledControllers, "failover-host-reservations-controller") {
+		setupLog.Info("enabling controller", "controller", "failover-host-reservations-controller")
+		failoverHostConfig := conf.GetConfigOrDie[failoverhost.Config]().Failover.Hosts
+		failoverHostMonitor := failoverhost.NewMonitor()
+		if err := metrics.Registry.Register(failoverHostMonitor); err != nil {
+			setupLog.Error(err, "failed to register failover host monitor metrics, continuing without metrics")
+			failoverHostMonitor = nil
+		}
+		controller := &failoverhost.Controller{
+			Client:  multiclusterClient,
+			Config:  failoverHostConfig,
+			Monitor: failoverHostMonitor,
+		}
+		if err := controller.SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller",
+				"controller", "failover-host-reservations-controller")
+			os.Exit(1)
+		}
+		setupLog.Info("failover-host-reservations-controller registered",
+			"ratio", failoverHostConfig.Ratio,
+			"minimum", failoverHostConfig.Minimum,
+			"generationInterval", failoverHostConfig.GenerationInterval,
+			"externalSchedulerURL", failoverHostConfig.ExternalSchedulerURL)
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "capacity-controller") {
 		setupLog.Info("enabling controller", "controller", "capacity-controller")

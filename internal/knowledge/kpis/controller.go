@@ -11,6 +11,11 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
+	// Register all supported kpis through their func init().
+	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/compute"
+	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/deployment"
+	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/infrastructure"
+	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/storage"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	corev1 "k8s.io/api/core/v1"
@@ -42,8 +47,9 @@ type Controller struct {
 	// Configuration for the controller.
 	Config ControllerConfig
 
-	// The supported kpis to manage.
-	supportedKPIs map[string]plugins.KPI
+	// The supported kpis to manage, keyed by name. Each value constructs a
+	// fresh kpi instance.
+	supportedKPIs map[string]func() plugins.KPI
 	// Registered kpis by name.
 	registeredKPIsByResourceName map[string]plugins.KPI
 }
@@ -242,12 +248,11 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 	// initialize and register it now.
 	if dependenciesReadyTotal == dependenciesTotal && !registered {
 		log.Info("kpi: registering new kpi", "name", obj.Name)
-		var ok bool
-		registeredKPI, ok = c.supportedKPIs[obj.Spec.Impl]
+		newKPI, ok := c.supportedKPIs[obj.Spec.Impl]
 		if !ok {
 			return fmt.Errorf("kpi %s not supported", obj.Name)
 		}
-		registeredKPI = &kpilogger{kpi: registeredKPI}
+		registeredKPI = &kpilogger{kpi: newKPI()}
 		// Get joint database connection for all dependencies.
 		jointDB, err := c.getJointDB(ctx, obj.Spec.Dependencies.Datasources)
 		if err != nil {
@@ -437,7 +442,7 @@ func (c *Controller) handleKnowledgeDeleted(
 
 func (c *Controller) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	if c.supportedKPIs == nil { // This can be overridden for tests.
-		c.supportedKPIs = supportedKPIs
+		c.supportedKPIs = plugins.Index
 	}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllKPIs)); err != nil {
 		return err

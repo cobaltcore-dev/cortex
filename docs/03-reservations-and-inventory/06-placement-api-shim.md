@@ -195,4 +195,4 @@ facts: the knowledge database.
 
 ## Next
 
-[Prev: Concurrency and in-flight reservations](04-concurrency-and-in-flight-reservations.md) · [Next: Chapter 4 — The knowledge database »](../04-knowledge-database/readme.md)
+[Prev: Concurrency and in-flight reservations](05-concurrency-and-in-flight-reservations.md) · [Next: Chapter 4 — The knowledge database »](../04-knowledge-database/readme.md)

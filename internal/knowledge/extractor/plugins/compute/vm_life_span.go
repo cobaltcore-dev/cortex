@@ -109,3 +109,9 @@ func (e *VMLifeSpanHistogramExtractor) Extract() ([]plugins.Feature, error) {
 	deletedVMLifeSpansBuckets = append(deletedVMLifeSpansBuckets, runningVMLifeSpansBuckets...)
 	return e.Extracted(deletedVMLifeSpansBuckets)
 }
+
+func init() {
+	plugins.Index["vm_life_span_histogram_extractor"] = func() plugins.FeatureExtractor {
+		return &VMLifeSpanHistogramExtractor{}
+	}
+}

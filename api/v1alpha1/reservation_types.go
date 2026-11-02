@@ -179,6 +179,17 @@ type FailoverHostReservationSpec struct {
 	// See Spec.TargetHost for the target host of the failover reservation.
 	// +kubebuilder:validation:Optional
 	SourceHosts []string `json:"sourceHosts,omitempty"`
+
+	// PartitionDescription is a short, human-readable label describing the
+	// failover partition this reservation belongs to: what distinguishes its
+	// hosts from other partitions (e.g. "spec.aggregates=[hana]") and which
+	// flavors the whole partition can run (e.g. "flavors: hana.4xl, hana.8xl
+	// (+3 more)"). It carries no scheduling semantics and exists purely to make a
+	// reservation understandable at a glance — in particular, which workloads a
+	// reserved host stands ready to absorb. See describePartition in the
+	// failoverhost controller.
+	// +kubebuilder:validation:Optional
+	PartitionDescription string `json:"partitionDescription,omitempty"`
 }
 
 // ReservationSpec defines the desired state of Reservation.

@@ -71,3 +71,7 @@ func (k *VMwareProjectNoisinessKPI) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstHistogram(k.projectNoisinessDesc, counts[key], sums[key], hist)
 	}
 }
+
+func init() {
+	plugins.Index["vmware_project_noisiness_kpi"] = func() plugins.KPI { return &VMwareProjectNoisinessKPI{} }
+}

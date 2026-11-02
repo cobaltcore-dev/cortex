@@ -6,6 +6,49 @@
 
 analytics_settings(False)
 
+# Guard against deploying to a shared/prod cluster by accident. Both `tilt up`
+# and `tilt down` evaluate this Tiltfile, so failing here aborts either one
+# before we touch the cluster (the kubectl calls below would otherwise hit it).
+#
+# The current kubectl context must be in the safe list, otherwise we bail out.
+# The defaults cover the common local clusters; extend the list for your own
+# throwaway clusters via TILT_SAFE_CONTEXTS (comma-separated), e.g.
+#   TILT_SAFE_CONTEXTS="my-dev-cluster,another-sandbox" tilt up
+DEFAULT_SAFE_CONTEXTS = [
+    'kind',
+    'kind-kind',
+    'docker-desktop',
+    'minikube',
+    'rancher-desktop',
+    'orbstack',
+    'k3d',
+    'colima',
+]
+
+safe_contexts = list(DEFAULT_SAFE_CONTEXTS)
+for ctx in os.getenv('TILT_SAFE_CONTEXTS', '').split(','):
+    ctx = ctx.strip()
+    if ctx:
+        safe_contexts.append(ctx)
+
+current_context = k8s_context()
+if current_context not in safe_contexts:
+    fail(
+        ('Refusing to run against kubectl context "{}": it is not in the safe ' +
+        'list ({}). This guards against accidentally deploying to a shared or ' +
+        'production cluster. Switch to a local/throwaway context, or add this ' +
+        'one via TILT_SAFE_CONTEXTS="{}".').format(
+            current_context,
+            ', '.join(safe_contexts),
+            current_context,
+        )
+    )
+
+# Tell Tilt the current context is allowed (we have already validated it above),
+# so its own built-in remote-cluster guard does not fire for e.g. k3d/colima
+# contexts added through TILT_SAFE_CONTEXTS.
+allow_k8s_contexts(current_context)
+
 # Use the ACTIVE_DEPLOYMENTS env var to select which Cortex bundles to deploy.
 ACTIVE_DEPLOYMENTS_ENV = os.getenv(
     'ACTIVE_DEPLOYMENTS',

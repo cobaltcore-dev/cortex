@@ -91,3 +91,7 @@ func (k *VMwareHostContentionKPI) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstHistogram(k.hostCPUContentionAvg, counts[key], sums[key], hist)
 	}
 }
+
+func init() {
+	plugins.Index["vmware_host_contention_kpi"] = func() plugins.KPI { return &VMwareHostContentionKPI{} }
+}

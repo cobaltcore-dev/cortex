@@ -292,3 +292,13 @@ func (m NetAppVolumeAggrLabelsMetric) With(n string, t time.Time, v float64) Pro
 	m.Value = v
 	return m
 }
+
+func init() {
+	Index["vrops_host_metric"] = newTypedSyncer[VROpsHostMetric]
+	Index["vrops_vm_metric"] = newTypedSyncer[VROpsVMMetric]
+	Index["node_exporter_metric"] = newTypedSyncer[NodeExporterMetric]
+	Index["netapp_aggregate_labels_metric"] = newTypedSyncer[NetAppAggregateLabelsMetric]
+	Index["netapp_node_metric"] = newTypedSyncer[NetAppNodeMetric]
+	Index["netapp_volume_aggregate_labels_metric"] = newTypedSyncer[NetAppVolumeAggrLabelsMetric]
+	Index["kvm_libvirt_domain_metric"] = newTypedSyncer[KVMDomainMetric]
+}

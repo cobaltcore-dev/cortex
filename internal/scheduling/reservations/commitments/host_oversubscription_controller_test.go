@@ -80,6 +80,26 @@ func TestComputeViolations(t *testing.T) {
 			wantViolation: true,
 			wantExcessGiB: 256,
 		},
+		{
+			name: "failover host reservation does not count toward oversubscription",
+			hv: hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{Name: "host-1"},
+				Status: hv1.HypervisorStatus{
+					EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+						hv1.ResourceMemory: testGiB(512),
+					},
+				},
+			},
+			slots: []v1alpha1.Reservation{{
+				Spec: v1alpha1.ReservationSpec{
+					// Full-host block, but FailoverHostReservation is not yet counted.
+					Type:       v1alpha1.ReservationTypeFailoverHost,
+					TargetHost: "host-1",
+					Resources:  map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(512)},
+				},
+				Status: v1alpha1.ReservationStatus{Host: "host-1"},
+			}},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
