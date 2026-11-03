@@ -23,7 +23,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 // HypervisorFamily is the coarse hypervisor family a request targets. It is the
@@ -111,10 +110,9 @@ type FlavorSpec struct {
 	// FlavorID is the flavor ID. Empty only affects the VM resource written by
 	// side effects.
 	FlavorID string
-	// Memory is the requested memory per instance, as a resource.Quantity in
-	// bytes. The zero value is a zero-memory instance to capacity/bin-pack steps
-	// (fits anywhere), so the adapter sets it (from Nova's memory_mb * 2^20).
-	Memory resource.Quantity
+	// MemoryMB is the requested memory per instance. 0 means a zero-memory
+	// instance to capacity/bin-pack steps (fits anywhere), so the adapter sets it.
+	MemoryMB uint64
 	// VCPUs is the requested vCPUs per instance. 0 means a zero-CPU instance to
 	// capacity/bin-pack steps (fits anywhere), so the adapter sets it.
 	VCPUs uint64

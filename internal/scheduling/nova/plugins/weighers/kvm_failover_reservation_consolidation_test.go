@@ -71,9 +71,9 @@ func newFailoverReservationRequest(resourceGroup string, hosts []string) compute
 		HypervisorFamily: compute.HypervisorFamilyKVM,
 		HypervisorType:   compute.HypervisorTypeQEMU,
 		Flavor: compute.FlavorSpec{
-			Name:   "m1.large",
-			VCPUs:  4,
-			Memory: *resource.NewQuantity(8192*(1<<20), resource.BinarySI),
+			Name:     "m1.large",
+			VCPUs:    4,
+			MemoryMB: 8192,
 		},
 		Hosts:   hostList,
 		Weights: weights,

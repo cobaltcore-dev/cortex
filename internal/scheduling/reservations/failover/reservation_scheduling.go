@@ -15,7 +15,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 // Pipeline names for failover reservation scheduling
@@ -143,9 +142,9 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		RequiredTraits:      requiredTraits,
 		ForbiddenTraits:     forbiddenTraits,
 		Flavor: compute.FlavorSpec{
-			Name:   resSpec.FlavorName,
-			VCPUs:  resSpec.VCPUs,
-			Memory: *resource.NewQuantity(int64(resSpec.MemoryMB)*(1<<20), resource.BinarySI), //nolint:gosec // flavor memory bounded by specs
+			Name:     resSpec.FlavorName,
+			VCPUs:    resSpec.VCPUs,
+			MemoryMB: resSpec.MemoryMB,
 		},
 	}
 
@@ -299,9 +298,9 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		RequiredTraits:      requiredTraits,
 		ForbiddenTraits:     forbiddenTraits,
 		Flavor: compute.FlavorSpec{
-			Name:   vm.FlavorName,
-			VCPUs:  vcpus,
-			Memory: *resource.NewQuantity(int64(memoryMB)*(1<<20), resource.BinarySI),
+			Name:     vm.FlavorName,
+			VCPUs:    vcpus,
+			MemoryMB: memoryMB,
 		},
 	}
 

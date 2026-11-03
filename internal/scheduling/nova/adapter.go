@@ -9,7 +9,6 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 // unsupportedCapabilityOps are the Nova extra-spec comparison operators the
@@ -70,9 +69,8 @@ func ToSchedulerRequest(
 		Name:     spec.Flavor.Data.Name,
 		FlavorID: spec.Flavor.Data.FlavorID,
 		VCPUs:    spec.Flavor.Data.VCPUs,
-		// Nova's memory_mb is in mebibytes (2^20 bytes).
-		Memory: *resource.NewQuantity(int64(spec.Flavor.Data.MemoryMB)*(1<<20), resource.BinarySI), //nolint:gosec // flavor memory bounded by Nova
-		Type:   toFlavorType(wire),
+		MemoryMB: spec.Flavor.Data.MemoryMB,
+		Type:     toFlavorType(wire),
 	}
 
 	// Hypervisor family + specific type.

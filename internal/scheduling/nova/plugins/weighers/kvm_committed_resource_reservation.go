@@ -72,7 +72,7 @@ func (s *KVMCommittedResourceReservationStep) Run(traceLog logr.Logger, request 
 	}
 
 	// Flavor memory in bytes for free-capacity check.
-	flavorMemoryBytes := request.Flavor.Memory.Value()
+	flavorMemoryBytes := int64(request.Flavor.MemoryMB) * 1024 * 1024 //nolint:gosec
 
 	var reservations v1alpha1.ReservationList
 	if err := s.Client.List(context.Background(), &reservations); err != nil {

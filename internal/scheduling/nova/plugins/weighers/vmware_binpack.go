@@ -187,7 +187,8 @@ func (s *VMwareBinpackStep) calcHostAllocation(hostUtilization compute.HostUtili
 // calcVMResources calculates the total resource requests for the VM to be scheduled.
 func (s *VMwareBinpackStep) calcVMResources(req sched.SchedulerRequest) map[corev1.ResourceName]resource.Quantity {
 	resources := make(map[corev1.ResourceName]resource.Quantity)
-	resourcesMemBytes := req.Flavor.Memory.Value() * int64(req.NumInstances) //nolint:gosec // instance count is bounded by Nova
+	resourcesMemBytes := int64(req.Flavor.MemoryMB) * (1 << 20) //nolint:gosec // memory values are bounded by Nova
+	resourcesMemBytes *= int64(req.NumInstances)                //nolint:gosec // instance count is bounded by Nova
 	resources[corev1.ResourceMemory] = *resource.
 		NewQuantity(resourcesMemBytes, resource.BinarySI)
 	resourcesCPU := int64(req.Flavor.VCPUs) //nolint:gosec // vCPU values are bounded by Nova

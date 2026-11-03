@@ -53,8 +53,8 @@ func makeQuotaEnforcementRequest(projectID, az, hwVersion string, memoryMB, numI
 		Intent:           intentFromHint(hints),
 		HardwareVersion:  hwVersion,
 		Flavor: compute.FlavorSpec{
-			VCPUs:  4,
-			Memory: *resource.NewQuantity(int64(memoryMB)*(1<<20), resource.BinarySI), //nolint:gosec // test code
+			VCPUs:    4,
+			MemoryMB: memoryMB,
 		},
 		Hosts: []compute.Host{
 			{ComputeHost: "host1"},

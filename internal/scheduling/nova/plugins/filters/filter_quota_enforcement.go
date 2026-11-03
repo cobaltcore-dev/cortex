@@ -6,6 +6,7 @@ package filters
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -153,11 +154,10 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request compute.Sched
 	if numInstances == 0 {
 		numInstances = 1
 	}
+	memoryMB := request.Flavor.MemoryMB
 	vcpus := request.Flavor.VCPUs
-	// Total requested RAM across all instances, converted to GiB (ceiling, so we
-	// never under-count headroom demand). Flavor.Memory is bytes per instance.
-	totalMemBytes := request.Flavor.Memory.Value() * int64(numInstances)
-	requestRAM := (totalMemBytes + (1 << 30) - 1) / (1 << 30)
+	// MB to GiB: using 1024 as divisor is slightly conservative (overestimates GiB needed).
+	requestRAM := int64(math.Ceil(float64(memoryMB*numInstances) / 1024.0))
 	requestCores := int64(vcpus * numInstances) //nolint:gosec // VCPUs from flavor specs, realistically bounded
 	requestInstances := int64(numInstances)
 

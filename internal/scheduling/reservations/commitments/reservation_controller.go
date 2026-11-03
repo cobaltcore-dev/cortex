@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -368,9 +367,9 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		AvailabilityZone:    availabilityZone,
 		DomainName:          domainName,
 		Flavor: compute.FlavorSpec{
-			Name:   flavorDetails.Name,
-			VCPUs:  flavorDetails.VCPUs,
-			Memory: *resource.NewQuantity(int64(flavorDetails.MemoryMB)*(1<<20), resource.BinarySI), //nolint:gosec // flavor memory bounded by specs
+			Name:     flavorDetails.Name,
+			VCPUs:    flavorDetails.VCPUs,
+			MemoryMB: flavorDetails.MemoryMB,
 		},
 		Options: scheduling.Options{
 			ReadOnly:                      false, // mutates state (reservation placement)

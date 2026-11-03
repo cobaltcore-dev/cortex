@@ -11,7 +11,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -166,8 +165,8 @@ func TestVMwareBinpackStep_Run(t *testing.T) {
 			request: sched.SchedulerRequest{
 				NumInstances: 1,
 				Flavor: sched.FlavorSpec{
-					Memory: *resource.NewQuantity(1000*(1<<20), resource.BinarySI), // 1GB
-					VCPUs:  1,
+					MemoryMB: 1000, // 1GB
+					VCPUs:    1,
 				},
 				Hosts: []sched.Host{
 					{ComputeHost: "host1"},
@@ -185,8 +184,8 @@ func TestVMwareBinpackStep_Run(t *testing.T) {
 			request: sched.SchedulerRequest{
 				NumInstances: 1,
 				Flavor: sched.FlavorSpec{
-					Memory: *resource.NewQuantity(1000*(1<<20), resource.BinarySI),
-					VCPUs:  1,
+					MemoryMB: 1000,
+					VCPUs:    1,
 				},
 				Hosts: []sched.Host{
 					{ComputeHost: "host1"},
@@ -290,8 +289,8 @@ func TestVMwareBinpackStep_CalcVMResources(t *testing.T) {
 			request: sched.SchedulerRequest{
 				NumInstances: 1,
 				Flavor: sched.FlavorSpec{
-					Memory: *resource.NewQuantity(2048*(1<<20), resource.BinarySI),
-					VCPUs:  4,
+					MemoryMB: 2048,
+					VCPUs:    4,
 				},
 			},
 			expectedMemory: 2048 * (1 << 20), // 2048 MiB in bytes
@@ -302,8 +301,8 @@ func TestVMwareBinpackStep_CalcVMResources(t *testing.T) {
 			request: sched.SchedulerRequest{
 				NumInstances: 3,
 				Flavor: sched.FlavorSpec{
-					Memory: *resource.NewQuantity(1024*(1<<20), resource.BinarySI),
-					VCPUs:  2,
+					MemoryMB: 1024,
+					VCPUs:    2,
 				},
 			},
 			expectedMemory: 3 * 1024 * (1 << 20), // 3 instances * 1024 MiB in bytes

@@ -833,9 +833,9 @@ func (c *Reconciler) probeScheduler(
 		ProjectID:           "cortex-capacity-probe",
 		AvailabilityZone:    az,
 		Flavor: sched.FlavorSpec{
-			Name:   flavor.Name,
-			VCPUs:  flavor.VCPUs,
-			Memory: *resource.NewQuantity(int64(flavor.MemoryMB)*(1<<20), resource.BinarySI), //nolint:gosec // flavor memory bounded by specs
+			Name:     flavor.Name,
+			VCPUs:    flavor.VCPUs,
+			MemoryMB: flavor.MemoryMB,
 		},
 		Options: scheduling.Options{
 			ReadOnly:                      true,

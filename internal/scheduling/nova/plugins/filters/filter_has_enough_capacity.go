@@ -307,7 +307,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Sche
 		}
 
 		// Check memory capacity.
-		if request.Flavor.Memory.IsZero() {
+		if request.Flavor.MemoryMB == 0 {
 			return nil, errors.New("flavor has 0 memory")
 		}
 		freeMemory, ok := free["memory"]
@@ -320,14 +320,16 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Sche
 			continue
 		}
 		// Calculate how many instances can fit on this host, based on memory.
-		// Flavor.Memory is already in bytes (resource.Quantity).
+		// Nova's memory_mb field is named "megabytes" in the API docs, but the values
+		// are in mebibytes (1 MiB = 2^20 bytes). Multiply by 1<<20 to convert to bytes.
 		//nolint:gosec // We're checking for underflows above (< 0).
-		memorySlots := uint64(freeMemory.Value()) / uint64(request.Flavor.Memory.Value())
+		memorySlots := uint64(freeMemory.Value()) /
+			(request.Flavor.MemoryMB * (1 << 20))
 		if memorySlots < request.NumInstances {
 			traceLog.V(1).Info(
 				"filtering host due to insufficient RAM capacity",
-				"host", host, "requested_memory", request.Flavor.Memory.String(),
-				"available_memory", freeMemory.String(),
+				"host", host, "requested_mb", request.Flavor.MemoryMB,
+				"available_mb", freeMemory.String(),
 			)
 			delete(result.Activations, host)
 			continue
@@ -336,7 +338,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Sche
 			"host has enough capacity", "host", host,
 			"requested_cpus", request.Flavor.VCPUs,
 			"available_cpus", freeCPU.String(),
-			"requested_memory", request.Flavor.Memory.String(),
+			"requested_memory_mb", request.Flavor.MemoryMB,
 			"available_memory", freeMemory.String(),
 		)
 	}

@@ -68,7 +68,7 @@ func newCRRequest(hosts []string) compute.SchedulerRequest {
 		AvailabilityZone: "qa-de-1a",
 		ResourceGroup:    "group-2101",
 		Flavor: compute.FlavorSpec{
-			Memory: *resource.NewQuantity(8*1024*(1<<20), resource.BinarySI),
+			MemoryMB: 8 * 1024,
 		},
 		Hosts:   hostList,
 		Weights: weights,
@@ -211,7 +211,7 @@ func TestKVMCommittedResourceReservationStep_Run(t *testing.T) {
 				Intent:           api.ReserveForFailoverIntent,
 				ResourceGroup:    "group-2101",
 				Flavor: compute.FlavorSpec{
-					Memory: *resource.NewQuantity(4096*(1<<20), resource.BinarySI),
+					MemoryMB: 4096,
 				},
 				Hosts: []compute.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
 			},

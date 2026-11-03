@@ -52,9 +52,9 @@ func newBinpackRequest(memoryMB, vcpus, numInstances uint64, hosts []string) com
 		HypervisorFamily: compute.HypervisorFamilyKVM,
 		HypervisorType:   compute.HypervisorTypeQEMU,
 		Flavor: compute.FlavorSpec{
-			Name:   "m1.large",
-			VCPUs:  vcpus,
-			Memory: *resource.NewQuantity(int64(memoryMB)*(1<<20), resource.BinarySI), //nolint:gosec // test code
+			Name:     "m1.large",
+			VCPUs:    vcpus,
+			MemoryMB: memoryMB,
 		},
 		Hosts:   hostList,
 		Weights: weights,

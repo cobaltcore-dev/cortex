@@ -126,9 +126,9 @@ func newNovaRequest(instanceUUID string, evacuation bool, hosts []string) comput
 		HypervisorFamily: compute.HypervisorFamilyKVM,
 		HypervisorType:   compute.HypervisorTypeQEMU,
 		Flavor: compute.FlavorSpec{
-			Name:   "m1.large",
-			VCPUs:  4,
-			Memory: *resource.NewQuantity(int64(parseMemoryToMB("8Gi"))*(1<<20), resource.BinarySI), //nolint:gosec // test code
+			Name:     "m1.large",
+			VCPUs:    4,
+			MemoryMB: parseMemoryToMB("8Gi"),
 		},
 		Hosts: hostList,
 	}

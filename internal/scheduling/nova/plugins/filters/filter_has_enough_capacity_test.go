@@ -287,9 +287,9 @@ func newNovaRequestWithIntent(instanceUUID, projectID, flavorName, flavorGroup s
 		HypervisorFamily: compute.HypervisorFamilyKVM,
 		HypervisorType:   compute.HypervisorTypeQEMU,
 		Flavor: compute.FlavorSpec{
-			Name:   flavorName,
-			VCPUs:  uint64(vcpus),                                                     //nolint:gosec // test code
-			Memory: *resource.NewQuantity(int64(memoryMB)*(1<<20), resource.BinarySI), //nolint:gosec // test code
+			Name:     flavorName,
+			VCPUs:    uint64(vcpus), //nolint:gosec // test code
+			MemoryMB: memoryMB,
 		},
 		Hosts:   hostList,
 		Weights: weights,
