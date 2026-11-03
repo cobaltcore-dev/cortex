@@ -971,9 +971,9 @@ type fakeFailoverMatcher struct {
 	err      error
 }
 
-func (f *fakeFailoverMatcher) Match(_ context.Context, _ api.ExternalSchedulerRequest, orig []string) ([]string, error) {
+func (f *fakeFailoverMatcher) Match(_ context.Context, _ api.ExternalSchedulerRequest, originalHosts []string) ([]string, error) {
 	f.called = true
-	f.gotHosts = orig
+	f.gotHosts = originalHosts
 	if f.err != nil {
 		return nil, f.err
 	}

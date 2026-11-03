@@ -70,7 +70,7 @@ type FilterWeigherPipelineController struct {
 type FailoverHostMatcher interface {
 	// Match returns the candidate hosts to use, possibly rewritten to the chosen
 	// failover host, or the originals unchanged when nothing applies.
-	Match(ctx context.Context, request api.ExternalSchedulerRequest, orig []string) ([]string, error)
+	Match(ctx context.Context, request api.ExternalSchedulerRequest, originalHosts []string) ([]string, error)
 }
 
 // The type of pipeline this controller manages.

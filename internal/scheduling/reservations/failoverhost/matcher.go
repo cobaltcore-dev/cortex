@@ -46,17 +46,17 @@ type Matcher struct {
 // Fallbacks preserve a valid placement: if no reservation matches, or the
 // chosen host is not among orig (so it conflicts with other scheduling
 // constraints), orig is returned unchanged so the VM still has candidates.
-func (m *Matcher) Match(ctx context.Context, request api.ExternalSchedulerRequest, orig []string) ([]string, error) {
+func (m *Matcher) Match(ctx context.Context, request api.ExternalSchedulerRequest, originalHosts []string) ([]string, error) {
 	log := logf.FromContext(ctx)
 
 	intent, err := request.GetIntent()
 	if err != nil || intent != api.EvacuateIntent {
-		return orig, nil //nolint:nilerr // non-evacuation requests are not rerouted
+		return originalHosts, nil //nolint:nilerr // non-evacuation requests are not rerouted
 	}
 	sourceHost, err := request.Spec.Data.GetSchedulerHintStr("source_host")
 	if err != nil || sourceHost == "" {
 		log.V(1).Info("no source_host hint on evacuation, leaving candidates untouched")
-		return orig, nil //nolint:nilerr // without a source host there is nothing to match
+		return originalHosts, nil //nolint:nilerr // without a source host there is nothing to match
 	}
 
 	var reservations v1alpha1.ReservationList
@@ -78,7 +78,7 @@ func (m *Matcher) Match(ctx context.Context, request api.ExternalSchedulerReques
 		log.V(1).Info("no failover host reservation for source host, falling back to ordinary candidates",
 			"sourceHost", sourceHost)
 		m.Monitor.RecordEvacuationWithoutReservation(request.Spec.Data.AvailabilityZone)
-		return orig, nil
+		return originalHosts, nil
 	}
 
 	// Sort deterministically by target host so selection is stable and testable;
@@ -109,7 +109,7 @@ func (m *Matcher) Match(ctx context.Context, request api.ExternalSchedulerReques
 			res.Status.FailoverHostReservation.SourceHost == sourceHost {
 			log.V(1).Info("reusing in-use failover host reservation for gang-evacuation",
 				"sourceHost", sourceHost, "reservation", res.Name, "targetHost", res.Spec.TargetHost)
-			return m.pick(*res, orig), nil
+			return m.pick(*res, originalHosts), nil
 		}
 	}
 
@@ -121,14 +121,14 @@ func (m *Matcher) Match(ctx context.Context, request api.ExternalSchedulerReques
 		log.V(1).Info("all failover host reservations for source host are in use by other sources, falling back",
 			"sourceHost", sourceHost)
 		m.Monitor.RecordEvacuationWithoutReservation(request.Spec.Data.AvailabilityZone)
-		return orig, nil
+		return originalHosts, nil
 	}
 	if err := m.markInUse(ctx, free, sourceHost); err != nil {
 		return nil, err
 	}
 	log.V(1).Info("pinned failover host reservation for evacuation",
 		"sourceHost", sourceHost, "reservation", free.Name, "targetHost", free.Spec.TargetHost)
-	return m.pick(*free, orig), nil
+	return m.pick(*free, originalHosts), nil
 }
 
 // pick returns the reservation's target host as the sole candidate, unless that
