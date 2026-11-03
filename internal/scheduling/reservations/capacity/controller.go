@@ -821,17 +821,26 @@ func (c *Reconciler) probeScheduler(
 		probeHosts = append(probeHosts, sched.Host{ComputeHost: h.ComputeHost, HypervisorHostname: h.HypervisorHostname})
 		probeWeights[h.ComputeHost] = 0.0
 	}
+	// Honor the flavor's trait and hypervisor-type constraints so the probe only
+	// counts compatible hosts (the typed request is built directly, so
+	// filter_has_requested_traits/filter_capabilities would otherwise see empty
+	// slices and become no-ops). No hypervisor-type default — only match when the
+	// flavor names one.
+	requiredTraits, forbiddenTraits := reservations.ExtractTraits(flavor.ExtraSpecs)
 	out, err := c.scheduler.RunWithoutLock(ctx, sched.SchedulerRequest{
-		Pipeline:            pipeline,
-		GatherAllCandidates: true,
-		HypervisorFamily:    sched.HypervisorFamilyKVM,
-		Hosts:               probeHosts,
-		Weights:             probeWeights,
-		Intent:              schedulerapi.CapacityProbeIntent,
-		InstanceUUID:        "capacity-" + flavor.Name,
-		NumInstances:        1, // probe a single flavor slot; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
-		ProjectID:           "cortex-capacity-probe",
-		AvailabilityZone:    az,
+		Pipeline:              pipeline,
+		GatherAllCandidates:   true,
+		HypervisorFamily:      sched.HypervisorFamilyKVM,
+		Hosts:                 probeHosts,
+		Weights:               probeWeights,
+		Intent:                schedulerapi.CapacityProbeIntent,
+		InstanceUUID:          "capacity-" + flavor.Name,
+		NumInstances:          1, // probe a single flavor slot; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
+		ProjectID:             "cortex-capacity-probe",
+		AvailabilityZone:      az,
+		RequiredTraits:        requiredTraits,
+		ForbiddenTraits:       forbiddenTraits,
+		RequestedCapabilities: reservations.HypervisorTypeCapability(flavor.ExtraSpecs, false),
 		Flavor: sched.FlavorSpec{
 			Name:     flavor.Name,
 			VCPUs:    flavor.VCPUs,

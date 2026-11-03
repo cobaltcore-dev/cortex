@@ -40,25 +40,6 @@ func InferFailoverPipeline(extraSpecs map[string]string) string {
 	return "kvm-general-purpose-load-balancing"
 }
 
-// traitsFromExtraSpecs splits the flavor extra specs' "trait:<name>" entries into
-// required and forbidden trait names, mirroring the Nova spec adapter so failover
-// reservation scheduling honors the same trait constraints as regular placement.
-func traitsFromExtraSpecs(extraSpecs map[string]string) (required, forbidden []string) {
-	for key, value := range extraSpecs {
-		name, ok := strings.CutPrefix(key, "trait:")
-		if !ok {
-			continue
-		}
-		switch value {
-		case "required":
-			required = append(required, name)
-		case "forbidden":
-			forbidden = append(forbidden, name)
-		}
-	}
-	return required, forbidden
-}
-
 // imagePropertiesFromFlavor synthesizes Glance-style image properties from a flavor's
 // capabilities:hypervisor_type extra spec. The failover controller does not have access
 // to the real Glance image metadata of the VM, but for reservation scheduling the VM
@@ -124,23 +105,24 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		hosts = append(hosts, compute.Host{ComputeHost: h.ComputeHost, HypervisorHostname: h.HypervisorHostname})
 		weights[h.ComputeHost] = 0.0
 	}
-	requiredTraits, forbiddenTraits := traitsFromExtraSpecs(vm.FlavorExtraSpecs)
+	requiredTraits, forbiddenTraits := reservations.ExtractTraits(vm.FlavorExtraSpecs)
 	schedReq := compute.SchedulerRequest{
-		Pipeline:            pipeline,
-		GatherAllCandidates: true,
-		HypervisorFamily:    compute.HypervisorFamilyKVM,
-		Hosts:               hosts,
-		Weights:             weights,
-		Options:             opts,
-		Intent:              intent,
-		InstanceUUID:        vm.UUID,
-		NumInstances:        1, // one reservation per VM; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
-		ProjectID:           vm.ProjectID,
-		AvailabilityZone:    vm.AvailabilityZone,
-		IgnoreHosts:         ignoreHypervisors,
-		ResourceGroup:       resSpec.ResourceGroup(vm.FlavorName),
-		RequiredTraits:      requiredTraits,
-		ForbiddenTraits:     forbiddenTraits,
+		Pipeline:              pipeline,
+		GatherAllCandidates:   true,
+		HypervisorFamily:      compute.HypervisorFamilyKVM,
+		Hosts:                 hosts,
+		Weights:               weights,
+		Options:               opts,
+		Intent:                intent,
+		InstanceUUID:          vm.UUID,
+		NumInstances:          1, // one reservation per VM; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
+		ProjectID:             vm.ProjectID,
+		AvailabilityZone:      vm.AvailabilityZone,
+		IgnoreHosts:           ignoreHypervisors,
+		ResourceGroup:         resSpec.ResourceGroup(vm.FlavorName),
+		RequiredTraits:        requiredTraits,
+		ForbiddenTraits:       forbiddenTraits,
+		RequestedCapabilities: reservations.HypervisorTypeCapability(vm.FlavorExtraSpecs, true),
 		Flavor: compute.FlavorSpec{
 			Name:     resSpec.FlavorName,
 			VCPUs:    resSpec.VCPUs,
@@ -278,25 +260,26 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 	// match it in the reservation's allocations. KVM gathers all candidates; the
 	// reservation host must come back ranked for the VM to be compatible.
 	pipeline := InferFailoverPipeline(flavorExtraSpecs)
-	requiredTraits, forbiddenTraits := traitsFromExtraSpecs(flavorExtraSpecs)
+	requiredTraits, forbiddenTraits := reservations.ExtractTraits(flavorExtraSpecs)
 	evacuateOpts := DefaultFailoverOptions
 	evacuateOpts.ReadOnly = true
 	evacuateOpts.LockReservations = true
 	schedReq := compute.SchedulerRequest{
-		Pipeline:            pipeline,
-		GatherAllCandidates: true,
-		HypervisorFamily:    compute.HypervisorFamilyKVM,
-		Hosts:               []compute.Host{{ComputeHost: reservationHost, HypervisorHostname: reservationHost}},
-		Weights:             map[string]float64{reservationHost: 0.0},
-		Options:             evacuateOpts,
-		Intent:              api.EvacuateIntent,
-		InstanceUUID:        vm.UUID,
-		NumInstances:        1, // validating one VM; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
-		ProjectID:           vm.ProjectID,
-		AvailabilityZone:    vm.AvailabilityZone,
-		IgnoreHosts:         []string{vm.CurrentHypervisor},
-		RequiredTraits:      requiredTraits,
-		ForbiddenTraits:     forbiddenTraits,
+		Pipeline:              pipeline,
+		GatherAllCandidates:   true,
+		HypervisorFamily:      compute.HypervisorFamilyKVM,
+		Hosts:                 []compute.Host{{ComputeHost: reservationHost, HypervisorHostname: reservationHost}},
+		Weights:               map[string]float64{reservationHost: 0.0},
+		Options:               evacuateOpts,
+		Intent:                api.EvacuateIntent,
+		InstanceUUID:          vm.UUID,
+		NumInstances:          1, // validating one VM; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
+		ProjectID:             vm.ProjectID,
+		AvailabilityZone:      vm.AvailabilityZone,
+		IgnoreHosts:           []string{vm.CurrentHypervisor},
+		RequiredTraits:        requiredTraits,
+		ForbiddenTraits:       forbiddenTraits,
+		RequestedCapabilities: reservations.HypervisorTypeCapability(flavorExtraSpecs, true),
 		Flavor: compute.FlavorSpec{
 			Name:     vm.FlavorName,
 			VCPUs:    vcpus,

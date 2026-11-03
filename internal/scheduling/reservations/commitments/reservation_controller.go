@@ -354,18 +354,27 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		hosts = append(hosts, compute.Host{ComputeHost: h.ComputeHost, HypervisorHostname: h.HypervisorHostname})
 		weights[h.ComputeHost] = 0.0
 	}
+	// Honor the flavor's trait and hypervisor-type constraints so a
+	// committed-resource reservation lands on a compatible host (the typed
+	// request is built directly, so filter_has_requested_traits/filter_capabilities
+	// would otherwise see empty slices and become no-ops). No hypervisor-type
+	// default here — only match when the flavor names one.
+	requiredTraits, forbiddenTraits := reservations.ExtractTraits(flavorDetails.ExtraSpecs)
 	schedReq := compute.SchedulerRequest{
-		Pipeline:            pipelineName,
-		GatherAllCandidates: true,
-		HypervisorFamily:    compute.HypervisorFamilyKVM,
-		Hosts:               hosts,
-		Weights:             weights,
-		Intent:              schedulerdelegationapi.ReserveForCommittedResourceIntent,
-		InstanceUUID:        res.Name,
-		NumInstances:        1, // one reservation slot; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
-		ProjectID:           projectID,
-		AvailabilityZone:    availabilityZone,
-		DomainName:          domainName,
+		Pipeline:              pipelineName,
+		GatherAllCandidates:   true,
+		HypervisorFamily:      compute.HypervisorFamilyKVM,
+		Hosts:                 hosts,
+		Weights:               weights,
+		Intent:                schedulerdelegationapi.ReserveForCommittedResourceIntent,
+		InstanceUUID:          res.Name,
+		NumInstances:          1, // one reservation slot; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
+		ProjectID:             projectID,
+		AvailabilityZone:      availabilityZone,
+		DomainName:            domainName,
+		RequiredTraits:        requiredTraits,
+		ForbiddenTraits:       forbiddenTraits,
+		RequestedCapabilities: reservations.HypervisorTypeCapability(flavorDetails.ExtraSpecs, false),
 		Flavor: compute.FlavorSpec{
 			Name:     flavorDetails.Name,
 			VCPUs:    flavorDetails.VCPUs,

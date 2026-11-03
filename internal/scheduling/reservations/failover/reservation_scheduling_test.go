@@ -5,6 +5,7 @@ package failover
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -586,6 +587,53 @@ func TestFailoverSchedulerOptions(t *testing.T) {
 			}
 			if capturedReq.Options.LockReservations != tt.wantLockReservations {
 				t.Errorf("LockReservations = %v, want %v", capturedReq.Options.LockReservations, tt.wantLockReservations)
+			}
+		})
+	}
+}
+
+// ============================================================================
+// Test: trait and hypervisor_type constraints sent to the scheduler
+// ============================================================================
+
+// TestFailoverSchedulerFlavorConstraints verifies the scheduler request carries
+// the flavor's traits and capabilities:hypervisor_type, so
+// filter_has_requested_traits / filter_capabilities keep a workload off an
+// incompatible host — including the qemu default when the flavor omits the
+// hypervisor type.
+func TestFailoverSchedulerFlavorConstraints(t *testing.T) {
+	tests := []struct {
+		name       string
+		extraSpecs map[string]string
+		wantHVType string
+		wantTraits []string
+	}{
+		{name: "flavor without hypervisor_type defaults to qemu", extraSpecs: nil, wantHVType: "qemu"},
+		{name: "explicit CH preserved", extraSpecs: map[string]string{"capabilities:hypervisor_type": "CH"}, wantHVType: "CH"},
+		{
+			name:       "required trait is forwarded",
+			extraSpecs: map[string]string{"capabilities:hypervisor_type": "qemu", "trait:CUSTOM_HANA_EXCLUSIVE_HOST": "required"},
+			wantHVType: "qemu",
+			wantTraits: []string{"CUSTOM_HANA_EXCLUSIVE_HOST"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			vm := buildSchedulingTestVM("vm-1", "host-1")
+			vm.FlavorExtraSpecs = tt.extraSpecs
+			resolved := resolveVMSpecForScheduling(context.Background(), vm, false, nil)
+
+			var capturedReq sched.SchedulerRequest
+			scheduler := newCapturingScheduler("host-2", &capturedReq)
+			c := buildMinimalController(t, scheduler)
+			_, _ = c.scheduleAndBuildNewFailoverReservation(context.Background(), vm, []string{"host-1", "host-2"}, nil, nil, resolved) //nolint:errcheck
+
+			wantCap := []sched.Capability{{Name: "hypervisor_type", Value: tt.wantHVType}}
+			if len(capturedReq.RequestedCapabilities) != 1 || capturedReq.RequestedCapabilities[0] != wantCap[0] {
+				t.Errorf("RequestedCapabilities = %v, want %v", capturedReq.RequestedCapabilities, wantCap)
+			}
+			if !slices.Equal(capturedReq.RequiredTraits, tt.wantTraits) {
+				t.Errorf("RequiredTraits = %v, want %v", capturedReq.RequiredTraits, tt.wantTraits)
 			}
 		})
 	}
