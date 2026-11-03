@@ -392,10 +392,6 @@ cortex-scheduling-controllers:
         # How often the failover partitions are recalculated and the reservations
         # updated to match. Must be at least 1m.
         generationInterval: 5m
-        # URL of the nova external scheduler API, used to discover which hosts a
-        # given host's workload could be evacuated onto. Typically the same
-        # scheduler endpoint the flavor-based failover controller uses.
-        externalSchedulerURL: "http://localhost:8080/scheduler/nova/external"
 
 cortex-knowledge-controllers:
   <<: *cortex

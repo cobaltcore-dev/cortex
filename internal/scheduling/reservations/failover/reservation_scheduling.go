@@ -31,9 +31,9 @@ var DefaultFailoverOptions = scheduling.Options{
 	SkipCommittedResourceTracking: true,
 }
 
-// inferFailoverPipeline returns the standard pipeline for a failover scheduling call based on
+// InferFailoverPipeline returns the standard pipeline for a failover scheduling call based on
 // the VM's flavor extra specs — the same HANA vs general-purpose split used by Nova placement.
-func inferFailoverPipeline(extraSpecs map[string]string) string {
+func InferFailoverPipeline(extraSpecs map[string]string) string {
 	if strings.ToLower(extraSpecs["trait:CUSTOM_HANA_EXCLUSIVE_HOST"]) == "required" {
 		return "kvm-hana-bin-packing"
 	}
@@ -196,7 +196,7 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 
 	reuseOpts := DefaultFailoverOptions
 	reuseOpts.ReadOnly = true
-	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, inferFailoverPipeline(vm.FlavorExtraSpecs), resSpec, api.ReuseFailoverReservationIntent, reuseOpts)
+	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, InferFailoverPipeline(vm.FlavorExtraSpecs), resSpec, api.ReuseFailoverReservationIntent, reuseOpts)
 	if err != nil {
 		logger.Error(err, "failed to get potential hypervisors for VM", "vmUUID", vm.UUID)
 		return nil
@@ -277,7 +277,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 	// this VM (avoiding self-blocking). Use the actual VM UUID so the filter can
 	// match it in the reservation's allocations. KVM gathers all candidates; the
 	// reservation host must come back ranked for the VM to be compatible.
-	pipeline := inferFailoverPipeline(flavorExtraSpecs)
+	pipeline := InferFailoverPipeline(flavorExtraSpecs)
 	requiredTraits, forbiddenTraits := traitsFromExtraSpecs(flavorExtraSpecs)
 	evacuateOpts := DefaultFailoverOptions
 	evacuateOpts.ReadOnly = true

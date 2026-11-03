@@ -38,10 +38,9 @@ func TestGenerateProducesReservations(t *testing.T) {
 	hvA := buildHV("hvA", 64, 32)
 	hvB := buildHV("hvB", 64, 32)
 
-	finder, server := stubScheduler(t, map[string][]string{
+	finder := stubScheduler(t, map[string][]string{
 		"flavor": {"hvA", "hvB"},
 	}, nil)
-	defer server.Close()
 
 	g := &pipelineGenerator{
 		Client:             newTestClient(t, hvA, hvB),
@@ -84,10 +83,9 @@ func TestGenerateDeduplicatesSharedHost(t *testing.T) {
 	// The path finder's edges are irrelevant here: the fake builder ignores them
 	// and hands Generate the overlapping cliques directly. The stub still needs an
 	// answer so FindPaths succeeds; one seed accepted on all three suffices.
-	finder, server := stubScheduler(t, map[string][]string{
+	finder := stubScheduler(t, map[string][]string{
 		"flavor": {"hvA", "hvB", "hvC"},
 	}, nil)
-	defer server.Close()
 
 	g := &pipelineGenerator{
 		Client:     newTestClient(t, hvA, hvB, hvC),
@@ -131,10 +129,9 @@ func TestGenerateSharedHostKeptInSmallestPartition(t *testing.T) {
 	hvC := buildHV("hvC", 64, 32)
 	hvD := buildHV("hvD", 64, 32)
 
-	finder, server := stubScheduler(t, map[string][]string{
+	finder := stubScheduler(t, map[string][]string{
 		"flavor": {"hvA", "hvB", "hvC", "hvD"},
 	}, nil)
-	defer server.Close()
 
 	g := &pipelineGenerator{
 		Client:     newTestClient(t, hvA, hvB, hvC, hvD),

@@ -5,14 +5,10 @@ package failoverhost
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"slices"
 	"sync"
 	"testing"
 
-	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
@@ -208,7 +204,6 @@ func TestIntegration(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
 			env := newIntegrationTestEnv(t, tc.Hypervisors, tc.Flavors)
-			defer env.Close()
 
 			ratio, minimum := tc.Ratio, tc.Minimum
 			if ratio == 0 {
@@ -243,18 +238,16 @@ func TestIntegration(t *testing.T) {
 // Test Environment
 // ============================================================================
 
-// integrationTestEnv wires a real Nova filter/weigher pipeline (served over
-// HTTP) on top of a fake k8s client holding the fleet and the flavor-groups
-// Knowledge CRD, so the generation pipeline can be driven end to end.
+// integrationTestEnv wires a real Nova filter/weigher pipeline behind the shared
+// in-process scheduler on top of a fake k8s client holding the fleet and the
+// flavor-groups Knowledge CRD, so the generation pipeline can be driven end to
+// end.
 type integrationTestEnv struct {
-	k8sClient    client.Client
-	server       *httptest.Server
-	schedulerURL string
-	flavors      []compute.FlavorInGroup
-	hypervisors  map[string]hv1.Hypervisor
+	k8sClient   client.Client
+	scheduler   *sched.Scheduler
+	flavors     []compute.FlavorInGroup
+	hypervisors map[string]hv1.Hypervisor
 }
-
-func (env *integrationTestEnv) Close() { env.server.Close() }
 
 // newIntegrationTestEnv builds the fake cluster and the real scheduler pipeline.
 func newIntegrationTestEnv(t *testing.T, hypervisors []*hv1.Hypervisor, flavors []compute.FlavorInGroup) *integrationTestEnv {
@@ -305,17 +298,13 @@ func newIntegrationTestEnv(t *testing.T, hypervisors []*hv1.Hypervisor, flavors 
 
 	// KVM requests trigger candidate gathering; the test seeds its own eligible
 	// hosts, so use a passthrough gatherer that preserves them.
-	api := &integrationHTTPAPI{scheduler: sched.NewScheduler(controller, passthroughGatherer{})}
-	mux := http.NewServeMux()
-	mux.HandleFunc("/scheduler/nova/external", api.handle)
-	server := httptest.NewServer(mux)
+	scheduler := sched.NewScheduler(controller, passthroughGatherer{})
 
 	return &integrationTestEnv{
-		k8sClient:    k8sClient,
-		server:       server,
-		schedulerURL: server.URL + "/scheduler/nova/external",
-		flavors:      flavors,
-		hypervisors:  hvsByName,
+		k8sClient:   k8sClient,
+		scheduler:   scheduler,
+		flavors:     flavors,
+		hypervisors: hvsByName,
 	}
 }
 
@@ -330,7 +319,7 @@ func (env *integrationTestEnv) Generate(t *testing.T, ratio float64, minimum int
 	g := &pipelineGenerator{
 		Client:             env.k8sClient,
 		seeder:             &seeder{k8s: env.k8sClient},
-		pathFinder:         &evacuationPathFinder{httpClient: http.DefaultClient, schedulerURL: env.schedulerURL},
+		pathFinder:         &evacuationPathFinder{scheduler: env.scheduler},
 		partitionBuilder:   cliquePartitionBuilder{},
 		reservationPlanner: ratioReservationPlanner{ratio: ratio, minimum: minimum},
 	}
@@ -353,7 +342,7 @@ func (env *integrationTestEnv) AcceptsByHost(t *testing.T) map[string]map[string
 	for _, hv := range env.hypervisors {
 		zones[hv.Labels[corev1.LabelTopologyZone]] = true
 	}
-	finder := &evacuationPathFinder{httpClient: http.DefaultClient, schedulerURL: env.schedulerURL}
+	finder := &evacuationPathFinder{scheduler: env.scheduler}
 	accepts := map[string]map[string]bool{}
 	for _, flavor := range env.flavors {
 		for zone := range zones {
@@ -439,38 +428,6 @@ func (env *integrationTestEnv) VerifySiblingSources(t *testing.T, desired map[co
 // evacProbePipeline is the name of the real Nova filter/weigher pipeline the
 // probe exercises.
 const evacProbePipeline = "kvm-general-purpose-load-balancing"
-
-// integrationHTTPAPI is a thin, deterministic HTTP front-end for the real Nova
-// filter/weigher pipeline — the same shape the failover package's integration
-// tests use. It does NOT shuffle, so the probe answers are stable.
-type integrationHTTPAPI struct {
-	scheduler *sched.Scheduler
-}
-
-func (a *integrationHTTPAPI) handle(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-	var reqData novaapi.ExternalSchedulerRequest
-	if err := json.NewDecoder(r.Body).Decode(&reqData); err != nil {
-		http.Error(w, "decode", http.StatusBadRequest)
-		return
-	}
-	// Resolve intent from the request hints, mirroring the production handler;
-	// the pipeline reads the resolved intent off the typed request.
-	intent, err := reqData.GetIntent()
-	if err != nil {
-		intent = novaapi.CreateIntent
-	}
-	req := nova.ToSchedulerRequest(reqData, intent, evacProbePipeline)
-	out, err := a.scheduler.Run(r.Context(), req, nil, nil)
-	if err != nil {
-		http.Error(w, "process", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(novaapi.ExternalSchedulerResponse{Hosts: out.OrderedHosts}); err != nil {
-		http.Error(w, "encode", http.StatusInternalServerError)
-	}
-}
 
 // ============================================================================
 // Object Creation Functions

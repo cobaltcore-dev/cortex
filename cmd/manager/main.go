@@ -813,10 +813,15 @@ func main() {
 			setupLog.Error(err, "failed to register failover host monitor metrics, continuing without metrics")
 			failoverHostMonitor = nil
 		}
+		if novaScheduler == nil {
+			setupLog.Error(nil, "failover-host-reservations-controller requires nova-pipeline-controllers (in-process scheduler) to be enabled")
+			os.Exit(1)
+		}
 		controller := &failoverhost.Controller{
-			Client:  multiclusterClient,
-			Config:  failoverHostConfig,
-			Monitor: failoverHostMonitor,
+			Client:    multiclusterClient,
+			Config:    failoverHostConfig,
+			Scheduler: novaScheduler,
+			Monitor:   failoverHostMonitor,
 		}
 		if err := controller.SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller",
@@ -826,8 +831,7 @@ func main() {
 		setupLog.Info("failover-host-reservations-controller registered",
 			"ratio", failoverHostConfig.Ratio,
 			"minimum", failoverHostConfig.Minimum,
-			"generationInterval", failoverHostConfig.GenerationInterval,
-			"externalSchedulerURL", failoverHostConfig.ExternalSchedulerURL)
+			"generationInterval", failoverHostConfig.GenerationInterval)
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "capacity-controller") {
 		setupLog.Info("enabling controller", "controller", "capacity-controller")
