@@ -53,7 +53,7 @@ type HTTPAPI interface {
 // interface so the handler can be unit-tested with a mock. *compute.Scheduler
 // satisfies it.
 type runner interface {
-	Run(ctx context.Context, req compute.SchedulerRequest, pre compute.PreHook, post compute.PostHook) (compute.RunOutcome, error)
+	Run(ctx context.Context, req compute.SchedulerRequest, pre compute.PreHook, post compute.PostHook) (compute.SchedulerResult, error)
 }
 
 type httpAPI struct {
@@ -280,7 +280,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	// Side effects run as a single post-hook after the pipeline, under the
 	// scheduler lock. It operates on the Nova wire request (which carries the
 	// fields the VM resource and CR tracking need) plus the typed result.
-	postHook := func(ctx context.Context, _ compute.SchedulerRequest, out compute.RunOutcome) error {
+	postHook := func(ctx context.Context, _ compute.SchedulerRequest, result compute.SchedulerResult) error {
 		// VM-resource creation.
 		switch {
 		case requestData.Options.ReadOnly:
@@ -292,7 +292,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		case schedReq.HypervisorFamily != compute.HypervisorFamilyKVM:
 			logger.V(1).Info("skipping virtual machine creation, unsupported hypervisor type", "instanceUUID", requestData.Spec.Data.InstanceUUID)
 		default:
-			if upsertErr := httpAPI.vmHandler.Upsert(ctx, out.Result, requestData, intent); upsertErr != nil {
+			if upsertErr := httpAPI.vmHandler.Upsert(ctx, result, requestData, intent); upsertErr != nil {
 				if httpAPI.featureGates.VirtualMachineCreationMandatory {
 					return fmt.Errorf("failed to upsert virtual machine resource: %w", upsertErr)
 				}
@@ -302,8 +302,8 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		}
 		// Committed-resource tracking.
 		if httpAPI.featureGates.CommittedResourceTracking && !requestData.Options.SkipCommittedResourceTracking {
-			if out.Result.TargetHost != nil {
-				httpAPI.crRecorder.RecordPlacement(ctx, out.Result, intent, requestData)
+			if result.TargetHost != nil {
+				httpAPI.crRecorder.RecordPlacement(ctx, result, intent, requestData)
 			} else {
 				httpAPI.crRecorder.RecordNoHostFound(ctx, intent, requestData)
 			}
@@ -311,16 +311,16 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		return nil
 	}
 
-	out, err := httpAPI.scheduler.Run(ctx, schedReq, nil, postHook)
+	result, err := httpAPI.scheduler.Run(ctx, schedReq, nil, postHook)
 	if err != nil {
 		c.Respond(logger, http.StatusInternalServerError, err, fmt.Sprintf("failed to process scheduling decision: %v", err))
 		return
 	}
-	hosts := out.Result.OrderedHosts
+	hosts := result.OrderedHosts
 	if httpAPI.config.NovaLimitHostsToRequest {
 		hosts = limitHostsToRequest(requestData, hosts)
 		logger.V(1).Info("limited hosts to request",
-			"hosts", hosts, "originalHosts", out.Result.OrderedHosts)
+			"hosts", hosts, "originalHosts", result.OrderedHosts)
 	}
 	// This is a hack to address the problem that Nova only uses the first host in hosts for evacuation requests.
 	// Only for evacuation we shuffle the first k hosts to ensure that we do not get stuck on a single host

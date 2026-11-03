@@ -385,7 +385,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, err
 	}
 
-	if len(out.Result.OrderedHosts) == 0 {
+	if len(out.OrderedHosts) == 0 {
 		logger.Info("no hosts found for reservation, will retry", "reservation", res.Name, "flavorName", resourceName)
 		old := res.DeepCopy()
 		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
@@ -411,7 +411,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	// Update the reservation Spec with the found host (idx 0)
 	// Only update Spec here - the Status will be synced in the next reconcile cycle
 	// This avoids race conditions from doing two patches in one reconcile
-	host := out.Result.OrderedHosts[0]
+	host := out.OrderedHosts[0]
 	logger.Info("found host for reservation", "host", host, "flavorName", resourceName)
 
 	old := res.DeepCopy()

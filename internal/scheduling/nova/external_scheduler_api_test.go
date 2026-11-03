@@ -21,16 +21,16 @@ import (
 
 // mockRunner is a test double for the scheduler the HTTP API depends on. runFunc
 // receives the mapped request and may invoke the post-hook to exercise the
-// handler's side-effect path; it returns the outcome/error the handler sees.
+// handler's side-effect path; it returns the result/error the handler sees.
 type mockRunner struct {
-	runFunc func(ctx context.Context, req compute.SchedulerRequest, post compute.PostHook) (compute.RunOutcome, error)
+	runFunc func(ctx context.Context, req compute.SchedulerRequest, post compute.PostHook) (compute.SchedulerResult, error)
 }
 
-func (m *mockRunner) Run(ctx context.Context, req compute.SchedulerRequest, _ compute.PreHook, post compute.PostHook) (compute.RunOutcome, error) {
+func (m *mockRunner) Run(ctx context.Context, req compute.SchedulerRequest, _ compute.PreHook, post compute.PostHook) (compute.SchedulerResult, error) {
 	if m.runFunc != nil {
 		return m.runFunc(ctx, req, post)
 	}
-	return compute.RunOutcome{}, nil
+	return compute.SchedulerResult{}, nil
 }
 
 // newTestAPI builds an *httpAPI with the given config and mock runner, leaving
@@ -273,14 +273,14 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &mockRunner{
-				runFunc: func(_ context.Context, _ compute.SchedulerRequest, _ compute.PostHook) (compute.RunOutcome, error) {
+				runFunc: func(_ context.Context, _ compute.SchedulerRequest, _ compute.PostHook) (compute.SchedulerResult, error) {
 					if tt.processDecisionErr != nil {
-						return compute.RunOutcome{}, tt.processDecisionErr
+						return compute.SchedulerResult{}, tt.processDecisionErr
 					}
 					if tt.result != nil {
-						return compute.RunOutcome{Result: *tt.result}, nil
+						return *tt.result, nil
 					}
-					return compute.RunOutcome{}, nil
+					return compute.SchedulerResult{}, nil
 				},
 			}
 
@@ -327,8 +327,8 @@ func TestHTTPAPI_NovaExternalScheduler_EmptyHostsSerializedAsArray(t *testing.T)
 	// response must serialize hosts as an empty array, not null, since Nova's
 	// schema requires an array.
 	r := &mockRunner{
-		runFunc: func(context.Context, compute.SchedulerRequest, compute.PostHook) (compute.RunOutcome, error) {
-			return compute.RunOutcome{Result: compute.SchedulerResult{OrderedHosts: nil}}, nil
+		runFunc: func(context.Context, compute.SchedulerRequest, compute.PostHook) (compute.SchedulerResult, error) {
+			return compute.SchedulerResult{OrderedHosts: nil}, nil
 		},
 	}
 	api := newTestAPI(HTTPAPIConfig{}, r)
@@ -365,9 +365,9 @@ func TestHTTPAPI_NovaExternalScheduler_EmptyHostsSerializedAsArray(t *testing.T)
 func TestHTTPAPI_NovaExternalScheduler_RequestMapping(t *testing.T) {
 	var captured compute.SchedulerRequest
 	r := &mockRunner{
-		runFunc: func(_ context.Context, req compute.SchedulerRequest, _ compute.PostHook) (compute.RunOutcome, error) {
+		runFunc: func(_ context.Context, req compute.SchedulerRequest, _ compute.PostHook) (compute.SchedulerResult, error) {
 			captured = req
-			return compute.RunOutcome{Result: compute.SchedulerResult{OrderedHosts: []string{"host1"}}}, nil
+			return compute.SchedulerResult{OrderedHosts: []string{"host1"}}, nil
 		},
 	}
 
@@ -435,9 +435,9 @@ func TestHTTPAPI_NovaExternalScheduler_ForcedDestination(t *testing.T) {
 
 	schedulerCalled := false
 	r := &mockRunner{
-		runFunc: func(context.Context, compute.SchedulerRequest, compute.PostHook) (compute.RunOutcome, error) {
+		runFunc: func(context.Context, compute.SchedulerRequest, compute.PostHook) (compute.SchedulerResult, error) {
 			schedulerCalled = true
-			return compute.RunOutcome{}, nil
+			return compute.SchedulerResult{}, nil
 		},
 	}
 	api := newTestAPI(HTTPAPIConfig{}, r)
@@ -485,9 +485,9 @@ func TestHTTPAPI_NovaExternalScheduler_ForcedDestinationNoWeights(t *testing.T) 
 
 	schedulerCalled := false
 	r := &mockRunner{
-		runFunc: func(context.Context, compute.SchedulerRequest, compute.PostHook) (compute.RunOutcome, error) {
+		runFunc: func(context.Context, compute.SchedulerRequest, compute.PostHook) (compute.SchedulerResult, error) {
 			schedulerCalled = true
-			return compute.RunOutcome{}, nil
+			return compute.SchedulerResult{}, nil
 		},
 	}
 	api := newTestAPI(HTTPAPIConfig{}, r)
@@ -538,9 +538,9 @@ func TestHTTPAPI_NovaExternalScheduler_ForcedDestinationDisabled(t *testing.T) {
 
 	schedulerCalled := false
 	r := &mockRunner{
-		runFunc: func(context.Context, compute.SchedulerRequest, compute.PostHook) (compute.RunOutcome, error) {
+		runFunc: func(context.Context, compute.SchedulerRequest, compute.PostHook) (compute.SchedulerResult, error) {
 			schedulerCalled = true
-			return compute.RunOutcome{}, nil
+			return compute.SchedulerResult{}, nil
 		},
 	}
 	disabled := false

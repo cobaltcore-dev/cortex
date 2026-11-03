@@ -80,7 +80,7 @@ func TestRunPreThenPost(t *testing.T) {
 		order = append(order, "pre")
 		return nil
 	}
-	post := func(_ context.Context, _ SchedulerRequest, _ RunOutcome) error {
+	post := func(_ context.Context, _ SchedulerRequest, _ SchedulerResult) error {
 		order = append(order, "post")
 		return nil
 	}
@@ -102,7 +102,7 @@ func TestRunNilHooks(t *testing.T) {
 func TestRunPostHookErrorAborts(t *testing.T) {
 	s := newTestScheduler(&fakePipeline{}, &fakeGatherer{})
 	boom := errors.New("boom")
-	post := func(_ context.Context, _ SchedulerRequest, _ RunOutcome) error { return boom }
+	post := func(_ context.Context, _ SchedulerRequest, _ SchedulerResult) error { return boom }
 	_, err := s.Run(context.Background(), SchedulerRequest{Pipeline: "p"}, nil, post)
 	if !errors.Is(err, boom) {
 		t.Fatalf("expected boom error, got %v", err)
@@ -113,7 +113,7 @@ func TestRunPipelineErrorSkipsPostHook(t *testing.T) {
 	boom := errors.New("pipeline failed")
 	s := newTestScheduler(&fakePipeline{err: boom}, &fakeGatherer{})
 	var ran bool
-	post := func(_ context.Context, _ SchedulerRequest, _ RunOutcome) error { ran = true; return nil }
+	post := func(_ context.Context, _ SchedulerRequest, _ SchedulerResult) error { ran = true; return nil }
 	_, err := s.Run(context.Background(), SchedulerRequest{Pipeline: "p"}, nil, post)
 	if !errors.Is(err, boom) {
 		t.Fatalf("expected pipeline error, got %v", err)
@@ -195,7 +195,7 @@ func TestRunHoldsLockAcrossPostHook(t *testing.T) {
 	releaseFirst := make(chan struct{})
 	secondDone := make(chan struct{})
 
-	var slowPost PostHook = func(_ context.Context, _ SchedulerRequest, _ RunOutcome) error {
+	var slowPost PostHook = func(_ context.Context, _ SchedulerRequest, _ SchedulerResult) error {
 		close(firstInPost)
 		<-releaseFirst
 		return nil
@@ -238,7 +238,7 @@ func TestRunWithoutLockDoesNotBlock(t *testing.T) {
 
 	firstInPost := make(chan struct{})
 	releaseFirst := make(chan struct{})
-	var slowPost PostHook = func(_ context.Context, _ SchedulerRequest, _ RunOutcome) error {
+	var slowPost PostHook = func(_ context.Context, _ SchedulerRequest, _ SchedulerResult) error {
 		close(firstInPost)
 		<-releaseFirst
 		return nil

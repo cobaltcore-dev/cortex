@@ -36,10 +36,10 @@ type PreHook func(ctx context.Context, req *SchedulerRequest) error
 
 // PostHook is a caller-provided side effect executed after the pipeline run,
 // under the scheduling lock (e.g. upserting the VM resource, recording the
-// decision). Returning an error aborts the run; non-fatal side effects should
-// log and return nil so the placement decision still stands. A nil PostHook is a
-// no-op.
-type PostHook func(ctx context.Context, req SchedulerRequest, out RunOutcome) error
+// decision). It receives the typed pipeline result. Returning an error aborts
+// the run; non-fatal side effects should log and return nil so the placement
+// decision still stands. A nil PostHook is a no-op.
+type PostHook func(ctx context.Context, req SchedulerRequest, result SchedulerResult) error
 
 // Scheduler is the single in-process owner of Nova placement decisions. It holds
 // the one shared scheduling lock and runs the pipeline plus a caller-provided
@@ -71,7 +71,7 @@ func (s *Scheduler) Run(
 	req SchedulerRequest,
 	pre PreHook,
 	post PostHook,
-) (RunOutcome, error) {
+) (SchedulerResult, error) {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -87,7 +87,7 @@ func (s *Scheduler) RunWithoutLock(
 	req SchedulerRequest,
 	pre PreHook,
 	post PostHook,
-) (RunOutcome, error) {
+) (SchedulerResult, error) {
 
 	return s.run(ctx, req, pre, post)
 }
@@ -99,19 +99,19 @@ func (s *Scheduler) run(
 	req SchedulerRequest,
 	pre PreHook,
 	post PostHook,
-) (RunOutcome, error) {
+) (SchedulerResult, error) {
 
 	log := ctrl.LoggerFrom(ctx)
 
 	pipeline, ok := s.pipelines.GetPipeline(req.Pipeline)
 	if !ok {
-		return RunOutcome{}, fmt.Errorf("pipeline not found or not ready: %q", req.Pipeline)
+		return SchedulerResult{}, fmt.Errorf("pipeline not found or not ready: %q", req.Pipeline)
 	}
 
 	// The pre-hook runs before the pipeline and may mutate the request.
 	if pre != nil {
 		if err := pre(ctx, &req); err != nil {
-			return RunOutcome{}, err
+			return SchedulerResult{}, err
 		}
 	}
 
@@ -120,22 +120,21 @@ func (s *Scheduler) run(
 	if req.GatherAllCandidates {
 		log.V(1).Info("gathering all placement candidates before filtering")
 		if err := s.gatherer.MutateWithAllCandidates(ctx, &req); err != nil {
-			return RunOutcome{}, fmt.Errorf("failed to gather all placement candidates: %w", err)
+			return SchedulerResult{}, fmt.Errorf("failed to gather all placement candidates: %w", err)
 		}
 		log.V(1).Info("gathered all placement candidates", "numHosts", len(req.Hosts))
 	}
 
 	result, runErr := pipeline.Run(req)
 	if runErr != nil {
-		return RunOutcome{}, runErr
+		return SchedulerResult{}, runErr
 	}
-	out := RunOutcome{Result: result}
 
 	// The post-hook runs after a successful pipeline run, under the lock.
 	if post != nil {
-		if err := post(ctx, req, out); err != nil {
-			return out, err
+		if err := post(ctx, req, result); err != nil {
+			return result, err
 		}
 	}
-	return out, nil
+	return result, nil
 }

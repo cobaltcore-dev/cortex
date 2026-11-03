@@ -849,7 +849,7 @@ func (c *Reconciler) probeScheduler(
 		return 0, 0, nil, fmt.Errorf("scheduler call failed (pipeline=%s): %w", pipeline, err)
 	}
 
-	for _, hostName := range out.Result.OrderedHosts {
+	for _, hostName := range out.OrderedHosts {
 		hv, ok := hvByName[hostName]
 		if !ok {
 			continue

@@ -467,7 +467,7 @@ func (a *integrationHTTPAPI) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(novaapi.ExternalSchedulerResponse{Hosts: out.Result.OrderedHosts}); err != nil {
+	if err := json.NewEncoder(w).Encode(novaapi.ExternalSchedulerResponse{Hosts: out.OrderedHosts}); err != nil {
 		http.Error(w, "encode", http.StatusInternalServerError)
 	}
 }

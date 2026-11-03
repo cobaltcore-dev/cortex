@@ -165,15 +165,15 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		"pipeline", pipeline,
 		"eligibleHypervisors", len(eligibleHypervisors),
 		"ignoreHypervisors", ignoreHypervisors,
-		"returnedHypervisors", out.Result.OrderedHosts)
+		"returnedHypervisors", out.OrderedHosts)
 
-	return out.Result.OrderedHosts, nil
+	return out.OrderedHosts, nil
 }
 
 // runScheduler runs the shared scheduler, choosing the lock-free path for
 // read-only runs (e.g. reuse/evacuate compatibility checks) and the locked path
 // for runs that mutate shared reservation state.
-func (c *FailoverReservationController) runScheduler(ctx context.Context, req compute.SchedulerRequest) (compute.RunOutcome, error) {
+func (c *FailoverReservationController) runScheduler(ctx context.Context, req compute.SchedulerRequest) (compute.SchedulerResult, error) {
 	if req.Options.ReadOnly {
 		return c.Scheduler.RunWithoutLock(ctx, req, nil, nil)
 	}
@@ -315,7 +315,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		logger.Error(err, "failed to validate VM for reservation host", "vmUUID", vm.UUID, "reservationHost", reservationHost)
 		return false, fmt.Errorf("failed to validate VM for reservation host: %w", err)
 	}
-	hosts := out.Result.OrderedHosts
+	hosts := out.OrderedHosts
 
 	// Handle empty response - no hosts returned
 	if len(hosts) < 1 {

@@ -1290,7 +1290,7 @@ func (api *testHTTPAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	response := novaapi.ExternalSchedulerResponse{Hosts: out.Result.OrderedHosts}
+	response := novaapi.ExternalSchedulerResponse{Hosts: out.OrderedHosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
