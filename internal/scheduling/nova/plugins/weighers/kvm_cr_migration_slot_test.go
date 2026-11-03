@@ -80,7 +80,7 @@ func confirmedSourceSlot(memory string) *v1alpha1.Reservation {
 				{Type: v1alpha1.ReservationConditionReady, Status: metav1.ConditionTrue, Reason: "ReservationActive"},
 			},
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+				Allocation: map[string]v1alpha1.CommittedResourceAllocation{
 					testInstanceUUID: {
 						ObjectRef: corev1.ObjectReference{Name: testInstanceUUID},
 						Resources: map[hv1.ResourceName]resource.Quantity{

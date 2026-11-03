@@ -151,7 +151,7 @@ type CommittedResourceReservationSpec struct {
 	// Key: Workload UUID (VM UUID for Nova, Pod UID for Pods, Machine UID for IronCore, etc.)
 	// Value: allocation state and metadata
 	//
-	// Deprecated: use status.committedResourceReservation.allocations instead. Will be removed once old pods are fully rolled out.
+	// Deprecated: use status.committedResourceReservation.allocation instead. Will be removed once old pods are fully rolled out.
 	// +kubebuilder:validation:Optional
 	Allocations map[string]CommittedResourceAllocation `json:"allocations,omitempty"`
 }
@@ -284,11 +284,19 @@ type CommittedResourceReservationStatus struct {
 	// +kubebuilder:validation:Optional
 	ObservedParentGeneration int64 `json:"observedParentGeneration,omitempty"`
 
-	// Allocations maps workload identifiers to their allocation details.
+	// Allocation maps workload identifiers to their allocation details.
 	// Key: workload UUID (vmUUID for virtual machines)
 	// Value: allocation details including resource consumption and object reference.
 	// +kubebuilder:validation:Optional
-	Allocations map[string]CommittedResourceAllocation `json:"allocations,omitempty"`
+	Allocation map[string]CommittedResourceAllocation `json:"allocation,omitempty"`
+
+	// Allocations is the old map[string]string format (VM UUID → hostname) kept here so that
+	// existing etcd objects decode cleanly during the upgrade window. The controller only reads
+	// and writes Allocation; this field is ignored and will be pruned on next write.
+	//
+	// Deprecated: superseded by Allocation. Will be removed once all clusters are upgraded.
+	// +kubebuilder:validation:Optional
+	Allocations map[string]string `json:"allocations,omitempty"`
 }
 
 // FailoverReservationStatus defines the status fields specific to failover reservations.
@@ -425,8 +433,8 @@ type ReservationStatus struct {
 // +kubebuilder:printcolumn:name="Resources",type="string",JSONPath=".spec.resources"
 // +kubebuilder:printcolumn:name="LastChanged",type="date",JSONPath=".status.failoverReservation.lastChanged",priority=1
 // +kubebuilder:printcolumn:name="AcknowledgedAt",type="date",JSONPath=".status.failoverReservation.acknowledgedAt",priority=1
-// +kubebuilder:printcolumn:name="CR alloc VMs",type="string",JSONPath=".status.committedResourceReservation.allocations.*.objectRef.name",priority=1
-// +kubebuilder:printcolumn:name="CR alloc resources",type="string",JSONPath=".status.committedResourceReservation.allocations.*.resources",priority=1
+// +kubebuilder:printcolumn:name="CR alloc VMs",type="string",JSONPath=".status.committedResourceReservation.allocation.*.objectRef.name",priority=1
+// +kubebuilder:printcolumn:name="CR alloc resources",type="string",JSONPath=".status.committedResourceReservation.allocation.*.resources",priority=1
 // +kubebuilder:printcolumn:name="HA Allocations",type="string",JSONPath=".status.failoverReservation.allocations",priority=1
 // +kubebuilder:printcolumn:name="CR CandidateVM",type="string",JSONPath=".metadata.annotations['reservations\\.cortex\\.cloud/candidate-allocation']",priority=1
 

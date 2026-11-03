@@ -304,7 +304,7 @@ func selectEvictionTarget(
 		if res.Spec.TargetHost == "" {
 			continue // already evicted, pending status cleanup
 		}
-		if res.Status.CommittedResourceReservation == nil || len(res.Status.CommittedResourceReservation.Allocations) == 0 {
+		if res.Status.CommittedResourceReservation == nil || len(res.Status.CommittedResourceReservation.Allocation) == 0 {
 			unallocated = append(unallocated, res)
 		} else {
 			allocated = append(allocated, res)

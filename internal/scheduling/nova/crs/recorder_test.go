@@ -90,7 +90,7 @@ func TestRecordCRAllocation(t *testing.T) {
 		}
 		if len(statusAllocs) > 0 {
 			res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{
-				Allocations: statusAllocs,
+				Allocation: statusAllocs,
 			}
 		}
 		return res

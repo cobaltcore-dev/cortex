@@ -98,7 +98,7 @@ func aggregateReservationsByHost(reservations []v1alpha1.Reservation) (
 			memNotInUse := reservation.Spec.Resources[hv1.ResourceMemory].DeepCopy()
 			if reservation.Status.CommittedResourceReservation != nil {
 				zero := resource.MustParse("0")
-				for _, alloc := range reservation.Status.CommittedResourceReservation.Allocations {
+				for _, alloc := range reservation.Status.CommittedResourceReservation.Allocation {
 					if cpu, ok := alloc.Resources[hv1.ResourceCPU]; ok {
 						cpuNotInUse.Sub(cpu)
 					}

@@ -106,7 +106,7 @@ func reservationWithAlloc(name, vmUUID string) *v1alpha1.Reservation {
 		},
 		Status: v1alpha1.ReservationStatus{
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+				Allocation: map[string]v1alpha1.CommittedResourceAllocation{
 					vmUUID: {ObjectRef: corev1.ObjectReference{Name: vmUUID}},
 				},
 			},
@@ -125,7 +125,7 @@ func buildPaygClient(t *testing.T, objs ...client.Object) client.Client {
 				return nil
 			}
 			var uuids []string
-			for vmUUID := range res.Status.CommittedResourceReservation.Allocations {
+			for vmUUID := range res.Status.CommittedResourceReservation.Allocation {
 				uuids = append(uuids, vmUUID)
 			}
 			return uuids
@@ -155,7 +155,7 @@ func TestFilterPaygCandidates(t *testing.T) {
 			wantVMIDs: []string{"vm-a"},
 		},
 		{
-			name:      "VM already in Reservation.Status.Allocations — excluded",
+			name:      "VM already in Reservation.Status.allocation — excluded",
 			hv:        hvWithInstances("host-1", "az-1", activeInstance("vm-a")),
 			vms:       []reservations.VM{vmOnHV("vm-a", "host-1", "small", 8192)},
 			extraObjs: []*v1alpha1.Reservation{reservationWithAlloc("res-1", "vm-a")},
@@ -209,7 +209,7 @@ func TestFilterPaygCandidates(t *testing.T) {
 			allocatedVMIDs := make(map[string]struct{})
 			for _, res := range tc.extraObjs {
 				if res.Status.CommittedResourceReservation != nil {
-					for vmUUID := range res.Status.CommittedResourceReservation.Allocations {
+					for vmUUID := range res.Status.CommittedResourceReservation.Allocation {
 						allocatedVMIDs[vmUUID] = struct{}{}
 					}
 				}

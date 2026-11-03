@@ -24,7 +24,7 @@ type PAYGCandidate struct {
 
 // ScanAZForPaygCandidates returns unallocated PAYG VMs across all HVs in az, grouped by HV name.
 // Makes exactly two calls regardless of HV or VM count:
-//  1. List all CR Reservations → build allocated VM UUID set from Status.Allocations
+//  1. List all CR Reservations → build allocated VM UUID set from Status.Allocation
 //  2. VMSource.ListVMsByProject → enriched VM data for the project
 //
 // HVs are identified by the label "topology.kubernetes.io/zone".
@@ -53,7 +53,7 @@ func ScanAZForPaygCandidates(
 	}
 
 	// One cache scan: build the set of VM UUIDs already confirmed in any CR Reservation.
-	// Status.Allocations holds verified VM placements — exactly what we need here.
+	// Status.Allocation holds verified VM placements — exactly what we need here.
 	allocatedVMIDs, err := buildAllocatedVMSet(ctx, k8sClient, az)
 	if err != nil {
 		return nil, err
@@ -82,7 +82,7 @@ func ScanAZForPaygCandidates(
 }
 
 // buildAllocatedVMSet lists CR Reservations in az and returns the set of VM UUIDs present
-// in any Status.Allocations (confirmed placements). Filtering by AZ keeps the set small —
+// in any Status.Allocation (confirmed placements). Filtering by AZ keeps the set small —
 // only slots relevant to the current scan are included. One cache scan shared across all HV filters.
 func buildAllocatedVMSet(ctx context.Context, k8sClient client.Client, az string) (map[string]struct{}, error) {
 	var resList v1alpha1.ReservationList
@@ -98,7 +98,7 @@ func buildAllocatedVMSet(ctx context.Context, k8sClient client.Client, az string
 		}
 		// Include confirmed VMs from status.
 		if res.Status.CommittedResourceReservation != nil {
-			for vmUUID := range res.Status.CommittedResourceReservation.Allocations {
+			for vmUUID := range res.Status.CommittedResourceReservation.Allocation {
 				allocated[vmUUID] = struct{}{}
 			}
 		}
@@ -108,7 +108,7 @@ func buildAllocatedVMSet(ctx context.Context, k8sClient client.Client, az string
 
 // filterPaygCandidates returns unallocated PAYG VMs from a pre-fetched list for one HV.
 // vms must already be filtered to hvName by the caller.
-// allocatedVMIDs is a pre-built set of UUIDs already confirmed in any CR Reservation.Status.Allocations.
+// allocatedVMIDs is a pre-built set of UUIDs already confirmed in any CR Reservation.Status.Allocation.
 // Used by reuse sites (ticket #410, #372) where the caller already holds VM data and the allocated set.
 func filterPaygCandidates(
 	hvName string,

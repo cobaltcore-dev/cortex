@@ -179,7 +179,7 @@ func TestCommitmentReservationController_Reconcile(t *testing.T) {
 }
 
 // TestMigrateSpecAllocationsToAnnotation verifies that a blind-scheduler slot that has
-// Spec.CommittedResourceReservation.Allocations populated (old schema) but no
+// Spec.CommittedResourceReservation.Allocation populated (old schema) but no
 // AnnotationCandidateAllocation annotation gets the annotation seeded from the first
 // Spec allocation entry on reconcile (one-time upgrade migration path).
 func TestMigrateSpecAllocationsToAnnotation(t *testing.T) {
@@ -353,7 +353,7 @@ func TestReconcileAllocations(t *testing.T) {
 				if err := k8sClient.Get(context.Background(), client.ObjectKey{Name: "slot-a"}, &updated); err != nil {
 					t.Fatalf("get slot-a: %v", err)
 				}
-				alloc := updated.Status.CommittedResourceReservation.Allocations["vm-multi"]
+				alloc := updated.Status.CommittedResourceReservation.Allocation["vm-multi"]
 				got := alloc.Resources[hv1.ResourceCPU]
 				if got.Cmp(resource.MustParse("4")) != 0 {
 					t.Errorf("cpu alloc: want 4, got %s", got.String())
@@ -403,7 +403,7 @@ func TestReconcileAllocations(t *testing.T) {
 				Status: v1alpha1.ReservationStatus{
 					Host: "host-1",
 					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-						Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+						Allocation: map[string]v1alpha1.CommittedResourceAllocation{
 							"vm-aaa": {ObjectRef: corev1.ObjectReference{Name: "vm-aaa"}, Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(8)}},
 							"vm-zzz": {ObjectRef: corev1.ObjectReference{Name: "vm-zzz"}, Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(8)}},
 						},
@@ -446,7 +446,7 @@ func TestReconcileAllocations(t *testing.T) {
 				Status: v1alpha1.ReservationStatus{
 					Host: "host-1",
 					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-						Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+						Allocation: map[string]v1alpha1.CommittedResourceAllocation{
 							"vm-existing": {ObjectRef: corev1.ObjectReference{Name: "vm-existing"}, Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(8)}},
 						},
 					},
@@ -475,7 +475,7 @@ func TestReconcileAllocations(t *testing.T) {
 				Status: v1alpha1.ReservationStatus{
 					Host: "host-1",
 					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-						Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+						Allocation: map[string]v1alpha1.CommittedResourceAllocation{
 							"vm-good":  {ObjectRef: corev1.ObjectReference{Name: "vm-good"}, Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(8)}},
 							"vm-error": {ObjectRef: corev1.ObjectReference{Name: "vm-error"}, Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(8)}},
 						},
@@ -619,7 +619,7 @@ func TestReconcileAllocations(t *testing.T) {
 			}
 			allocs := map[string]v1alpha1.CommittedResourceAllocation{}
 			if updated.Status.CommittedResourceReservation != nil {
-				allocs = updated.Status.CommittedResourceReservation.Allocations
+				allocs = updated.Status.CommittedResourceReservation.Allocation
 			}
 
 			for _, key := range tt.wantAllocKeys {
@@ -1045,7 +1045,7 @@ func TestReconcile_RevokesReadyWhenTargetHostCleared(t *testing.T) {
 				},
 			},
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+				Allocation: map[string]v1alpha1.CommittedResourceAllocation{
 					"vm-1": {ObjectRef: corev1.ObjectReference{Name: "vm-1"}},
 				},
 			},
@@ -1070,8 +1070,8 @@ func TestReconcile_RevokesReadyWhenTargetHostCleared(t *testing.T) {
 	if updated.Status.Host != "" {
 		t.Errorf("expected Status.Host cleared, got %q", updated.Status.Host)
 	}
-	if updated.Status.CommittedResourceReservation != nil && len(updated.Status.CommittedResourceReservation.Allocations) != 0 {
-		t.Errorf("expected Status.Allocations cleared, got %v", updated.Status.CommittedResourceReservation.Allocations)
+	if updated.Status.CommittedResourceReservation != nil && len(updated.Status.CommittedResourceReservation.Allocation) != 0 {
+		t.Errorf("expected Status.allocation cleared, got %v", updated.Status.CommittedResourceReservation.Allocation)
 	}
 	cond := meta.FindStatusCondition(updated.Status.Conditions, v1alpha1.ReservationConditionReady)
 	if cond == nil || cond.Status != metav1.ConditionFalse {
@@ -1135,10 +1135,10 @@ func crSlot(name, host string, memGiB int64, annotations map[string]string) *v1a
 
 // withAlloc adds a confirmed allocation to a slot for the given VM.
 func withAlloc(slot *v1alpha1.Reservation, vmUUID string, memGiB int64) *v1alpha1.Reservation {
-	if slot.Status.CommittedResourceReservation.Allocations == nil {
-		slot.Status.CommittedResourceReservation.Allocations = make(map[string]v1alpha1.CommittedResourceAllocation)
+	if slot.Status.CommittedResourceReservation.Allocation == nil {
+		slot.Status.CommittedResourceReservation.Allocation = make(map[string]v1alpha1.CommittedResourceAllocation)
 	}
-	slot.Status.CommittedResourceReservation.Allocations[vmUUID] = v1alpha1.CommittedResourceAllocation{
+	slot.Status.CommittedResourceReservation.Allocation[vmUUID] = v1alpha1.CommittedResourceAllocation{
 		ObjectRef: corev1.ObjectReference{Name: vmUUID},
 		Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(memGiB)},
 	}
@@ -1159,7 +1159,7 @@ func getAllocGiB(slot *v1alpha1.Reservation, vmUUID string) resource.Quantity { 
 	if slot.Status.CommittedResourceReservation == nil {
 		return testGiB(0)
 	}
-	alloc, ok := slot.Status.CommittedResourceReservation.Allocations[vmUUID]
+	alloc, ok := slot.Status.CommittedResourceReservation.Allocation[vmUUID]
 	if !ok {
 		return testGiB(0)
 	}

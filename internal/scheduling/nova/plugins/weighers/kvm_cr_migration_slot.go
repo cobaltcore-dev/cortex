@@ -94,7 +94,7 @@ func (s *KVMCRMigrationSlotStep) Run(
 		if res.Status.CommittedResourceReservation == nil || res.Spec.CommittedResourceReservation == nil {
 			continue
 		}
-		if _, ok := res.Status.CommittedResourceReservation.Allocations[instanceUUID]; ok {
+		if _, ok := res.Status.CommittedResourceReservation.Allocation[instanceUUID]; ok {
 			sourceSlot = res
 			break
 		}

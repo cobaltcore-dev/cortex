@@ -68,11 +68,11 @@ spec:
       name: AcknowledgedAt
       priority: 1
       type: date
-    - jsonPath: .status.committedResourceReservation.allocations.*.objectRef.name
+    - jsonPath: .status.committedResourceReservation.allocation.*.objectRef.name
       name: CR alloc VMs
       priority: 1
       type: string
-    - jsonPath: .status.committedResourceReservation.allocations.*.resources
+    - jsonPath: .status.committedResourceReservation.allocation.*.resources
       name: CR alloc resources
       priority: 1
       type: string
@@ -191,7 +191,7 @@ spec:
                       Key: Workload UUID (VM UUID for Nova, Pod UID for Pods, Machine UID for IronCore, etc.)
                       Value: allocation state and metadata
 
-                      Deprecated: use status.committedResourceReservation.allocations instead. Will be removed once old pods are fully rolled out.
+                      Deprecated: use status.committedResourceReservation.allocation instead. Will be removed once old pods are fully rolled out.
                     type: object
                   commitmentUUID:
                     description: CommitmentUUID is the UUID of the commitment that
@@ -343,7 +343,7 @@ spec:
                   CommittedResourceReservation contains status fields specific to committed resource reservations.
                   Only used when Type is CommittedResourceReservation.
                 properties:
-                  allocations:
+                  allocation:
                     additionalProperties:
                       description: |-
                         CommittedResourceAllocation represents a workload's assignment to a committed resource reservation slot.
@@ -412,9 +412,19 @@ spec:
                       - resources
                       type: object
                     description: |-
-                      Allocations maps workload identifiers to their allocation details.
+                      Allocation maps workload identifiers to their allocation details.
                       Key: workload UUID (vmUUID for virtual machines)
                       Value: allocation details including resource consumption and object reference.
+                    type: object
+                  allocations:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Allocations is the old map[string]string format (VM UUID → hostname) kept here so that
+                      existing etcd objects decode cleanly during the upgrade window. The controller only reads
+                      and writes Allocation; this field is ignored and will be pruned on next write.
+
+                      Deprecated: superseded by Allocation. Will be removed once all clusters are upgraded.
                     type: object
                   observedParentGeneration:
                     description: |-

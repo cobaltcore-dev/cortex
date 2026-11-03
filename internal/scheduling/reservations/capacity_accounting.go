@@ -143,13 +143,13 @@ func UnusedReservationCapacity(res *v1alpha1.Reservation, ignoreAllocations bool
 		!ignoreAllocations &&
 		res.Spec.TargetHost == res.Status.Host &&
 		res.Status.CommittedResourceReservation != nil &&
-		len(res.Status.CommittedResourceReservation.Allocations) > 0 {
+		len(res.Status.CommittedResourceReservation.Allocation) > 0 {
 		// Compute remaining slot capacity: slot - sum of confirmed VM resources.
 		result := make(map[hv1.ResourceName]resource.Quantity, len(res.Spec.Resources))
 		zero := resource.MustParse("0")
 		for rn, slotQty := range res.Spec.Resources {
 			remaining := slotQty.DeepCopy()
-			for _, alloc := range res.Status.CommittedResourceReservation.Allocations {
+			for _, alloc := range res.Status.CommittedResourceReservation.Allocation {
 				if used, ok := alloc.Resources[rn]; ok {
 					remaining.Sub(used)
 				}

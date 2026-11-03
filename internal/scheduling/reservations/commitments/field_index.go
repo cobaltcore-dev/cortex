@@ -131,7 +131,7 @@ func indexProjectQuotaByProjectID(ctx context.Context, mcl *multicluster.Client)
 	return err
 }
 
-// Status.CommittedResourceReservation.Allocations. This allows the reservation controller
+// Status.CommittedResourceReservation.Allocation. This allows the reservation controller
 // to efficiently find all Reservation CRDs that have confirmed a specific VM UUID without
 // scanning every reservation in the cluster.
 func indexReservationByAllocationVMUUID(ctx context.Context, mcl *multicluster.Client) (err error) {
@@ -150,8 +150,8 @@ func indexReservationByAllocationVMUUID(ctx context.Context, mcl *multicluster.C
 				if res.Status.CommittedResourceReservation == nil {
 					return nil
 				}
-				uuids := make([]string, 0, len(res.Status.CommittedResourceReservation.Allocations))
-				for vmUUID := range res.Status.CommittedResourceReservation.Allocations {
+				uuids := make([]string, 0, len(res.Status.CommittedResourceReservation.Allocation))
+				for vmUUID := range res.Status.CommittedResourceReservation.Allocation {
 					uuids = append(uuids, vmUUID)
 				}
 				return uuids

@@ -1133,7 +1133,7 @@ func (tr *UsageTestReservation) toK8sReservation(number int) *v1alpha1.Reservati
 			},
 		},
 		CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-			Allocations: map[string]v1alpha1.CommittedResourceAllocation{},
+			Allocation: map[string]v1alpha1.CommittedResourceAllocation{},
 		},
 	}
 

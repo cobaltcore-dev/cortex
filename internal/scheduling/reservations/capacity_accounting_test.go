@@ -71,7 +71,7 @@ func TestUnusedReservationCapacity(t *testing.T) {
 				},
 				Status: v1alpha1.ReservationStatus{
 					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-						Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+						Allocation: map[string]v1alpha1.CommittedResourceAllocation{
 							"vm-1": {
 								ObjectRef: corev1.ObjectReference{Name: "vm-1"},
 								Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(480)},
@@ -92,7 +92,7 @@ func TestUnusedReservationCapacity(t *testing.T) {
 				},
 				Status: v1alpha1.ReservationStatus{
 					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-						Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+						Allocation: map[string]v1alpha1.CommittedResourceAllocation{
 							"vm-1": {
 								ObjectRef: corev1.ObjectReference{Name: "vm-1"},
 								Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(240)},
@@ -130,7 +130,7 @@ func TestUnusedReservationCapacity(t *testing.T) {
 				Status: v1alpha1.ReservationStatus{
 					Host: "old-host", // differs from TargetHost → migration in progress
 					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-						Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+						Allocation: map[string]v1alpha1.CommittedResourceAllocation{
 							"vm-1": {
 								ObjectRef: corev1.ObjectReference{Name: "vm-1"},
 								Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(480)},
@@ -151,7 +151,7 @@ func TestUnusedReservationCapacity(t *testing.T) {
 				},
 				Status: v1alpha1.ReservationStatus{
 					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-						Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+						Allocation: map[string]v1alpha1.CommittedResourceAllocation{
 							"vm-1": {
 								ObjectRef: corev1.ObjectReference{Name: "vm-1"},
 								Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(480)},
@@ -327,7 +327,7 @@ func TestHostFreeCapacity(t *testing.T) {
 			Status: v1alpha1.ReservationStatus{
 				Host: "host",
 				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-					Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+					Allocation: map[string]v1alpha1.CommittedResourceAllocation{
 						"vm-1": {
 							ObjectRef: corev1.ObjectReference{Name: "vm-1"},
 							Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)},

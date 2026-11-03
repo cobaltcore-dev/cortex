@@ -109,7 +109,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		old := res.DeepCopy()
 		res.Status.Host = ""
 		if res.Status.CommittedResourceReservation != nil {
-			res.Status.CommittedResourceReservation.Allocations = nil
+			res.Status.CommittedResourceReservation.Allocation = nil
 		}
 		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
 			Type:               v1alpha1.ReservationConditionReady,
@@ -380,7 +380,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 //  1. Verify existing confirmed allocations via VMSource: VMs still on the expected
 //     host have their partial allocation recomputed; VMs that have disappeared are removed.
 //  2. Promote a PAYG candidate VM (AnnotationCandidateAllocation) into
-//     status.allocations when it is confirmed active on the expected host.
+//     status.allocation when it is confirmed active on the expected host.
 func (r *CommitmentReservationController) reconcileAllocations(ctx context.Context, res *v1alpha1.Reservation) error {
 	logger := LoggerFromContext(ctx)
 
@@ -403,8 +403,8 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 
 	// Pass 1: remove VMs no longer on the expected host.
 	// Sort lexically for deterministic processing order for the greedy resource assignment logic.
-	vmUUIDs := make([]string, 0, len(res.Status.CommittedResourceReservation.Allocations))
-	for vmUUID := range res.Status.CommittedResourceReservation.Allocations {
+	vmUUIDs := make([]string, 0, len(res.Status.CommittedResourceReservation.Allocation))
+	for vmUUID := range res.Status.CommittedResourceReservation.Allocation {
 		vmUUIDs = append(vmUUIDs, vmUUID)
 	}
 	// add VM id from annotation if present
@@ -429,7 +429,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 			continue
 		}
 		if vm == nil || vm.CurrentHypervisor != expectedHost {
-			if _, ok := res.Status.CommittedResourceReservation.Allocations[vmUUID]; ok {
+			if _, ok := res.Status.CommittedResourceReservation.Allocation[vmUUID]; ok {
 				logger.Info("removing confirmed allocation (VM not found on expected host)",
 					"vm", vmUUID,
 					"reservation", res.Name,
@@ -505,11 +505,11 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 	// Single status patch.
 	old := res.DeepCopy()
 	// Skip the status patch when allocations have not changed.
-	if apiequality.Semantic.DeepEqual(res.Status.CommittedResourceReservation.Allocations, newStatusAllocations) {
+	if apiequality.Semantic.DeepEqual(res.Status.CommittedResourceReservation.Allocation, newStatusAllocations) {
 		logger.V(1).Info("reconciled allocations, nothing has changed")
 		return nil
 	}
-	res.Status.CommittedResourceReservation.Allocations = newStatusAllocations
+	res.Status.CommittedResourceReservation.Allocation = newStatusAllocations
 	if err := r.Status().Patch(ctx, res, client.MergeFrom(old)); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			logger.Info("reservation not found, nothing to patch, probably deleted in the meantime", "reservation", res.Name)
@@ -564,7 +564,7 @@ func (r *CommitmentReservationController) computeAlreadyAssignedElsewhere(
 			// stale allocation on a different-host slot — skip; it will self-correct when that slot next reconciles.
 			continue // only same-host slots contribute
 		}
-		if alloc, ok := other.Status.CommittedResourceReservation.Allocations[vmUUID]; ok {
+		if alloc, ok := other.Status.CommittedResourceReservation.Allocation[vmUUID]; ok {
 			for rn, qty := range alloc.Resources {
 				if cur, exists := result[rn]; exists {
 					cur.Add(qty)

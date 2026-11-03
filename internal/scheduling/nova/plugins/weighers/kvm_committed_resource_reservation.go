@@ -133,7 +133,7 @@ func freeMemoryBytes(res *v1alpha1.Reservation) int64 {
 		return total
 	}
 	var confirmed int64
-	for _, alloc := range res.Status.CommittedResourceReservation.Allocations {
+	for _, alloc := range res.Status.CommittedResourceReservation.Allocation {
 		if used, ok := alloc.Resources[hv1.ResourceMemory]; ok {
 			confirmed += used.Value()
 		}

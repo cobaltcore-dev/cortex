@@ -152,7 +152,7 @@ func TestSelectEvictionTarget(t *testing.T) {
 			Status: v1alpha1.ReservationStatus{
 				Host: "host-1",
 				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-					Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+					Allocation: map[string]v1alpha1.CommittedResourceAllocation{
 						vmID: {ObjectRef: corev1.ObjectReference{Name: vmID}, Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(totalGiB)}},
 					},
 				},
@@ -448,7 +448,7 @@ func TestEvictReservation_ClearsAllocations(t *testing.T) {
 		Status: v1alpha1.ReservationStatus{
 			Host: "host-1",
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+				Allocation: map[string]v1alpha1.CommittedResourceAllocation{
 					"vm-1": {ObjectRef: corev1.ObjectReference{Name: "vm-1"}, Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(512)}},
 				},
 			},
@@ -474,8 +474,8 @@ func TestEvictReservation_ClearsAllocations(t *testing.T) {
 	if updated.Spec.TargetHost != "" {
 		t.Errorf("expected TargetHost cleared, got %q", updated.Spec.TargetHost)
 	}
-	// Eviction only clears TargetHost; status.allocations tracks confirmed VMs and is untouched.
-	if updated.Status.CommittedResourceReservation == nil || len(updated.Status.CommittedResourceReservation.Allocations) == 0 {
-		t.Errorf("expected status.allocations to remain after eviction")
+	// Eviction only clears TargetHost; status.allocation tracks confirmed VMs and is untouched.
+	if updated.Status.CommittedResourceReservation == nil || len(updated.Status.CommittedResourceReservation.Allocation) == 0 {
+		t.Errorf("expected status.allocation to remain after eviction")
 	}
 }

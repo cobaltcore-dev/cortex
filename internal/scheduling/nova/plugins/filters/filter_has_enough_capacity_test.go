@@ -180,7 +180,7 @@ func newMigratingReservation(
 
 	if len(statusAllocations) > 0 {
 		res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{
-			Allocations: statusAllocations,
+			Allocation: statusAllocations,
 		}
 	}
 

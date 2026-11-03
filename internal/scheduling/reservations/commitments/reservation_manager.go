@@ -217,7 +217,7 @@ func (m *ReservationManager) ApplyCommitmentState(
 		}
 		if reservationToDelete == nil {
 			for i, res := range existing {
-				if res.Status.CommittedResourceReservation == nil || len(res.Status.CommittedResourceReservation.Allocations) == 0 {
+				if res.Status.CommittedResourceReservation == nil || len(res.Status.CommittedResourceReservation.Allocation) == 0 {
 					reservationToDelete = &res
 					existing = append(existing[:i], existing[i+1:]...) // remove from existing list
 					break

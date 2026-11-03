@@ -46,7 +46,7 @@ func newTestCRSlot(name string, memGiB int64, targetHost, resourceGroup string, 
 	}
 	if len(statusAllocs) > 0 {
 		res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{
-			Allocations: statusAllocs,
+			Allocation: statusAllocs,
 		}
 	}
 	return res
@@ -195,7 +195,7 @@ func TestApplyCommitmentState(t *testing.T) {
 				}
 				if remaining[0].Spec.TargetHost == "" ||
 					remaining[0].Status.CommittedResourceReservation == nil ||
-					len(remaining[0].Status.CommittedResourceReservation.Allocations) == 0 {
+					len(remaining[0].Status.CommittedResourceReservation.Allocation) == 0 {
 					t.Error("expected scheduled reservation with allocations to remain")
 				}
 			},
@@ -210,7 +210,7 @@ func TestApplyCommitmentState(t *testing.T) {
 			wantRemovedCount: 1,
 			validateRemoved: func(t *testing.T, removed []v1alpha1.Reservation) {
 				if removed[0].Status.CommittedResourceReservation != nil &&
-					len(removed[0].Status.CommittedResourceReservation.Allocations) != 0 {
+					len(removed[0].Status.CommittedResourceReservation.Allocation) != 0 {
 					t.Error("expected reservation without allocations to be removed")
 				}
 			},
@@ -219,7 +219,7 @@ func TestApplyCommitmentState(t *testing.T) {
 					t.Fatalf("expected 1 remaining, got %d", len(remaining))
 				}
 				if remaining[0].Status.CommittedResourceReservation == nil ||
-					len(remaining[0].Status.CommittedResourceReservation.Allocations) == 0 {
+					len(remaining[0].Status.CommittedResourceReservation.Allocation) == 0 {
 					t.Error("expected reservation with allocations to remain")
 				}
 			},

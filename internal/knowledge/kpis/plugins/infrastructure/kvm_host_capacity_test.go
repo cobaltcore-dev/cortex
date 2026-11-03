@@ -565,7 +565,7 @@ func TestKVMResourceCapacityKPI_Collect(t *testing.T) {
 							{Type: v1alpha1.ReservationConditionReady, Status: v1.ConditionTrue},
 						},
 						CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-							Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+							Allocation: map[string]v1alpha1.CommittedResourceAllocation{
 								"vm-uuid-1": {
 									ObjectRef: corev1.ObjectReference{Name: "vm-uuid-1"},
 									Resources: map[hv1.ResourceName]resource.Quantity{

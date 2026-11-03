@@ -53,7 +53,7 @@ func newCRReservation(name, host, projectID, resourceGroup, az, totalMemory stri
 			}
 		}
 		res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{
-			Allocations: statusAllocs,
+			Allocation: statusAllocs,
 		}
 	}
 	return res

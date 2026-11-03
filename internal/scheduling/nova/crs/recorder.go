@@ -114,7 +114,7 @@ func (r *Recorder) RecordPlacement(ctx context.Context, decision *v1alpha1.Decis
 
 	for _, slot := range slotsOnTarget {
 		if slot.Status.CommittedResourceReservation != nil {
-			if _, exists := slot.Status.CommittedResourceReservation.Allocations[instanceUUID]; exists {
+			if _, exists := slot.Status.CommittedResourceReservation.Allocation[instanceUUID]; exists {
 				log.V(1).Info("CR allocation: VM UUID already confirmed in reservation, skipping",
 					"instanceUUID", instanceUUID, "reservation", slot.Name)
 				return

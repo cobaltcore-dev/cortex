@@ -440,8 +440,8 @@ func newIntgEnv(t *testing.T, initialObjects []client.Object, schedulerFn http.H
 			if !ok || res.Status.CommittedResourceReservation == nil {
 				return nil
 			}
-			uuids := make([]string, 0, len(res.Status.CommittedResourceReservation.Allocations))
-			for vmUUID := range res.Status.CommittedResourceReservation.Allocations {
+			uuids := make([]string, 0, len(res.Status.CommittedResourceReservation.Allocation))
+			for vmUUID := range res.Status.CommittedResourceReservation.Allocation {
 				uuids = append(uuids, vmUUID)
 			}
 			return uuids
@@ -1327,7 +1327,7 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 			// slots 0-9: allocated — have a confirmed VM
 			vmID := fmt.Sprintf("vm-%02d", i)
 			slot.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{
-				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+				Allocation: map[string]v1alpha1.CommittedResourceAllocation{
 					vmID: {
 						ObjectRef: corev1.ObjectReference{Name: vmID},
 						Resources: map[hv1.ResourceName]resource.Quantity{
@@ -1393,7 +1393,7 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 	for _, r := range resList.Items {
 		if r.Spec.TargetHost == "" &&
 			r.Status.CommittedResourceReservation != nil &&
-			len(r.Status.CommittedResourceReservation.Allocations) > 0 {
+			len(r.Status.CommittedResourceReservation.Allocation) > 0 {
 			t.Errorf("slot %s has confirmed allocations but was evicted", r.Name)
 		}
 	}

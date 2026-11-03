@@ -132,8 +132,8 @@ func newCRTestClient(scheme *runtime.Scheme, objects ...client.Object) client.Cl
 			if !ok || res.Status.CommittedResourceReservation == nil {
 				return nil
 			}
-			uuids := make([]string, 0, len(res.Status.CommittedResourceReservation.Allocations))
-			for vmUUID := range res.Status.CommittedResourceReservation.Allocations {
+			uuids := make([]string, 0, len(res.Status.CommittedResourceReservation.Allocation))
+			for vmUUID := range res.Status.CommittedResourceReservation.Allocation {
 				uuids = append(uuids, vmUUID)
 			}
 			return uuids

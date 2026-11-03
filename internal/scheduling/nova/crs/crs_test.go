@@ -29,7 +29,7 @@ func makeSlot(projectID, flavorGroup string, totalMemMiB, allocatedMemMiB int64)
 	}
 	if allocatedMemMiB > 0 {
 		res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{
-			Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+			Allocation: map[string]v1alpha1.CommittedResourceAllocation{
 				"some-vm": {
 					ObjectRef: corev1.ObjectReference{Name: "some-vm"},
 					Resources: map[hv1.ResourceName]resource.Quantity{
@@ -240,7 +240,7 @@ func TestPickSlot(t *testing.T) {
 		}
 		if usedMemMiB > 0 {
 			res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{
-				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
+				Allocation: map[string]v1alpha1.CommittedResourceAllocation{
 					"vm-existing": {
 						ObjectRef: corev1.ObjectReference{Name: "vm-existing"},
 						Resources: map[hv1.ResourceName]resource.Quantity{
