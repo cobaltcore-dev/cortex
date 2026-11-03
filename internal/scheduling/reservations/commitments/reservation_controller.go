@@ -517,7 +517,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 		}
 		return fmt.Errorf("failed to patch reservation status: %w", err)
 	}
-	logger.Info("reconciled allocations", "remainingSpare", remainingSpare, "statusAllocations", len(newStatusAllocations))
+	logger.V(1).Info("reconciled allocations", "remainingSpare", remainingSpare, "statusAllocations", len(newStatusAllocations))
 	return nil
 }
 
