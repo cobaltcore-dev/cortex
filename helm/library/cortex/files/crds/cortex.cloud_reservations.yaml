@@ -416,16 +416,6 @@ spec:
                       Key: workload UUID (vmUUID for virtual machines)
                       Value: allocation details including resource consumption and object reference.
                     type: object
-                  allocations:
-                    additionalProperties:
-                      type: string
-                    description: |-
-                      Allocations is the old map[string]string format (VM UUID → hostname) kept here so that
-                      existing etcd objects decode cleanly during the upgrade window. The controller only reads
-                      and writes Allocation; this field is ignored and will be pruned on next write.
-
-                      Deprecated: superseded by Allocation. Will be removed once all clusters are upgraded.
-                    type: object
                   observedParentGeneration:
                     description: |-
                       ObservedParentGeneration is the Spec.CommittedResourceReservation.ParentGeneration value

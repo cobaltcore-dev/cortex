@@ -289,14 +289,6 @@ type CommittedResourceReservationStatus struct {
 	// Value: allocation details including resource consumption and object reference.
 	// +kubebuilder:validation:Optional
 	Allocation map[string]CommittedResourceAllocation `json:"allocation,omitempty"`
-
-	// Allocations is the old map[string]string format (VM UUID → hostname) kept here so that
-	// existing etcd objects decode cleanly during the upgrade window. The controller only reads
-	// and writes Allocation; this field is ignored and will be pruned on next write.
-	//
-	// Deprecated: superseded by Allocation. Will be removed once all clusters are upgraded.
-	// +kubebuilder:validation:Optional
-	Allocations map[string]string `json:"allocations,omitempty"`
 }
 
 // FailoverReservationStatus defines the status fields specific to failover reservations.
