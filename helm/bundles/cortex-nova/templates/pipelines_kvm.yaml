@@ -84,6 +84,17 @@ spec:
         # FailoverHostReservation is a new feature and is not yet counted as
         # reserved capacity during scheduling.
         - {key: ignoredReservationTypes, stringListValue: ["FailoverHostReservation"]}
+    - name: filter_no_failover_host
+      description: |
+        This step blocks hosts that have a failover host reservation, so no new
+        virtual machines are placed on a host being drained or kept empty as a
+        gang-evacuation landing zone. It only applies to non-evacuation requests;
+        evacuations are routed onto reserved hosts after the pipeline. The filter
+        is purely subtractive, so its position does not matter. It honors the
+        call-time ignoredReservationTypes option so the failover host path finder
+        probe still discovers reserved hosts.
+      params:
+        - {key: enabled, boolValue: {{ .Values.kvm.filterNoFailoverHost.enabled }}}
     - name: filter_allowed_projects
       description: |
         This step filters hosts based on allowed projects defined in the
@@ -258,6 +269,17 @@ spec:
         # FailoverHostReservation is a new feature and is not yet counted as
         # reserved capacity during scheduling.
         - {key: ignoredReservationTypes, stringListValue: ["FailoverHostReservation"]}
+    - name: filter_no_failover_host
+      description: |
+        This step blocks hosts that have a failover host reservation, so no new
+        virtual machines are placed on a host being drained or kept empty as a
+        gang-evacuation landing zone. It only applies to non-evacuation requests;
+        evacuations are routed onto reserved hosts after the pipeline. The filter
+        is purely subtractive, so its position does not matter. It honors the
+        call-time ignoredReservationTypes option so the failover host path finder
+        probe still discovers reserved hosts.
+      params:
+        - {key: enabled, boolValue: {{ .Values.kvm.filterNoFailoverHost.enabled }}}
     - name: filter_allowed_projects
       description: |
         This step filters hosts based on allowed projects defined in the
@@ -582,6 +604,17 @@ spec:
         # FailoverHostReservation is a new feature and is not yet counted as
         # reserved capacity during scheduling.
         - {key: ignoredReservationTypes, stringListValue: ["FailoverHostReservation"]}
+    - name: filter_no_failover_host
+      description: |
+        This step blocks hosts that have a failover host reservation, so no new
+        virtual machines are placed on a host being drained or kept empty as a
+        gang-evacuation landing zone. It only applies to non-evacuation requests;
+        evacuations are routed onto reserved hosts after the pipeline. The filter
+        is purely subtractive, so its position does not matter. It honors the
+        call-time ignoredReservationTypes option so the failover host path finder
+        probe still discovers reserved hosts.
+      params:
+        - {key: enabled, boolValue: {{ .Values.kvm.filterNoFailoverHost.enabled }}}
     - name: filter_has_requested_traits
       description: |
         This step filters hosts that do not have the requested traits given by the

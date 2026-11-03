@@ -475,6 +475,64 @@ stateDiagram-v2
 > independently rather than as a single current-state field, so the arrows show the normal path rather than the
 > only possible transitions.
 
+## How failover host reservations affect scheduling
+
+Creating a reservation is only half the story — the scheduler has to *honor* it. Two distinct behaviors wire
+failover host reservations into the Nova scheduling pipeline, split along a natural seam: one keeps new
+workload *off* reserved hosts, the other steers a dead host's workload *onto* them.
+
+### Normal placement: reserved hosts are blocked
+
+For every non-evacuation request, the **`filter_no_failover_host`** pipeline filter removes any host that has a
+failover host reservation from the candidate set, so no new VM is placed on a host that is being drained or
+kept empty as a landing zone. The filter is purely *subtractive* — it only ever removes hosts — so its
+position in the pipeline does not matter and all other filters and weighers still apply around it. It is
+toggled by the `kvm.filterNoFailoverHost.enabled` Helm value (default `false`) and is a no-op when disabled.
+
+The filter also honors the **call-time** `ignoredReservationTypes` request option. This is what keeps the
+**path finder probe** working: the probe asks the scheduler which hosts would accept a flavor, and it passes
+`ignoredReservationTypes: [FailoverHostReservation]` precisely so a reserved host is *not* hidden from its own
+partition. Because the filter obeys that option, the probe still discovers already-reserved hosts and the
+partitioning does not fragment.
+
+### Evacuation: routing onto a failover host (gang-evacuation)
+
+Evacuations are **not** handled by the filter — it deliberately leaves evacuation requests untouched.
+Instead, a dedicated **Matcher** runs *after* the filter/weigher pipeline has produced its ordered
+candidates, from inside the pipeline's global execution lock. For an evacuation request (identified by the
+`evacuate` intent) it reads the dead host from the `source_host` scheduler hint and:
+
+1. finds the failover host reservations whose `sourceHosts` include that source host;
+2. if **none** match, it changes nothing — the request falls back to the ordinary candidate set so the VM
+   still has somewhere to go — and increments a metric
+   (`cortex_failover_host_evacuations_without_reservation_total`) that drives an alert on frequent
+   occurrences;
+3. if one of them is already **In Use** *by this same source host*, it reuses that one — this is the
+   gang-evacuation path, so the whole gang lands on the same target;
+4. otherwise it pins the first reservation that is *not* already in use, marking it **In Use** and recording
+   the source host on its status, then returns that reservation's host as the sole candidate.
+
+A reservation can legitimately rescue several source hosts (the planner lists every partition peer as a
+source), so two hosts in the same partition can fail over concurrently, one reservation each. The Matcher
+therefore never pins a reservation that is already **In Use** by a *different* source — that would steal a
+landing zone actively absorbing another host's gang. If every matching reservation is already taken by other
+sources, it falls back to the ordinary candidate set (and records the same metric as the no-reservation
+case).
+
+Running inside the global pipeline lock is what makes **gang-evacuation** work. The *first* VM evacuated from
+a dead host pins a target and writes `In Use` while holding the lock; every subsequent VM from the same
+source host — serialized behind the same lock — sees that `In Use` reservation and lands on the *same*
+target. Writing the pin *after* the pipeline (rather than inside the filter) avoids a dangling `In Use`
+reservation if a later step fails, and keeping it under the lock guarantees the next request observes it.
+
+As a safety mechanism, if the chosen reserved host is not among the pipeline's candidates (the reservation
+conflicts with the request's other scheduling constraints), the Matcher falls back to the original candidate
+set rather than returning an empty one, so the VM is never left with nowhere to schedule.
+
+The Matcher only ever advances a reservation *to* `In Use`. Moving it back out — to `Active` once the
+evacuation completes, or on cleanup — stays with the failover host lifecycle reconciler, based on the real
+workload present on the host.
+
 ## Configuration
 
 Enable the controller and configure it under the nested `failover.hosts` key:

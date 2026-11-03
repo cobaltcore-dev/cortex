@@ -56,6 +56,21 @@ type FilterWeigherPipelineController struct {
 
 	// CRRecorder receives scheduling events and updates CR reservations and metrics.
 	CRRecorder crs.Recorder
+
+	// FailoverMatcher routes evacuation requests onto failover host reservations
+	// after the pipeline runs, inside the exclusive lock. Optional; when nil, no
+	// failover host rerouting is applied.
+	FailoverMatcher FailoverHostMatcher
+}
+
+// FailoverHostMatcher reroutes an evacuation onto a failover host reservation.
+// Implemented by reservations/failoverhost.Matcher; declared here as an
+// interface so the nova package does not import failoverhost (which would form
+// an import cycle via that package's integration tests).
+type FailoverHostMatcher interface {
+	// Match returns the candidate hosts to use, possibly rewritten to the chosen
+	// failover host, or the originals unchanged when nothing applies.
+	Match(ctx context.Context, request api.ExternalSchedulerRequest, orig []string) ([]string, error)
 }
 
 // The type of pipeline this controller manages.
@@ -177,6 +192,24 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 
 	result, err := pipeline.Run(request)
 	if err == nil {
+		// Route evacuations onto failover host reservations and pin the
+		// source->target relationship. This runs inside the exclusive lock (write
+		// runs only) so the InUse write is visible to subsequent evacuations from
+		// the same source, implementing gang-evacuation. Read-only runs (probes,
+		// capacity checks) never reroute or write.
+		if c.FailoverMatcher != nil && !request.Options.ReadOnly {
+			hosts, mErr := c.FailoverMatcher.Match(ctx, request, result.OrderedHosts)
+			if mErr != nil {
+				log.Error(mErr, "failover host matcher failed")
+				return &request, mErr
+			}
+			result.OrderedHosts = hosts
+			if len(hosts) > 0 {
+				result.TargetHost = &hosts[0]
+			} else {
+				result.TargetHost = nil
+			}
+		}
 		decision.Status.Result = &result
 	}
 	// Record a human-readable explanation of the decision so it propagates to

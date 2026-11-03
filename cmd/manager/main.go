@@ -419,6 +419,8 @@ func main() {
 		featureGates := conf.GetConfigOrDie[nova.FeatureGates]()
 		noHostFoundCounter := crs.NewNoHostFoundCounter()
 		placementCounter := crs.NewPlacementCounter()
+		failoverHostMatcherMonitor := failoverhost.NewMatcherMonitor()
+		metrics.Registry.MustRegister(failoverHostMatcherMonitor)
 		// Filter-weigher pipeline controller setup.
 		filterWeigherController := &nova.FilterWeigherPipelineController{
 			Monitor:      filterWeigherPipelineMonitor,
@@ -426,6 +428,10 @@ func main() {
 			CRRecorder: crs.Recorder{
 				NoHostFoundCounter: noHostFoundCounter,
 				PlacementCounter:   placementCounter,
+			},
+			FailoverMatcher: &failoverhost.Matcher{
+				Client:  multiclusterClient,
+				Monitor: failoverHostMatcherMonitor,
 			},
 		}
 		metrics.Registry.MustRegister(noHostFoundCounter)

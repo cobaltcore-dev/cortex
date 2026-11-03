@@ -961,3 +961,148 @@ func TestFilterWeigherPipelineController_PeekReadOnly(t *testing.T) {
 		})
 	}
 }
+
+// fakeFailoverMatcher records the candidates it was handed and returns a
+// preconfigured result, so controller wiring can be asserted in isolation.
+type fakeFailoverMatcher struct {
+	called   bool
+	gotHosts []string
+	ret      []string
+	err      error
+}
+
+func (f *fakeFailoverMatcher) Match(_ context.Context, _ api.ExternalSchedulerRequest, orig []string) ([]string, error) {
+	f.called = true
+	f.gotHosts = orig
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.ret, nil
+}
+
+// runProcessWithMatcher builds a controller with an empty pipeline and the given
+// matcher, runs the decision through ProcessNewDecisionFromAPI, and returns the
+// decision and any error. The request's weights make the pipeline order the two
+// hosts [compute-1, compute-2].
+func runProcessWithMatcher(t *testing.T, matcher FailoverHostMatcher, readOnly bool) (*v1alpha1.Decision, error) {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add v1alpha1 scheme: %v", err)
+	}
+
+	req := api.ExternalSchedulerRequest{
+		Spec:     api.NovaObject[api.NovaSpec]{Data: api.NovaSpec{InstanceUUID: "vm-1", NumInstances: 1}},
+		Hosts:    []api.ExternalSchedulerHost{{ComputeHost: "compute-1"}, {ComputeHost: "compute-2"}},
+		Weights:  map[string]float64{"compute-1": 1.0, "compute-2": 0.5},
+		Pipeline: "p",
+	}
+	if readOnly {
+		// ReadOnly runs must also skip inflight and CR tracking, else Options.Validate rejects them.
+		req.Options = scheduling.Options{ReadOnly: true, SkipInflight: true, SkipCommittedResourceTracking: true}
+	}
+	raw, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	pipeline := &v1alpha1.Pipeline{
+		ObjectMeta: metav1.ObjectMeta{Name: "p"},
+		Spec: v1alpha1.PipelineSpec{
+			Type:             v1alpha1.PipelineTypeFilterWeigher,
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+		},
+	}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(pipeline).
+		WithStatusSubresource(&v1alpha1.Decision{}).
+		Build()
+	controller := &FilterWeigherPipelineController{
+		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
+			Client:          fakeClient,
+			Pipelines:       make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
+			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
+		},
+		Monitor:         lib.FilterWeigherPipelineMonitor{},
+		FailoverMatcher: matcher,
+	}
+	controller.PipelineConfigs["p"] = *pipeline
+	initResult := controller.InitPipeline(context.Background(), *pipeline)
+	if len(initResult.FilterErrors) > 0 || len(initResult.WeigherErrors) > 0 {
+		t.Fatalf("init pipeline: %v %v", initResult.FilterErrors, initResult.WeigherErrors)
+	}
+	controller.Pipelines["p"] = initResult.Pipeline
+
+	decision := &v1alpha1.Decision{
+		ObjectMeta: metav1.ObjectMeta{Name: "d", Namespace: "default"},
+		Spec: v1alpha1.DecisionSpec{
+			SchedulingDomain: v1alpha1.SchedulingDomainNova,
+			PipelineRef:      corev1.ObjectReference{Name: "p"},
+			NovaRaw:          &runtime.RawExtension{Raw: raw},
+		},
+	}
+	return decision, controller.ProcessNewDecisionFromAPI(context.Background(), decision)
+}
+
+func TestFilterWeigherPipelineController_FailoverMatcherRewritesResult(t *testing.T) {
+	m := &fakeFailoverMatcher{ret: []string{"compute-2"}}
+	decision, err := runProcessWithMatcher(t, m, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !m.called {
+		t.Fatal("expected matcher to be called")
+	}
+	// Matcher receives the pipeline's ordered hosts.
+	if len(m.gotHosts) != 2 || m.gotHosts[0] != "compute-1" || m.gotHosts[1] != "compute-2" {
+		t.Errorf("matcher got unexpected hosts: %v", m.gotHosts)
+	}
+	// Its returned hosts become the result, with TargetHost pointing at the first.
+	if decision.Status.Result == nil {
+		t.Fatal("expected result to be set")
+	}
+	if got := decision.Status.Result.OrderedHosts; len(got) != 1 || got[0] != "compute-2" {
+		t.Errorf("expected OrderedHosts [compute-2], got %v", got)
+	}
+	if decision.Status.Result.TargetHost == nil || *decision.Status.Result.TargetHost != "compute-2" {
+		t.Errorf("expected TargetHost compute-2, got %v", decision.Status.Result.TargetHost)
+	}
+}
+
+func TestFilterWeigherPipelineController_FailoverMatcherSkippedOnReadOnly(t *testing.T) {
+	m := &fakeFailoverMatcher{ret: []string{"compute-2"}}
+	decision, err := runProcessWithMatcher(t, m, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if m.called {
+		t.Error("expected matcher NOT to be called on a read-only run")
+	}
+	// The pipeline's original ordering is preserved.
+	if got := decision.Status.Result.OrderedHosts; len(got) != 2 || got[0] != "compute-1" {
+		t.Errorf("expected original ordering, got %v", got)
+	}
+}
+
+func TestFilterWeigherPipelineController_FailoverMatcherErrorFailsDecision(t *testing.T) {
+	m := &fakeFailoverMatcher{err: errors.New("patch failed")}
+	decision, err := runProcessWithMatcher(t, m, false)
+	if err == nil || !strings.Contains(err.Error(), "patch failed") {
+		t.Fatalf("expected matcher error to propagate, got %v", err)
+	}
+	// On matcher failure the decision carries no result.
+	if decision.Status.Result != nil {
+		t.Errorf("expected no result on matcher error, got %v", decision.Status.Result)
+	}
+}
+
+func TestFilterWeigherPipelineController_FailoverMatcherEmptyClearsTargetHost(t *testing.T) {
+	m := &fakeFailoverMatcher{ret: []string{}}
+	decision, err := runProcessWithMatcher(t, m, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if decision.Status.Result.TargetHost != nil {
+		t.Errorf("expected nil TargetHost for empty host list, got %v", *decision.Status.Result.TargetHost)
+	}
+}

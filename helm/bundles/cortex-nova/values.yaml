@@ -109,6 +109,14 @@ kvm:
     # Domain names that are explicitly treated as non-external-customer domains and
     # skipped by the filter, even if they match one of the prefixes above.
     ignoredDomainNames: []
+  # Options for the filter_no_failover_host pipeline step, which blocks hosts with a
+  # failover host reservation so no new VMs land on a host being kept empty as a
+  # gang-evacuation landing zone. Applied to every KVM pipeline that uses the step.
+  filterNoFailoverHost:
+    # Disabled by default until the failover host draining controller logic is
+    # implemented. Set to true to block hosts with a failover host reservation
+    # from ordinary placement.
+    enabled: false
 
 cortex: &cortex
   crd: {enable: false}
