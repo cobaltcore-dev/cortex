@@ -30,7 +30,9 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/go-logr/logr"
 )
@@ -224,7 +226,7 @@ func (c *Reconciler) reconcileAll(ctx context.Context) error {
 	logger := LoggerFromContext(ctx)
 	startTime := time.Now()
 
-	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
+	knowledge := &accounting.FlavorGroupKnowledgeClient{Client: c.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get flavor groups: %w", err)
@@ -826,7 +828,7 @@ func (c *Reconciler) probeScheduler(
 	// filter_has_requested_traits/filter_capabilities would otherwise see empty
 	// slices and become no-ops). No hypervisor-type default — only match when the
 	// flavor names one.
-	requiredTraits, forbiddenTraits := schedulerapi.SplitTraits(flavor.ExtraSpecs)
+	requiredTraits, forbiddenTraits := nova.SplitTraits(flavor.ExtraSpecs)
 	out, err := c.scheduler.RunWithoutLock(ctx, sched.SchedulerRequest{
 		Pipeline:              pipeline,
 		GatherAllCandidates:   true,
@@ -841,7 +843,7 @@ func (c *Reconciler) probeScheduler(
 		RequiredTraits:        requiredTraits,
 		ForbiddenTraits:       forbiddenTraits,
 		RequestedCapabilities: reservations.HypervisorTypeCapability(flavor.ExtraSpecs, false),
-		AcceleratorsRequested: schedulerapi.RequestsAccelerators(flavor.ExtraSpecs),
+		AcceleratorsRequested: nova.RequestsAccelerators(flavor.ExtraSpecs),
 		Flavor: sched.FlavorSpec{
 			VCPUs:    flavor.VCPUs,
 			MemoryMB: flavor.MemoryMB,
@@ -919,7 +921,7 @@ func (c *Reconciler) blockedResourcesByHost(ctx context.Context) (map[string]map
 			continue
 		}
 
-		resourcesToBlock := reservations.UnusedReservationCapacity(res, false)
+		resourcesToBlock := accounting.UnusedReservationCapacity(res, false)
 		for host := range hostsToBlock {
 			if blocked[host] == nil {
 				blocked[host] = make(map[string]int64)
@@ -990,7 +992,7 @@ func (c *Reconciler) reservedResourcesByGroupAZ(
 				"reservation", res.Name, "type", res.Spec.Type, "az", az)
 			continue
 		}
-		blockedRes := reservations.UnusedReservationCapacity(res, false)
+		blockedRes := accounting.UnusedReservationCapacity(res, false)
 		// Route each reservation to exactly one bucket by type; the two are disjoint.
 		bucket := committed
 		if res.Spec.Type == v1alpha1.ReservationTypeFailover {

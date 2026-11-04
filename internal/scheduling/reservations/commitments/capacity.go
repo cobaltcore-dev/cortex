@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 )
 
 // ErrCapacityNotReady is returned by CalculateCapacity when one or more FlavorGroupCapacity
@@ -64,7 +64,7 @@ func NewCapacityCalculator(client client.Client, conf APIConfig) *CapacityCalcul
 //   - Usage: always None. Limes derives project usage from the separate Report-Usage endpoint, so
 //     a usage value here is unused and would only invite misinterpretation of reserved capacity.
 func (c *CapacityCalculator) CalculateCapacity(ctx context.Context, req liquid.ServiceCapacityRequest) (liquid.ServiceCapacityReport, error) {
-	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
+	knowledge := &accounting.FlavorGroupKnowledgeClient{Client: c.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		return liquid.ServiceCapacityReport{}, fmt.Errorf("failed to get flavor groups: %w", err)

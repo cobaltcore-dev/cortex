@@ -14,6 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 )
 
@@ -105,7 +106,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		hosts = append(hosts, compute.Host{ComputeHost: h.ComputeHost, HypervisorHostname: h.HypervisorHostname})
 		weights[h.ComputeHost] = 0.0
 	}
-	requiredTraits, forbiddenTraits := api.SplitTraits(vm.FlavorExtraSpecs)
+	requiredTraits, forbiddenTraits := nova.SplitTraits(vm.FlavorExtraSpecs)
 	schedReq := compute.SchedulerRequest{
 		Pipeline:              pipeline,
 		GatherAllCandidates:   true,
@@ -123,7 +124,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		RequiredTraits:        requiredTraits,
 		ForbiddenTraits:       forbiddenTraits,
 		RequestedCapabilities: reservations.HypervisorTypeCapability(vm.FlavorExtraSpecs, true),
-		AcceleratorsRequested: api.RequestsAccelerators(vm.FlavorExtraSpecs),
+		AcceleratorsRequested: nova.RequestsAccelerators(vm.FlavorExtraSpecs),
 		Flavor: compute.FlavorSpec{
 			VCPUs:    resSpec.VCPUs,
 			MemoryMB: resSpec.MemoryMB,
@@ -260,7 +261,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 	// match it in the reservation's allocations. KVM gathers all candidates; the
 	// reservation host must come back ranked for the VM to be compatible.
 	pipeline := InferFailoverPipeline(flavorExtraSpecs)
-	requiredTraits, forbiddenTraits := api.SplitTraits(flavorExtraSpecs)
+	requiredTraits, forbiddenTraits := nova.SplitTraits(flavorExtraSpecs)
 	evacuateOpts := DefaultFailoverOptions
 	evacuateOpts.ReadOnly = true
 	evacuateOpts.LockReservations = true
@@ -280,7 +281,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		RequiredTraits:        requiredTraits,
 		ForbiddenTraits:       forbiddenTraits,
 		RequestedCapabilities: reservations.HypervisorTypeCapability(flavorExtraSpecs, true),
-		AcceleratorsRequested: api.RequestsAccelerators(flavorExtraSpecs),
+		AcceleratorsRequested: nova.RequestsAccelerators(flavorExtraSpecs),
 		Flavor: compute.FlavorSpec{
 			VCPUs:    vcpus,
 			MemoryMB: memoryMB,

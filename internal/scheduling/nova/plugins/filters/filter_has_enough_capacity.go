@@ -14,7 +14,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	resv "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -231,7 +231,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Sche
 		// Oversize spec-only: if a pending VM is larger than the remaining slot, block its full size.
 		//
 		// FailoverReservations: block = Spec.Resources (always fully blocked).
-		resourcesToBlock := resv.UnusedReservationCapacity(&reservation, ignoreAllocations)
+		resourcesToBlock := accounting.UnusedReservationCapacity(&reservation, ignoreAllocations)
 
 		// Block the calculated resources on each host
 		for host := range hostsToBlock {

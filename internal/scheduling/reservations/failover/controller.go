@@ -16,6 +16,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/google/uuid"
@@ -347,7 +348,7 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 	// 6. Fetch flavor groups for reservation sizing (if configured)
 	var flavorGroups map[string]compute.FlavorGroupFeature
 	if c.Config.UseFlavorGroupResources {
-		knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.Client}
+		knowledge := &accounting.FlavorGroupKnowledgeClient{Client: c.Client}
 		fg, err := knowledge.GetAllFlavorGroups(ctx, nil)
 		if err != nil {
 			logger.Info("flavor group knowledge not available, will fall back to VM resources for sizing",

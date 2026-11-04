@@ -12,7 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -42,12 +42,12 @@ var errFlavorNotInGroup = errors.New("flavor not in any group")
 // Returns errFlavorNotInGroup (PAYG) if the flavor is not in any group.
 // Returns a different error for transient failures (Knowledge CRD unavailable, etc).
 func (r *Recorder) resolveFlavorGroup(ctx context.Context, flavorName string) (string, *compute.FlavorInGroup, error) {
-	fgClient := reservations.FlavorGroupKnowledgeClient{Client: r.Client}
+	fgClient := accounting.FlavorGroupKnowledgeClient{Client: r.Client}
 	flavorGroups, err := fgClient.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		return "", nil, err
 	}
-	groupName, flavor, err := reservations.FindFlavorInGroups(flavorName, flavorGroups)
+	groupName, flavor, err := accounting.FindFlavorInGroups(flavorName, flavorGroups)
 	if err != nil {
 		return "", nil, errFlavorNotInGroup
 	}

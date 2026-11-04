@@ -13,6 +13,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -74,7 +75,7 @@ func (c *QuotaController) ReconcilePeriodic(ctx context.Context) error {
 	logger.Info("starting full quota reconcile")
 
 	// Fetch flavor groups from Knowledge CRD
-	flavorGroupClient := &reservations.FlavorGroupKnowledgeClient{Client: c.Client}
+	flavorGroupClient := &accounting.FlavorGroupKnowledgeClient{Client: c.Client}
 	flavorGroups, err := flavorGroupClient.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		logger.Error(err, "failed to get flavor groups")
@@ -228,7 +229,7 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	// Fetch flavor groups for CRUsage computation
-	flavorGroupClient := &reservations.FlavorGroupKnowledgeClient{Client: c.Client}
+	flavorGroupClient := &accounting.FlavorGroupKnowledgeClient{Client: c.Client}
 	flavorGroups, err := flavorGroupClient.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		logger.Error(err, "failed to get flavor groups")
@@ -267,7 +268,7 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 // a ProjectQuota is first created and has no persisted TotalUsage yet.
 func (c *QuotaController) computeTotalUsageForProject(ctx context.Context, projectID string) (map[string]map[string]int64, error) {
 	// Fetch flavor groups from Knowledge CRD
-	flavorGroupClient := &reservations.FlavorGroupKnowledgeClient{Client: c.Client}
+	flavorGroupClient := &accounting.FlavorGroupKnowledgeClient{Client: c.Client}
 	flavorGroups, err := flavorGroupClient.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get flavor groups: %w", err)
@@ -362,7 +363,7 @@ func (c *QuotaController) ReconcileHVDiff(ctx context.Context, oldHV, newHV *hv1
 	logger.V(1).Info("HV instance diff detected", "added", len(added), "removed", len(removed))
 
 	// Get flavor groups for mapping
-	flavorGroupClient := &reservations.FlavorGroupKnowledgeClient{Client: c.Client}
+	flavorGroupClient := &accounting.FlavorGroupKnowledgeClient{Client: c.Client}
 	flavorGroups, err := flavorGroupClient.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		logger.Error(err, "failed to get flavor groups for incremental update")

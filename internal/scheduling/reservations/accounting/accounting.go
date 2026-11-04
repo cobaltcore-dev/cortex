@@ -1,7 +1,12 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package reservations
+// Package accounting holds the reservation capacity-accounting math and flavor
+// group lookup. Both are pure, self-contained helpers over Reservation/Knowledge
+// CRDs with no dependency on the scheduling pipeline, so they can live below both
+// the reservation controllers and the Nova scheduler tree without forming an
+// import cycle.
+package accounting
 
 import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"

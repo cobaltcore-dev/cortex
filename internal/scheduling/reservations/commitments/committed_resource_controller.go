@@ -24,6 +24,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 )
 
@@ -442,7 +443,7 @@ func (r *CommittedResourceController) reconcileCoresHeadroom(ctx context.Context
 }
 
 func (r *CommittedResourceController) applyReservationState(ctx context.Context, logger logr.Logger, cr *v1alpha1.CommittedResource) (*ApplyResult, error) {
-	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: r.Client}
+	knowledge := &accounting.FlavorGroupKnowledgeClient{Client: r.Client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("flavor knowledge not ready: %w", err)
@@ -646,7 +647,7 @@ func (r *CommittedResourceController) rollbackToAccepted(ctx context.Context, lo
 	if cr.Status.AcceptedSpec == nil {
 		return r.deleteChildReservations(ctx, cr)
 	}
-	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: r.Client}
+	knowledge := &accounting.FlavorGroupKnowledgeClient{Client: r.Client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		// Can't compute the rollback target — fall back to full delete rather than leaving
