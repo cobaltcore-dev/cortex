@@ -120,6 +120,8 @@ spec:
         requests without headroom, add `params: [{key: enforce, boolValue: true}]`
         to this step. The shadow default is intentional so that newly-rolled-out
         releases never silently start rejecting requests.
+      params:
+        - {key: crStateFilter, stringListValue: {{ .Values.kvm.crStateFilter | toJson }}}
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -293,6 +295,8 @@ spec:
         requests without headroom, add `params: [{key: enforce, boolValue: true}]`
         to this step. The shadow default is intentional so that newly-rolled-out
         releases never silently start rejecting requests.
+      params:
+        - {key: crStateFilter, stringListValue: {{ .Values.kvm.crStateFilter | toJson }}}
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
