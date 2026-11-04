@@ -21,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/capacity"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib/capacity"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"

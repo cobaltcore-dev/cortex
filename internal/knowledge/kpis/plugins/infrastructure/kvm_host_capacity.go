@@ -12,7 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/capacity"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib/capacity"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/prometheus/client_golang/prometheus"
 

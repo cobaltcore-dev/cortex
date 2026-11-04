@@ -27,7 +27,7 @@ import (
 
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/capacity"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib/capacity"
 	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"

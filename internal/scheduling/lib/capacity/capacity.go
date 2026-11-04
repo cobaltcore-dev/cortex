@@ -8,8 +8,8 @@
 // scheduling tree and the knowledge KPI tree without forming an import cycle.
 //
 // Three consumers share this math: the Nova capacity filter
-// (filter_has_enough_capacity), the reservation controllers (via the accounting
-// package), and the KVM host-capacity KPI.
+// (filter_has_enough_capacity), the reservation controllers, and the KVM
+// host-capacity KPI.
 package capacity
 
 import (

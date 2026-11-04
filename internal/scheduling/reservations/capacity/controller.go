@@ -29,7 +29,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	caplib "github.com/cobaltcore-dev/cortex/internal/scheduling/capacity"
+	caplib "github.com/cobaltcore-dev/cortex/internal/scheduling/lib/capacity"
 	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
