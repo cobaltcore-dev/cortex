@@ -183,7 +183,6 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request compute.Place
 	// liquid RAM math below.
 	memoryMB := request.RequestedResources.MemoryBytes() / (1 << 20)
 	vcpus := request.RequestedResources.VCPUs()
-	//nolint:gosec // instance count is a small, non-negative count.
 	instances := int64(numInstances)
 	// MB to GiB: using 1024 as divisor is slightly conservative (overestimates GiB needed).
 	requestRAM := int64(math.Ceil(float64(memoryMB*instances) / 1024.0))
