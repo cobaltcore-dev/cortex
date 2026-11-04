@@ -479,7 +479,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 					// Fully used, so it provides no CR headroom itself — the request
 					// falls through to the PAYG check where its amount is deducted.
 					Status: v1alpha1.CommittedResourceStatus{
-						UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("100Gi")},
+						Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("100Gi")}},
 					},
 				},
 				&v1alpha1.ProjectQuota{
@@ -518,7 +518,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 						Amount:           resource.MustParse("100Gi"),
 					},
 					Status: v1alpha1.CommittedResourceStatus{
-						UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("100Gi")},
+						Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("100Gi")}},
 					},
 				},
 				&v1alpha1.ProjectQuota{

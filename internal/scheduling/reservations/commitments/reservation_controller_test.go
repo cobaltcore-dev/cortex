@@ -23,6 +23,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 )
 
 // fakePipeline returns a fixed ordered-host list (modelling a scheduler run).

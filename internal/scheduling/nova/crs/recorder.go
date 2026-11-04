@@ -10,6 +10,7 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	"github.com/prometheus/client_golang/prometheus"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -50,14 +51,14 @@ func (r *Recorder) resolveFlavorGroup(ctx context.Context, flavorName string) (s
 
 // RecordPlacement writes the placed VM UUID into the matching Reservation slot
 // and emits placement metrics. Called after a successful Nova placement.
-func (r *Recorder) RecordPlacement(ctx context.Context, decision *v1alpha1.Decision, request api.ExternalSchedulerRequest) {
+func (r *Recorder) RecordPlacement(ctx context.Context, result sched.PlacementResult, intent v1alpha1.SchedulingIntent, request api.ExternalSchedulerRequest) {
 	log := ctrl.LoggerFrom(ctx)
 
 	instanceUUID := request.Spec.Data.InstanceUUID
 	projectID := request.Context.ProjectID
 	flavorName := request.Spec.Data.Flavor.Data.Name
-	selectedHost := *decision.Status.Result.TargetHost
-	intent := string(decision.Spec.Intent)
+	selectedHost := *result.TargetHost
+	intentStr := string(intent)
 
 	flavorGroupName, flavorInGroup, err := r.resolveFlavorGroup(ctx, flavorName)
 	if err != nil {
@@ -67,7 +68,7 @@ func (r *Recorder) RecordPlacement(ctx context.Context, decision *v1alpha1.Decis
 			log.Error(err, "CR allocation: failed to resolve flavor group",
 				"flavor", flavorName, "instanceUUID", instanceUUID)
 			if r.PlacementCounter != nil {
-				r.PlacementCounter.WithLabelValues("unknown", intent, "error").Inc()
+				r.PlacementCounter.WithLabelValues("unknown", intentStr, "error").Inc()
 			}
 		}
 		return
@@ -92,7 +93,7 @@ func (r *Recorder) RecordPlacement(ctx context.Context, decision *v1alpha1.Decis
 		activeCRs = append(activeCRs, cr)
 	}
 
-	candidateHosts := decision.Status.Result.OrderedHosts
+	candidateHosts := result.OrderedHosts
 	crOutcome := ClassifyPlacement(evaluator, activeCRs, candidateHosts, projectID, flavorGroupName)
 
 	log.V(1).Info("CR allocation: placement classified",
@@ -103,7 +104,7 @@ func (r *Recorder) RecordPlacement(ctx context.Context, decision *v1alpha1.Decis
 		"flavorGroup", flavorGroupName,
 	)
 	if r.PlacementCounter != nil {
-		r.PlacementCounter.WithLabelValues(flavorGroupName, intent, crOutcome).Inc()
+		r.PlacementCounter.WithLabelValues(flavorGroupName, intentStr, crOutcome).Inc()
 	}
 
 	if crOutcome != "slot_used" {
@@ -159,13 +160,12 @@ func (r *Recorder) RecordPlacement(ctx context.Context, decision *v1alpha1.Decis
 }
 
 // RecordNoHostFound classifies a no-host-found result and emits a log line and metric.
-func (r *Recorder) RecordNoHostFound(ctx context.Context, decision *v1alpha1.Decision, request api.ExternalSchedulerRequest) {
+func (r *Recorder) RecordNoHostFound(ctx context.Context, intent v1alpha1.SchedulingIntent, request api.ExternalSchedulerRequest) {
 	log := ctrl.LoggerFrom(ctx)
 
 	projectID := request.Context.ProjectID
 	flavorName := request.Spec.Data.Flavor.Data.Name
 	instanceUUID := request.Spec.Data.InstanceUUID
-	intent := decision.Spec.Intent
 
 	flavorGroupName, flavorInGroup, err := r.resolveFlavorGroup(ctx, flavorName)
 	if err != nil {
