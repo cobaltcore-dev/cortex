@@ -84,17 +84,19 @@ spec:
         # FailoverHostReservation is a new feature and is not yet counted as
         # reserved capacity during scheduling.
         - {key: ignoredReservationTypes, stringListValue: ["FailoverHostReservation"]}
-    - name: filter_no_failover_host
+    - name: filter_failover_host
       description: |
-        This step blocks hosts that have a failover host reservation, so no new
-        virtual machines are placed on a host being drained or kept empty as a
-        gang-evacuation landing zone. It only applies to non-evacuation requests;
-        evacuations are routed onto reserved hosts after the pipeline. The filter
-        is purely subtractive, so its position does not matter. It honors the
-        call-time ignoredReservationTypes option so the failover host path finder
-        probe still discovers reserved hosts.
+        This step keeps new virtual machines off hosts that have a failover host
+        reservation. For ordinary requests it removes every such host; for
+        evacuations it removes all but the one failover host deterministically
+        selected for the source host, so another failure keeps a free landing
+        zone, while ordinary candidates are retained so Nova can retry on failure.
+        The weigher_failover_host weigher then lifts the selected host to the
+        front. The filter is purely subtractive, so its position does not matter.
+        It honors the call-time ignoredReservationTypes option so the failover
+        host path finder probe still discovers reserved hosts.
       params:
-        - {key: enabled, boolValue: {{ .Values.kvm.filterNoFailoverHost.enabled }}}
+        - {key: enabled, boolValue: {{ .Values.kvm.failoverHost.enabled }}}
     - name: filter_allowed_projects
       description: |
         This step filters hosts based on allowed projects defined in the
@@ -168,6 +170,16 @@ spec:
         VM is allocated get a higher weight, encouraging placement on
         pre-reserved failover capacity. For non-evacuation requests, this
         weigher has no effect.
+    - name: weigher_failover_host
+      description: |
+        For an evacuation, this weigher lifts the failover host selected for the
+        request's source host to the front of the candidate list by giving it a
+        dominating weight, so it becomes Nova's first choice while the retained
+        ordinary candidates stay behind it as retry fallbacks. It selects the same
+        host the filter_failover_host filter kept. For non-evacuation requests it
+        has no effect.
+      params:
+        - {key: enabled, boolValue: {{ .Values.kvm.failoverHost.enabled }}}
     - name: kvm_committed_resource_reservation
       description: |
         This weigher boosts hosts that have a ready CommittedResourceReservation
@@ -269,17 +281,19 @@ spec:
         # FailoverHostReservation is a new feature and is not yet counted as
         # reserved capacity during scheduling.
         - {key: ignoredReservationTypes, stringListValue: ["FailoverHostReservation"]}
-    - name: filter_no_failover_host
+    - name: filter_failover_host
       description: |
-        This step blocks hosts that have a failover host reservation, so no new
-        virtual machines are placed on a host being drained or kept empty as a
-        gang-evacuation landing zone. It only applies to non-evacuation requests;
-        evacuations are routed onto reserved hosts after the pipeline. The filter
-        is purely subtractive, so its position does not matter. It honors the
-        call-time ignoredReservationTypes option so the failover host path finder
-        probe still discovers reserved hosts.
+        This step keeps new virtual machines off hosts that have a failover host
+        reservation. For ordinary requests it removes every such host; for
+        evacuations it removes all but the one failover host deterministically
+        selected for the source host, so another failure keeps a free landing
+        zone, while ordinary candidates are retained so Nova can retry on failure.
+        The weigher_failover_host weigher then lifts the selected host to the
+        front. The filter is purely subtractive, so its position does not matter.
+        It honors the call-time ignoredReservationTypes option so the failover
+        host path finder probe still discovers reserved hosts.
       params:
-        - {key: enabled, boolValue: {{ .Values.kvm.filterNoFailoverHost.enabled }}}
+        - {key: enabled, boolValue: {{ .Values.kvm.failoverHost.enabled }}}
     - name: filter_allowed_projects
       description: |
         This step filters hosts based on allowed projects defined in the
@@ -350,6 +364,16 @@ spec:
         VM is allocated get a higher weight, encouraging placement on
         pre-reserved failover capacity. For non-evacuation requests, this
         weigher has no effect.
+    - name: weigher_failover_host
+      description: |
+        For an evacuation, this weigher lifts the failover host selected for the
+        request's source host to the front of the candidate list by giving it a
+        dominating weight, so it becomes Nova's first choice while the retained
+        ordinary candidates stay behind it as retry fallbacks. It selects the same
+        host the filter_failover_host filter kept. For non-evacuation requests it
+        has no effect.
+      params:
+        - {key: enabled, boolValue: {{ .Values.kvm.failoverHost.enabled }}}
     - name: kvm_committed_resource_reservation
       description: |
         This weigher boosts hosts that have a ready CommittedResourceReservation
@@ -604,17 +628,19 @@ spec:
         # FailoverHostReservation is a new feature and is not yet counted as
         # reserved capacity during scheduling.
         - {key: ignoredReservationTypes, stringListValue: ["FailoverHostReservation"]}
-    - name: filter_no_failover_host
+    - name: filter_failover_host
       description: |
-        This step blocks hosts that have a failover host reservation, so no new
-        virtual machines are placed on a host being drained or kept empty as a
-        gang-evacuation landing zone. It only applies to non-evacuation requests;
-        evacuations are routed onto reserved hosts after the pipeline. The filter
-        is purely subtractive, so its position does not matter. It honors the
-        call-time ignoredReservationTypes option so the failover host path finder
-        probe still discovers reserved hosts.
+        This step keeps new virtual machines off hosts that have a failover host
+        reservation. For ordinary requests it removes every such host; for
+        evacuations it removes all but the one failover host deterministically
+        selected for the source host, so another failure keeps a free landing
+        zone, while ordinary candidates are retained so Nova can retry on failure.
+        The weigher_failover_host weigher then lifts the selected host to the
+        front. The filter is purely subtractive, so its position does not matter.
+        It honors the call-time ignoredReservationTypes option so the failover
+        host path finder probe still discovers reserved hosts.
       params:
-        - {key: enabled, boolValue: {{ .Values.kvm.filterNoFailoverHost.enabled }}}
+        - {key: enabled, boolValue: {{ .Values.kvm.failoverHost.enabled }}}
     - name: filter_has_requested_traits
       description: |
         This step filters hosts that do not have the requested traits given by the
@@ -655,6 +681,16 @@ spec:
         VM is allocated get a higher weight, encouraging placement on
         pre-reserved failover capacity. For non-evacuation requests, this
         weigher has no effect.
+    - name: weigher_failover_host
+      description: |
+        For an evacuation, this weigher lifts the failover host selected for the
+        request's source host to the front of the candidate list by giving it a
+        dominating weight, so it becomes Nova's first choice while the retained
+        ordinary candidates stay behind it as retry fallbacks. It selects the same
+        host the filter_failover_host filter kept. For non-evacuation requests it
+        has no effect.
+      params:
+        - {key: enabled, boolValue: {{ .Values.kvm.failoverHost.enabled }}}
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline

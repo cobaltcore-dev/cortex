@@ -5,7 +5,6 @@ package failoverhost
 
 import (
 	"context"
-	"slices"
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -55,23 +54,30 @@ func evacuationRequest(sourceHost string) api.ExternalSchedulerRequest {
 	}
 }
 
-func getReservation(t *testing.T, c client.Client) v1alpha1.Reservation {
+func getReservation(t *testing.T, c client.Client, name string) v1alpha1.Reservation {
 	t.Helper()
 	var res v1alpha1.Reservation
-	if err := c.Get(context.Background(), types.NamespacedName{Name: "failover-host-target1"}, &res); err != nil {
+	if err := c.Get(context.Background(), types.NamespacedName{Name: name}, &res); err != nil {
 		t.Fatalf("failed to get reservation: %v", err)
 	}
 	return res
 }
 
-func TestMatcher_Match(t *testing.T) {
+func isInUseBy(res v1alpha1.Reservation, sourceHost string) bool {
+	if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
+		return false
+	}
+	return res.Status.FailoverHostReservation != nil &&
+		res.Status.FailoverHostReservation.SourceHost == sourceHost
+}
+
+func TestMatcher_ConfirmAndMarkInUse(t *testing.T) {
 	tests := []struct {
 		name         string
 		reservations []*v1alpha1.Reservation
 		request      api.ExternalSchedulerRequest
-		orig         []string
-		want         []string
-		// check runs after Match to assert reservation state in the client.
+		orderedHosts []string
+		// check runs after the call to assert reservation state in the client.
 		check func(t *testing.T, c client.Client)
 	}{
 		{
@@ -82,96 +88,110 @@ func TestMatcher_Match(t *testing.T) {
 					SchedulerHints: map[string]any{"_nova_check_type": "live_migrate", "source_host": "source1"},
 				}},
 			},
-			orig: []string{"host1", "host2"},
-			want: []string{"host1", "host2"},
+			orderedHosts: []string{"target1", "host2"},
+			check: func(t *testing.T, c client.Client) {
+				res := getReservation(t, c, "failover-host-target1")
+				if meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
+					t.Error("expected target1 to not be in use for a non-evacuation request")
+				}
+			},
 		},
 		{
 			name:         "evacuation without source hint is a no-op",
 			reservations: []*v1alpha1.Reservation{matcherReservation("target1", "source1")},
 			request:      evacuationRequest(""),
-			orig:         []string{"host1", "host2"},
-			want:         []string{"host1", "host2"},
-		},
-		{
-			name:         "no matching reservation falls back to original candidates",
-			reservations: []*v1alpha1.Reservation{matcherReservation("target1", "otherSource")},
-			request:      evacuationRequest("source1"),
-			orig:         []string{"host1", "host2"},
-			want:         []string{"host1", "host2"},
-		},
-		{
-			name:         "pins a fresh reservation and writes InUse",
-			reservations: []*v1alpha1.Reservation{matcherReservation("target1", "source1")},
-			request:      evacuationRequest("source1"),
-			orig:         []string{"host1", "target1", "host2"},
-			want:         []string{"target1"},
+			orderedHosts: []string{"target1", "host2"},
 			check: func(t *testing.T, c client.Client) {
-				res := getReservation(t, c)
-				if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
-					t.Error("expected InUse condition to be True")
-				}
-				if res.Status.FailoverHostReservation == nil || res.Status.FailoverHostReservation.SourceHost != "source1" {
-					t.Errorf("expected status SourceHost=source1, got %+v", res.Status.FailoverHostReservation)
+				res := getReservation(t, c, "failover-host-target1")
+				if meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
+					t.Error("expected target1 to not be in use without a source hint")
 				}
 			},
 		},
 		{
-			name: "reuses the in-use reservation for the same source",
-			// A second, not-in-use reservation (target0 sorts first) must be
-			// ignored in favour of the one already in use by this source.
+			name:         "pins the selected reservation when it is the top candidate",
+			reservations: []*v1alpha1.Reservation{matcherReservation("target1", "source1")},
+			request:      evacuationRequest("source1"),
+			orderedHosts: []string{"target1", "host1", "host2"},
+			check: func(t *testing.T, c client.Client) {
+				res := getReservation(t, c, "failover-host-target1")
+				if !isInUseBy(res, "source1") {
+					t.Errorf("expected target1 to be in use by source1, got %+v", res.Status.FailoverHostReservation)
+				}
+			},
+		},
+		{
+			name:         "does not pin when the selected target is not the top candidate",
+			reservations: []*v1alpha1.Reservation{matcherReservation("target1", "source1")},
+			request:      evacuationRequest("source1"),
+			// target1 lost to an ordinary host (e.g. filtered out by other
+			// constraints), so the evacuation falls back and must not pin.
+			orderedHosts: []string{"host1", "host2"},
+			check: func(t *testing.T, c client.Client) {
+				res := getReservation(t, c, "failover-host-target1")
+				if meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
+					t.Error("expected target1 to NOT be pinned when it is not the top candidate")
+				}
+			},
+		},
+		{
+			name: "reuses the in-use reservation for the same source, no new write",
 			reservations: []*v1alpha1.Reservation{
 				inUse(matcherReservation("target1", "source1"), "source1"),
 				matcherReservation("target0", "source1"),
 			},
-			request: evacuationRequest("source1"),
-			orig:    []string{"target0", "target1", "host2"},
-			want:    []string{"target1"},
-		},
-		{
-			name: "does not steal a reservation in use by another source",
-			// source2 evacuates while source1 already holds target1, so source2
-			// must pin the free target2 and leave target1's pin intact.
-			reservations: []*v1alpha1.Reservation{
-				inUse(matcherReservation("target1", "source1", "source2"), "source1"),
-				matcherReservation("target2", "source1", "source2"),
-			},
-			request: evacuationRequest("source2"),
-			orig:    []string{"target1", "target2", "host3"},
-			want:    []string{"target2"},
+			request:      evacuationRequest("source1"),
+			orderedHosts: []string{"target1", "host2"},
 			check: func(t *testing.T, c client.Client) {
-				res := getReservation(t, c)
-				if res.Status.FailoverHostReservation == nil || res.Status.FailoverHostReservation.SourceHost != "source1" {
-					t.Errorf("expected target1 to stay pinned to source1, got %+v", res.Status.FailoverHostReservation)
+				res := getReservation(t, c, "failover-host-target1")
+				if !isInUseBy(res, "source1") {
+					t.Errorf("expected target1 to stay in use by source1, got %+v", res.Status.FailoverHostReservation)
+				}
+				// target0 must remain untouched.
+				res0 := getReservation(t, c, "failover-host-target0")
+				if meta.IsStatusConditionTrue(res0.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
+					t.Error("expected target0 to remain free")
 				}
 			},
 		},
 		{
-			name: "all reservations in use by others falls back",
+			name: "does not steal a reservation in use by another source",
+			reservations: []*v1alpha1.Reservation{
+				inUse(matcherReservation("target1", "source1", "source2"), "source1"),
+				matcherReservation("target2", "source1", "source2"),
+			},
+			request:      evacuationRequest("source2"),
+			orderedHosts: []string{"target2", "host3"},
+			check: func(t *testing.T, c client.Client) {
+				res1 := getReservation(t, c, "failover-host-target1")
+				if !isInUseBy(res1, "source1") {
+					t.Errorf("expected target1 to stay pinned to source1, got %+v", res1.Status.FailoverHostReservation)
+				}
+				res2 := getReservation(t, c, "failover-host-target2")
+				if !isInUseBy(res2, "source2") {
+					t.Errorf("expected target2 to be pinned to source2, got %+v", res2.Status.FailoverHostReservation)
+				}
+			},
+		},
+		{
+			name: "all reservations in use by others is a no-op",
 			reservations: []*v1alpha1.Reservation{
 				inUse(matcherReservation("target1", "source1", "source2"), "source1"),
 			},
-			request: evacuationRequest("source2"),
-			orig:    []string{"target1", "host3"},
-			want:    []string{"target1", "host3"},
+			request:      evacuationRequest("source2"),
+			orderedHosts: []string{"host3"},
 			check: func(t *testing.T, c client.Client) {
-				res := getReservation(t, c)
+				res := getReservation(t, c, "failover-host-target1")
 				if res.Status.FailoverHostReservation.SourceHost != "source1" {
 					t.Errorf("expected target1 to stay pinned to source1, got %q", res.Status.FailoverHostReservation.SourceHost)
 				}
 			},
 		},
 		{
-			name:         "chosen host not in candidates falls back but still pins",
-			reservations: []*v1alpha1.Reservation{matcherReservation("target1", "source1")},
+			name:         "no matching reservation is a no-op",
+			reservations: []*v1alpha1.Reservation{matcherReservation("target1", "otherSource")},
 			request:      evacuationRequest("source1"),
-			orig:         []string{"host1", "host2"}, // target1 absent: conflicts with other constraints
-			want:         []string{"host1", "host2"},
-			check: func(t *testing.T, c client.Client) {
-				res := getReservation(t, c)
-				if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
-					t.Error("expected InUse condition to be True even on candidate fallback")
-				}
-			},
+			orderedHosts: []string{"host1", "host2"},
 		},
 	}
 	for _, tt := range tests {
@@ -182,12 +202,8 @@ func TestMatcher_Match(t *testing.T) {
 			}
 			c := newTestClient(t, objs...)
 			m := &Matcher{Client: c, Monitor: NewMatcherMonitor()}
-			got, err := m.Match(context.Background(), tt.request, tt.orig)
-			if err != nil {
+			if err := m.ConfirmAndMarkInUse(context.Background(), tt.request, tt.orderedHosts); err != nil {
 				t.Fatalf("unexpected error: %v", err)
-			}
-			if !slices.Equal(got, tt.want) {
-				t.Fatalf("got %v, want %v", got, tt.want)
 			}
 			if tt.check != nil {
 				tt.check(t, c)

@@ -962,22 +962,20 @@ func TestFilterWeigherPipelineController_PeekReadOnly(t *testing.T) {
 	}
 }
 
-// fakeFailoverMatcher records the candidates it was handed and returns a
-// preconfigured result, so controller wiring can be asserted in isolation.
+// fakeFailoverMatcher records the candidates it was handed, so controller wiring
+// can be asserted in isolation. It no longer rewrites the candidate list — the
+// InUse write it performs in production is a side effect the controller does not
+// observe.
 type fakeFailoverMatcher struct {
 	called   bool
 	gotHosts []string
-	ret      []string
 	err      error
 }
 
-func (f *fakeFailoverMatcher) Match(_ context.Context, _ api.ExternalSchedulerRequest, originalHosts []string) ([]string, error) {
+func (f *fakeFailoverMatcher) ConfirmAndMarkInUse(_ context.Context, _ api.ExternalSchedulerRequest, orderedHosts []string) error {
 	f.called = true
-	f.gotHosts = originalHosts
-	if f.err != nil {
-		return nil, f.err
-	}
-	return f.ret, nil
+	f.gotHosts = orderedHosts
+	return f.err
 }
 
 // runProcessWithMatcher builds a controller with an empty pipeline and the given
@@ -1044,8 +1042,8 @@ func runProcessWithMatcher(t *testing.T, matcher FailoverHostMatcher, readOnly b
 	return decision, controller.ProcessNewDecisionFromAPI(context.Background(), decision)
 }
 
-func TestFilterWeigherPipelineController_FailoverMatcherRewritesResult(t *testing.T) {
-	m := &fakeFailoverMatcher{ret: []string{"compute-2"}}
+func TestFilterWeigherPipelineController_FailoverMatcherConfirmsResult(t *testing.T) {
+	m := &fakeFailoverMatcher{}
 	decision, err := runProcessWithMatcher(t, m, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1053,24 +1051,24 @@ func TestFilterWeigherPipelineController_FailoverMatcherRewritesResult(t *testin
 	if !m.called {
 		t.Fatal("expected matcher to be called")
 	}
-	// Matcher receives the pipeline's ordered hosts.
+	// Matcher receives the pipeline's ordered hosts but does not rewrite them.
 	if len(m.gotHosts) != 2 || m.gotHosts[0] != "compute-1" || m.gotHosts[1] != "compute-2" {
 		t.Errorf("matcher got unexpected hosts: %v", m.gotHosts)
 	}
-	// Its returned hosts become the result, with TargetHost pointing at the first.
+	// The pipeline's ordering and target host flow through unchanged.
 	if decision.Status.Result == nil {
 		t.Fatal("expected result to be set")
 	}
-	if got := decision.Status.Result.OrderedHosts; len(got) != 1 || got[0] != "compute-2" {
-		t.Errorf("expected OrderedHosts [compute-2], got %v", got)
+	if got := decision.Status.Result.OrderedHosts; len(got) != 2 || got[0] != "compute-1" {
+		t.Errorf("expected OrderedHosts [compute-1 compute-2], got %v", got)
 	}
-	if decision.Status.Result.TargetHost == nil || *decision.Status.Result.TargetHost != "compute-2" {
-		t.Errorf("expected TargetHost compute-2, got %v", decision.Status.Result.TargetHost)
+	if decision.Status.Result.TargetHost == nil || *decision.Status.Result.TargetHost != "compute-1" {
+		t.Errorf("expected TargetHost compute-1, got %v", decision.Status.Result.TargetHost)
 	}
 }
 
 func TestFilterWeigherPipelineController_FailoverMatcherSkippedOnReadOnly(t *testing.T) {
-	m := &fakeFailoverMatcher{ret: []string{"compute-2"}}
+	m := &fakeFailoverMatcher{}
 	decision, err := runProcessWithMatcher(t, m, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1093,16 +1091,5 @@ func TestFilterWeigherPipelineController_FailoverMatcherErrorFailsDecision(t *te
 	// On matcher failure the decision carries no result.
 	if decision.Status.Result != nil {
 		t.Errorf("expected no result on matcher error, got %v", decision.Status.Result)
-	}
-}
-
-func TestFilterWeigherPipelineController_FailoverMatcherEmptyClearsTargetHost(t *testing.T) {
-	m := &fakeFailoverMatcher{ret: []string{}}
-	decision, err := runProcessWithMatcher(t, m, false)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if decision.Status.Result.TargetHost != nil {
-		t.Errorf("expected nil TargetHost for empty host list, got %v", *decision.Status.Result.TargetHost)
 	}
 }

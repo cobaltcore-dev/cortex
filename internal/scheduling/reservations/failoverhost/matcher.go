@@ -17,15 +17,23 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// Matcher routes an evacuation request onto a failover host reservation and
-// pins the source host to a single target, implementing gang-evacuation.
+// Matcher confirms an evacuation's gang target after the scheduling pipeline has
+// run and pins the source host to that target, implementing gang-evacuation.
 //
-// It is called after the scheduling pipeline has produced its ordered
-// candidates, from inside the pipeline controller's exclusive lock, so that the
-// InUse status write below is serialized against — and visible to — subsequent
-// evacuation requests from the same source host. The write is committed only
-// once (on the first evacuation from a given source); later requests reuse the
-// already-InUse reservation and so land on the same target.
+// The candidate shaping — removing the other reserved hosts and lifting the
+// selected failover host to the front — is done inside the pipeline by the
+// filter_failover_host filter and the weigher_failover_host weigher. The Matcher
+// does not touch the candidate list. Its sole job is the stateful write: once the
+// pipeline has settled on a target host, it marks the matching reservation InUse
+// so that subsequent evacuations from the same source host deterministically land
+// on the same target.
+//
+// It runs from inside the pipeline controller's exclusive lock, on write runs
+// only, so the InUse write is serialized against — and visible to — subsequent
+// evacuation requests from the same source host. The write is committed only once
+// (on the first evacuation from a given source); later requests see the
+// already-InUse reservation (the filter/weigher keep selecting it) and so land on
+// the same target.
 //
 // The Matcher only ever advances a reservation to InUse. Moving it back out
 // (to Active/Used once the evacuation completes) is owned by the failover host
@@ -36,32 +44,31 @@ type Matcher struct {
 	Monitor *MatcherMonitor
 }
 
-// Match returns the candidate hosts to use for this request. For a
-// non-evacuation request, or an evacuation the Matcher cannot or should not
-// reroute, it returns orig unchanged. For an evacuation it finds the failover
-// host reservations whose SourceHosts include the request's source host and
-// returns the chosen failover host as the sole candidate, writing the InUse
-// condition when it pins a fresh one.
+// ConfirmAndMarkInUse inspects the pipeline's ordered candidates for an evacuation
+// request and, if the top candidate is the failover host reservation selected for
+// the request's source host, marks that reservation InUse.
 //
-// Fallbacks preserve a valid placement: if no reservation matches, or the
-// chosen host is not among orig (so it conflicts with other scheduling
-// constraints), orig is returned unchanged so the VM still has candidates.
-func (m *Matcher) Match(ctx context.Context, request api.ExternalSchedulerRequest, originalHosts []string) ([]string, error) {
+// It is a no-op for non-evacuation requests and for evacuations without a source
+// host. When no failover host reservation matches the source host — or the
+// selected one did not end up as the top candidate (it was filtered out by other
+// constraints, so the evacuation falls back to an ordinary host) — it records the
+// evacuation-without-reservation metric and writes nothing.
+func (m *Matcher) ConfirmAndMarkInUse(ctx context.Context, request api.ExternalSchedulerRequest, orderedHosts []string) error {
 	log := logf.FromContext(ctx)
 
 	intent, err := request.GetIntent()
 	if err != nil || intent != api.EvacuateIntent {
-		return originalHosts, nil //nolint:nilerr // non-evacuation requests are not rerouted
+		return nil //nolint:nilerr // non-evacuation requests are not matched
 	}
 	sourceHost, err := request.Spec.Data.GetSchedulerHintStr("source_host")
 	if err != nil || sourceHost == "" {
-		log.V(1).Info("no source_host hint on evacuation, leaving candidates untouched")
-		return originalHosts, nil //nolint:nilerr // without a source host there is nothing to match
+		log.V(1).Info("no source_host hint on evacuation, nothing to confirm")
+		return nil //nolint:nilerr // without a source host there is nothing to match
 	}
 
 	var reservations v1alpha1.ReservationList
 	if err := m.List(ctx, &reservations); err != nil {
-		return nil, err
+		return err
 	}
 	// Collect the failover host reservations whose partition includes the source
 	// host, i.e. the reservations this host may evacuate onto.
@@ -75,70 +82,64 @@ func (m *Matcher) Match(ctx context.Context, request api.ExternalSchedulerReques
 		}
 	}
 	if len(matching) == 0 {
-		log.V(1).Info("no failover host reservation for source host, falling back to ordinary candidates",
-			"sourceHost", sourceHost)
+		log.V(1).Info("no failover host reservation for source host", "sourceHost", sourceHost)
 		m.Monitor.RecordEvacuationWithoutReservation(request.Spec.Data.AvailabilityZone)
-		return originalHosts, nil
+		return nil
 	}
 
-	// Sort deterministically by target host so selection is stable and testable;
-	// the InUse write below is what makes a fresh choice binding for subsequent
-	// requests from the same source.
+	// Re-derive the selected reservation with the same deterministic rule the
+	// filter and weigher used, so we confirm the one they shaped the candidates
+	// around. Sort by target host so selection is stable.
 	sort.Slice(matching, func(i, j int) bool {
 		return matching[i].Spec.TargetHost < matching[j].Spec.TargetHost
 	})
-
-	// Classify each candidate reservation by its InUse status. A reservation can
-	// legitimately rescue many source hosts (the planner lists every partition
-	// peer), so more than one source may evacuate concurrently: one reservation
-	// per source. We must therefore (a) reuse the reservation already in use by
-	// *this* source, and (b) never pin a reservation already in use by a
-	// *different* source, which would steal an active landing zone.
-	var free *v1alpha1.Reservation
+	var selected *v1alpha1.Reservation
 	for i := range matching {
 		res := &matching[i]
 		if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
-			if free == nil {
-				free = res
+			if selected == nil {
+				selected = res
 			}
 			continue
 		}
-		// In use: reuse it only if it is in use by this very source host, which
-		// is the gang-evacuation path — the whole gang lands on the same target.
+		// In use: reuse it only if it is in use by this very source host, which is
+		// the gang-evacuation path — the whole gang lands on the same target.
 		if res.Status.FailoverHostReservation != nil &&
 			res.Status.FailoverHostReservation.SourceHost == sourceHost {
-			log.V(1).Info("reusing in-use failover host reservation for gang-evacuation",
-				"sourceHost", sourceHost, "reservation", res.Name, "targetHost", res.Spec.TargetHost)
-			return m.pick(*res, originalHosts), nil
+			selected = res
+			break
 		}
 	}
-
-	// None already in use by this source. Pin the first free reservation.
-	if free == nil {
+	if selected == nil {
 		// Every matching reservation is already absorbing another source host's
-		// gang. Fall back to ordinary candidates rather than stealing a landing
-		// zone, and surface it like the no-reservation case.
-		log.V(1).Info("all failover host reservations for source host are in use by other sources, falling back",
+		// gang. Surface it like the no-reservation case.
+		log.V(1).Info("all failover host reservations for source host are in use by other sources",
 			"sourceHost", sourceHost)
 		m.Monitor.RecordEvacuationWithoutReservation(request.Spec.Data.AvailabilityZone)
-		return originalHosts, nil
+		return nil
 	}
-	if err := m.markInUse(ctx, free, sourceHost); err != nil {
-		return nil, err
+
+	// Only pin when the pipeline actually settled on the selected target. If it is
+	// not the top candidate (filtered out by other constraints, so the evacuation
+	// falls back to an ordinary host), we must not leave a dangling InUse.
+	if len(orderedHosts) == 0 || orderedHosts[0] != selected.Spec.TargetHost {
+		log.V(1).Info("selected failover host is not the top candidate, not pinning",
+			"sourceHost", sourceHost, "targetHost", selected.Spec.TargetHost)
+		m.Monitor.RecordEvacuationWithoutReservation(request.Spec.Data.AvailabilityZone)
+		return nil
+	}
+	// Already in use by this source (gang-evacuation reuse): nothing to write.
+	if meta.IsStatusConditionTrue(selected.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
+		log.V(1).Info("failover host reservation already in use for this source, reusing",
+			"sourceHost", sourceHost, "reservation", selected.Name, "targetHost", selected.Spec.TargetHost)
+		return nil
+	}
+	if err := m.markInUse(ctx, selected, sourceHost); err != nil {
+		return err
 	}
 	log.V(1).Info("pinned failover host reservation for evacuation",
-		"sourceHost", sourceHost, "reservation", free.Name, "targetHost", free.Spec.TargetHost)
-	return m.pick(*free, originalHosts), nil
-}
-
-// pick returns the reservation's target host as the sole candidate, unless that
-// host is not among the pipeline's candidates (it conflicts with other
-// scheduling constraints), in which case it falls back to the original set.
-func (m *Matcher) pick(res v1alpha1.Reservation, orig []string) []string {
-	if slices.Contains(orig, res.Spec.TargetHost) {
-		return []string{res.Spec.TargetHost}
-	}
-	return orig
+		"sourceHost", sourceHost, "reservation", selected.Name, "targetHost", selected.Spec.TargetHost)
+	return nil
 }
 
 // markInUse sets the InUse condition and records the source host on the

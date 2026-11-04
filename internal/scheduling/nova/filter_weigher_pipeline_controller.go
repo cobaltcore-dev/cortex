@@ -57,20 +57,21 @@ type FilterWeigherPipelineController struct {
 	// CRRecorder receives scheduling events and updates CR reservations and metrics.
 	CRRecorder crs.Recorder
 
-	// FailoverMatcher routes evacuation requests onto failover host reservations
-	// after the pipeline runs, inside the exclusive lock. Optional; when nil, no
-	// failover host rerouting is applied.
+	// FailoverMatcher pins an evacuation's gang target to a failover host
+	// reservation after the pipeline runs, inside the exclusive lock. Optional;
+	// when nil, no failover host pinning is applied.
 	FailoverMatcher FailoverHostMatcher
 }
 
-// FailoverHostMatcher reroutes an evacuation onto a failover host reservation.
-// Implemented by reservations/failoverhost.Matcher; declared here as an
-// interface so the nova package does not import failoverhost (which would form
-// an import cycle via that package's integration tests).
+// FailoverHostMatcher confirms an evacuation's failover host target and marks the
+// reservation InUse. Implemented by reservations/failoverhost.Matcher; declared
+// here as an interface so the nova package does not import failoverhost (which
+// would form an import cycle via that package's integration tests).
 type FailoverHostMatcher interface {
-	// Match returns the candidate hosts to use, possibly rewritten to the chosen
-	// failover host, or the originals unchanged when nothing applies.
-	Match(ctx context.Context, request api.ExternalSchedulerRequest, originalHosts []string) ([]string, error)
+	// ConfirmAndMarkInUse marks the failover host reservation selected for the
+	// request's source host InUse, but only when it is the pipeline's top
+	// candidate. It does not change the candidate list.
+	ConfirmAndMarkInUse(ctx context.Context, request api.ExternalSchedulerRequest, orderedHosts []string) error
 }
 
 // The type of pipeline this controller manages.
@@ -192,22 +193,18 @@ func (c *FilterWeigherPipelineController) process(ctx context.Context, decision 
 
 	result, err := pipeline.Run(request)
 	if err == nil {
-		// Route evacuations onto failover host reservations and pin the
-		// source->target relationship. This runs inside the exclusive lock (write
-		// runs only) so the InUse write is visible to subsequent evacuations from
-		// the same source, implementing gang-evacuation. Read-only runs (probes,
-		// capacity checks) never reroute or write.
+		// Mark the failover host reservation selected for an evacuation InUse,
+		// pinning the source->target relationship for gang-evacuation. The
+		// candidate shaping (removing other reserved hosts, lifting the selected
+		// target to the front) is already done inside the pipeline by the
+		// filter_failover_host filter and weigher_failover_host weigher; this only
+		// performs the serialized InUse write. It runs inside the exclusive lock
+		// (write runs only) so the write is visible to subsequent evacuations from
+		// the same source. Read-only runs (probes, capacity checks) never pin.
 		if c.FailoverMatcher != nil && !request.Options.ReadOnly {
-			hosts, mErr := c.FailoverMatcher.Match(ctx, request, result.OrderedHosts)
-			if mErr != nil {
+			if mErr := c.FailoverMatcher.ConfirmAndMarkInUse(ctx, request, result.OrderedHosts); mErr != nil {
 				log.Error(mErr, "failover host matcher failed")
 				return &request, mErr
-			}
-			result.OrderedHosts = hosts
-			if len(hosts) > 0 {
-				result.TargetHost = &hosts[0]
-			} else {
-				result.TargetHost = nil
 			}
 		}
 		decision.Status.Result = &result
