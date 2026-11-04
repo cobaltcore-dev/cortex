@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/go-logr/logr"
 	"math"
+	"slices"
 	"time"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -29,6 +30,30 @@ type FilterQuotaEnforcementOpts struct {
 	// enforcement, and so that newly-rolled-out pipelines never silently start
 	// rejecting requests.
 	Enforce bool `json:"enforce,omitempty"`
+
+	// CRStateFilter selects which CommittedResource states count toward the CR
+	// portion of quota, i.e. which CRs are deducted when computing PAYG headroom
+	// (headroom = Quota - sum(CR amounts) - PaygUsage). It MUST mirror the quota
+	// controller's crStateFilter (see internal/scheduling/reservations/quota/config.go)
+	// so the filter's CR deduction and the controller's PaygUsage derivation agree
+	// on what quota already accounts for. Empty means the shared default (confirmed).
+	CRStateFilter []v1alpha1.CommitmentStatus `json:"crStateFilter,omitempty"`
+}
+
+// defaultCRStateFilter mirrors the quota controller's default
+// (internal/scheduling/reservations/quota/config.go): confirmed only.
+var defaultCRStateFilter = []v1alpha1.CommitmentStatus{
+	v1alpha1.CommitmentStatusConfirmed,
+}
+
+// crStateIncluded reports whether a CR in the given state counts toward the CR
+// portion of quota. An unset CRStateFilter falls back to defaultCRStateFilter.
+func (o FilterQuotaEnforcementOpts) crStateIncluded(state v1alpha1.CommitmentStatus) bool {
+	states := o.CRStateFilter
+	if len(states) == 0 {
+		states = defaultCRStateFilter
+	}
+	return slices.Contains(states, state)
 }
 
 func (FilterQuotaEnforcementOpts) Validate() error { return nil }
@@ -199,7 +224,8 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 			spec = cr.Status.AcceptedSpec
 		}
 
-		// Must match project, AZ, flavor group, resource type, and be active.
+		// Must match project, AZ, flavor group, resource type, and be in a
+		// quota-counting state (see Options.CRStateFilter).
 		if spec.ProjectID != projectID {
 			continue
 		}
@@ -212,7 +238,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 		if spec.ResourceType != v1alpha1.CommittedResourceTypeMemory {
 			continue
 		}
-		if !spec.IsActive() {
+		if !s.Options.crStateIncluded(spec.State) {
 			continue
 		}
 		now := time.Now()

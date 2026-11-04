@@ -18,7 +18,7 @@ type QuotaControllerConfig struct {
 	FullReconcileInterval metav1.Duration `json:"fullReconcileInterval"`
 
 	// CRStateFilter defines which CommittedResource states to include
-	// when summing cr_actual_usage. Default: ["confirmed", "guaranteed"]
+	// when summing cr_actual_usage. Default: ["confirmed"]
 	CRStateFilter []v1alpha1.CommitmentStatus `json:"crStateFilter"`
 
 	// EnableHVDiff enables incremental TotalUsage updates via HV instance diffs.
@@ -60,7 +60,6 @@ func DefaultQuotaControllerConfig() QuotaControllerConfig {
 		FullReconcileInterval: metav1.Duration{Duration: 5 * time.Minute},
 		CRStateFilter: []v1alpha1.CommitmentStatus{
 			v1alpha1.CommitmentStatusConfirmed,
-			v1alpha1.CommitmentStatusGuaranteed,
 		},
 		EnableHVDiff: &enableHVDiff,
 	}
