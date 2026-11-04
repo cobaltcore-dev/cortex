@@ -210,7 +210,7 @@ func NewResourceDemand(vcpus, memoryMB uint64) ResourceDemand {
 	//nolint:gosec // vCPU and memory values are small, non-negative flavor counts.
 	return ResourceDemand{
 		hv1.ResourceCPU:    *resource.NewQuantity(int64(vcpus), resource.DecimalSI),
-		hv1.ResourceMemory: *resource.NewQuantity(int64(memoryMB*(1<<20)), resource.BinarySI),
+		hv1.ResourceMemory: *resource.NewQuantity(int64(memoryMB)*(1<<20), resource.BinarySI),
 	}
 }
 
