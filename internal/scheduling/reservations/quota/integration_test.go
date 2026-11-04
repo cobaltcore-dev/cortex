@@ -1135,7 +1135,7 @@ func newIntegrationTestEnv(t *testing.T, tc IntegrationTestCase) *integrationTes
 	controller := &QuotaController{
 		Client:   k8sClient,
 		VMSource: vmSrc,
-		Config:   DefaultQuotaControllerConfig(),
+		Config:   testQuotaConfig(),
 		Metrics:  NewQuotaMetrics(nil), // no-op metrics
 	}
 
