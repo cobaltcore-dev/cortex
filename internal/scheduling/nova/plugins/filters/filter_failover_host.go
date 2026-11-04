@@ -6,14 +6,13 @@ package filters
 import (
 	"context"
 	"slices"
-	"sort"
 
 	"github.com/go-logr/logr"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	"k8s.io/apimachinery/pkg/api/meta"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failoverhost"
 )
 
 // FilterFailoverHostOpts configures the failover-host filter.
@@ -69,47 +68,18 @@ func (s *FilterFailoverHost) Run(traceLog logr.Logger, request api.ExternalSched
 	}
 
 	// For an evacuation, keep the single failover host selected for this source so
-	// the gang lands there; for everything else, keep none. The selection is a
-	// pure function of the reservation snapshot — among the reservations whose
-	// partition includes the source host, prefer the one already in use by this
-	// very source (gang-evacuation reuse), never one in use by a different source
-	// (that would steal an active landing zone), otherwise the first Active one
-	// by target host name — so the weigher_failover_host weigher reaches the same
-	// target over the same snapshot without coordinating.
-	//
-	// A not-yet-in-use reservation is only eligible once it is Active (host
-	// drained and empty, ready to absorb an evacuation). A reservation still being
-	// drained (not yet Active, e.g. freshly created) is not a valid landing zone
-	// yet, so it is never selected here — but note it is still blocked below,
-	// keeping ordinary VMs off it while it drains.
+	// the gang lands there; for everything else, keep none. The selection
+	// (failoverhost.SelectFailoverHost) is a pure function of the reservation
+	// snapshot, so the weigher_failover_host weigher reaches the same target over
+	// the same snapshot without coordinating. A reservation is only selectable
+	// once it is Active (drained and empty); a still-draining one is not kept here
+	// — but note it is still blocked below, keeping ordinary VMs off it while it
+	// drains.
 	var keep string
 	if intent, err := request.GetIntent(); err == nil && intent == api.EvacuateIntent {
 		if sourceHost, err := request.Spec.Data.GetSchedulerHintStr("source_host"); err == nil && sourceHost != "" {
-			var matching []v1alpha1.Reservation
-			for _, res := range reservations.Items {
-				if res.Spec.Type != v1alpha1.ReservationTypeFailoverHost || res.Spec.FailoverHostReservation == nil {
-					continue
-				}
-				if slices.Contains(res.Spec.FailoverHostReservation.SourceHosts, sourceHost) {
-					matching = append(matching, res)
-				}
-			}
-			sort.Slice(matching, func(i, j int) bool {
-				return matching[i].Spec.TargetHost < matching[j].Spec.TargetHost
-			})
-			for i := range matching {
-				res := &matching[i]
-				if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
-					if keep == "" && meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive) {
-						keep = res.Spec.TargetHost
-					}
-					continue
-				}
-				if res.Status.FailoverHostReservation != nil &&
-					res.Status.FailoverHostReservation.SourceHost == sourceHost {
-					keep = res.Spec.TargetHost
-					break
-				}
+			if selected := failoverhost.SelectFailoverHost(reservations.Items, sourceHost); selected != nil {
+				keep = selected.Spec.TargetHost
 			}
 		}
 	}

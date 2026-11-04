@@ -5,15 +5,13 @@ package weighers
 
 import (
 	"context"
-	"slices"
-	"sort"
 
 	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/api/meta"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failoverhost"
 )
 
 // failoverTargetWeight is the activation assigned to the failover host a source
@@ -68,41 +66,13 @@ func (s *WeigherFailoverHost) Run(traceLog logr.Logger, request api.ExternalSche
 
 	// Select the one failover host this source should gang-evacuate onto, with the
 	// same deterministic rule the filter_failover_host filter used over the same
-	// snapshot: among the reservations whose partition includes the source host,
-	// prefer the one already in use by this very source (gang-evacuation reuse),
-	// never one in use by a different source, otherwise the first Active one by
-	// target host name. A not-yet-in-use reservation is only eligible once it is
-	// Active (drained and empty); a still-draining, not-yet-Active one is never lifted.
-	var matching []v1alpha1.Reservation
-	for _, res := range reservations.Items {
-		if res.Spec.Type != v1alpha1.ReservationTypeFailoverHost || res.Spec.FailoverHostReservation == nil {
-			continue
-		}
-		if slices.Contains(res.Spec.FailoverHostReservation.SourceHosts, sourceHost) {
-			matching = append(matching, res)
-		}
-	}
-	sort.Slice(matching, func(i, j int) bool {
-		return matching[i].Spec.TargetHost < matching[j].Spec.TargetHost
-	})
-	var target string
-	for i := range matching {
-		res := &matching[i]
-		if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
-			if target == "" && meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive) {
-				target = res.Spec.TargetHost
-			}
-			continue
-		}
-		if res.Status.FailoverHostReservation != nil &&
-			res.Status.FailoverHostReservation.SourceHost == sourceHost {
-			target = res.Spec.TargetHost
-			break
-		}
-	}
-	if target == "" {
+	// snapshot (failoverhost.SelectFailoverHost), so the filter and weigher agree
+	// without coordinating.
+	selected := failoverhost.SelectFailoverHost(reservations.Items, sourceHost)
+	if selected == nil {
 		return result, nil
 	}
+	target := selected.Spec.TargetHost
 	if _, ok := result.Activations[target]; !ok {
 		// The selected target conflicts with other scheduling constraints and was
 		// filtered out, so there is nothing to lift.

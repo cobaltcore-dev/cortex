@@ -72,39 +72,8 @@ func (m *Matcher) ConfirmAndMarkInUse(ctx context.Context, request api.ExternalS
 	}
 	// Re-derive the selected reservation with the same deterministic rule the
 	// filter and weigher used over the same snapshot, so we confirm the one they
-	// shaped the candidates around: among the reservations whose partition
-	// includes the source host, prefer the one already in use by this very source
-	// (gang-evacuation reuse), never one in use by a different source (that would
-	// steal an active landing zone), otherwise the first Active one by target host
-	// name. A not-yet-in-use reservation is only eligible once it is Active
-	// (drained and empty); a still-draining, not-yet-Active one is never pinned.
-	var matching []v1alpha1.Reservation
-	for _, res := range reservations.Items {
-		if res.Spec.Type != v1alpha1.ReservationTypeFailoverHost || res.Spec.FailoverHostReservation == nil {
-			continue
-		}
-		if slices.Contains(res.Spec.FailoverHostReservation.SourceHosts, sourceHost) {
-			matching = append(matching, res)
-		}
-	}
-	sort.Slice(matching, func(i, j int) bool {
-		return matching[i].Spec.TargetHost < matching[j].Spec.TargetHost
-	})
-	var selected *v1alpha1.Reservation
-	for i := range matching {
-		res := &matching[i]
-		if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
-			if selected == nil && meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive) {
-				selected = res
-			}
-			continue
-		}
-		if res.Status.FailoverHostReservation != nil &&
-			res.Status.FailoverHostReservation.SourceHost == sourceHost {
-			selected = res
-			break
-		}
-	}
+	// shaped the candidates around.
+	selected := SelectFailoverHost(reservations.Items, sourceHost)
 	if selected == nil {
 		// Either no reservation can rescue this source, or every matching one is
 		// already absorbing another source host's gang. Surface it either way.
@@ -151,4 +120,49 @@ func (m *Matcher) markInUse(ctx context.Context, res *v1alpha1.Reservation, sour
 	}
 	res.Status.FailoverHostReservation.SourceHost = sourceHost
 	return m.Status().Patch(ctx, res, client.MergeFrom(old))
+}
+
+// SelectFailoverHost picks the one failover host reservation a source host should
+// gang-evacuate onto, deterministically. It is a pure function of the reservation
+// snapshot, so the filter_failover_host filter, the weigher_failover_host weigher
+// and this Matcher — which all run over the same snapshot within one pipeline
+// execution — select the same target without coordinating.
+//
+// Among the reservations whose partition includes sourceHost it prefers the one
+// already in use by this very source (the gang-evacuation path — the whole gang
+// lands on the same target), never picks one in use by a different source (which
+// would steal an active landing zone), and otherwise takes the first Active one
+// by target host name. A not-yet-in-use reservation is only eligible once it is
+// Active (its host drained and empty); a still-draining, not-yet-Active one is
+// never selected (though the filter still blocks it from ordinary placement).
+// Returns nil when nothing is selectable.
+func SelectFailoverHost(reservations []v1alpha1.Reservation, sourceHost string) *v1alpha1.Reservation {
+	var matching []v1alpha1.Reservation
+	for _, res := range reservations {
+		if res.Spec.Type != v1alpha1.ReservationTypeFailoverHost || res.Spec.FailoverHostReservation == nil {
+			continue
+		}
+		if slices.Contains(res.Spec.FailoverHostReservation.SourceHosts, sourceHost) {
+			matching = append(matching, res)
+		}
+	}
+	sort.Slice(matching, func(i, j int) bool {
+		return matching[i].Spec.TargetHost < matching[j].Spec.TargetHost
+	})
+	var firstActiveFree *v1alpha1.Reservation
+	for i := range matching {
+		res := &matching[i]
+		if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
+			if firstActiveFree == nil && meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive) {
+				firstActiveFree = res
+			}
+			continue
+		}
+		// In use: reuse it only if it is in use by this very source host.
+		if res.Status.FailoverHostReservation != nil &&
+			res.Status.FailoverHostReservation.SourceHost == sourceHost {
+			return res
+		}
+	}
+	return firstActiveFree
 }
