@@ -33,9 +33,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
@@ -239,7 +237,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	}
 
 	// Get flavor details from flavor group knowledge CRD
-	knowledge := &accounting.FlavorGroupKnowledgeClient{Client: r.Client}
+	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: r.Client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		logger.V(1).Info("flavor knowledge not ready, requeueing",
@@ -249,7 +247,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	}
 
 	// Search for the flavor across all flavor groups
-	flavorGroupName, flavorDetails, err := accounting.FindFlavorInGroups(resourceName, flavorGroups)
+	flavorGroupName, flavorDetails, err := reservations.FindFlavorInGroups(resourceName, flavorGroups)
 	if err != nil {
 		logger.Error(err, "flavor not found in any flavor group",
 			"resourceName", resourceName)
@@ -316,7 +314,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	// request is built directly, so filter_has_requested_traits/filter_capabilities
 	// would otherwise see empty slices and become no-ops). No hypervisor-type
 	// default here — only match when the flavor names one.
-	requiredTraits, forbiddenTraits := nova.SplitTraits(flavorDetails.ExtraSpecs)
+	requiredTraits, forbiddenTraits := compute.SplitTraits(flavorDetails.ExtraSpecs)
 	schedReq := compute.PlacementRequest{
 		Pipeline:              pipelineName,
 		GatherAllCandidates:   true,
@@ -332,7 +330,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		RequiredTraits:        requiredTraits,
 		ForbiddenTraits:       forbiddenTraits,
 		RequestedCapabilities: reservations.HypervisorTypeCapability(flavorDetails.ExtraSpecs, false),
-		AcceleratorsRequested: nova.RequestsAccelerators(flavorDetails.ExtraSpecs),
+		AcceleratorsRequested: compute.RequestsAccelerators(flavorDetails.ExtraSpecs),
 		Flavor: compute.FlavorSpec{
 			VCPUs:    flavorDetails.VCPUs,
 			MemoryMB: flavorDetails.MemoryMB,

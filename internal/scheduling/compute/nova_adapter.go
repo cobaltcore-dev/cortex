@@ -1,18 +1,17 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package nova
+package compute
 
 import (
 	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 )
 
 // ToSchedulerRequest translates the Nova over-the-wire request into the typed,
-// Nova-agnostic compute.PlacementRequest the pipeline consumes. This is the one
+// Nova-agnostic PlacementRequest the pipeline consumes. This is the one
 // place that reads Nova's loosely-typed scheduler hints and flavor/image extra
 // specs; every downstream filter/weigher sees only resolved typed fields.
 //
@@ -22,11 +21,11 @@ func ToSchedulerRequest(
 	wire api.ExternalSchedulerRequest,
 	intent v1alpha1.SchedulingIntent,
 	pipeline string,
-) compute.PlacementRequest {
+) PlacementRequest {
 
 	spec := wire.Spec.Data
 
-	req := compute.PlacementRequest{
+	req := PlacementRequest{
 		Pipeline: pipeline,
 		Hosts:    toComputeHosts(wire.Hosts),
 		Weights:  wire.Weights,
@@ -54,7 +53,7 @@ func ToSchedulerRequest(
 	}
 
 	// Flavor sizing.
-	req.Flavor = compute.FlavorSpec{
+	req.Flavor = FlavorSpec{
 		VCPUs:    spec.Flavor.Data.VCPUs,
 		MemoryMB: spec.Flavor.Data.MemoryMB,
 	}
@@ -66,7 +65,7 @@ func ToSchedulerRequest(
 	// preselection) is determined by the hypervisor family: cortex can enumerate
 	// KVM hypervisors itself, whereas VMware placement relies on the host list
 	// Nova sent in the request.
-	req.GatherAllCandidates = req.HypervisorFamily == compute.HypervisorFamilyKVM
+	req.GatherAllCandidates = req.HypervisorFamily == HypervisorFamilyKVM
 
 	// Image.
 	req.ImageHypervisorType = toImageHypervisorType(spec.Image.Data)
@@ -83,26 +82,26 @@ func ToSchedulerRequest(
 	return req
 }
 
-func toComputeHosts(hosts []api.ExternalSchedulerHost) []compute.Host {
-	out := make([]compute.Host, len(hosts))
+func toComputeHosts(hosts []api.ExternalSchedulerHost) []Host {
+	out := make([]Host, len(hosts))
 	for i, h := range hosts {
-		out[i] = compute.Host{ComputeHost: h.ComputeHost, HypervisorHostname: h.HypervisorHostname}
+		out[i] = Host{ComputeHost: h.ComputeHost, HypervisorHostname: h.HypervisorHostname}
 	}
 	return out
 }
 
 // toHypervisorFamily resolves the coarse family from the wire hypervisor type.
 // It is empty when unresolved.
-func toHypervisorFamily(wire api.ExternalSchedulerRequest) compute.HypervisorFamily {
+func toHypervisorFamily(wire api.ExternalSchedulerRequest) HypervisorFamily {
 	hv, err := wire.GetHypervisorType()
 	if err != nil {
 		return ""
 	}
 	switch hv {
 	case api.HypervisorTypeQEMU, api.HypervisorTypeCH:
-		return compute.HypervisorFamilyKVM
+		return HypervisorFamilyKVM
 	case api.HypervisorTypeVMware:
-		return compute.HypervisorFamilyVMware
+		return HypervisorFamilyVMware
 	}
 	return ""
 }
@@ -110,7 +109,7 @@ func toHypervisorFamily(wire api.ExternalSchedulerRequest) compute.HypervisorFam
 // toImageHypervisorType maps the image-declared hypervisor type. It returns
 // ImageHypervisorTypeUnparseable when the image declared a type that could not
 // be parsed, distinct from ImageHypervisorTypeUnset when none was declared.
-func toImageHypervisorType(image api.NovaImageMeta) compute.ImageHypervisorType {
+func toImageHypervisorType(image api.NovaImageMeta) ImageHypervisorType {
 	hv, err := image.GetHypervisorType()
 	if err != nil {
 		// GetHypervisorType errors both when nothing is declared and when a
@@ -119,38 +118,38 @@ func toImageHypervisorType(image api.NovaImageMeta) compute.ImageHypervisorType 
 		if image.Properties.Data != nil {
 			for _, key := range []string{"img_hv_type", "hypervisor_type"} {
 				if _, ok := image.Properties.Data[key]; ok {
-					return compute.ImageHypervisorTypeUnparseable
+					return ImageHypervisorTypeUnparseable
 				}
 			}
 		}
-		return compute.ImageHypervisorTypeUnset
+		return ImageHypervisorTypeUnset
 	}
 	switch hv {
 	case api.NovaImageMetaHVTypeVMware:
-		return compute.ImageHypervisorTypeVMware
+		return ImageHypervisorTypeVMware
 	case api.NovaImageMetaHVTypeBaremetal:
-		return compute.ImageHypervisorTypeBaremetal
+		return ImageHypervisorTypeBaremetal
 	case api.NovaImageMetaHVTypeKVM:
-		return compute.ImageHypervisorTypeKVM
+		return ImageHypervisorTypeKVM
 	}
-	return compute.ImageHypervisorTypeUnset
+	return ImageHypervisorTypeUnset
 }
 
-func toRequestedDestination(rd *api.NovaObject[api.NovaRequestedDestination]) *compute.RequestedDestination {
+func toRequestedDestination(rd *api.NovaObject[api.NovaRequestedDestination]) *RequestedDestination {
 	if rd == nil {
 		return nil
 	}
-	return &compute.RequestedDestination{
+	return &RequestedDestination{
 		Host:       rd.Data.Host,
 		Aggregates: rd.Data.Aggregates,
 	}
 }
 
-func toInstanceGroup(ig *api.NovaObject[api.NovaInstanceGroup]) *compute.InstanceGroupSpec {
+func toInstanceGroup(ig *api.NovaObject[api.NovaInstanceGroup]) *InstanceGroupSpec {
 	if ig == nil {
 		return nil
 	}
-	out := &compute.InstanceGroupSpec{
+	out := &InstanceGroupSpec{
 		UUID:    ig.Data.UUID,
 		Policy:  ig.Data.Policy,
 		Hosts:   ig.Data.Hosts,
@@ -232,13 +231,13 @@ func SplitTraits(extraSpecs map[string]string) (required, forbidden []string) {
 }
 
 // SplitCapabilities extracts a flavor's "capabilities:<key>" extra specs as typed
-// compute.Capability equalities (prefix stripped). The "hypervisor_type" value is
+// Capability equalities (prefix stripped). The "hypervisor_type" value is
 // canonicalized (qemu->QEMU, ch->CH) so it matches what hypervisors advertise
 // (filter_capabilities compares case-sensitively); all other values pass through
 // unchanged. If any value uses an unsupported comparison operator it returns nil so
 // the capabilities filter is skipped entirely (matching Nova behavior).
-func SplitCapabilities(extraSpecs map[string]string) []compute.Capability {
-	var caps []compute.Capability
+func SplitCapabilities(extraSpecs map[string]string) []Capability {
+	var caps []Capability
 	for key, value := range extraSpecs {
 		name, ok := strings.CutPrefix(key, "capabilities:")
 		if !ok {
@@ -252,7 +251,7 @@ func SplitCapabilities(extraSpecs map[string]string) []compute.Capability {
 		if name == "hypervisor_type" {
 			value = CanonicalHypervisorType(value)
 		}
-		caps = append(caps, compute.Capability{Name: name, Value: value})
+		caps = append(caps, Capability{Name: name, Value: value})
 	}
 	return caps
 }

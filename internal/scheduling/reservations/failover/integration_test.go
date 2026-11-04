@@ -1283,7 +1283,7 @@ func (api *testHTTPAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		intent = novaapi.CreateIntent
 	}
 
-	req := nova.ToSchedulerRequest(requestData, intent, pipelineName)
+	req := compute.ToSchedulerRequest(requestData, intent, pipelineName)
 	out, err := api.scheduler.Run(r.Context(), req, nil, nil)
 	if err != nil {
 		http.Error(w, "failed to process scheduling decision", http.StatusInternalServerError)

@@ -275,7 +275,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	ctx := r.Context()
 
 	// Translate the Nova wire request into the typed pipeline request.
-	schedReq := ToSchedulerRequest(requestData, intent, requestData.Pipeline)
+	schedReq := compute.ToSchedulerRequest(requestData, intent, requestData.Pipeline)
 
 	// Side effects run as a single post-hook after the pipeline, under the
 	// scheduler lock. It operates on the Nova wire request (which carries the

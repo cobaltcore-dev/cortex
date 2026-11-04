@@ -15,7 +15,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -254,7 +253,7 @@ func (f *evacuationPathFinder) fetchSeedCandidates(ctx context.Context, seed See
 	// considers compatible hosts (filter_has_requested_traits/filter_capabilities
 	// would otherwise see empty slices and become no-ops). The seeder only emits
 	// seeds whose flavor names a supported hypervisor type, so no default is needed.
-	requiredTraits, forbiddenTraits := nova.SplitTraits(seed.Flavor.ExtraSpecs)
+	requiredTraits, forbiddenTraits := compute.SplitTraits(seed.Flavor.ExtraSpecs)
 	req := compute.PlacementRequest{
 		// Same HANA vs general-purpose split as regular failover placement.
 		Pipeline: failover.InferFailoverPipeline(seed.Flavor.ExtraSpecs),
@@ -282,7 +281,7 @@ func (f *evacuationPathFinder) fetchSeedCandidates(ctx context.Context, seed See
 		// seeds whose flavor names a supported hypervisor type, so this is always
 		// set (no default needed).
 		RequestedCapabilities: reservations.HypervisorTypeCapability(seed.Flavor.ExtraSpecs, false),
-		AcceleratorsRequested: nova.RequestsAccelerators(seed.Flavor.ExtraSpecs),
+		AcceleratorsRequested: compute.RequestsAccelerators(seed.Flavor.ExtraSpecs),
 		Flavor: compute.FlavorSpec{
 			VCPUs:    seed.Flavor.VCPUs,
 			MemoryMB: seed.Flavor.MemoryMB,

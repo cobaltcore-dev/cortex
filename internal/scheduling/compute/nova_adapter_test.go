@@ -1,14 +1,12 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-package nova
+package compute
 
 import (
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 )
 
 func TestSplitTraits(t *testing.T) {
@@ -27,23 +25,23 @@ func TestSplitTraits(t *testing.T) {
 }
 
 func TestSplitCapabilities(t *testing.T) {
-	sortCaps := func(c []compute.Capability) {
-		slices.SortFunc(c, func(a, b compute.Capability) int { return strings.Compare(a.Name, b.Name) })
+	sortCaps := func(c []Capability) {
+		slices.SortFunc(c, func(a, b Capability) int { return strings.Compare(a.Name, b.Name) })
 	}
 	cases := []struct {
 		name       string
 		extraSpecs map[string]string
-		want       []compute.Capability
+		want       []Capability
 	}{
 		{
 			name:       "canonicalizes lowercase hypervisor_type to match hosts",
 			extraSpecs: map[string]string{"capabilities:hypervisor_type": "qemu"},
-			want:       []compute.Capability{{Name: "hypervisor_type", Value: "QEMU"}},
+			want:       []Capability{{Name: "hypervisor_type", Value: "QEMU"}},
 		},
 		{
 			name:       "ch canonicalized",
 			extraSpecs: map[string]string{"capabilities:hypervisor_type": "ch"},
-			want:       []compute.Capability{{Name: "hypervisor_type", Value: "CH"}},
+			want:       []Capability{{Name: "hypervisor_type", Value: "CH"}},
 		},
 		{
 			name: "non-hypervisor_type capabilities preserved verbatim",
@@ -51,7 +49,7 @@ func TestSplitCapabilities(t *testing.T) {
 				"capabilities:hypervisor_type": "QEMU",
 				"capabilities:cpu_arch":        "aarch64",
 			},
-			want: []compute.Capability{
+			want: []Capability{
 				{Name: "cpu_arch", Value: "aarch64"},
 				{Name: "hypervisor_type", Value: "QEMU"},
 			},

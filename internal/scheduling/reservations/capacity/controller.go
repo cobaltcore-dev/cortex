@@ -31,9 +31,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	caplib "github.com/cobaltcore-dev/cortex/internal/scheduling/lib/capacity"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/go-logr/logr"
 )
@@ -227,7 +225,7 @@ func (c *Reconciler) reconcileAll(ctx context.Context) error {
 	logger := LoggerFromContext(ctx)
 	startTime := time.Now()
 
-	knowledge := &accounting.FlavorGroupKnowledgeClient{Client: c.client}
+	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get flavor groups: %w", err)
@@ -829,7 +827,7 @@ func (c *Reconciler) probeScheduler(
 	// filter_has_requested_traits/filter_capabilities would otherwise see empty
 	// slices and become no-ops). No hypervisor-type default — only match when the
 	// flavor names one.
-	requiredTraits, forbiddenTraits := nova.SplitTraits(flavor.ExtraSpecs)
+	requiredTraits, forbiddenTraits := sched.SplitTraits(flavor.ExtraSpecs)
 	out, err := c.scheduler.RunWithoutLock(ctx, sched.PlacementRequest{
 		Pipeline:              pipeline,
 		GatherAllCandidates:   true,
@@ -844,7 +842,7 @@ func (c *Reconciler) probeScheduler(
 		RequiredTraits:        requiredTraits,
 		ForbiddenTraits:       forbiddenTraits,
 		RequestedCapabilities: reservations.HypervisorTypeCapability(flavor.ExtraSpecs, false),
-		AcceleratorsRequested: nova.RequestsAccelerators(flavor.ExtraSpecs),
+		AcceleratorsRequested: sched.RequestsAccelerators(flavor.ExtraSpecs),
 		Flavor: sched.FlavorSpec{
 			VCPUs:    flavor.VCPUs,
 			MemoryMB: flavor.MemoryMB,

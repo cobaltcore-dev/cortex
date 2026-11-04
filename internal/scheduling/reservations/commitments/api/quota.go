@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/google/uuid"
@@ -97,7 +97,7 @@ func (api *HTTPAPI) HandleQuota(w http.ResponseWriter, r *http.Request) {
 	// Fetch flavor groups to determine per-resource RAM unit.
 	// The ProjectQuota CRD stores RAM values in GiB; Limes sends in the declared unit
 	// (slots for fixed-ratio groups, GiB for variable-ratio). Convert on receipt.
-	knowledge := &accounting.FlavorGroupKnowledgeClient{Client: api.client}
+	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(r.Context(), nil)
 	if err != nil {
 		log.Info("flavor groups not available for quota unit conversion", "error", err.Error())
