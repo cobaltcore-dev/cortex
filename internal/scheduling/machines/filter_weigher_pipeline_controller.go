@@ -61,7 +61,7 @@ func (c *FilterWeigherPipelineController) Reconcile(context.Context, ctrl.Reques
 func (c *FilterWeigherPipelineController) ProcessNewMachine(ctx context.Context, machine *ironcorev1alpha1.Machine) error {
 	c.processMu.Lock()
 	defer c.processMu.Unlock()
-	return c.process(ctx, machine)
+	return c.process(ctx, machine.DeepCopy())
 }
 
 func (c *FilterWeigherPipelineController) process(ctx context.Context, machine *ironcorev1alpha1.Machine) error {
