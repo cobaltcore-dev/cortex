@@ -189,8 +189,6 @@ func (r *CommittedResourceChangeReconciler) reconcileAwaitingScheduling(ctx cont
 			logger.Info("CR rejected, rolling back", "cr", ref.Name, "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "message", cond.Message)
 			return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseRollingBack, func(s *v1alpha1.CommittedResourceChangeStatus) {
 				s.Message = fmt.Sprintf("CR %s rejected: %s", ref.Name, cond.Message)
-				now := metav1.Now()
-				s.RollbackStartedAt = &now
 			})
 		default:
 			// Still transitioning — wait.
@@ -206,8 +204,6 @@ func (r *CommittedResourceChangeReconciler) reconcileAwaitingScheduling(ctx cont
 				logger.Info("timed out waiting for scheduling, rolling back", "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "timeout", r.AwaitingSchedulingTimeout)
 				return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseRollingBack, func(s *v1alpha1.CommittedResourceChangeStatus) {
 					s.Message = "timed out waiting for scheduling"
-					now := metav1.Now()
-					s.RollbackStartedAt = &now
 					meta.SetStatusCondition(&s.Conditions, metav1.Condition{
 						Type:               v1alpha1.ChangeConditionProgressing,
 						Status:             metav1.ConditionFalse,
@@ -224,10 +220,7 @@ func (r *CommittedResourceChangeReconciler) reconcileAwaitingScheduling(ctx cont
 	}
 
 	if tx.Spec.DryRun {
-		return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseDryRunCleanup, func(s *v1alpha1.CommittedResourceChangeStatus) {
-			now := metav1.Now()
-			s.RollbackStartedAt = &now
-		})
+		return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseDryRunCleanup, nil)
 	}
 	return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseAccepted, nil)
 }
@@ -364,6 +357,10 @@ func (r *CommittedResourceChangeReconciler) advanceTo(
 	tx.Status.Phase = phase
 	if mutate != nil {
 		mutate(&tx.Status)
+	}
+	if (phase == v1alpha1.ChangePhaseRollingBack || phase == v1alpha1.ChangePhaseDryRunCleanup) && tx.Status.RollbackStartedAt == nil {
+		now := metav1.Now()
+		tx.Status.RollbackStartedAt = &now
 	}
 	progressingStatus, progressingReason := metav1.ConditionTrue, "Advancing"
 	if tx.IsTerminal() {
