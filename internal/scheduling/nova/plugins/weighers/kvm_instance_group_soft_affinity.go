@@ -23,10 +23,10 @@ import (
 // respectively, for the scheduler to choose that host for new instances of
 // the same group.
 type KVMInstanceGroupSoftAffinityStep struct {
-	lib.BaseWeigher[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseWeigher[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
-func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMInstanceGroupSoftAffinityStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	result.Statistics["affinity"] = s.PrepareStats(request, "float")
 

@@ -30,7 +30,7 @@ func newHypervisorWithCapacity(name, capacityCPU, capacityMem string) *hv1.Hyper
 	}
 }
 
-func newPreferSmallerHostsRequest(hosts []string) compute.SchedulerRequest {
+func newPreferSmallerHostsRequest(hosts []string) compute.PlacementRequest {
 	hostList := make([]compute.Host, len(hosts))
 	for i, h := range hosts {
 		hostList[i] = compute.Host{ComputeHost: h}
@@ -41,7 +41,7 @@ func newPreferSmallerHostsRequest(hosts []string) compute.SchedulerRequest {
 		weights[h] = 1.0
 	}
 
-	return compute.SchedulerRequest{
+	return compute.PlacementRequest{
 		ProjectID:        "project-A",
 		InstanceUUID:     "instance-123",
 		NumInstances:     1,
@@ -170,7 +170,7 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 	tests := []struct {
 		name            string
 		hypervisors     []*hv1.Hypervisor
-		request         compute.SchedulerRequest
+		request         compute.PlacementRequest
 		opts            KVMPreferSmallerHostsStepOpts
 		expectedWeights map[string]float64
 		wantErr         bool

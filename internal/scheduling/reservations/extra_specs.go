@@ -8,7 +8,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 )
 
-// The reservation controllers build the typed compute.SchedulerRequest directly
+// The reservation controllers build the typed compute.PlacementRequest directly
 // (not via the Nova wire adapter), yet their flavors still carry Nova's extra-spec
 // string conventions. HypervisorTypeCapability reuses the shared parser in
 // internal/scheduling/nova and layers the reservation-specific defaultQEMU seeding

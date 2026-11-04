@@ -14,7 +14,7 @@ import (
 // This step is useful to circumvent scheduling issues on specific hosts by
 // excluding them from all scheduling decisions.
 type FilterExcludeHostsStep struct {
-	lib.BaseFilter[compute.SchedulerRequest, FilterExcludeHostsStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, FilterExcludeHostsStepOpts]
 }
 
 type FilterExcludeHostsStepOpts struct {
@@ -29,7 +29,7 @@ func (opts FilterExcludeHostsStepOpts) Validate() error { return nil }
 
 func (s *FilterExcludeHostsStep) Run(
 	traceLog logr.Logger,
-	request compute.SchedulerRequest,
+	request compute.PlacementRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 
 	result := s.IncludeAllHostsFromRequest(request)

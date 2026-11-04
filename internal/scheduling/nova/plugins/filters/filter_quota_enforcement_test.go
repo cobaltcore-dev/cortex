@@ -45,8 +45,8 @@ func intentFromHint(hints map[string]any) v1alpha1.SchedulingIntent {
 	}
 }
 
-func makeQuotaEnforcementRequest(projectID, az, hwVersion string, memoryMB, numInstances uint64, hints map[string]any) compute.SchedulerRequest {
-	return compute.SchedulerRequest{
+func makeQuotaEnforcementRequest(projectID, az, hwVersion string, memoryMB, numInstances uint64, hints map[string]any) compute.PlacementRequest {
+	return compute.PlacementRequest{
 		ProjectID:        projectID,
 		AvailabilityZone: az,
 		NumInstances:     numInstances,
@@ -73,7 +73,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 	type tc struct {
 		name    string
 		objects []client.Object
-		request compute.SchedulerRequest
+		request compute.PlacementRequest
 		enforce bool
 
 		expectAccept bool

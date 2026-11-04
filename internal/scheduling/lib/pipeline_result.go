@@ -14,7 +14,7 @@ type StepResult struct {
 // PipelineResult is the domain-neutral output of a filter-weigher pipeline run:
 // the ordered hosts, the target host, and the input/output weights plus per-step
 // activations used to rank them. Domain-facing aliases (e.g.
-// compute.SchedulerResult) point at this type.
+// compute.PlacementResult) point at this type.
 type PipelineResult struct {
 	// RawInWeights are the input weights to the pipeline, before normalization.
 	RawInWeights map[string]float64

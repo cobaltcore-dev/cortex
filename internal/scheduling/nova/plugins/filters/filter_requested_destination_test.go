@@ -23,7 +23,7 @@ import (
 func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 	tests := []struct {
 		name          string
-		request       compute.SchedulerRequest
+		request       compute.PlacementRequest
 		hypervisors   []hv1.Hypervisor
 		expectedHosts []string
 		filteredHosts []string
@@ -31,7 +31,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 	}{
 		{
 			name: "No requested_destination - all hosts pass",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedDestination: nil,
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -59,7 +59,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Empty requested_destination - all hosts pass",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedDestination: &compute.RequestedDestination{
 					Aggregates: []string{},
 					Host:       "",
@@ -85,7 +85,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Filter by specific host",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedDestination: &compute.RequestedDestination{
 					Host: "host2",
 				},
@@ -115,7 +115,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Filter by single aggregate - hosts in spec aggregates",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedDestination: &compute.RequestedDestination{
 					Aggregates: []string{"aggregate1"},
 				},
@@ -145,7 +145,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Filter by single aggregate - hosts in status aggregates",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedDestination: &compute.RequestedDestination{
 					Aggregates: []string{"aggregate1"},
 				},
@@ -175,7 +175,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Filter by multiple aggregates with OR syntax (comma-separated)",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedDestination: &compute.RequestedDestination{
 					// "aggregate1,aggregate3" means host must be in aggregate1 OR aggregate3
 					Aggregates: []string{"aggregate1,aggregate3"},
@@ -211,7 +211,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Filter by multiple aggregates with AND logic",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedDestination: &compute.RequestedDestination{
 					// ["aggregate1", "aggregate2"] means host must be in aggregate1 AND aggregate2
 					Aggregates: []string{"aggregate1", "aggregate2"},
@@ -242,7 +242,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Filter by mixed AND/OR aggregates",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedDestination: &compute.RequestedDestination{
 					// Host must be in (aggregate1 OR aggregate2) AND aggregate3
 					Aggregates: []string{"aggregate1,aggregate2", "aggregate3"},
@@ -278,7 +278,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Filter by aggregates with OR syntax - hosts in both spec and status",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedDestination: &compute.RequestedDestination{
 					// "aggregate1,aggregate2" means host must be in aggregate1 OR aggregate2
 					Aggregates: []string{"aggregate1,aggregate2"},
@@ -309,7 +309,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Filter by both host and aggregates - host takes precedence",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedDestination: &compute.RequestedDestination{
 					Aggregates: []string{"aggregate1"},
 					Host:       "host2",
@@ -340,7 +340,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Host not found in hypervisors - filtered out",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedDestination: &compute.RequestedDestination{
 					Aggregates: []string{"aggregate1"},
 				},
@@ -366,7 +366,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Host with no aggregates - filtered out when aggregates requested",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedDestination: &compute.RequestedDestination{
 					Aggregates: []string{"aggregate1"},
 				},
@@ -396,7 +396,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "All hosts filtered by aggregate",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedDestination: &compute.RequestedDestination{
 					Aggregates: []string{"nonexistent-aggregate"},
 				},
@@ -421,7 +421,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Requested host not in candidates",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedDestination: &compute.RequestedDestination{
 					Host: "host-not-in-list",
 				},
@@ -450,7 +450,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		},
 		{
 			name: "Empty host list",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedDestination: &compute.RequestedDestination{
 					Aggregates: []string{"aggregate1"},
 				},
@@ -485,8 +485,8 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 				Build()
 
 			step := &FilterRequestedDestinationStep{
-				BaseFilter: lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
-					BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+				BaseFilter: lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+					BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
 						Client: fakeClient,
 					},
 				},
@@ -654,7 +654,7 @@ func TestFilterRequestedDestinationStep_processRequestedHost(t *testing.T) {
 }
 
 func TestFilterRequestedDestinationStep_Run_ClientError(t *testing.T) {
-	request := compute.SchedulerRequest{
+	request := compute.PlacementRequest{
 		RequestedDestination: &compute.RequestedDestination{
 			Aggregates: []string{"aggregate1"},
 		},
@@ -678,8 +678,8 @@ func TestFilterRequestedDestinationStep_Run_ClientError(t *testing.T) {
 		Build()
 
 	step := &FilterRequestedDestinationStep{
-		BaseFilter: lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
-			BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+		BaseFilter: lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+			BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
 				Client: fakeClient,
 			},
 		},
@@ -711,7 +711,7 @@ func TestFilterRequestedDestinationStep_SkipsForNonPlacementIntent(t *testing.T)
 		api.CapacityProbeIntent,
 	} {
 		t.Run(string(intent), func(t *testing.T) {
-			request := compute.SchedulerRequest{
+			request := compute.PlacementRequest{
 				RequestedDestination: &compute.RequestedDestination{Host: "host1"},
 				Intent:               intent,
 				Hosts:                []compute.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},

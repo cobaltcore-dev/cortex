@@ -14,13 +14,13 @@ import (
 )
 
 type FilterHasRequestedTraits struct {
-	lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Filter hosts based on the traits requested in the flavor:
 // - a forbidden trait means the host must not have the specified trait.
 // - a required trait means the host must have the specified trait.
-func (s *FilterHasRequestedTraits) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterHasRequestedTraits) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	requiredTraits := request.RequiredTraits
 	forbiddenTraits := request.ForbiddenTraits

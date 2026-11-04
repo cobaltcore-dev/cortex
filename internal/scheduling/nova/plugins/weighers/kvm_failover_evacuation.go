@@ -46,13 +46,13 @@ func (o KVMFailoverEvacuationOpts) GetDefaultHostWeight() float64 {
 // Hosts that match a failover reservation for the VM being scheduled get a higher weight,
 // encouraging placement on pre-reserved failover capacity.
 type KVMFailoverEvacuationStep struct {
-	lib.BaseWeigher[compute.SchedulerRequest, KVMFailoverEvacuationOpts]
+	lib.BaseWeigher[compute.PlacementRequest, KVMFailoverEvacuationOpts]
 }
 
 // Run the weigher step.
 // For evacuation requests, hosts matching a failover reservation where the VM is in Allocations get a higher weight.
 // For non-evacuation requests (e.g., live migration, rebuild), this weigher has no effect.
-func (s *KVMFailoverEvacuationStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMFailoverEvacuationStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	if request.Intent != api.EvacuateIntent {

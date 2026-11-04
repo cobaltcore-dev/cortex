@@ -49,11 +49,11 @@ type HTTPAPI interface {
 	Init(*http.ServeMux)
 }
 
-// runner is the subset of compute.Scheduler the HTTP API depends on. It is an
-// interface so the handler can be unit-tested with a mock. *compute.Scheduler
+// runner is the subset of compute.Placement the HTTP API depends on. It is an
+// interface so the handler can be unit-tested with a mock. *compute.Placement
 // satisfies it.
 type runner interface {
-	Run(ctx context.Context, req compute.SchedulerRequest, pre compute.PreHook, post compute.PostHook) (compute.SchedulerResult, error)
+	Run(ctx context.Context, req compute.PlacementRequest, pre compute.PreHook, post compute.PostHook) (compute.PlacementResult, error)
 }
 
 type httpAPI struct {
@@ -66,11 +66,11 @@ type httpAPI struct {
 }
 
 // NewAPI builds the Nova external-scheduler HTTP API. It calls the shared
-// compute.Scheduler directly; VM-resource creation and committed-resource
+// compute.Placement directly; VM-resource creation and committed-resource
 // tracking run as post-hooks after the pipeline, under the scheduler's lock.
 func NewAPI(
 	config HTTPAPIConfig,
-	scheduler *compute.Scheduler,
+	scheduler *compute.Placement,
 	vmHandler *VirtualMachineHandler,
 	crRecorder crs.Recorder,
 	featureGates FeatureGates,
@@ -280,7 +280,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 	// Side effects run as a single post-hook after the pipeline, under the
 	// scheduler lock. It operates on the Nova wire request (which carries the
 	// fields the VM resource and CR tracking need) plus the typed result.
-	postHook := func(ctx context.Context, _ compute.SchedulerRequest, result compute.SchedulerResult) error {
+	postHook := func(ctx context.Context, _ compute.PlacementRequest, result compute.PlacementResult) error {
 		// VM-resource creation.
 		switch {
 		case requestData.Options.ReadOnly:

@@ -67,13 +67,13 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		request       compute.SchedulerRequest
+		request       compute.PlacementRequest
 		expectedHosts []string
 		filteredHosts []string
 	}{
 		{
 			name: "No accelerators requested - all hosts pass",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -86,7 +86,7 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Accelerators requested - filter to hosts with COMPUTE_ACCELERATORS trait",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				AcceleratorsRequested: true,
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -100,7 +100,7 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Accelerators requested with different device profile value",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				AcceleratorsRequested: true,
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -113,7 +113,7 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Accelerators requested - all hosts have the trait",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				AcceleratorsRequested: true,
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -126,7 +126,7 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Accelerators requested - no hosts have the trait",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				AcceleratorsRequested: true,
 				Hosts: []compute.Host{
 					{ComputeHost: "host3"},
@@ -138,7 +138,7 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Other extra specs present but no accelerator request - all hosts pass",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host3"},
@@ -150,7 +150,7 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Accelerators requested with empty device profile value",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				AcceleratorsRequested: true,
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -163,7 +163,7 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Empty host list with accelerators requested",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				AcceleratorsRequested: true,
 				Hosts:                 []compute.Host{},
 			},
@@ -172,7 +172,7 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Empty host list without accelerators requested",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{},
 			},
 			expectedHosts: []string{},
@@ -180,7 +180,7 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Mixed hosts with and without accelerators trait",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				AcceleratorsRequested: true,
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -195,7 +195,7 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Accelerators with additional extra specs",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				AcceleratorsRequested: true,
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -207,7 +207,7 @@ func TestFilterHasAcceleratorsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Host not in database with accelerators requested",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				AcceleratorsRequested: true,
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},

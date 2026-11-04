@@ -38,7 +38,7 @@ func (o VMwareAntiAffinityNoisyProjectsStepOpts) Validate() error {
 // Step to avoid noisy projects by downvoting the hosts they are running on.
 type VMwareAntiAffinityNoisyProjectsStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	lib.BaseWeigher[sched.SchedulerRequest, VMwareAntiAffinityNoisyProjectsStepOpts]
+	lib.BaseWeigher[sched.PlacementRequest, VMwareAntiAffinityNoisyProjectsStepOpts]
 }
 
 // Initialize the step and validate that all required knowledges are ready.
@@ -53,7 +53,7 @@ func (s *VMwareAntiAffinityNoisyProjectsStep) Init(ctx context.Context, client c
 }
 
 // Downvote the hosts a project is currently running on if it's noisy.
-func (s *VMwareAntiAffinityNoisyProjectsStep) Run(traceLog logr.Logger, request sched.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *VMwareAntiAffinityNoisyProjectsStep) Run(traceLog logr.Logger, request sched.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	result.Statistics["avg cpu usage of this project"] = s.PrepareStats(request, "%")
@@ -92,7 +92,7 @@ func (s *VMwareAntiAffinityNoisyProjectsStep) Run(traceLog logr.Logger, request 
 }
 
 func init() {
-	Index["vmware_anti_affinity_noisy_projects"] = func() lib.Weigher[sched.SchedulerRequest] {
+	Index["vmware_anti_affinity_noisy_projects"] = func() lib.Weigher[sched.PlacementRequest] {
 		return &VMwareAntiAffinityNoisyProjectsStep{}
 	}
 }

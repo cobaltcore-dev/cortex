@@ -29,29 +29,29 @@ import (
 // fakePipeline returns a fixed ordered-host list (modelling a scheduler run).
 type fakePipeline struct{ hosts []string }
 
-func (p fakePipeline) Run(sched.SchedulerRequest) (sched.SchedulerResult, error) {
-	return sched.SchedulerResult{OrderedHosts: p.hosts}, nil
+func (p fakePipeline) Run(sched.PlacementRequest) (sched.PlacementResult, error) {
+	return sched.PlacementResult{OrderedHosts: p.hosts}, nil
 }
 
 // fakePipelineProvider serves a fakePipeline for every pipeline name, returning
 // the configured host list.
 type fakePipelineProvider struct{ hosts []string }
 
-func (f fakePipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.SchedulerRequest], bool) {
+func (f fakePipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.PlacementRequest], bool) {
 	return fakePipeline(f), true
 }
 
 // fakeGatherer is a no-op gatherer (tests supply their own hosts).
 type fakeGatherer struct{}
 
-func (fakeGatherer) MutateWithAllCandidates(context.Context, *sched.SchedulerRequest) error {
+func (fakeGatherer) MutateWithAllCandidates(context.Context, *sched.PlacementRequest) error {
 	return nil
 }
 
-// newMockScheduler builds an in-process compute.Scheduler whose pipeline returns
+// newMockScheduler builds an in-process compute.Placement whose pipeline returns
 // the given host list. Replaces the former httptest mock scheduler server.
-func newMockScheduler(hosts []string) *sched.Scheduler {
-	return sched.NewScheduler(fakePipelineProvider{hosts: hosts}, fakeGatherer{})
+func newMockScheduler(hosts []string) *sched.Placement {
+	return sched.NewPlacement(fakePipelineProvider{hosts: hosts}, fakeGatherer{})
 }
 
 // mockDomainResolver is a test double for DomainResolver.
@@ -871,16 +871,16 @@ func TestCommitmentReservationController_reconcileInstanceReservation_Success(t 
 
 // capturingPipeline records the SchedulerRequest it was run with and returns a
 // single host, so tests can assert on the request the reconciler built.
-type capturingPipeline struct{ captured *sched.SchedulerRequest }
+type capturingPipeline struct{ captured *sched.PlacementRequest }
 
-func (p capturingPipeline) Run(req sched.SchedulerRequest) (sched.SchedulerResult, error) {
+func (p capturingPipeline) Run(req sched.PlacementRequest) (sched.PlacementResult, error) {
 	*p.captured = req
-	return sched.SchedulerResult{OrderedHosts: []string{"test-host-1"}}, nil
+	return sched.PlacementResult{OrderedHosts: []string{"test-host-1"}}, nil
 }
 
-type capturingPipelineProvider struct{ captured *sched.SchedulerRequest }
+type capturingPipelineProvider struct{ captured *sched.PlacementRequest }
 
-func (f capturingPipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.SchedulerRequest], bool) {
+func (f capturingPipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.PlacementRequest], bool) {
 	return capturingPipeline(f), true
 }
 
@@ -930,12 +930,12 @@ func TestCommitmentReservationController_DomainNameHint(t *testing.T) {
 			k8sClient := newCRTestClient(scheme, reservation, newTestFlavorKnowledge(),
 				&hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "test-host-1"}})
 
-			var captured sched.SchedulerRequest
+			var captured sched.PlacementRequest
 			reconciler := &CommitmentReservationController{
 				Client:         k8sClient,
 				Scheme:         scheme,
 				Conf:           ReservationControllerConfig{},
-				Scheduler:      sched.NewScheduler(capturingPipelineProvider{captured: &captured}, fakeGatherer{}),
+				Scheduler:      sched.NewPlacement(capturingPipelineProvider{captured: &captured}, fakeGatherer{}),
 				DomainResolver: tt.resolver,
 			}
 

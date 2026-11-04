@@ -16,7 +16,7 @@ import (
 // for a given Nova scheduling request.
 type CandidateGatherer interface {
 	// Gather all placement candidates and mutate the request accordingly.
-	MutateWithAllCandidates(ctx context.Context, request *compute.SchedulerRequest) error
+	MutateWithAllCandidates(ctx context.Context, request *compute.PlacementRequest) error
 }
 
 // candidateGatherer is the default implementation of CandidateGatherer
@@ -24,7 +24,7 @@ type CandidateGatherer interface {
 type candidateGatherer struct{ client.Client }
 
 // NewCandidateGatherer builds the default Nova candidate gatherer backed by the
-// given client. It is handed to the compute.Scheduler, which invokes it when a
+// given client. It is handed to the compute.Placement, which invokes it when a
 // request opts into gathering all placement candidates.
 func NewCandidateGatherer(c client.Client) CandidateGatherer {
 	return &candidateGatherer{Client: c}
@@ -32,7 +32,7 @@ func NewCandidateGatherer(c client.Client) CandidateGatherer {
 
 // MutateWithAllCandidates gathers all placement candidates and mutates
 // the request accordingly.
-func (g *candidateGatherer) MutateWithAllCandidates(ctx context.Context, request *compute.SchedulerRequest) error {
+func (g *candidateGatherer) MutateWithAllCandidates(ctx context.Context, request *compute.PlacementRequest) error {
 	// Currently we can only get candidates for kvm placements.
 	if request.HypervisorFamily != compute.HypervisorFamilyKVM {
 		return fmt.Errorf(

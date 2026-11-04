@@ -39,7 +39,7 @@ type VirtualMachineHandler struct {
 // written on create; mutable fields (target host, cortex spec, labels) are
 // patched on updates. A human-readable explanation of the result and the intent
 // are recorded on the VM's cortex spec.
-func (h *VirtualMachineHandler) Upsert(ctx context.Context, result compute.SchedulerResult, request api.ExternalSchedulerRequest, intent v1alpha1.SchedulingIntent) error {
+func (h *VirtualMachineHandler) Upsert(ctx context.Context, result compute.PlacementResult, request api.ExternalSchedulerRequest, intent v1alpha1.SchedulingIntent) error {
 	log := ctrl.LoggerFrom(ctx)
 
 	if result.TargetHost == nil {

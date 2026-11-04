@@ -13,14 +13,14 @@ import (
 func TestIsForcedDestination(t *testing.T) {
 	cases := []struct {
 		name   string
-		req    SchedulerRequest
+		req    PlacementRequest
 		forced bool
 	}{
-		{"no force", SchedulerRequest{}, false},
-		{"force host, no intent", SchedulerRequest{ForceHosts: []string{"h1"}}, true},
-		{"force node, no intent", SchedulerRequest{ForceNodes: []string{"n1"}}, true},
-		{"force host, unknown intent", SchedulerRequest{ForceHosts: []string{"h1"}, Intent: v1alpha1.SchedulingIntentUnknown}, true},
-		{"force host, concrete intent must still filter", SchedulerRequest{ForceHosts: []string{"h1"}, Intent: "evacuate"}, false},
+		{"no force", PlacementRequest{}, false},
+		{"force host, no intent", PlacementRequest{ForceHosts: []string{"h1"}}, true},
+		{"force node, no intent", PlacementRequest{ForceNodes: []string{"n1"}}, true},
+		{"force host, unknown intent", PlacementRequest{ForceHosts: []string{"h1"}, Intent: v1alpha1.SchedulingIntentUnknown}, true},
+		{"force host, concrete intent must still filter", PlacementRequest{ForceHosts: []string{"h1"}, Intent: "evacuate"}, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -51,7 +51,7 @@ func TestForcedHosts(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			r := SchedulerRequest{Hosts: hosts, ForceHosts: c.force, ForceNodes: c.nodes}
+			r := PlacementRequest{Hosts: hosts, ForceHosts: c.force, ForceNodes: c.nodes}
 			got := r.ForcedHosts()
 			if !slices.Equal(got, c.want) {
 				t.Errorf("ForcedHosts() = %v, want %v", got, c.want)
@@ -61,13 +61,13 @@ func TestForcedHosts(t *testing.T) {
 }
 
 func TestFilterNarrowsHostsAndWeights(t *testing.T) {
-	r := SchedulerRequest{
+	r := PlacementRequest{
 		Hosts: []Host{
 			{ComputeHost: "a"}, {ComputeHost: "b"}, {ComputeHost: "c"},
 		},
 		Weights: map[string]float64{"a": 1, "b": 2, "c": 3},
 	}
-	filtered := r.Filter(map[string]float64{"a": 10, "c": 30}).(SchedulerRequest)
+	filtered := r.Filter(map[string]float64{"a": 10, "c": 30}).(PlacementRequest)
 	got := filtered.GetHosts()
 	slices.Sort(got)
 	if !slices.Equal(got, []string{"a", "c"}) {

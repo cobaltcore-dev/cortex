@@ -37,7 +37,7 @@ type FilterHasEnoughCapacityOpts struct {
 func (FilterHasEnoughCapacityOpts) Validate() error { return nil }
 
 type FilterHasEnoughCapacity struct {
-	lib.BaseFilter[compute.SchedulerRequest, FilterHasEnoughCapacityOpts]
+	lib.BaseFilter[compute.PlacementRequest, FilterHasEnoughCapacityOpts]
 }
 
 // Filter hosts that don't have enough capacity to run the requested flavor.
@@ -64,7 +64,7 @@ type FilterHasEnoughCapacity struct {
 // known at this point.
 //
 // Please also note that disk space is currently not considered by this filter.
-func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	opts := request.GetOptions()
 	result := s.IncludeAllHostsFromRequest(request)
 

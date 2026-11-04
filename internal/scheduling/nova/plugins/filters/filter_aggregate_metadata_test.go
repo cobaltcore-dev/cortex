@@ -22,14 +22,14 @@ import (
 func TestFilterAggregateMetadata_Run(t *testing.T) {
 	tests := []struct {
 		name          string
-		request       compute.SchedulerRequest
+		request       compute.PlacementRequest
 		hypervisors   []hv1.Hypervisor
 		expectedHosts []string
 		filteredHosts []string
 	}{
 		{
 			name: "No aggregates with filter_tenant_id - all hosts pass",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-a",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -62,7 +62,7 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Host with filter_tenant_id matching project - host passes",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-a",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -88,7 +88,7 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Host with filter_tenant_id not matching project - host filtered",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-b",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -114,7 +114,7 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Host in multiple aggregates with different filter_tenant_id - project matches one",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-b",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -136,7 +136,7 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Host in multiple aggregates - project matches none",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-c",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -158,7 +158,7 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Mixed hosts - some restricted, some open",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-a",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -198,7 +198,7 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Empty host list",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-a",
 				Hosts:     []compute.Host{},
 			},
@@ -215,7 +215,7 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "All hosts filtered out",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-nonexistent",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -241,7 +241,7 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Host not in hypervisor list - passes (no restrictions found)",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-a",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -261,7 +261,7 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Aggregate with nil metadata - treated as no restriction",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-a",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -280,7 +280,7 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Comma-separated filter_tenant_id - project matches one of many",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-b",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -299,7 +299,7 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Comma-separated filter_tenant_id - project matches none",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-d",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -318,7 +318,7 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Comma-separated filter_tenant_id with surrounding whitespace - project matches",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-b",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -337,7 +337,7 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Numbered filter_tenant_id keys - project matches one of the numbered keys",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-c",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -360,7 +360,7 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Numbered filter_tenant_id keys with comma-separated values - project matches",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-e",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -383,7 +383,7 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Numbered filter_tenant_id keys - project matches none",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-z",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -448,7 +448,7 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 }
 
 func TestFilterAggregateMetadata_Run_ClientError(t *testing.T) {
-	request := compute.SchedulerRequest{
+	request := compute.PlacementRequest{
 		ProjectID: "project-a",
 		Hosts: []compute.Host{
 			{ComputeHost: "host1"},
@@ -509,7 +509,7 @@ func TestFilterAggregateMetadata_SkipsForCapacityProbeIntent(t *testing.T) {
 	step := &FilterAggregateMetadata{}
 	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 
-	request := compute.SchedulerRequest{
+	request := compute.PlacementRequest{
 		ProjectID: "project-y",
 		Intent:    api.CapacityProbeIntent,
 		Hosts:     []compute.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
@@ -546,7 +546,7 @@ func TestFilterAggregateMetadata_AppliesForFailoverIntents(t *testing.T) {
 		t.Run(string(intent), func(t *testing.T) {
 			step := &FilterAggregateMetadata{}
 			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
-			request := compute.SchedulerRequest{
+			request := compute.PlacementRequest{
 				ProjectID: "project-y",
 				Intent:    intent,
 				Hosts:     []compute.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},

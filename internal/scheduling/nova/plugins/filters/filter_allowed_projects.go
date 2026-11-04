@@ -15,12 +15,12 @@ import (
 )
 
 type FilterAllowedProjectsStep struct {
-	lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Lock certain hosts for certain projects, based on the hypervisor spec.
 // Note that hosts without specified projects are still accessible.
-func (s *FilterAllowedProjectsStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterAllowedProjectsStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	// Capacity probe calls are synthetic and not placed on behalf of a tenant
 	// project, so they must ignore tenant pinning. Failover reservations DO respect

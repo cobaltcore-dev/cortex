@@ -57,7 +57,7 @@ type e2eEnv struct {
 
 // newE2EEnv creates an e2eEnv with the given flavors and scheduler handler.
 // The scheduler handler controls what the mock Nova scheduler returns.
-func newE2EEnv(t *testing.T, flavors []*TestFlavor, infoVersion int64, scheduler *sched.Scheduler) *e2eEnv {
+func newE2EEnv(t *testing.T, flavors []*TestFlavor, infoVersion int64, scheduler *sched.Placement) *e2eEnv {
 	t.Helper()
 	log.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
 
@@ -272,31 +272,31 @@ func e2eIsTerminalReservation(res v1alpha1.Reservation) bool {
 // e2eFakePipeline models a scheduler run returning a fixed host list.
 type e2eFakePipeline struct{ hosts []string }
 
-func (p e2eFakePipeline) Run(sched.SchedulerRequest) (sched.SchedulerResult, error) {
-	return sched.SchedulerResult{OrderedHosts: p.hosts}, nil
+func (p e2eFakePipeline) Run(sched.PlacementRequest) (sched.PlacementResult, error) {
+	return sched.PlacementResult{OrderedHosts: p.hosts}, nil
 }
 
 type e2eFakeProvider struct{ hosts []string }
 
-func (f e2eFakeProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.SchedulerRequest], bool) {
+func (f e2eFakeProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.PlacementRequest], bool) {
 	return e2eFakePipeline(f), true
 }
 
 type e2eFakeGatherer struct{}
 
-func (e2eFakeGatherer) MutateWithAllCandidates(context.Context, *sched.SchedulerRequest) error {
+func (e2eFakeGatherer) MutateWithAllCandidates(context.Context, *sched.PlacementRequest) error {
 	return nil
 }
 
-func e2eScheduler(hosts []string) *sched.Scheduler {
-	return sched.NewScheduler(e2eFakeProvider{hosts: hosts}, e2eFakeGatherer{})
+func e2eScheduler(hosts []string) *sched.Placement {
+	return sched.NewPlacement(e2eFakeProvider{hosts: hosts}, e2eFakeGatherer{})
 }
 
 // e2eAcceptScheduler returns a scheduler that always places on host-1.
-func e2eAcceptScheduler() *sched.Scheduler { return e2eScheduler([]string{"host-1"}) }
+func e2eAcceptScheduler() *sched.Placement { return e2eScheduler([]string{"host-1"}) }
 
 // e2eRejectScheduler returns a scheduler that finds no host (NoHostsFound).
-func e2eRejectScheduler() *sched.Scheduler { return e2eScheduler(nil) }
+func e2eRejectScheduler() *sched.Placement { return e2eScheduler(nil) }
 
 // assertNoDryRunProbes verifies that all probe CommittedResource CRDs and their child
 // Reservations have been cleaned up. It only checks objects associated with dry-run probes
@@ -337,7 +337,7 @@ var e2eFlavor = &TestFlavor{Name: "m1.small", Group: "hana_1", MemoryMB: 1024, V
 func TestE2EChangeCommitments(t *testing.T) {
 	testCases := []struct {
 		Name       string
-		Scheduler  func() *sched.Scheduler
+		Scheduler  func() *sched.Placement
 		ReqJSON    string
 		WantResp   APIResponseExpectation
 		WantAbsent []string

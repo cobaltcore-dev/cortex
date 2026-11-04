@@ -14,13 +14,13 @@ import (
 )
 
 type FilterInstanceGroupAffinityStep struct {
-	lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Select hosts in spec.instance_group.
 func (s *FilterInstanceGroupAffinityStep) Run(
 	traceLog logr.Logger,
-	request compute.SchedulerRequest,
+	request compute.PlacementRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 
 	result := s.IncludeAllHostsFromRequest(request)

@@ -34,7 +34,7 @@ func newHypervisor(name, capacityCPU, capacityMem, allocationCPU, allocationMem 
 	}
 }
 
-func newBinpackRequest(memoryMB, vcpus, numInstances uint64, hosts []string) compute.SchedulerRequest {
+func newBinpackRequest(memoryMB, vcpus, numInstances uint64, hosts []string) compute.PlacementRequest {
 	hostList := make([]compute.Host, len(hosts))
 	for i, h := range hosts {
 		hostList[i] = compute.Host{ComputeHost: h}
@@ -45,7 +45,7 @@ func newBinpackRequest(memoryMB, vcpus, numInstances uint64, hosts []string) com
 		weights[h] = 1.0
 	}
 
-	return compute.SchedulerRequest{
+	return compute.PlacementRequest{
 		ProjectID:        "project-A",
 		InstanceUUID:     "instance-123",
 		NumInstances:     numInstances,
@@ -172,7 +172,7 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 	tests := []struct {
 		name            string
 		hypervisors     []*hv1.Hypervisor
-		request         compute.SchedulerRequest
+		request         compute.PlacementRequest
 		opts            KVMBinpackStepOpts
 		expectedWeights map[string]float64
 		wantErr         bool
@@ -474,7 +474,7 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 func TestKVMBinpackStep_calcVMResources(t *testing.T) {
 	tests := []struct {
 		name             string
-		request          compute.SchedulerRequest
+		request          compute.PlacementRequest
 		expectedMemBytes int64
 		expectedCPU      int64
 	}{

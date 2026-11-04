@@ -21,7 +21,7 @@ type mockCandidateGatherer struct {
 	gatheredHosts []compute.Host
 }
 
-func (m *mockCandidateGatherer) MutateWithAllCandidates(ctx context.Context, request *compute.SchedulerRequest) error {
+func (m *mockCandidateGatherer) MutateWithAllCandidates(ctx context.Context, request *compute.PlacementRequest) error {
 	m.called = true
 	if m.err != nil {
 		return m.err

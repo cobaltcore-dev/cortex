@@ -16,11 +16,11 @@ import (
 )
 
 type FilterImagePropertiesStep struct {
-	lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Filter hosts based on image properties given in the request spec.
-func (s *FilterImagePropertiesStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterImagePropertiesStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	// Apply this filter to all requests, unless we know from the request's

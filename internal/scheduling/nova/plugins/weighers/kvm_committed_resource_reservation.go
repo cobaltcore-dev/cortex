@@ -48,12 +48,12 @@ func (o KVMCommittedResourceReservationOpts) GetDefaultHostWeight() float64 {
 // Hosts that have a ready Reservation matching the request's project and flavor group,
 // with enough free memory capacity for the requested VM, receive a higher weight.
 type KVMCommittedResourceReservationStep struct {
-	lib.BaseWeigher[compute.SchedulerRequest, KVMCommittedResourceReservationOpts]
+	lib.BaseWeigher[compute.PlacementRequest, KVMCommittedResourceReservationOpts]
 }
 
 // Run the weigher step.
 // Hosts with a matching CommittedResourceReservation (project + flavor group + free capacity) get a higher weight.
-func (s *KVMCommittedResourceReservationStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMCommittedResourceReservationStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	// Skip for failover reservation scheduling — CR reservations should not influence

@@ -201,7 +201,7 @@ func TestFilterLiveMigratableStep_checkHasSufficientFeatures(t *testing.T) {
 func TestFilterLiveMigratableStep_Run(t *testing.T) {
 	tests := []struct {
 		name          string
-		request       compute.SchedulerRequest
+		request       compute.PlacementRequest
 		hypervisors   []hv1.Hypervisor
 		expectedHosts []string
 		filteredHosts []string
@@ -209,7 +209,7 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 	}{
 		{
 			name: "Not a live migration - all hosts pass",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Intent: api.EvacuateIntent,
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -236,7 +236,7 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 		},
 		{
 			name: "Live migration without source_host - all hosts pass",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Intent: api.LiveMigrationIntent,
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -263,7 +263,7 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 		},
 		{
 			name: "Live migration with compatible hosts",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Intent:     api.LiveMigrationIntent,
 				SourceHost: "host1",
 				Hosts: []compute.Host{
@@ -313,7 +313,7 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 		},
 		{
 			name: "Live migration with incompatible architecture",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Intent:     api.LiveMigrationIntent,
 				SourceHost: "host1",
 				Hosts: []compute.Host{
@@ -357,7 +357,7 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 		},
 		{
 			name: "Live migration with missing CPU modes",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Intent:     api.LiveMigrationIntent,
 				SourceHost: "host1",
 				Hosts: []compute.Host{
@@ -407,7 +407,7 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 		},
 		{
 			name: "Live migration with missing features",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Intent:     api.LiveMigrationIntent,
 				SourceHost: "host1",
 				Hosts: []compute.Host{
@@ -441,7 +441,7 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 		},
 		{
 			name: "Live migration with missing devices",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Intent:     api.LiveMigrationIntent,
 				SourceHost: "host1",
 				Hosts: []compute.Host{
@@ -475,7 +475,7 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 		},
 		{
 			name: "Live migration with non-existent target host",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Intent:     api.LiveMigrationIntent,
 				SourceHost: "host1",
 				Hosts: []compute.Host{
@@ -504,7 +504,7 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 		},
 		{
 			name: "Live migration with all hosts filtered",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Intent:     api.LiveMigrationIntent,
 				SourceHost: "host1",
 				Hosts: []compute.Host{
@@ -539,7 +539,7 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 		},
 		{
 			name: "Live migration with empty host list",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Intent:     api.LiveMigrationIntent,
 				SourceHost: "host1",
 				Hosts:      []compute.Host{},
@@ -575,8 +575,8 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 				Build()
 
 			step := &FilterLiveMigratableStep{
-				BaseFilter: lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
-					BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+				BaseFilter: lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+					BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
 						Client: fakeClient,
 					},
 				},
@@ -618,7 +618,7 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 }
 
 func TestFilterLiveMigratableStep_Run_SourceHostNotFound(t *testing.T) {
-	request := compute.SchedulerRequest{
+	request := compute.PlacementRequest{
 		Intent:     api.LiveMigrationIntent,
 		SourceHost: "nonexistent-host",
 		Hosts: []compute.Host{
@@ -656,8 +656,8 @@ func TestFilterLiveMigratableStep_Run_SourceHostNotFound(t *testing.T) {
 		Build()
 
 	step := &FilterLiveMigratableStep{
-		BaseFilter: lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
-			BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+		BaseFilter: lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+			BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
 				Client: fakeClient,
 			},
 		},
@@ -673,7 +673,7 @@ func TestFilterLiveMigratableStep_Run_SourceHostNotFound(t *testing.T) {
 }
 
 func TestFilterLiveMigratableStep_Run_ClientError(t *testing.T) {
-	request := compute.SchedulerRequest{
+	request := compute.PlacementRequest{
 		Intent:     api.LiveMigrationIntent,
 		SourceHost: "host1",
 		Hosts: []compute.Host{
@@ -696,8 +696,8 @@ func TestFilterLiveMigratableStep_Run_ClientError(t *testing.T) {
 		Build()
 
 	step := &FilterLiveMigratableStep{
-		BaseFilter: lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
-			BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+		BaseFilter: lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+			BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
 				Client: fakeClient,
 			},
 		},

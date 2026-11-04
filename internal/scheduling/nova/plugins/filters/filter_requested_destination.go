@@ -17,7 +17,7 @@ import (
 )
 
 type FilterRequestedDestinationStep struct {
-	lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // processRequestedAggregates filters hosts based on the requested aggregates.
@@ -102,7 +102,7 @@ func (s *FilterRequestedDestinationStep) processRequestedHost(
 // The requested destination can include a specific host, aggregates, or both.
 // When both are specified, aggregate filtering is applied first, followed by
 // host filtering.
-func (s *FilterRequestedDestinationStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterRequestedDestinationStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	// The requested_destination hint is only set by Nova for user-directed placement;
 	if slices.Contains([]v1alpha1.SchedulingIntent{

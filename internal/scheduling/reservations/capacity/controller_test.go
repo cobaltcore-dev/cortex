@@ -102,8 +102,8 @@ func newHypervisor(name, az string, memoryBytes int64) *hv1.Hypervisor {
 // fakePipeline returns a fixed ordered-host list (modelling a scheduler run).
 type fakePipeline struct{ hosts []string }
 
-func (p fakePipeline) Run(sched.SchedulerRequest) (sched.SchedulerResult, error) {
-	return sched.SchedulerResult{OrderedHosts: p.hosts}, nil
+func (p fakePipeline) Run(sched.PlacementRequest) (sched.PlacementResult, error) {
+	return sched.PlacementResult{OrderedHosts: p.hosts}, nil
 }
 
 // fakePipelineProvider serves a fakePipeline per pipeline name, returning the
@@ -115,7 +115,7 @@ type fakePipelineProvider struct {
 	useAll          bool
 }
 
-func (f fakePipelineProvider) GetPipeline(name string) (lib.FilterWeigherPipeline[sched.SchedulerRequest], bool) {
+func (f fakePipelineProvider) GetPipeline(name string) (lib.FilterWeigherPipeline[sched.PlacementRequest], bool) {
 	if f.useAll {
 		return fakePipeline{hosts: f.allPipelines}, true
 	}
@@ -125,70 +125,70 @@ func (f fakePipelineProvider) GetPipeline(name string) (lib.FilterWeigherPipelin
 // fakeGatherer is a no-op gatherer (tests preselect their own hosts).
 type fakeGatherer struct{}
 
-func (fakeGatherer) MutateWithAllCandidates(context.Context, *sched.SchedulerRequest) error {
+func (fakeGatherer) MutateWithAllCandidates(context.Context, *sched.PlacementRequest) error {
 	return nil
 }
 
-// newMockScheduler builds an in-process compute.Scheduler whose pipelines return
+// newMockScheduler builds an in-process compute.Placement whose pipelines return
 // the given per-pipeline host lists. Replaces the former httptest mock server.
-func newMockScheduler(hostsByPipeline map[string][]string) *sched.Scheduler {
-	return sched.NewScheduler(fakePipelineProvider{hostsByPipeline: hostsByPipeline}, fakeGatherer{})
+func newMockScheduler(hostsByPipeline map[string][]string) *sched.Placement {
+	return sched.NewPlacement(fakePipelineProvider{hostsByPipeline: hostsByPipeline}, fakeGatherer{})
 }
 
 // newMockSchedulerHosts is a convenience for a scheduler that returns the same
 // host list regardless of pipeline.
-func newMockSchedulerHosts(hosts []string) *sched.Scheduler {
-	return sched.NewScheduler(fakePipelineProvider{allPipelines: hosts, useAll: true}, fakeGatherer{})
+func newMockSchedulerHosts(hosts []string) *sched.Placement {
+	return sched.NewPlacement(fakePipelineProvider{allPipelines: hosts, useAll: true}, fakeGatherer{})
 }
 
 // fakeErrPipeline models a scheduler run that fails (replaces the former
 // HTTP 500 mock server).
 type fakeErrPipeline struct{}
 
-func (fakeErrPipeline) Run(sched.SchedulerRequest) (sched.SchedulerResult, error) {
-	return sched.SchedulerResult{}, errors.New("boom")
+func (fakeErrPipeline) Run(sched.PlacementRequest) (sched.PlacementResult, error) {
+	return sched.PlacementResult{}, errors.New("boom")
 }
 
 type fakeErrPipelineProvider struct{}
 
-func (fakeErrPipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.SchedulerRequest], bool) {
+func (fakeErrPipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.PlacementRequest], bool) {
 	return fakeErrPipeline{}, true
 }
 
 // newErrScheduler builds a scheduler whose pipeline always returns an error.
-func newErrScheduler() *sched.Scheduler {
-	return sched.NewScheduler(fakeErrPipelineProvider{}, fakeGatherer{})
+func newErrScheduler() *sched.Placement {
+	return sched.NewPlacement(fakeErrPipelineProvider{}, fakeGatherer{})
 }
 
 // capturePipeline records the request it is run with and returns a fixed host list.
 type capturePipeline struct {
-	captured *sched.SchedulerRequest
+	captured *sched.PlacementRequest
 	hosts    []string
 }
 
-func (p capturePipeline) Run(req sched.SchedulerRequest) (sched.SchedulerResult, error) {
+func (p capturePipeline) Run(req sched.PlacementRequest) (sched.PlacementResult, error) {
 	*p.captured = req
-	return sched.SchedulerResult{OrderedHosts: p.hosts}, nil
+	return sched.PlacementResult{OrderedHosts: p.hosts}, nil
 }
 
 type capturePipelineProvider struct {
-	captured *sched.SchedulerRequest
+	captured *sched.PlacementRequest
 	hosts    []string
 }
 
-func (f capturePipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.SchedulerRequest], bool) {
+func (f capturePipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.PlacementRequest], bool) {
 	return capturePipeline(f), true
 }
 
 // captureScheduler builds a scheduler that records the request it is run with
 // into captured and returns the given hosts.
-func captureScheduler(captured *sched.SchedulerRequest, hosts []string) *sched.Scheduler {
-	return sched.NewScheduler(capturePipelineProvider{captured: captured, hosts: hosts}, fakeGatherer{})
+func captureScheduler(captured *sched.PlacementRequest, hosts []string) *sched.Placement {
+	return sched.NewPlacement(capturePipelineProvider{captured: captured, hosts: hosts}, fakeGatherer{})
 }
 
 // newController is a test helper that creates a Reconciler with a nil VMSource
 // and the given scheduler.
-func newController(t *testing.T, c client.Client, cfg Config, scheduler *sched.Scheduler) *Reconciler {
+func newController(t *testing.T, c client.Client, cfg Config, scheduler *sched.Placement) *Reconciler {
 	t.Helper()
 	return NewController(c, cfg, nil, scheduler)
 }
@@ -1344,7 +1344,7 @@ func TestProbeScheduler_SetsCapacityProbeIntent(t *testing.T) {
 
 	// Capture the request the scheduler receives so we can assert the probe
 	// intent and project are set.
-	var capturedReq sched.SchedulerRequest
+	var capturedReq sched.PlacementRequest
 	captured := captureScheduler(&capturedReq, []string{"host-1"})
 
 	c := NewController(fake.NewClientBuilder().WithScheme(scheme).Build(), Config{}, nil, captured)

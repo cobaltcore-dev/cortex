@@ -59,12 +59,12 @@ func (o KVMCRMigrationSlotOpts) GetDefaultHostWeight() float64 {
 //
 // Only activates for LiveMigrationIntent.
 type KVMCRMigrationSlotStep struct {
-	lib.BaseWeigher[compute.SchedulerRequest, KVMCRMigrationSlotOpts]
+	lib.BaseWeigher[compute.PlacementRequest, KVMCRMigrationSlotOpts]
 }
 
 func (s *KVMCRMigrationSlotStep) Run(
 	traceLog logr.Logger,
-	request compute.SchedulerRequest,
+	request compute.PlacementRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 
 	result := s.IncludeAllHostsFromRequest(request)

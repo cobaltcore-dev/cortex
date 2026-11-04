@@ -51,7 +51,7 @@ func newFailoverReservationWithGroup(name, targetHost, resourceGroup string) *v1
 	}
 }
 
-func newFailoverReservationRequest(resourceGroup string, hosts []string) compute.SchedulerRequest {
+func newFailoverReservationRequest(resourceGroup string, hosts []string) compute.PlacementRequest {
 	hostList := make([]compute.Host, len(hosts))
 	for i, h := range hosts {
 		hostList[i] = compute.Host{ComputeHost: h}
@@ -62,7 +62,7 @@ func newFailoverReservationRequest(resourceGroup string, hosts []string) compute
 		weights[h] = 1.0
 	}
 
-	return compute.SchedulerRequest{
+	return compute.PlacementRequest{
 		ProjectID:        "project-A",
 		InstanceUUID:     "test-instance",
 		NumInstances:     1,
@@ -88,7 +88,7 @@ func TestKVMFailoverReservationConsolidationStep_Run(t *testing.T) {
 	tests := []struct {
 		name            string
 		reservations    []*v1alpha1.Reservation
-		request         compute.SchedulerRequest
+		request         compute.PlacementRequest
 		opts            KVMFailoverReservationConsolidationOpts
 		expectedWeights map[string]float64
 	}{

@@ -79,7 +79,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 	tests := []struct {
 		name          string
 		opts          FilterExternalCustomerStepOpts
-		request       compute.SchedulerRequest
+		request       compute.PlacementRequest
 		expectedHosts []string
 		filteredHosts []string
 		expectError   bool
@@ -89,7 +89,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				DomainName: "ext-customer1",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -106,7 +106,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				DomainName: "internal-customer",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -123,7 +123,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"external-", "ext-", "customer-"},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				DomainName: "customer-abc",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -140,7 +140,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 				CustomerDomainNamePrefixes: []string{"ext-"},
 				CustomerIgnoredDomainNames: []string{"ext-special-domain"},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				DomainName: "ext-special-domain",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -156,7 +156,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				DomainName: "ext-customer2",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -172,7 +172,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				DomainName: "ext-customer3",
 				Hosts: []compute.Host{
 					{ComputeHost: "host3"},
@@ -187,7 +187,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				DomainName: "ext-customer",
 				Hosts:      []compute.Host{},
 			},
@@ -199,7 +199,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				DomainName: "ext-customer",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -214,7 +214,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host3"},
@@ -228,7 +228,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -242,7 +242,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				DomainName: "EXT-customer",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -258,7 +258,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext"},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				DomainName: "ext",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -274,7 +274,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 				CustomerDomainNamePrefixes: []string{"ext-"},
 				CustomerIgnoredDomainNames: []string{"ext-test", "ext-dev", "ext-staging"},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				DomainName: "ext-dev",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -289,7 +289,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Intent:     api.ReserveForFailoverIntent,
 				DomainName: "ext-customer1",
 				Hosts: []compute.Host{
@@ -305,7 +305,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Intent: api.ReserveForCommittedResourceIntent,
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -320,7 +320,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Intent:     api.ReserveForCommittedResourceIntent,
 				DomainName: "ext-customer1",
 				Hosts: []compute.Host{
@@ -337,7 +337,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				DomainName: "ext-customer1",
 				Hosts: []compute.Host{
 					{ComputeHost: "host-custom-trait"},
@@ -467,7 +467,7 @@ func TestFilterExternalCustomerStep_SkipsForNonPlacementIntent(t *testing.T) {
 
 	for _, intent := range []string{"reserve_for_failover", "reuse_failover_reservation", "capacity_probe"} {
 		t.Run(intent, func(t *testing.T) {
-			request := compute.SchedulerRequest{
+			request := compute.PlacementRequest{
 				Intent:     v1alpha1.SchedulingIntent(intent),
 				DomainName: "iaas-customer",
 				Hosts:      []compute.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},

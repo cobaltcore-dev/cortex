@@ -74,13 +74,13 @@ func (o KVMFailoverReservationConsolidationOpts) GetSameSpecPenalty() float64 {
 //
 // This produces bounded output (~0 to 1) that plays nicely with other weighers.
 type KVMFailoverReservationConsolidationStep struct {
-	lib.BaseWeigher[compute.SchedulerRequest, KVMFailoverReservationConsolidationOpts]
+	lib.BaseWeigher[compute.PlacementRequest, KVMFailoverReservationConsolidationOpts]
 }
 
 // Run the weigher step.
 // For reserve_for_failover requests, hosts are scored based on existing failover reservation density
 // and same-spec diversity. For all other request types, this weigher has no effect.
-func (s *KVMFailoverReservationConsolidationStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMFailoverReservationConsolidationStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	if request.Intent != api.ReserveForFailoverIntent {

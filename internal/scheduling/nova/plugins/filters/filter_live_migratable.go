@@ -16,7 +16,7 @@ import (
 )
 
 type FilterLiveMigratableStep struct {
-	lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Check if a vm can be live migrated from a source to a given target host.
@@ -51,7 +51,7 @@ func (s *FilterLiveMigratableStep) checkHasSufficientFeatures(
 // Ensure the target host of a live migration can accept the migrating VM.
 func (s *FilterLiveMigratableStep) Run(
 	traceLog logr.Logger,
-	request compute.SchedulerRequest,
+	request compute.PlacementRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 
 	result := s.IncludeAllHostsFromRequest(request)

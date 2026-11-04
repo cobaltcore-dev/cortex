@@ -14,11 +14,11 @@ import (
 )
 
 type FilterHasAcceleratorsStep struct {
-	lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // If requested, only get hosts with accelerators.
-func (s *FilterHasAcceleratorsStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterHasAcceleratorsStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	if !request.AcceleratorsRequested {
 		traceLog.V(1).Info("no accelerators requested, skipping filter")

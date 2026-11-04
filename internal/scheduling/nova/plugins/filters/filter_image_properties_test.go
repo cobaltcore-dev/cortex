@@ -20,12 +20,12 @@ import (
 
 // requestWith builds a SchedulerRequest with the given hosts and image
 // hypervisor type.
-func requestWith(hosts []string, hvType compute.ImageHypervisorType) compute.SchedulerRequest {
+func requestWith(hosts []string, hvType compute.ImageHypervisorType) compute.PlacementRequest {
 	schedHosts := make([]compute.Host, 0, len(hosts))
 	for _, h := range hosts {
 		schedHosts = append(schedHosts, compute.Host{ComputeHost: h})
 	}
-	return compute.SchedulerRequest{
+	return compute.PlacementRequest{
 		Hosts:               schedHosts,
 		ImageHypervisorType: hvType,
 	}
@@ -34,7 +34,7 @@ func requestWith(hosts []string, hvType compute.ImageHypervisorType) compute.Sch
 // requestWithIntent builds a SchedulerRequest with the given intent. The image
 // hypervisor type is irrelevant to the intent-skip paths these callers exercise,
 // so it is fixed to VMware.
-func requestWithIntent(hosts []string, intent v1alpha1.SchedulingIntent) compute.SchedulerRequest {
+func requestWithIntent(hosts []string, intent v1alpha1.SchedulingIntent) compute.PlacementRequest {
 	request := requestWith(hosts, compute.ImageHypervisorTypeVMware)
 	request.Intent = intent
 	return request
@@ -54,7 +54,7 @@ func TestFilterImagePropertiesStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		request        compute.SchedulerRequest
+		request        compute.PlacementRequest
 		expectedHosts  []string
 		filteredHosts  []string
 		expectedEvents []lib.FilterWeigherPipelineStepEvent

@@ -56,8 +56,8 @@ func vmTestRequest() api.ExternalSchedulerRequest {
 	return req
 }
 
-func vmTestResult(targetHost *string) compute.SchedulerResult {
-	return compute.SchedulerResult{TargetHost: targetHost}
+func vmTestResult(targetHost *string) compute.PlacementResult {
+	return compute.PlacementResult{TargetHost: targetHost}
 }
 
 func vmTestHypervisor(region, az string) *hv1.Hypervisor {

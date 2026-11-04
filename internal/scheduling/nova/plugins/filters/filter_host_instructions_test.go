@@ -13,13 +13,13 @@ import (
 func TestFilterHostInstructionsStep_Run(t *testing.T) {
 	tests := []struct {
 		name          string
-		request       compute.SchedulerRequest
+		request       compute.PlacementRequest
 		expectedHosts []string
 		filteredHosts []string
 	}{
 		{
 			name: "No host instructions - no filtering",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -32,7 +32,7 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Ignore single host",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				IgnoreHosts: []string{"host2"},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -46,7 +46,7 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Ignore multiple hosts",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				IgnoreHosts: []string{"host1", "host3", "host4"},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -60,7 +60,7 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Ignore all hosts",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				IgnoreHosts: []string{"host1", "host2", "host3", "host4"},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -74,7 +74,7 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Ignore non-existent host",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				IgnoreHosts: []string{"host-nonexistent"},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -87,7 +87,7 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Force single host",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ForceHosts: []string{"host2"},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -101,7 +101,7 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Force multiple hosts",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ForceHosts: []string{"host1", "host3"},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -115,7 +115,7 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Force non-existent host",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ForceHosts: []string{"host-nonexistent"},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -128,7 +128,7 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Force and ignore same host - ignore takes precedence",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				IgnoreHosts: []string{"host2"},
 				ForceHosts:  []string{"host2"},
 				Hosts: []compute.Host{
@@ -142,7 +142,7 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Force and ignore different hosts",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				IgnoreHosts: []string{"host1"},
 				ForceHosts:  []string{"host2", "host3"},
 				Hosts: []compute.Host{
@@ -157,7 +157,7 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Complex scenario - multiple ignore and force",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				IgnoreHosts: []string{"host2", "host5"},
 				ForceHosts:  []string{"host1", "host3", "host4"},
 				Hosts: []compute.Host{
@@ -174,7 +174,7 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Empty host list",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				IgnoreHosts: []string{"host1"},
 				ForceHosts:  []string{"host2"},
 				Hosts:       []compute.Host{},
@@ -184,7 +184,7 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Empty ignore list",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				IgnoreHosts: []string{},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -196,7 +196,7 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Empty force list",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ForceHosts: []string{},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -210,7 +210,7 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Both lists empty",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				IgnoreHosts: []string{},
 				ForceHosts:  []string{},
 				Hosts: []compute.Host{
@@ -223,7 +223,7 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Duplicate hosts in ignore list",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				IgnoreHosts: []string{"host1", "host1", "host2"},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -236,7 +236,7 @@ func TestFilterHostInstructionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Duplicate hosts in force list",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ForceHosts: []string{"host1", "host1", "host2"},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},

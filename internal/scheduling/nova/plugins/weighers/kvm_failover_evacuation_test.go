@@ -113,13 +113,13 @@ func parseMemoryToMB(memory string) uint64 {
 	return uint64(bytes / (1024 * 1024)) //nolint:gosec // test code
 }
 
-func newNovaRequest(instanceUUID string, evacuation bool, hosts []string) compute.SchedulerRequest { //nolint:unparam // instanceUUID varies in real usage
+func newNovaRequest(instanceUUID string, evacuation bool, hosts []string) compute.PlacementRequest { //nolint:unparam // instanceUUID varies in real usage
 	hostList := make([]compute.Host, len(hosts))
 	for i, h := range hosts {
 		hostList[i] = compute.Host{ComputeHost: h}
 	}
 
-	req := compute.SchedulerRequest{
+	req := compute.PlacementRequest{
 		ProjectID:        "project-A",
 		InstanceUUID:     instanceUUID,
 		NumInstances:     1,
@@ -153,7 +153,7 @@ func TestKVMFailoverEvacuationStep_Run(t *testing.T) {
 	tests := []struct {
 		name            string
 		reservations    []*v1alpha1.Reservation
-		request         compute.SchedulerRequest
+		request         compute.PlacementRequest
 		opts            KVMFailoverEvacuationOpts
 		expectedWeights map[string]float64
 	}{

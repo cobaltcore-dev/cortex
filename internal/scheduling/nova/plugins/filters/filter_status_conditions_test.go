@@ -214,13 +214,13 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		request       compute.SchedulerRequest
+		request       compute.PlacementRequest
 		expectedHosts []string
 		filteredHosts []string
 	}{
 		{
 			name: "Filter hosts with all conditions met",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -233,7 +233,7 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Host not ready should be filtered",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{
 					{ComputeHost: "host2"},
 				},
@@ -243,7 +243,7 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Terminating host should be filtered",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{
 					{ComputeHost: "host3"},
 				},
@@ -253,7 +253,7 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Tainted host should not be filtered",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{
 					{ComputeHost: "host4"},
 				},
@@ -263,7 +263,7 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Disabled hypervisor should be filtered",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{
 					{ComputeHost: "host8"},
 				},
@@ -273,7 +273,7 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Host with optional conditions in any state should pass",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{
 					{ComputeHost: "host5"},
 				},
@@ -283,7 +283,7 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Host missing Ready condition should be kept",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{
 					{ComputeHost: "host6"},
 				},
@@ -293,7 +293,7 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Host with no conditions should be kept",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{
 					{ComputeHost: "host7"},
 				},
@@ -303,7 +303,7 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Empty host list",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{},
 			},
 			expectedHosts: []string{},
@@ -311,7 +311,7 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Host not in database",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host-unknown"},
@@ -322,7 +322,7 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Mixed condition states",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},

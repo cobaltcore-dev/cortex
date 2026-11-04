@@ -83,7 +83,7 @@ type evacuationPathFinder struct {
 	// scheduler is the shared in-process scheduler used to probe placement. The
 	// pathfinder issues read-only runs via RunWithoutLock. Separately injected so
 	// tests can point it at a fake pipeline.
-	scheduler *compute.Scheduler
+	scheduler *compute.Placement
 	// monitor records scheduler request metrics. May be nil (e.g. in tests).
 	monitor *Monitor
 }
@@ -255,7 +255,7 @@ func (f *evacuationPathFinder) fetchSeedCandidates(ctx context.Context, seed See
 	// would otherwise see empty slices and become no-ops). The seeder only emits
 	// seeds whose flavor names a supported hypervisor type, so no default is needed.
 	requiredTraits, forbiddenTraits := nova.SplitTraits(seed.Flavor.ExtraSpecs)
-	req := compute.SchedulerRequest{
+	req := compute.PlacementRequest{
 		// Same HANA vs general-purpose split as regular failover placement.
 		Pipeline: failover.InferFailoverPipeline(seed.Flavor.ExtraSpecs),
 		// We offer the host set ourselves; the scheduler must not gather the

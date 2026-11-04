@@ -17,7 +17,7 @@ import (
 // lib.BasePipelineController.
 type PipelineProvider interface {
 	// GetPipeline returns the initialized pipeline for the given name, if ready.
-	GetPipeline(name string) (lib.FilterWeigherPipeline[SchedulerRequest], bool)
+	GetPipeline(name string) (lib.FilterWeigherPipeline[PlacementRequest], bool)
 }
 
 // CandidateGatherer gathers all placement candidates for a request when the
@@ -25,27 +25,27 @@ type PipelineProvider interface {
 type CandidateGatherer interface {
 	// MutateWithAllCandidates overrides the request's hosts and weights with all
 	// available placement candidates.
-	MutateWithAllCandidates(ctx context.Context, request *SchedulerRequest) error
+	MutateWithAllCandidates(ctx context.Context, request *PlacementRequest) error
 }
 
 // PreHook is a caller-provided hook executed under the scheduling lock before
 // the pipeline runs. It may mutate the request (e.g. to create a pessimistic
 // in-flight reservation and narrow the candidate set). Returning an error aborts
 // the run before the pipeline executes. A nil PreHook is a no-op.
-type PreHook func(ctx context.Context, req *SchedulerRequest) error
+type PreHook func(ctx context.Context, req *PlacementRequest) error
 
 // PostHook is a caller-provided side effect executed after the pipeline run,
 // under the scheduling lock (e.g. upserting the VM resource, recording the
 // decision). It receives the typed pipeline result. Returning an error aborts
 // the run; non-fatal side effects should log and return nil so the placement
 // decision still stands. A nil PostHook is a no-op.
-type PostHook func(ctx context.Context, req SchedulerRequest, result SchedulerResult) error
+type PostHook func(ctx context.Context, req PlacementRequest, result PlacementResult) error
 
-// Scheduler is the single in-process owner of Nova placement decisions. It holds
+// Placement is the single in-process owner of Nova placement decisions. It holds
 // the one shared scheduling lock and runs the pipeline plus a caller-provided
 // pre-hook and post-hook. It owns no side-effect policy itself — the caller
 // decides, via the hooks it passes, what happens before and after the run.
-type Scheduler struct {
+type Placement struct {
 	// mu is the single shared scheduling lock, held across the pre-hook, the
 	// pipeline run, and the post-hook in Run. RunWithoutLock bypasses it.
 	mu sync.Mutex
@@ -56,22 +56,22 @@ type Scheduler struct {
 	gatherer CandidateGatherer
 }
 
-// NewScheduler builds a Scheduler over the given pipeline provider and candidate
+// NewPlacement builds a Placement over the given pipeline provider and candidate
 // gatherer.
-func NewScheduler(pipelines PipelineProvider, gatherer CandidateGatherer) *Scheduler {
-	return &Scheduler{pipelines: pipelines, gatherer: gatherer}
+func NewPlacement(pipelines PipelineProvider, gatherer CandidateGatherer) *Placement {
+	return &Placement{pipelines: pipelines, gatherer: gatherer}
 }
 
 // Run executes the pipeline and hooks while holding the shared scheduling lock
 // across the whole operation, so concurrent runs observe a consistent view of
 // shared scheduling state. The pre-hook runs before the pipeline; the post-hook
 // after. Either hook may be nil. Use this for any run that mutates shared state.
-func (s *Scheduler) Run(
+func (s *Placement) Run(
 	ctx context.Context,
-	req SchedulerRequest,
+	req PlacementRequest,
 	pre PreHook,
 	post PostHook,
-) (SchedulerResult, error) {
+) (PlacementResult, error) {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -82,36 +82,36 @@ func (s *Scheduler) Run(
 // lock. Use this only for read-only runs (e.g. capacity probes) that do not
 // mutate shared scheduling state and can safely run concurrently with a locked
 // run. Either hook may be nil.
-func (s *Scheduler) RunWithoutLock(
+func (s *Placement) RunWithoutLock(
 	ctx context.Context,
-	req SchedulerRequest,
+	req PlacementRequest,
 	pre PreHook,
 	post PostHook,
-) (SchedulerResult, error) {
+) (PlacementResult, error) {
 
 	return s.run(ctx, req, pre, post)
 }
 
 // run is the shared body of Run and RunWithoutLock. The caller is responsible
 // for holding (or deliberately not holding) the lock.
-func (s *Scheduler) run(
+func (s *Placement) run(
 	ctx context.Context,
-	req SchedulerRequest,
+	req PlacementRequest,
 	pre PreHook,
 	post PostHook,
-) (SchedulerResult, error) {
+) (PlacementResult, error) {
 
 	log := ctrl.LoggerFrom(ctx)
 
 	pipeline, ok := s.pipelines.GetPipeline(req.Pipeline)
 	if !ok {
-		return SchedulerResult{}, fmt.Errorf("pipeline not found or not ready: %q", req.Pipeline)
+		return PlacementResult{}, fmt.Errorf("pipeline not found or not ready: %q", req.Pipeline)
 	}
 
 	// The pre-hook runs before the pipeline and may mutate the request.
 	if pre != nil {
 		if err := pre(ctx, &req); err != nil {
-			return SchedulerResult{}, err
+			return PlacementResult{}, err
 		}
 	}
 
@@ -120,14 +120,14 @@ func (s *Scheduler) run(
 	if req.GatherAllCandidates {
 		log.V(1).Info("gathering all placement candidates before filtering")
 		if err := s.gatherer.MutateWithAllCandidates(ctx, &req); err != nil {
-			return SchedulerResult{}, fmt.Errorf("failed to gather all placement candidates: %w", err)
+			return PlacementResult{}, fmt.Errorf("failed to gather all placement candidates: %w", err)
 		}
 		log.V(1).Info("gathered all placement candidates", "numHosts", len(req.Hosts))
 	}
 
 	result, runErr := pipeline.Run(req)
 	if runErr != nil {
-		return SchedulerResult{}, runErr
+		return PlacementResult{}, runErr
 	}
 
 	// The post-hook runs after a successful pipeline run, under the lock.

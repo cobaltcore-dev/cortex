@@ -69,13 +69,13 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		request       compute.SchedulerRequest
+		request       compute.PlacementRequest
 		expectedHosts []string
 		filteredHosts []string
 	}{
 		{
 			name: "No project ID in request - all hosts pass",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -88,7 +88,7 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Project matches allowed projects on host2",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-a",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -101,7 +101,7 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Project matches allowed projects on host3 only",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-a",
 				Hosts: []compute.Host{
 					{ComputeHost: "host2"},
@@ -114,7 +114,7 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Project does not match any allowed projects",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-d",
 				Hosts: []compute.Host{
 					{ComputeHost: "host2"},
@@ -127,7 +127,7 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Hosts without allowed projects are accessible",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-x",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -139,7 +139,7 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Mixed hosts - some with empty allowed projects, some with matching project",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-b",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -153,7 +153,7 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "All hosts filtered out",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-nonexistent",
 				Hosts: []compute.Host{
 					{ComputeHost: "host2"},
@@ -166,7 +166,7 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Empty host list",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-a",
 				Hosts:     []compute.Host{},
 			},
@@ -175,7 +175,7 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Project matches on multiple hosts with allowed projects",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-a",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -190,7 +190,7 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Project matches second item in allowed projects list",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-b",
 				Hosts: []compute.Host{
 					{ComputeHost: "host2"},
@@ -201,7 +201,7 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "All hosts have empty allowed projects",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "any-project",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -213,7 +213,7 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Mixed allowed projects configuration",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "project-c",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -228,7 +228,7 @@ func TestFilterAllowedProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Case sensitive project matching",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID: "Project-A",
 				Hosts: []compute.Host{
 					{ComputeHost: "host2"},
@@ -290,7 +290,7 @@ func TestFilterAllowedProjectsStep_SkipsForCapacityProbeIntent(t *testing.T) {
 	step := &FilterAllowedProjectsStep{}
 	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 
-	request := compute.SchedulerRequest{
+	request := compute.PlacementRequest{
 		ProjectID: "project-y",
 		Intent:    api.CapacityProbeIntent,
 		Hosts:     []compute.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
@@ -322,7 +322,7 @@ func TestFilterAllowedProjectsStep_AppliesForFailoverIntents(t *testing.T) {
 		t.Run(string(intent), func(t *testing.T) {
 			step := &FilterAllowedProjectsStep{}
 			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
-			request := compute.SchedulerRequest{
+			request := compute.PlacementRequest{
 				ProjectID: "project-y",
 				Intent:    intent,
 				Hosts:     []compute.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},

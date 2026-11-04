@@ -16,14 +16,14 @@ import (
 )
 
 type FilterInstanceGroupAntiAffinityStep struct {
-	lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Select hosts not in spec_obj.instance_group but only until
 // max_server_per_host is reached (by default = 1).
 func (s *FilterInstanceGroupAntiAffinityStep) Run(
 	traceLog logr.Logger,
-	request compute.SchedulerRequest,
+	request compute.PlacementRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 
 	result := s.IncludeAllHostsFromRequest(request)

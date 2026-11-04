@@ -107,7 +107,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		weights[h.ComputeHost] = 0.0
 	}
 	requiredTraits, forbiddenTraits := nova.SplitTraits(vm.FlavorExtraSpecs)
-	schedReq := compute.SchedulerRequest{
+	schedReq := compute.PlacementRequest{
 		Pipeline:              pipeline,
 		GatherAllCandidates:   true,
 		HypervisorFamily:      compute.HypervisorFamilyKVM,
@@ -156,7 +156,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 // runScheduler runs the shared scheduler, choosing the lock-free path for
 // read-only runs (e.g. reuse/evacuate compatibility checks) and the locked path
 // for runs that mutate shared reservation state.
-func (c *FailoverReservationController) runScheduler(ctx context.Context, req compute.SchedulerRequest) (compute.SchedulerResult, error) {
+func (c *FailoverReservationController) runScheduler(ctx context.Context, req compute.PlacementRequest) (compute.PlacementResult, error) {
 	if req.Options.ReadOnly {
 		return c.Scheduler.RunWithoutLock(ctx, req, nil, nil)
 	}
@@ -265,7 +265,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 	evacuateOpts := DefaultFailoverOptions
 	evacuateOpts.ReadOnly = true
 	evacuateOpts.LockReservations = true
-	schedReq := compute.SchedulerRequest{
+	schedReq := compute.PlacementRequest{
 		Pipeline:              pipeline,
 		GatherAllCandidates:   true,
 		HypervisorFamily:      compute.HypervisorFamilyKVM,

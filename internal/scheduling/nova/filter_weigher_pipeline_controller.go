@@ -23,13 +23,13 @@ import (
 
 // FilterWeigherPipelineController owns the Nova filter-weigher pipelines: it
 // watches Pipeline and Knowledge resources to (re)configure the pipelines, and
-// exposes them via GetPipeline for the compute.Scheduler to run. Placement
-// requests no longer flow through this controller — the compute.Scheduler,
+// exposes them via GetPipeline for the compute.Placement to run. Placement
+// requests no longer flow through this controller — the compute.Placement,
 // driven by the external-scheduler HTTP API and the reservation controllers, is
 // the entrypoint.
 type FilterWeigherPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
-	lib.BasePipelineController[lib.FilterWeigherPipeline[compute.SchedulerRequest]]
+	lib.BasePipelineController[lib.FilterWeigherPipeline[compute.PlacementRequest]]
 
 	// Monitor to pass down to all pipelines.
 	Monitor lib.FilterWeigherPipelineMonitor
@@ -43,7 +43,7 @@ func (c *FilterWeigherPipelineController) PipelineType() v1alpha1.PipelineType {
 func (c *FilterWeigherPipelineController) InitPipeline(
 	ctx context.Context,
 	p v1alpha1.Pipeline,
-) lib.PipelineInitResult[lib.FilterWeigherPipeline[compute.SchedulerRequest]] {
+) lib.PipelineInitResult[lib.FilterWeigherPipeline[compute.PlacementRequest]] {
 
 	return lib.InitNewFilterWeigherPipeline(
 		ctx, c.Client, p.Name,
@@ -118,7 +118,7 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 
 // Reconcile is a no-op: this controller reconfigures pipelines through its
 // Pipeline/Knowledge watch handlers, and placement runs through the
-// compute.Scheduler, not through object reconciliation. A Reconcile method is
+// compute.Placement, not through object reconciliation. A Reconcile method is
 // required to satisfy the controller builder.
 func (c *FilterWeigherPipelineController) Reconcile(context.Context, ctrl.Request) (ctrl.Result, error) {
 	return ctrl.Result{}, nil

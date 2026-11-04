@@ -219,12 +219,12 @@ func TestVMwareAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		request        sched.SchedulerRequest
+		request        sched.PlacementRequest
 		downvotedHosts map[string]struct{}
 	}{
 		{
 			name: "Noisy project",
-			request: sched.SchedulerRequest{
+			request: sched.PlacementRequest{
 				ProjectID: "project1",
 				Hosts: []sched.Host{
 					{ComputeHost: "host1"},
@@ -239,7 +239,7 @@ func TestVMwareAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Non-noisy project",
-			request: sched.SchedulerRequest{
+			request: sched.PlacementRequest{
 				ProjectID: "project2",
 				Hosts: []sched.Host{
 					{ComputeHost: "host1"},
@@ -251,7 +251,7 @@ func TestVMwareAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "No noisy project data",
-			request: sched.SchedulerRequest{
+			request: sched.PlacementRequest{
 				Hosts: []sched.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},

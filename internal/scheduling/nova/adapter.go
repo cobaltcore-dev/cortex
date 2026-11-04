@@ -12,7 +12,7 @@ import (
 )
 
 // ToSchedulerRequest translates the Nova over-the-wire request into the typed,
-// Nova-agnostic compute.SchedulerRequest the pipeline consumes. This is the one
+// Nova-agnostic compute.PlacementRequest the pipeline consumes. This is the one
 // place that reads Nova's loosely-typed scheduler hints and flavor/image extra
 // specs; every downstream filter/weigher sees only resolved typed fields.
 //
@@ -22,11 +22,11 @@ func ToSchedulerRequest(
 	wire api.ExternalSchedulerRequest,
 	intent v1alpha1.SchedulingIntent,
 	pipeline string,
-) compute.SchedulerRequest {
+) compute.PlacementRequest {
 
 	spec := wire.Spec.Data
 
-	req := compute.SchedulerRequest{
+	req := compute.PlacementRequest{
 		Pipeline: pipeline,
 		Hosts:    toComputeHosts(wire.Hosts),
 		Weights:  wire.Weights,

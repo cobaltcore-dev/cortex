@@ -75,13 +75,13 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		request       compute.SchedulerRequest
+		request       compute.PlacementRequest
 		expectedHosts []string
 		filteredHosts []string
 	}{
 		{
 			name: "No traits requested - all hosts pass",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -93,7 +93,7 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 		},
 		{
 			name: "Single required trait - filter hosts with trait",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequiredTraits: []string{"CUSTOM_TRAIT_A"},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -107,7 +107,7 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 		},
 		{
 			name: "Multiple required traits - filter hosts with all traits",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequiredTraits: []string{"CUSTOM_TRAIT_A", "CUSTOM_TRAIT_B"},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -121,7 +121,7 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 		},
 		{
 			name: "Single forbidden trait - filter hosts without trait",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ForbiddenTraits: []string{"CUSTOM_TRAIT_A"},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -136,7 +136,7 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 		},
 		{
 			name: "Multiple forbidden traits - filter hosts without any of them",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ForbiddenTraits: []string{"CUSTOM_TRAIT_A", "CUSTOM_TRAIT_B"},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -151,7 +151,7 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 		},
 		{
 			name: "Mixed required and forbidden traits",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequiredTraits:  []string{"CUSTOM_TRAIT_A"},
 				ForbiddenTraits: []string{"CUSTOM_TRAIT_D"},
 				Hosts: []compute.Host{
@@ -166,7 +166,7 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 		},
 		{
 			name: "Required trait that no host has",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequiredTraits: []string{"CUSTOM_TRAIT_NONEXISTENT"},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -179,7 +179,7 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 		},
 		{
 			name: "Forbidden trait that no host has - all pass",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ForbiddenTraits: []string{"CUSTOM_TRAIT_NONEXISTENT"},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -192,7 +192,7 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 		},
 		{
 			name: "Host with no traits - required trait filters it out",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequiredTraits: []string{"CUSTOM_TRAIT_A"},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -204,7 +204,7 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 		},
 		{
 			name: "Host with no traits - forbidden trait lets it pass",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ForbiddenTraits: []string{"CUSTOM_TRAIT_A"},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -216,7 +216,7 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 		},
 		{
 			name: "Non-trait extra specs are ignored",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequiredTraits: []string{"CUSTOM_TRAIT_A"},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -228,7 +228,7 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 		},
 		{
 			name: "Invalid trait value (not required or forbidden) - ignored",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -240,7 +240,7 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 		},
 		{
 			name: "Empty host list",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequiredTraits: []string{"CUSTOM_TRAIT_A"},
 				Hosts:          []compute.Host{},
 			},
@@ -249,7 +249,7 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 		},
 		{
 			name: "Host not in database",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequiredTraits: []string{"CUSTOM_TRAIT_A"},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -261,7 +261,7 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 		},
 		{
 			name: "Complex scenario with many traits",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequiredTraits:  []string{"CUSTOM_TRAIT_A", "CUSTOM_TRAIT_B"},
 				ForbiddenTraits: []string{"CUSTOM_TRAIT_D"},
 				Hosts: []compute.Host{
@@ -278,7 +278,7 @@ func TestFilterHasRequestedTraits_Run(t *testing.T) {
 		},
 		{
 			name: "All hosts match required and forbidden traits",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequiredTraits:  []string{"CUSTOM_TRAIT_A"},
 				ForbiddenTraits: []string{"CUSTOM_TRAIT_E"},
 				Hosts: []compute.Host{

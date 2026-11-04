@@ -13,17 +13,17 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
-// fakePipeline is a stub lib.FilterWeigherPipeline[SchedulerRequest] that records
+// fakePipeline is a stub lib.FilterWeigherPipeline[PlacementRequest] that records
 // the request it was run with and returns a configurable result/error. The run
 // function, if set, is invoked inside Run (used to observe lock behavior).
 type fakePipeline struct {
-	result  SchedulerResult
+	result  PlacementResult
 	err     error
-	onRun   func(SchedulerRequest)
-	lastReq SchedulerRequest
+	onRun   func(PlacementRequest)
+	lastReq PlacementRequest
 }
 
-func (p *fakePipeline) Run(req SchedulerRequest) (SchedulerResult, error) {
+func (p *fakePipeline) Run(req PlacementRequest) (PlacementResult, error) {
 	p.lastReq = req
 	if p.onRun != nil {
 		p.onRun(req)
@@ -35,10 +35,10 @@ func (p *fakePipeline) Run(req SchedulerRequest) (SchedulerResult, error) {
 // configured name.
 type fakeProvider struct {
 	name     string
-	pipeline lib.FilterWeigherPipeline[SchedulerRequest]
+	pipeline lib.FilterWeigherPipeline[PlacementRequest]
 }
 
-func (f *fakeProvider) GetPipeline(name string) (lib.FilterWeigherPipeline[SchedulerRequest], bool) {
+func (f *fakeProvider) GetPipeline(name string) (lib.FilterWeigherPipeline[PlacementRequest], bool) {
 	if name != f.name || f.pipeline == nil {
 		return nil, false
 	}
@@ -51,7 +51,7 @@ type fakeGatherer struct {
 	err    error
 }
 
-func (g *fakeGatherer) MutateWithAllCandidates(_ context.Context, req *SchedulerRequest) error {
+func (g *fakeGatherer) MutateWithAllCandidates(_ context.Context, req *PlacementRequest) error {
 	g.called = true
 	if g.err != nil {
 		return g.err
@@ -60,31 +60,31 @@ func (g *fakeGatherer) MutateWithAllCandidates(_ context.Context, req *Scheduler
 	return nil
 }
 
-// newTestScheduler builds a Scheduler whose only ready pipeline is named "p".
-func newTestScheduler(p *fakePipeline, g CandidateGatherer) *Scheduler {
-	return NewScheduler(&fakeProvider{name: "p", pipeline: p}, g)
+// newTestPlacement builds a Placement whose only ready pipeline is named "p".
+func newTestPlacement(p *fakePipeline, g CandidateGatherer) *Placement {
+	return NewPlacement(&fakeProvider{name: "p", pipeline: p}, g)
 }
 
 func TestRunPipelineNotFound(t *testing.T) {
-	s := newTestScheduler(&fakePipeline{}, &fakeGatherer{})
-	_, err := s.Run(context.Background(), SchedulerRequest{Pipeline: "missing"}, nil, nil)
+	s := newTestPlacement(&fakePipeline{}, &fakeGatherer{})
+	_, err := s.Run(context.Background(), PlacementRequest{Pipeline: "missing"}, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for missing pipeline, got nil")
 	}
 }
 
 func TestRunPreThenPost(t *testing.T) {
-	s := newTestScheduler(&fakePipeline{}, &fakeGatherer{})
+	s := newTestPlacement(&fakePipeline{}, &fakeGatherer{})
 	var order []string
-	pre := func(_ context.Context, _ *SchedulerRequest) error {
+	pre := func(_ context.Context, _ *PlacementRequest) error {
 		order = append(order, "pre")
 		return nil
 	}
-	post := func(_ context.Context, _ SchedulerRequest, _ SchedulerResult) error {
+	post := func(_ context.Context, _ PlacementRequest, _ PlacementResult) error {
 		order = append(order, "post")
 		return nil
 	}
-	if _, err := s.Run(context.Background(), SchedulerRequest{Pipeline: "p"}, pre, post); err != nil {
+	if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, pre, post); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(order) != 2 || order[0] != "pre" || order[1] != "post" {
@@ -93,17 +93,17 @@ func TestRunPreThenPost(t *testing.T) {
 }
 
 func TestRunNilHooks(t *testing.T) {
-	s := newTestScheduler(&fakePipeline{}, &fakeGatherer{})
-	if _, err := s.Run(context.Background(), SchedulerRequest{Pipeline: "p"}, nil, nil); err != nil {
+	s := newTestPlacement(&fakePipeline{}, &fakeGatherer{})
+	if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, nil, nil); err != nil {
 		t.Fatalf("nil hooks should be a no-op, got error: %v", err)
 	}
 }
 
 func TestRunPostHookErrorAborts(t *testing.T) {
-	s := newTestScheduler(&fakePipeline{}, &fakeGatherer{})
+	s := newTestPlacement(&fakePipeline{}, &fakeGatherer{})
 	boom := errors.New("boom")
-	post := func(_ context.Context, _ SchedulerRequest, _ SchedulerResult) error { return boom }
-	_, err := s.Run(context.Background(), SchedulerRequest{Pipeline: "p"}, nil, post)
+	post := func(_ context.Context, _ PlacementRequest, _ PlacementResult) error { return boom }
+	_, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, nil, post)
 	if !errors.Is(err, boom) {
 		t.Fatalf("expected boom error, got %v", err)
 	}
@@ -111,10 +111,10 @@ func TestRunPostHookErrorAborts(t *testing.T) {
 
 func TestRunPipelineErrorSkipsPostHook(t *testing.T) {
 	boom := errors.New("pipeline failed")
-	s := newTestScheduler(&fakePipeline{err: boom}, &fakeGatherer{})
+	s := newTestPlacement(&fakePipeline{err: boom}, &fakeGatherer{})
 	var ran bool
-	post := func(_ context.Context, _ SchedulerRequest, _ SchedulerResult) error { ran = true; return nil }
-	_, err := s.Run(context.Background(), SchedulerRequest{Pipeline: "p"}, nil, post)
+	post := func(_ context.Context, _ PlacementRequest, _ PlacementResult) error { ran = true; return nil }
+	_, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, nil, post)
 	if !errors.Is(err, boom) {
 		t.Fatalf("expected pipeline error, got %v", err)
 	}
@@ -125,17 +125,17 @@ func TestRunPipelineErrorSkipsPostHook(t *testing.T) {
 
 func TestRunPreHookRunsBeforePipelineAndMutates(t *testing.T) {
 	var sawHostInPipeline string
-	p := &fakePipeline{onRun: func(r SchedulerRequest) {
+	p := &fakePipeline{onRun: func(r PlacementRequest) {
 		if len(r.Hosts) > 0 {
 			sawHostInPipeline = r.Hosts[0].ComputeHost
 		}
 	}}
-	s := newTestScheduler(p, &fakeGatherer{})
-	pre := func(_ context.Context, r *SchedulerRequest) error {
+	s := newTestPlacement(p, &fakeGatherer{})
+	pre := func(_ context.Context, r *PlacementRequest) error {
 		r.Hosts = []Host{{ComputeHost: "from-prehook"}}
 		return nil
 	}
-	if _, err := s.Run(context.Background(), SchedulerRequest{Pipeline: "p"}, pre, nil); err != nil {
+	if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, pre, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if sawHostInPipeline != "from-prehook" {
@@ -145,11 +145,11 @@ func TestRunPreHookRunsBeforePipelineAndMutates(t *testing.T) {
 
 func TestRunPreHookErrorAbortsBeforePipeline(t *testing.T) {
 	var pipelineRan bool
-	p := &fakePipeline{onRun: func(SchedulerRequest) { pipelineRan = true }}
-	s := newTestScheduler(p, &fakeGatherer{})
+	p := &fakePipeline{onRun: func(PlacementRequest) { pipelineRan = true }}
+	s := newTestPlacement(p, &fakeGatherer{})
 	boom := errors.New("prehook boom")
-	pre := func(_ context.Context, _ *SchedulerRequest) error { return boom }
-	_, err := s.Run(context.Background(), SchedulerRequest{Pipeline: "p"}, pre, nil)
+	pre := func(_ context.Context, _ *PlacementRequest) error { return boom }
+	_, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, pre, nil)
 	if !errors.Is(err, boom) {
 		t.Fatalf("expected prehook error, got %v", err)
 	}
@@ -161,8 +161,8 @@ func TestRunPreHookErrorAbortsBeforePipeline(t *testing.T) {
 func TestRunGathersCandidatesWhenRequested(t *testing.T) {
 	g := &fakeGatherer{}
 	p := &fakePipeline{}
-	s := newTestScheduler(p, g)
-	req := SchedulerRequest{Pipeline: "p", GatherAllCandidates: true}
+	s := newTestPlacement(p, g)
+	req := PlacementRequest{Pipeline: "p", GatherAllCandidates: true}
 	if _, err := s.Run(context.Background(), req, nil, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -176,8 +176,8 @@ func TestRunGathersCandidatesWhenRequested(t *testing.T) {
 
 func TestRunDoesNotGatherWithoutGatherAllCandidates(t *testing.T) {
 	g := &fakeGatherer{}
-	s := newTestScheduler(&fakePipeline{}, g)
-	if _, err := s.Run(context.Background(), SchedulerRequest{Pipeline: "p"}, nil, nil); err != nil {
+	s := newTestPlacement(&fakePipeline{}, g)
+	if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, nil, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if g.called {
@@ -189,13 +189,13 @@ func TestRunDoesNotGatherWithoutGatherAllCandidates(t *testing.T) {
 // first Run's post-hook completes — i.e. the lock spans the whole run, not just
 // the pipeline.
 func TestRunHoldsLockAcrossPostHook(t *testing.T) {
-	s := newTestScheduler(&fakePipeline{}, &fakeGatherer{})
+	s := newTestPlacement(&fakePipeline{}, &fakeGatherer{})
 
 	firstInPost := make(chan struct{})
 	releaseFirst := make(chan struct{})
 	secondDone := make(chan struct{})
 
-	var slowPost PostHook = func(_ context.Context, _ SchedulerRequest, _ SchedulerResult) error {
+	var slowPost PostHook = func(_ context.Context, _ PlacementRequest, _ PlacementResult) error {
 		close(firstInPost)
 		<-releaseFirst
 		return nil
@@ -205,7 +205,7 @@ func TestRunHoldsLockAcrossPostHook(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if _, err := s.Run(context.Background(), SchedulerRequest{Pipeline: "p"}, nil, slowPost); err != nil {
+		if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, nil, slowPost); err != nil {
 			t.Errorf("first Run: %v", err)
 		}
 	}()
@@ -213,7 +213,7 @@ func TestRunHoldsLockAcrossPostHook(t *testing.T) {
 	<-firstInPost // first Run is parked inside its post-hook, still holding the lock.
 
 	go func() {
-		if _, err := s.Run(context.Background(), SchedulerRequest{Pipeline: "p"}, nil, nil); err != nil {
+		if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, nil, nil); err != nil {
 			t.Errorf("second Run: %v", err)
 		}
 		close(secondDone)
@@ -234,18 +234,18 @@ func TestRunHoldsLockAcrossPostHook(t *testing.T) {
 // TestRunWithoutLockDoesNotBlock verifies that RunWithoutLock proceeds even while
 // a locked Run holds the lock inside its post-hook.
 func TestRunWithoutLockDoesNotBlock(t *testing.T) {
-	s := newTestScheduler(&fakePipeline{}, &fakeGatherer{})
+	s := newTestPlacement(&fakePipeline{}, &fakeGatherer{})
 
 	firstInPost := make(chan struct{})
 	releaseFirst := make(chan struct{})
-	var slowPost PostHook = func(_ context.Context, _ SchedulerRequest, _ SchedulerResult) error {
+	var slowPost PostHook = func(_ context.Context, _ PlacementRequest, _ PlacementResult) error {
 		close(firstInPost)
 		<-releaseFirst
 		return nil
 	}
 
 	go func() {
-		if _, err := s.Run(context.Background(), SchedulerRequest{Pipeline: "p"}, nil, slowPost); err != nil {
+		if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, nil, slowPost); err != nil {
 			t.Errorf("locked Run: %v", err)
 		}
 	}()
@@ -253,7 +253,7 @@ func TestRunWithoutLockDoesNotBlock(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		if _, err := s.RunWithoutLock(context.Background(), SchedulerRequest{Pipeline: "p"}, nil, nil); err != nil {
+		if _, err := s.RunWithoutLock(context.Background(), PlacementRequest{Pipeline: "p"}, nil, nil); err != nil {
 			t.Errorf("RunWithoutLock: %v", err)
 		}
 		close(done)

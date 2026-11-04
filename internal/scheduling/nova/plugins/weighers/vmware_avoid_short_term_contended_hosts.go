@@ -47,7 +47,7 @@ func (o VMwareAvoidShortTermContendedHostsStepOpts) Validate() error {
 // Step to avoid recently contended hosts by downvoting them.
 type VMwareAvoidShortTermContendedHostsStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	lib.BaseWeigher[compute.SchedulerRequest, VMwareAvoidShortTermContendedHostsStepOpts]
+	lib.BaseWeigher[compute.PlacementRequest, VMwareAvoidShortTermContendedHostsStepOpts]
 }
 
 // Initialize the step and validate that all required knowledges are ready.
@@ -62,7 +62,7 @@ func (s *VMwareAvoidShortTermContendedHostsStep) Init(ctx context.Context, clien
 }
 
 // Downvote hosts that are highly contended.
-func (s *VMwareAvoidShortTermContendedHostsStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *VMwareAvoidShortTermContendedHostsStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
@@ -110,7 +110,7 @@ func (s *VMwareAvoidShortTermContendedHostsStep) Run(traceLog logr.Logger, reque
 }
 
 func init() {
-	Index["vmware_avoid_short_term_contended_hosts"] = func() lib.Weigher[compute.SchedulerRequest] {
+	Index["vmware_avoid_short_term_contended_hosts"] = func() lib.Weigher[compute.PlacementRequest] {
 		return &VMwareAvoidShortTermContendedHostsStep{}
 	}
 }

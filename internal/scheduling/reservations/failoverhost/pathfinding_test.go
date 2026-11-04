@@ -29,7 +29,7 @@ func stubScheduler(t *testing.T, candidatesByFlavor map[string][]string, errFlav
 		candidatesByFlavor: candidatesByFlavor,
 		errFlavors:         errFlavors,
 	}}
-	scheduler := compute.NewScheduler(provider, passthroughGatherer{})
+	scheduler := compute.NewPlacement(provider, passthroughGatherer{})
 	return &evacuationPathFinder{scheduler: scheduler}
 }
 
@@ -39,7 +39,7 @@ type stubPipelineProvider struct {
 	pipeline *stubPipeline
 }
 
-func (p *stubPipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[compute.SchedulerRequest], bool) {
+func (p *stubPipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[compute.PlacementRequest], bool) {
 	return p.pipeline, true
 }
 
@@ -52,7 +52,7 @@ type stubPipeline struct {
 	errFlavors         map[string]bool
 }
 
-func (s *stubPipeline) Run(req compute.SchedulerRequest) (compute.SchedulerResult, error) {
+func (s *stubPipeline) Run(req compute.PlacementRequest) (compute.PlacementResult, error) {
 	// Identify which seed this probe is for by the trait the seed constructor
 	// puts on the flavor (see seed()), which the probe carries in RequiredTraits.
 	flavor := ""
@@ -86,9 +86,9 @@ func (s *stubPipeline) Run(req compute.SchedulerRequest) (compute.SchedulerResul
 		s.t.Errorf("request for flavor %q must not set a source host", flavor)
 	}
 	if s.errFlavors[flavor] {
-		return compute.SchedulerResult{}, fmt.Errorf("probe failed for flavor %q", flavor)
+		return compute.PlacementResult{}, fmt.Errorf("probe failed for flavor %q", flavor)
 	}
-	return compute.SchedulerResult{OrderedHosts: s.candidatesByFlavor[flavor]}, nil
+	return compute.PlacementResult{OrderedHosts: s.candidatesByFlavor[flavor]}, nil
 }
 
 // pathNames collapses failover edges into sorted "source->target" strings, for

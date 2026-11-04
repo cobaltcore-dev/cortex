@@ -73,7 +73,7 @@ func (FilterQuotaEnforcementOpts) Validate() error { return nil }
 //
 // Disabled by default; activated by adding "filter_quota_enforcement" to the pipeline config.
 type FilterQuotaEnforcement struct {
-	lib.BaseFilter[compute.SchedulerRequest, FilterQuotaEnforcementOpts]
+	lib.BaseFilter[compute.PlacementRequest, FilterQuotaEnforcementOpts]
 }
 
 // recordDecision appends an accept/reject/skip outcome as a named pipeline
@@ -94,7 +94,7 @@ func recordDecision(result *lib.FilterWeigherPipelineStepResult, mode, decision,
 	})
 }
 
-func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	mode := "shadow"

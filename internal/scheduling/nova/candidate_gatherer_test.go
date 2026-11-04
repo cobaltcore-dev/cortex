@@ -26,7 +26,7 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 	tests := []struct {
 		name           string
 		hypervisors    []client.Object
-		request        compute.SchedulerRequest
+		request        compute.PlacementRequest
 		expectError    bool
 		errorContains  string
 		expectedHosts  []string
@@ -35,7 +35,7 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 		{
 			name:        "unresolved hypervisor family",
 			hypervisors: []client.Object{},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				HypervisorFamily: "",
 			},
 			expectError:   true,
@@ -44,7 +44,7 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 		{
 			name:        "unsupported hypervisor family vmware",
 			hypervisors: []client.Object{},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				HypervisorFamily: compute.HypervisorFamilyVMware,
 			},
 			expectError:   true,
@@ -53,7 +53,7 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 		{
 			name:        "unsupported hypervisor family unknown",
 			hypervisors: []client.Object{},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				HypervisorFamily: "unknown-family",
 			},
 			expectError:   true,
@@ -78,7 +78,7 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 					},
 				},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				HypervisorFamily: compute.HypervisorFamilyKVM,
 			},
 			expectError:    false,
@@ -94,7 +94,7 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 					},
 				},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				HypervisorFamily: compute.HypervisorFamilyKVM,
 			},
 			expectError:    false,
@@ -115,7 +115,7 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 					},
 				},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				HypervisorFamily: compute.HypervisorFamilyKVM,
 			},
 			expectError:    false,
@@ -131,7 +131,7 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 					},
 				},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				HypervisorFamily: compute.HypervisorFamilyKVM,
 			},
 			expectError:    false,
@@ -141,7 +141,7 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 		{
 			name:        "empty hypervisor list",
 			hypervisors: []client.Object{},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				HypervisorFamily: compute.HypervisorFamilyKVM,
 			},
 			expectError:    false,
@@ -157,7 +157,7 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 					},
 				},
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				HypervisorFamily: compute.HypervisorFamilyKVM,
 				Hosts: []compute.Host{
 					{ComputeHost: "old-host", HypervisorHostname: "old-hv"},

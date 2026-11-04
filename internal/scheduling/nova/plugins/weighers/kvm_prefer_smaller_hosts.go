@@ -53,11 +53,11 @@ func (o KVMPreferSmallerHostsStepOpts) Validate() error {
 // accommodate larger VMs when they need to be scheduled.
 type KVMPreferSmallerHostsStep struct {
 	// Base weigher providing common functionality.
-	lib.BaseWeigher[compute.SchedulerRequest, KVMPreferSmallerHostsStepOpts]
+	lib.BaseWeigher[compute.PlacementRequest, KVMPreferSmallerHostsStepOpts]
 }
 
 // Run this weigher in the pipeline after filters have been executed.
-func (s *KVMPreferSmallerHostsStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMPreferSmallerHostsStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	result.Statistics["small host score"] = s.PrepareStats(request, "float")
 

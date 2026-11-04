@@ -8,7 +8,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
-type NovaFilter = lib.Filter[compute.SchedulerRequest]
+type NovaFilter = lib.Filter[compute.PlacementRequest]
 
 // Configuration of filters supported by the nova scheduler.
 var Index = map[string]func() NovaFilter{}

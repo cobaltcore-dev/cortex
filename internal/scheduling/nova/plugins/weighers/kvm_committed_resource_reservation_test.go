@@ -54,7 +54,7 @@ func newCRReservation(name, host, projectID, resourceGroup, az, totalMemory stri
 	}
 }
 
-func newCRRequest(hosts []string) compute.SchedulerRequest {
+func newCRRequest(hosts []string) compute.PlacementRequest {
 	hostList := make([]compute.Host, len(hosts))
 	for i, h := range hosts {
 		hostList[i] = compute.Host{ComputeHost: h}
@@ -63,7 +63,7 @@ func newCRRequest(hosts []string) compute.SchedulerRequest {
 	for _, h := range hosts {
 		weights[h] = 1.0
 	}
-	return compute.SchedulerRequest{
+	return compute.PlacementRequest{
 		ProjectID:        "project-A",
 		AvailabilityZone: "qa-de-1a",
 		ResourceGroup:    "group-2101",
@@ -83,7 +83,7 @@ func TestKVMCommittedResourceReservationStep_Run(t *testing.T) {
 	tests := []struct {
 		name            string
 		reservations    []*v1alpha1.Reservation
-		request         compute.SchedulerRequest
+		request         compute.PlacementRequest
 		opts            KVMCommittedResourceReservationOpts
 		expectedWeights map[string]float64
 	}{
@@ -166,7 +166,7 @@ func TestKVMCommittedResourceReservationStep_Run(t *testing.T) {
 		{
 			name:         "no resource group hint skips weigher",
 			reservations: []*v1alpha1.Reservation{newCRReservation("res-1", "host1", "project-A", "group-2101", "qa-de-1a", "16Gi")},
-			request: func() compute.SchedulerRequest {
+			request: func() compute.PlacementRequest {
 				r := newCRRequest([]string{"host1", "host2"})
 				r.ResourceGroup = ""
 				return r
@@ -205,7 +205,7 @@ func TestKVMCommittedResourceReservationStep_Run(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{
 				newCRReservation("res-1", "host1", "project-A", "group-2101", "qa-de-1a", "16Gi"),
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				ProjectID:        "project-A",
 				AvailabilityZone: "qa-de-1a",
 				Intent:           api.ReserveForFailoverIntent,

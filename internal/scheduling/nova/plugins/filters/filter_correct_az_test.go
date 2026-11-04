@@ -57,13 +57,13 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		request       compute.SchedulerRequest
+		request       compute.PlacementRequest
 		expectedHosts []string
 		filteredHosts []string
 	}{
 		{
 			name: "Filter hosts in az-1",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				AvailabilityZone: "az-1",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -78,7 +78,7 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 		},
 		{
 			name: "Filter hosts in az-2",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				AvailabilityZone: "az-2",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -92,7 +92,7 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 		},
 		{
 			name: "Filter hosts in az-3",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				AvailabilityZone: "az-3",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -106,7 +106,7 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 		},
 		{
 			name: "No hosts in requested AZ",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				AvailabilityZone: "az-nonexistent",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
@@ -119,7 +119,7 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 		},
 		{
 			name: "Empty host list",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				AvailabilityZone: "az-1",
 				Hosts:            []compute.Host{},
 			},
@@ -128,7 +128,7 @@ func TestFilterCorrectAZStep_Run(t *testing.T) {
 		},
 		{
 			name: "Host not in database",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				AvailabilityZone: "az-1",
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},

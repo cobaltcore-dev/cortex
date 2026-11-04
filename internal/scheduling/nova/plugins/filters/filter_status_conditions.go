@@ -15,12 +15,12 @@ import (
 )
 
 type FilterStatusConditionsStep struct {
-	lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Check that all status conditions meet the expected values, for example,
 // that the hypervisor is ready and not disabled.
-func (s *FilterStatusConditionsStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterStatusConditionsStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	hvs := &hv1.HypervisorList{}

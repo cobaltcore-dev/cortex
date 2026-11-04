@@ -362,9 +362,9 @@ func TestFeatureGate_CommittedResourceTracking(t *testing.T) {
 			reg.MustRegister(counter)
 
 			controller := &FilterWeigherPipelineController{
-				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[sched.SchedulerRequest]]{
+				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[sched.PlacementRequest]]{
 					Client:          fakeClient,
-					Pipelines:       make(map[string]lib.FilterWeigherPipeline[sched.SchedulerRequest]),
+					Pipelines:       make(map[string]lib.FilterWeigherPipeline[sched.PlacementRequest]),
 					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 				},
 			}
@@ -377,7 +377,7 @@ func TestFeatureGate_CommittedResourceTracking(t *testing.T) {
 
 			// Drive the committed-resource tracking path through the real HTTP API
 			// handler, where the feature gate now lives (as a post-hook).
-			scheduler := sched.NewScheduler(controller, passthroughGatherer{})
+			scheduler := sched.NewPlacement(controller, passthroughGatherer{})
 			crRecorder := crs.Recorder{Client: fakeClient, NoHostFoundCounter: counter}
 			api := newTestAPIWithScheduler(
 				HTTPAPIConfig{},

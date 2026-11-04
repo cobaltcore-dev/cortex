@@ -225,14 +225,14 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		request        compute.SchedulerRequest
+		request        compute.PlacementRequest
 		expectedHosts  []string
 		filteredHosts  []string
 		expectedEvents []lib.FilterWeigherPipelineStepEvent
 	}{
 		{
 			name: "No extra specs in request - all hosts pass",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -244,7 +244,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "Non-capability extra specs - all hosts pass",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -255,7 +255,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "Match CH hypervisor type",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedCapabilities: []compute.Capability{
 					{Name: "hypervisor_type", Value: "CH"},
 				},
@@ -270,7 +270,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "Match QEMU hypervisor type",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedCapabilities: []compute.Capability{
 					{Name: "hypervisor_type", Value: "QEMU"},
 				},
@@ -286,7 +286,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "Match x86_64 CPU architecture",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedCapabilities: []compute.Capability{
 					{Name: "cpu_arch", Value: "x86_64"},
 				},
@@ -302,7 +302,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "Match aarch64 CPU architecture",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedCapabilities: []compute.Capability{
 					{Name: "cpu_arch", Value: "aarch64"},
 				},
@@ -318,7 +318,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "Match both hypervisor type and CPU architecture",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedCapabilities: []compute.Capability{
 					{Name: "hypervisor_type", Value: "CH"},
 					{Name: "cpu_arch", Value: "x86_64"},
@@ -335,7 +335,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "Match QEMU with aarch64",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedCapabilities: []compute.Capability{
 					{Name: "hypervisor_type", Value: "QEMU"},
 					{Name: "cpu_arch", Value: "aarch64"},
@@ -352,7 +352,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "Ignore hypervisors not in request even with unknown type",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedCapabilities: []compute.Capability{
 					{Name: "hypervisor_type", Value: "CH"},
 				},
@@ -366,7 +366,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "Candidate hypervisor with empty hypervisor type emits event and is filtered out",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedCapabilities: []compute.Capability{
 					{Name: "hypervisor_type", Value: "CH"},
 				},
@@ -382,7 +382,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "Candidate hypervisor with unknown hypervisor type emits event and is filtered out",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedCapabilities: []compute.Capability{
 					{Name: "hypervisor_type", Value: "CH"},
 				},
@@ -398,7 +398,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "No matching hosts",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedCapabilities: []compute.Capability{
 					{Name: "hypervisor_type", Value: "KVM"},
 				},
@@ -412,7 +412,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "Mixed capability and non-capability extra specs",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedCapabilities: []compute.Capability{
 					{Name: "hypervisor_type", Value: "CH"},
 					{Name: "cpu_arch", Value: "x86_64"},
@@ -428,7 +428,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "Empty host list",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedCapabilities: []compute.Capability{
 					{Name: "hypervisor_type", Value: "CH"},
 				},
@@ -439,7 +439,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "Case sensitive capability matching",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				RequestedCapabilities: []compute.Capability{
 					{Name: "hypervisor_type", Value: "ch"}, // lowercase should not match
 				},
@@ -453,7 +453,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "Unsupported operator in extra specs - skip filter",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				// An unsupported comparison operator is dropped by the adapter,
 				// so the filter sees no requested capabilities and is a no-op.
 				RequestedCapabilities: nil,
@@ -468,7 +468,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "Unsupported <in> operator - skip filter",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				// An unsupported comparison operator is dropped by the adapter,
 				// so the filter sees no requested capabilities and is a no-op.
 				RequestedCapabilities: nil,
@@ -482,7 +482,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		},
 		{
 			name: "All hosts match when no capabilities requested",
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},

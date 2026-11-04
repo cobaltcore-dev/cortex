@@ -30,12 +30,12 @@ func (opts FilterExternalCustomerStepOpts) Validate() error {
 }
 
 type FilterExternalCustomerStep struct {
-	lib.BaseFilter[compute.SchedulerRequest, FilterExternalCustomerStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, FilterExternalCustomerStepOpts]
 }
 
 // Prefix-match the domain name for external customer domains and filter out hosts
 // that are not intended for external customers.
-func (s *FilterExternalCustomerStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterExternalCustomerStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	// Failover and capacity probe calls are not associated with a user domain;

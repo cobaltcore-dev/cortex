@@ -35,12 +35,12 @@ func newCRMigrationSlotWeigher(t *testing.T, opts KVMCRMigrationSlotOpts, objs .
 }
 
 // migrationRequest builds a live-migration request from the given candidate hosts.
-func migrationRequest(hosts ...string) compute.SchedulerRequest {
+func migrationRequest(hosts ...string) compute.PlacementRequest {
 	hostList := make([]compute.Host, len(hosts))
 	for i, h := range hosts {
 		hostList[i] = compute.Host{ComputeHost: h}
 	}
-	return compute.SchedulerRequest{
+	return compute.PlacementRequest{
 		InstanceUUID: testInstanceUUID,
 		ProjectID:    testProjectID,
 		Intent:       api.LiveMigrationIntent,
@@ -130,7 +130,7 @@ func TestKVMCRMigrationSlotStep_Run(t *testing.T) {
 	tests := []struct {
 		name            string
 		objects         []client.Object
-		request         compute.SchedulerRequest
+		request         compute.PlacementRequest
 		opts            KVMCRMigrationSlotOpts
 		expectedWeights map[string]float64
 	}{
@@ -139,7 +139,7 @@ func TestKVMCRMigrationSlotStep_Run(t *testing.T) {
 			objects: []client.Object{
 				confirmedSourceSlot("16Gi"),
 			},
-			request: compute.SchedulerRequest{
+			request: compute.PlacementRequest{
 				InstanceUUID: testInstanceUUID,
 				ProjectID:    testProjectID,
 				// no Intent → CreateIntent

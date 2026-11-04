@@ -8,7 +8,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
-type NovaWeigher = lib.Weigher[compute.SchedulerRequest]
+type NovaWeigher = lib.Weigher[compute.PlacementRequest]
 
 // Configuration of weighers supported by the nova scheduler.
 var Index = map[string]func() NovaWeigher{}

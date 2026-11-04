@@ -420,7 +420,7 @@ func main() {
 	// nova-pipeline-controllers are enabled and consumed in-process by the Nova
 	// HTTP API and the reservation/commitment/capacity/failover controllers (which
 	// must run in the same process — see the cortex-nova-scheduling deployment).
-	var novaScheduler *compute.Scheduler
+	var novaScheduler *compute.Placement
 
 	if slices.Contains(mainConfig.EnabledControllers, "nova-pipeline-controllers") {
 		featureGates := conf.GetConfigOrDie[nova.FeatureGates]()
@@ -441,7 +441,7 @@ func main() {
 		// Shared in-process scheduler: owns the scheduling lock and runs the
 		// pipeline. The Nova HTTP API and the reservation controllers call it
 		// directly (no self-directed HTTP).
-		novaScheduler = compute.NewScheduler(filterWeigherController, nova.NewCandidateGatherer(multiclusterClient))
+		novaScheduler = compute.NewPlacement(filterWeigherController, nova.NewCandidateGatherer(multiclusterClient))
 		vmHandler := &nova.VirtualMachineHandler{Client: multiclusterClient}
 		crRecorder := crs.Recorder{
 			Client:             multiclusterClient,

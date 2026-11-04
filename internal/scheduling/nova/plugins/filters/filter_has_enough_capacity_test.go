@@ -249,13 +249,13 @@ func parseMemoryToMB(memory string) uint64 {
 	return uint64(bytes / (1024 * 1024)) //nolint:gosec // test code
 }
 
-func newNovaRequest(instanceUUID, projectID, flavorGroup string, vcpus int, memory string, evacuation bool, hosts []string) compute.SchedulerRequest {
+func newNovaRequest(instanceUUID, projectID, flavorGroup string, vcpus int, memory string, evacuation bool, hosts []string) compute.PlacementRequest {
 	return newNovaRequestWithIntent(instanceUUID, projectID, flavorGroup, vcpus, memory, "", evacuation, hosts)
 }
 
 // newNovaRequestWithIntent creates a nova request with a specific intent.
 // intentHint can be: "evacuate", "reserve_for_committed_resource", "reserve_for_failover", or "" for create.
-func newNovaRequestWithIntent(instanceUUID, projectID, flavorGroup string, vcpus int, memory, intentHint string, evacuation bool, hosts []string) compute.SchedulerRequest {
+func newNovaRequestWithIntent(instanceUUID, projectID, flavorGroup string, vcpus int, memory, intentHint string, evacuation bool, hosts []string) compute.PlacementRequest {
 	hostList := make([]compute.Host, len(hosts))
 	for i, h := range hosts {
 		hostList[i] = compute.Host{ComputeHost: h}
@@ -278,7 +278,7 @@ func newNovaRequestWithIntent(instanceUUID, projectID, flavorGroup string, vcpus
 		weights[h] = 1.0
 	}
 
-	return compute.SchedulerRequest{
+	return compute.PlacementRequest{
 		ProjectID:        projectID,
 		InstanceUUID:     instanceUUID,
 		NumInstances:     1,
@@ -351,7 +351,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 	tests := []struct {
 		name          string
 		reservations  []*v1alpha1.Reservation
-		request       compute.SchedulerRequest
+		request       compute.PlacementRequest
 		opts          FilterHasEnoughCapacityOpts
 		expectedHosts []string
 		filteredHosts []string
@@ -763,7 +763,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 		name                    string
 		hypervisors             []*hv1.Hypervisor
 		reservations            []*v1alpha1.Reservation
-		request                 compute.SchedulerRequest
+		request                 compute.PlacementRequest
 		ignoredReservationTypes []v1alpha1.ReservationType
 		expectedHosts           []string
 		filteredHosts           []string
@@ -1076,7 +1076,7 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 		name          string
 		hypervisors   []*hv1.Hypervisor
 		reservations  []*v1alpha1.Reservation
-		request       compute.SchedulerRequest
+		request       compute.PlacementRequest
 		opts          FilterHasEnoughCapacityOpts
 		expectedHosts []string
 		filteredHosts []string
@@ -1285,7 +1285,7 @@ func TestFilterHasEnoughCapacity_NilEffectiveCapacityFallback(t *testing.T) {
 	tests := []struct {
 		name          string
 		hypervisors   []*hv1.Hypervisor
-		request       compute.SchedulerRequest
+		request       compute.PlacementRequest
 		expectedHosts []string
 		filteredHosts []string
 	}{

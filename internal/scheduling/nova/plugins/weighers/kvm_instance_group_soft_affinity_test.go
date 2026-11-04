@@ -33,13 +33,13 @@ func newHypervisorWithInstances(name string, instanceIDs ...string) *hv1.Hypervi
 	}
 }
 
-func newInstanceGroupRequest(policy string, members, hosts []string) compute.SchedulerRequest {
+func newInstanceGroupRequest(policy string, members, hosts []string) compute.PlacementRequest {
 	hostList := make([]compute.Host, len(hosts))
 	for i, h := range hosts {
 		hostList[i] = compute.Host{ComputeHost: h}
 	}
 
-	req := compute.SchedulerRequest{
+	req := compute.PlacementRequest{
 		ProjectID:        "project-A",
 		InstanceUUID:     "new-instance-uuid",
 		NumInstances:     1,
@@ -75,7 +75,7 @@ func TestKVMInstanceGroupSoftAffinityStep_Run(t *testing.T) {
 	tests := []struct {
 		name            string
 		hypervisors     []*hv1.Hypervisor
-		request         compute.SchedulerRequest
+		request         compute.PlacementRequest
 		expectedWeights map[string]float64
 		wantErr         bool
 	}{

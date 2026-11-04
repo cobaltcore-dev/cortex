@@ -128,7 +128,7 @@ type Controller struct {
 	// Scheduler is the shared in-process scheduler the path finder probes for
 	// placement candidates. Required (the controller cannot compute failover
 	// partitions without it).
-	Scheduler *compute.Scheduler
+	Scheduler *compute.Placement
 
 	// Monitor records Prometheus metrics for the calculation loop and the
 	// reconciler. It may be nil (e.g. in tests); every call site nil-guards it.

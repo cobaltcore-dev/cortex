@@ -14,7 +14,7 @@ import (
 )
 
 type FilterCapabilitiesStep struct {
-	lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Get the provided capabilities of a hypervisor resource in the format Nova expects.
@@ -44,7 +44,7 @@ func hvToNovaCapabilities(hv hv1.Hypervisor) (map[string]string, error) {
 
 // Check the capabilities of each host and if they match the extra spec provided
 // in the request spec flavor.
-func (s *FilterCapabilitiesStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterCapabilitiesStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	requestedCapabilities := request.RequestedCapabilities
 	if len(requestedCapabilities) == 0 {

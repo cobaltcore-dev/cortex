@@ -156,13 +156,13 @@ func TestVMwareBinpackStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name                string
-		request             sched.SchedulerRequest
+		request             sched.PlacementRequest
 		expectedHigherScore string
 		expectedLowerScore  string
 	}{
 		{
 			name: "binpack prefers hosts with higher utilization",
-			request: sched.SchedulerRequest{
+			request: sched.PlacementRequest{
 				NumInstances: 1,
 				Flavor: sched.FlavorSpec{
 					MemoryMB: 1000, // 1GB
@@ -181,7 +181,7 @@ func TestVMwareBinpackStep_Run(t *testing.T) {
 		},
 		{
 			name: "handles missing host data gracefully",
-			request: sched.SchedulerRequest{
+			request: sched.PlacementRequest{
 				NumInstances: 1,
 				Flavor: sched.FlavorSpec{
 					MemoryMB: 1000,
@@ -280,13 +280,13 @@ func TestVMwareBinpackStep_CalcVMResources(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		request        sched.SchedulerRequest
+		request        sched.PlacementRequest
 		expectedMemory int64
 		expectedCPU    int64
 	}{
 		{
 			name: "single instance",
-			request: sched.SchedulerRequest{
+			request: sched.PlacementRequest{
 				NumInstances: 1,
 				Flavor: sched.FlavorSpec{
 					MemoryMB: 2048,
@@ -298,7 +298,7 @@ func TestVMwareBinpackStep_CalcVMResources(t *testing.T) {
 		},
 		{
 			name: "multiple instances",
-			request: sched.SchedulerRequest{
+			request: sched.PlacementRequest{
 				NumInstances: 3,
 				Flavor: sched.FlavorSpec{
 					MemoryMB: 1024,

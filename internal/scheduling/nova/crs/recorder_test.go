@@ -105,9 +105,9 @@ func TestRecordCRAllocation(t *testing.T) {
 		}
 	}
 
-	makeResult := func(host string, candidates ...string) sched.SchedulerResult {
+	makeResult := func(host string, candidates ...string) sched.PlacementResult {
 		h := host
-		return sched.SchedulerResult{
+		return sched.PlacementResult{
 			TargetHost:   &h,
 			OrderedHosts: candidates,
 		}
@@ -151,7 +151,7 @@ func TestRecordCRAllocation(t *testing.T) {
 		name             string
 		objects          []client.Object
 		request          api.ExternalSchedulerRequest
-		result           sched.SchedulerResult
+		result           sched.PlacementResult
 		intent           v1alpha1.SchedulingIntent
 		checkSlot        string
 		expectAllocation bool

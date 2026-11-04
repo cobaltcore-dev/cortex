@@ -48,7 +48,7 @@ type CommitmentReservationController struct {
 	// Configuration for the controller.
 	Conf ReservationControllerConfig
 	// Scheduler is the in-process scheduler used to place reservations.
-	Scheduler *compute.Scheduler
+	Scheduler *compute.Placement
 	// DomainResolver resolves OpenStack domain IDs to domain names so the
 	// domain_name scheduler hint can be populated for filter_external_customer.
 	// Nil when KeystoneSecretRef is not configured; hint is omitted in that case.
@@ -362,7 +362,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	// would otherwise see empty slices and become no-ops). No hypervisor-type
 	// default here — only match when the flavor names one.
 	requiredTraits, forbiddenTraits := nova.SplitTraits(flavorDetails.ExtraSpecs)
-	schedReq := compute.SchedulerRequest{
+	schedReq := compute.PlacementRequest{
 		Pipeline:              pipelineName,
 		GatherAllCandidates:   true,
 		HypervisorFamily:      compute.HypervisorFamilyKVM,

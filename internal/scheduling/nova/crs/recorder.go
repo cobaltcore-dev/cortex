@@ -56,7 +56,7 @@ func (r *Recorder) resolveFlavorGroup(ctx context.Context, flavorName string) (s
 
 // RecordPlacement writes the placed VM UUID into the matching Reservation slot
 // and emits placement metrics. Called after a successful Nova placement.
-func (r *Recorder) RecordPlacement(ctx context.Context, result sched.SchedulerResult, intent v1alpha1.SchedulingIntent, request api.ExternalSchedulerRequest) {
+func (r *Recorder) RecordPlacement(ctx context.Context, result sched.PlacementResult, intent v1alpha1.SchedulingIntent, request api.ExternalSchedulerRequest) {
 	log := ctrl.LoggerFrom(ctx)
 
 	instanceUUID := request.Spec.Data.InstanceUUID

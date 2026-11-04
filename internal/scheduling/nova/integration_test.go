@@ -250,9 +250,9 @@ func NewIntegrationTestServer(t *testing.T, pipelineConfig PipelineConfig, objec
 
 	// Create the pipeline controller with shared monitor to avoid duplicate registration
 	controller := &FilterWeigherPipelineController{
-		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[compute.SchedulerRequest]]{
+		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[compute.PlacementRequest]]{
 			Client:          k8sClient,
-			Pipelines:       make(map[string]lib.FilterWeigherPipeline[compute.SchedulerRequest]),
+			Pipelines:       make(map[string]lib.FilterWeigherPipeline[compute.PlacementRequest]),
 			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 		},
 		Monitor: getSharedMonitor(),
@@ -284,11 +284,11 @@ func NewIntegrationTestServer(t *testing.T, pipelineConfig PipelineConfig, objec
 	controller.Pipelines[testPipeline.Name] = result.Pipeline
 	controller.PipelineConfigs[testPipeline.Name] = testPipeline
 
-	// Create the HTTP API backed by a real compute.Scheduler over the controller.
+	// Create the HTTP API backed by a real compute.Placement over the controller.
 	// Set EvacuationShuffleK=0 to disable shuffle for deterministic test results.
 	// KVM requests trigger candidate gathering; use a passthrough gatherer
 	// (nil gatheredHosts) so the test's preselected hosts are preserved.
-	scheduler := compute.NewScheduler(controller, &mockCandidateGatherer{})
+	scheduler := compute.NewPlacement(controller, &mockCandidateGatherer{})
 	api := &httpAPI{
 		config:     HTTPAPIConfig{EvacuationShuffleK: 0},
 		monitor:    lib.NewSchedulerMonitor(), // Create new monitor but don't register

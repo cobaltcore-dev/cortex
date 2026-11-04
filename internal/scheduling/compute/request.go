@@ -3,11 +3,11 @@
 
 // Package compute is the in-process entrypoint for Nova placement scheduling.
 //
-// It defines a well-typed, Nova-agnostic SchedulerRequest that the
-// filter-weigher pipeline consumes, and a Scheduler that owns the single shared
+// It defines a well-typed, Nova-agnostic PlacementRequest that the
+// filter-weigher pipeline consumes, and a Placement that owns the single shared
 // scheduling lock and runs the pipeline plus caller-provided side-effect
 // closures. Callers that run in the same process (the Nova HTTP adapter, the
-// reservation/commitment/capacity/failover controllers) call the Scheduler
+// reservation/commitment/capacity/failover controllers) call the Placement
 // directly instead of POSTing to the external HTTP endpoint.
 //
 // The spec deliberately contains NO loosely-typed maps or Nova string
@@ -76,7 +76,7 @@ type Capability struct {
 
 // FlavorSpec is the typed, Nova-agnostic description of the requested flavor.
 // It carries no extra-spec map: the adapter resolves every extra spec the
-// pipeline needs into the typed fields on this struct and on SchedulerRequest.
+// pipeline needs into the typed fields on this struct and on PlacementRequest.
 type FlavorSpec struct {
 	// MemoryMB is the requested memory per instance. 0 means a zero-memory
 	// instance to capacity/bin-pack steps (fits anywhere), so the adapter sets it.
@@ -118,20 +118,20 @@ type InstanceGroupSpec struct {
 	MaxServerPerHost int
 }
 
-// SchedulerRequest is the well-typed, Nova-agnostic input to the scheduling
+// PlacementRequest is the well-typed, Nova-agnostic input to the scheduling
 // pipeline. Every field is a resolved scalar, enum, or typed collection — there
 // are no maps of Nova-specific string keys and no values the pipeline must parse.
 //
 // Each field documents what leaving it at its zero value means, so the Nova spec
 // adapter (and any other caller) can see exactly which fields are load-bearing.
 //
-// SchedulerRequest implements lib.FilterWeigherPipelineRequest so it can be the
+// PlacementRequest implements lib.FilterWeigherPipelineRequest so it can be the
 // RequestType of the filter-weigher pipeline.
-type SchedulerRequest struct {
+type PlacementRequest struct {
 	// Pipeline is the name of the pipeline to execute. Required: an empty name
 	// resolves no pipeline and the run fails with "pipeline not found".
 	Pipeline string
-	// GatherAllCandidates, when true, tells the Scheduler to ignore the Hosts and
+	// GatherAllCandidates, when true, tells the Placement to ignore the Hosts and
 	// Weights the caller provided and instead gather ALL available placement
 	// candidates (via the CandidateGatherer) before filtering. It is set for
 	// requests where cortex can enumerate the candidate hosts itself — today the
@@ -253,14 +253,14 @@ type SchedulerRequest struct {
 	GlobalRequestID string
 }
 
-// Compile-time check that SchedulerRequest satisfies the pipeline request contract.
-var _ lib.FilterWeigherPipelineRequest = SchedulerRequest{}
+// Compile-time check that PlacementRequest satisfies the pipeline request contract.
+var _ lib.FilterWeigherPipelineRequest = PlacementRequest{}
 
 // GetIntent returns the resolved scheduling intent.
-func (r SchedulerRequest) GetIntent() v1alpha1.SchedulingIntent { return r.Intent }
+func (r PlacementRequest) GetIntent() v1alpha1.SchedulingIntent { return r.Intent }
 
 // GetHosts returns the compute host names of all candidates.
-func (r SchedulerRequest) GetHosts() []string {
+func (r PlacementRequest) GetHosts() []string {
 	hosts := make([]string, len(r.Hosts))
 	for i, h := range r.Hosts {
 		hosts[i] = h.ComputeHost
@@ -269,13 +269,13 @@ func (r SchedulerRequest) GetHosts() []string {
 }
 
 // GetWeights returns the per-host input weights.
-func (r SchedulerRequest) GetWeights() map[string]float64 { return r.Weights }
+func (r PlacementRequest) GetWeights() map[string]float64 { return r.Weights }
 
 // GetOptions returns the call-time options for this run.
-func (r SchedulerRequest) GetOptions() scheduling.Options { return r.Options }
+func (r PlacementRequest) GetOptions() scheduling.Options { return r.Options }
 
 // GetTraceLogArgs returns alternating key/value pairs for the step trace log.
-func (r SchedulerRequest) GetTraceLogArgs() []any {
+func (r PlacementRequest) GetTraceLogArgs() []any {
 	return []any{
 		"greq", r.GlobalRequestID,
 		"req", r.RequestID,
@@ -287,7 +287,7 @@ func (r SchedulerRequest) GetTraceLogArgs() []any {
 // Filter returns a copy of the request narrowed to the given hosts, with the
 // weights updated to the provided values. Hosts not present in includedHosts are
 // dropped and won't be reconsidered by later steps.
-func (r SchedulerRequest) Filter(includedHosts map[string]float64) lib.FilterWeigherPipelineRequest {
+func (r PlacementRequest) Filter(includedHosts map[string]float64) lib.FilterWeigherPipelineRequest {
 	filteredHosts := make([]Host, 0, len(includedHosts))
 	for _, h := range r.Hosts {
 		if _, ok := includedHosts[h.ComputeHost]; ok {
@@ -308,7 +308,7 @@ func (r SchedulerRequest) Filter(includedHosts map[string]float64) lib.FilterWei
 // request that still carries a non-create intent (rebuild/evacuate/resize) must
 // be validated by the filters, so it is not treated as forced here. Intent
 // resolution happens in the adapter; this only inspects the typed Intent field.
-func (r SchedulerRequest) IsForcedDestination() bool {
+func (r PlacementRequest) IsForcedDestination() bool {
 	if len(r.ForceHosts) == 0 && len(r.ForceNodes) == 0 {
 		return false
 	}
@@ -319,7 +319,7 @@ func (r SchedulerRequest) IsForcedDestination() bool {
 // destinations. force_hosts matches on compute host name (case-insensitive);
 // force_nodes matches on hypervisor hostname (case-sensitive); when both are set
 // a host must match both. Order is preserved and compute hosts are deduplicated.
-func (r SchedulerRequest) ForcedHosts() []string {
+func (r PlacementRequest) ForcedHosts() []string {
 	forceHostSet := make(map[string]bool, len(r.ForceHosts))
 	for _, h := range r.ForceHosts {
 		forceHostSet[strings.ToLower(h)] = true

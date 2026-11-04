@@ -218,12 +218,12 @@ func TestVMwareAvoidLongTermContendedHostsStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		request  sched.SchedulerRequest
+		request  sched.PlacementRequest
 		expected map[string]float64
 	}{
 		{
 			name: "Avoid contended hosts",
-			request: sched.SchedulerRequest{
+			request: sched.PlacementRequest{
 				Hosts: []sched.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -240,7 +240,7 @@ func TestVMwareAvoidLongTermContendedHostsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Missing data",
-			request: sched.SchedulerRequest{
+			request: sched.PlacementRequest{
 				Hosts: []sched.Host{
 					{ComputeHost: "host4"},
 					{ComputeHost: "host5"},

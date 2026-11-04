@@ -16,12 +16,12 @@ import (
 )
 
 type FilterAggregateMetadata struct {
-	lib.BaseFilter[compute.SchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Restrict hosts to specific projects if they are in an aggregate that has
 // the "filter_tenant_id" metadata key set.
-func (s *FilterAggregateMetadata) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterAggregateMetadata) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	// Capacity probe calls are synthetic and not placed on behalf of a tenant
 	// project, so they must ignore tenant pinning. Failover reservations DO respect

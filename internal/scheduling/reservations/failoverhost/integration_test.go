@@ -27,7 +27,7 @@ import (
 // hosts, so gathering is a no-op here.
 type passthroughGatherer struct{}
 
-func (passthroughGatherer) MutateWithAllCandidates(context.Context, *sched.SchedulerRequest) error {
+func (passthroughGatherer) MutateWithAllCandidates(context.Context, *sched.PlacementRequest) error {
 	return nil
 }
 
@@ -244,7 +244,7 @@ func TestIntegration(t *testing.T) {
 // end.
 type integrationTestEnv struct {
 	k8sClient   client.Client
-	scheduler   *sched.Scheduler
+	scheduler   *sched.Placement
 	flavors     []compute.FlavorInGroup
 	hypervisors map[string]hv1.Hypervisor
 }
@@ -264,9 +264,9 @@ func newIntegrationTestEnv(t *testing.T, hypervisors []*hv1.Hypervisor, flavors 
 	k8sClient := newTestClient(t, objects...)
 
 	controller := &nova.FilterWeigherPipelineController{
-		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[sched.SchedulerRequest]]{
+		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[sched.PlacementRequest]]{
 			Client:          k8sClient,
-			Pipelines:       make(map[string]lib.FilterWeigherPipeline[sched.SchedulerRequest]),
+			Pipelines:       make(map[string]lib.FilterWeigherPipeline[sched.PlacementRequest]),
 			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 		},
 		Monitor: sharedPipelineMonitor(),
@@ -298,7 +298,7 @@ func newIntegrationTestEnv(t *testing.T, hypervisors []*hv1.Hypervisor, flavors 
 
 	// KVM requests trigger candidate gathering; the test seeds its own eligible
 	// hosts, so use a passthrough gatherer that preserves them.
-	scheduler := sched.NewScheduler(controller, passthroughGatherer{})
+	scheduler := sched.NewPlacement(controller, passthroughGatherer{})
 
 	return &integrationTestEnv{
 		k8sClient:   k8sClient,

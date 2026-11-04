@@ -107,13 +107,13 @@ func capacityMapsEqual(a, b map[hv1.ResourceName]resource.Quantity) bool {
 type Reconciler struct {
 	client    client.Client
 	vmSource  reservations.VMSource
-	scheduler *sched.Scheduler
+	scheduler *sched.Placement
 	config    Config
 
 	lastReconcileAt time.Time
 }
 
-func NewController(c client.Client, config Config, vmSource reservations.VMSource, scheduler *sched.Scheduler) *Reconciler {
+func NewController(c client.Client, config Config, vmSource reservations.VMSource, scheduler *sched.Placement) *Reconciler {
 	return &Reconciler{
 		client:    c,
 		vmSource:  vmSource,
@@ -829,7 +829,7 @@ func (c *Reconciler) probeScheduler(
 	// slices and become no-ops). No hypervisor-type default — only match when the
 	// flavor names one.
 	requiredTraits, forbiddenTraits := nova.SplitTraits(flavor.ExtraSpecs)
-	out, err := c.scheduler.RunWithoutLock(ctx, sched.SchedulerRequest{
+	out, err := c.scheduler.RunWithoutLock(ctx, sched.PlacementRequest{
 		Pipeline:              pipeline,
 		GatherAllCandidates:   true,
 		HypervisorFamily:      sched.HypervisorFamilyKVM,

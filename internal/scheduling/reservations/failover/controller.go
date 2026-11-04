@@ -44,13 +44,13 @@ type FailoverReservationController struct {
 	client.Client
 	VMSource       reservations.VMSource
 	Config         FailoverConfig
-	Scheduler      *sched.Scheduler
+	Scheduler      *sched.Placement
 	Recorder       events.EventRecorder // Event recorder for emitting Kubernetes events
 	Monitor        *FailoverMonitor
 	reconcileCount int64 // Track reconciliation count for rotating VM selection
 }
 
-func NewFailoverReservationController(c client.Client, vmSource reservations.VMSource, config FailoverConfig, scheduler *sched.Scheduler, monitor *FailoverMonitor) *FailoverReservationController {
+func NewFailoverReservationController(c client.Client, vmSource reservations.VMSource, config FailoverConfig, scheduler *sched.Placement, monitor *FailoverMonitor) *FailoverReservationController {
 	return &FailoverReservationController{
 		Client:    c,
 		VMSource:  vmSource,

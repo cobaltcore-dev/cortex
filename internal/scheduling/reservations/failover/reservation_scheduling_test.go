@@ -480,36 +480,36 @@ func buildSchedulingTestVMWithResources(uuid, hypervisor string, memoryMB, vcpus
 // single fixed host, so tests can assert the options the controller built.
 type capturingPipeline struct {
 	host     string
-	captured *sched.SchedulerRequest
+	captured *sched.PlacementRequest
 }
 
-func (p *capturingPipeline) Run(req sched.SchedulerRequest) (sched.SchedulerResult, error) {
+func (p *capturingPipeline) Run(req sched.PlacementRequest) (sched.PlacementResult, error) {
 	*p.captured = req
-	return sched.SchedulerResult{OrderedHosts: []string{p.host}}, nil
+	return sched.PlacementResult{OrderedHosts: []string{p.host}}, nil
 }
 
 // capturingProvider serves the same capturingPipeline for every pipeline name.
 type capturingProvider struct{ pipeline *capturingPipeline }
 
-func (f capturingProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.SchedulerRequest], bool) {
+func (f capturingProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.PlacementRequest], bool) {
 	return f.pipeline, true
 }
 
 // capturingGatherer is a no-op gatherer (the tests preselect their own hosts).
 type capturingGatherer struct{}
 
-func (capturingGatherer) MutateWithAllCandidates(context.Context, *sched.SchedulerRequest) error {
+func (capturingGatherer) MutateWithAllCandidates(context.Context, *sched.PlacementRequest) error {
 	return nil
 }
 
 // newCapturingScheduler builds an in-process scheduler whose pipeline returns
 // the given host and records every request it ran into *out.
-func newCapturingScheduler(host string, out *sched.SchedulerRequest) *sched.Scheduler {
-	return sched.NewScheduler(capturingProvider{pipeline: &capturingPipeline{host: host, captured: out}}, capturingGatherer{})
+func newCapturingScheduler(host string, out *sched.PlacementRequest) *sched.Placement {
+	return sched.NewPlacement(capturingProvider{pipeline: &capturingPipeline{host: host, captured: out}}, capturingGatherer{})
 }
 
 // buildMinimalController returns a FailoverReservationController wired to the given scheduler.
-func buildMinimalController(t *testing.T, scheduler *sched.Scheduler) *FailoverReservationController {
+func buildMinimalController(t *testing.T, scheduler *sched.Placement) *FailoverReservationController {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
@@ -577,7 +577,7 @@ func TestFailoverSchedulerOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var capturedReq sched.SchedulerRequest
+			var capturedReq sched.PlacementRequest
 			scheduler := newCapturingScheduler("host-2", &capturedReq)
 
 			tt.call(buildMinimalController(t, scheduler), context.Background())
@@ -623,7 +623,7 @@ func TestFailoverSchedulerFlavorConstraints(t *testing.T) {
 			vm.FlavorExtraSpecs = tt.extraSpecs
 			resolved := resolveVMSpecForScheduling(context.Background(), vm, false, nil)
 
-			var capturedReq sched.SchedulerRequest
+			var capturedReq sched.PlacementRequest
 			scheduler := newCapturingScheduler("host-2", &capturedReq)
 			c := buildMinimalController(t, scheduler)
 			_, _ = c.scheduleAndBuildNewFailoverReservation(context.Background(), vm, []string{"host-1", "host-2"}, nil, nil, resolved) //nolint:errcheck

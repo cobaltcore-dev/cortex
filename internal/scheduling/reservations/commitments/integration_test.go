@@ -410,22 +410,22 @@ type intgEnv struct {
 // intgSchedulerFn models a scheduler run: given the request it returns the ordered
 // hosts (an empty list models NoHostsFound). It replaces the former httptest mock
 // Nova scheduler handler.
-type intgSchedulerFn func(sched.SchedulerRequest) sched.SchedulerResult
+type intgSchedulerFn func(sched.PlacementRequest) sched.PlacementResult
 
 type intgPipeline struct{ fn intgSchedulerFn }
 
-func (p intgPipeline) Run(req sched.SchedulerRequest) (sched.SchedulerResult, error) {
+func (p intgPipeline) Run(req sched.PlacementRequest) (sched.PlacementResult, error) {
 	return p.fn(req), nil
 }
 
 type intgPipelineProvider struct{ fn intgSchedulerFn }
 
-func (p intgPipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.SchedulerRequest], bool) {
+func (p intgPipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.PlacementRequest], bool) {
 	return intgPipeline(p), true
 }
 
-func newIntgScheduler(fn intgSchedulerFn) *sched.Scheduler {
-	return sched.NewScheduler(intgPipelineProvider{fn: fn}, fakeGatherer{})
+func newIntgScheduler(fn intgSchedulerFn) *sched.Placement {
+	return sched.NewPlacement(intgPipelineProvider{fn: fn}, fakeGatherer{})
 }
 
 func newIntgEnv(t *testing.T, initialObjects []client.Object, schedulerFn intgSchedulerFn, vmSource reservations.VMSource) *intgEnv {
@@ -719,19 +719,19 @@ func intgAssertCRCondition(t *testing.T, k8sClient client.Client, crNames []stri
 // Scheduler functions
 // ============================================================================
 
-func intgAcceptScheduler(sched.SchedulerRequest) sched.SchedulerResult {
-	return sched.SchedulerResult{OrderedHosts: []string{"host-1"}}
+func intgAcceptScheduler(sched.PlacementRequest) sched.PlacementResult {
+	return sched.PlacementResult{OrderedHosts: []string{"host-1"}}
 }
 
-func intgRejectScheduler(sched.SchedulerRequest) sched.SchedulerResult {
-	return sched.SchedulerResult{OrderedHosts: []string{}}
+func intgRejectScheduler(sched.PlacementRequest) sched.PlacementResult {
+	return sched.PlacementResult{OrderedHosts: []string{}}
 }
 
 // intgAcceptFirstScheduler returns a scheduler fn that accepts the first count placement calls
 // and rejects all subsequent ones. Uses an atomic counter so concurrent calls are safe.
 func intgAcceptFirstScheduler(count int) intgSchedulerFn {
 	var calls atomic.Int32
-	return func(req sched.SchedulerRequest) sched.SchedulerResult {
+	return func(req sched.PlacementRequest) sched.PlacementResult {
 		if int(calls.Add(1)) <= count {
 			return intgAcceptScheduler(req)
 		}
@@ -743,7 +743,7 @@ func intgAcceptFirstScheduler(count int) intgSchedulerFn {
 // and accepts all subsequent ones. Used to test AllowRejection=false retry-until-success paths.
 func intgRejectFirstScheduler(count int) intgSchedulerFn {
 	var calls atomic.Int32
-	return func(req sched.SchedulerRequest) sched.SchedulerResult {
+	return func(req sched.PlacementRequest) sched.PlacementResult {
 		if int(calls.Add(1)) <= count {
 			return intgRejectScheduler(req)
 		}
@@ -1251,12 +1251,12 @@ func TestCRScheduling_SetsReserveForCommittedResourceIntent(t *testing.T) {
 	// CR slot scheduling has a real project ID and must run tenant-context filters
 	// (filter_allowed_projects, filter_aggregate_metadata, etc.). Verify the intent is
 	// reserve_for_committed_resource so filters can identify the call type correctly.
-	var capturedReq sched.SchedulerRequest
+	var capturedReq sched.PlacementRequest
 	var schedulerCalled bool
-	captureScheduler := func(req sched.SchedulerRequest) sched.SchedulerResult {
+	captureScheduler := func(req sched.PlacementRequest) sched.PlacementResult {
 		schedulerCalled = true
 		capturedReq = req
-		return sched.SchedulerResult{OrderedHosts: []string{"host-1"}}
+		return sched.PlacementResult{OrderedHosts: []string{"host-1"}}
 	}
 
 	env := newIntgEnv(t, []client.Object{newTestFlavorKnowledge(), intgHypervisor("host-1")}, captureScheduler, nil)
@@ -1345,7 +1345,7 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 	}
 
 	var schedulerCalls atomic.Int32
-	schedulerFn := func(req sched.SchedulerRequest) sched.SchedulerResult {
+	schedulerFn := func(req sched.PlacementRequest) sched.PlacementResult {
 		schedulerCalls.Add(1)
 		return intgRejectScheduler(req) // reject so evicted slots don't land back on host-1
 	}

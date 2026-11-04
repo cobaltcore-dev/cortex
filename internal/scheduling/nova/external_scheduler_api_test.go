@@ -23,14 +23,14 @@ import (
 // receives the mapped request and may invoke the post-hook to exercise the
 // handler's side-effect path; it returns the result/error the handler sees.
 type mockRunner struct {
-	runFunc func(ctx context.Context, req compute.SchedulerRequest, post compute.PostHook) (compute.SchedulerResult, error)
+	runFunc func(ctx context.Context, req compute.PlacementRequest, post compute.PostHook) (compute.PlacementResult, error)
 }
 
-func (m *mockRunner) Run(ctx context.Context, req compute.SchedulerRequest, _ compute.PreHook, post compute.PostHook) (compute.SchedulerResult, error) {
+func (m *mockRunner) Run(ctx context.Context, req compute.PlacementRequest, _ compute.PreHook, post compute.PostHook) (compute.PlacementResult, error) {
 	if m.runFunc != nil {
 		return m.runFunc(ctx, req, post)
 	}
-	return compute.SchedulerResult{}, nil
+	return compute.PlacementResult{}, nil
 }
 
 // newTestAPI builds an *httpAPI with the given config and mock runner, leaving
@@ -44,7 +44,7 @@ func newTestAPI(config HTTPAPIConfig, r runner) *httpAPI {
 	}
 }
 
-// newTestAPIWithScheduler builds an *httpAPI over a real compute.Scheduler plus
+// newTestAPIWithScheduler builds an *httpAPI over a real compute.Placement plus
 // the CR recorder and feature gates, for tests that exercise the committed-
 // resource post-hook end-to-end.
 func newTestAPIWithScheduler(config HTTPAPIConfig, scheduler runner, crRecorder crs.Recorder, featureGates FeatureGates) *httpAPI {
@@ -61,7 +61,7 @@ func newTestAPIWithScheduler(config HTTPAPIConfig, scheduler runner, crRecorder 
 // unchanged (tests seed their own host sets).
 type passthroughGatherer struct{}
 
-func (passthroughGatherer) MutateWithAllCandidates(context.Context, *compute.SchedulerRequest) error {
+func (passthroughGatherer) MutateWithAllCandidates(context.Context, *compute.PlacementRequest) error {
 	return nil
 }
 
@@ -169,7 +169,7 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 		method             string
 		body               string
 		processDecisionErr error
-		result             *compute.SchedulerResult
+		result             *compute.PlacementResult
 		expectedStatus     int
 		expectedHosts      []string
 	}{
@@ -208,7 +208,7 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 				}
 				return string(data)
 			}(),
-			result: &compute.SchedulerResult{
+			result: &compute.PlacementResult{
 				OrderedHosts: []string{"host1"},
 			},
 			expectedStatus: http.StatusOK,
@@ -273,14 +273,14 @@ func TestHTTPAPI_NovaExternalScheduler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &mockRunner{
-				runFunc: func(_ context.Context, _ compute.SchedulerRequest, _ compute.PostHook) (compute.SchedulerResult, error) {
+				runFunc: func(_ context.Context, _ compute.PlacementRequest, _ compute.PostHook) (compute.PlacementResult, error) {
 					if tt.processDecisionErr != nil {
-						return compute.SchedulerResult{}, tt.processDecisionErr
+						return compute.PlacementResult{}, tt.processDecisionErr
 					}
 					if tt.result != nil {
 						return *tt.result, nil
 					}
-					return compute.SchedulerResult{}, nil
+					return compute.PlacementResult{}, nil
 				},
 			}
 
@@ -327,8 +327,8 @@ func TestHTTPAPI_NovaExternalScheduler_EmptyHostsSerializedAsArray(t *testing.T)
 	// response must serialize hosts as an empty array, not null, since Nova's
 	// schema requires an array.
 	r := &mockRunner{
-		runFunc: func(context.Context, compute.SchedulerRequest, compute.PostHook) (compute.SchedulerResult, error) {
-			return compute.SchedulerResult{OrderedHosts: nil}, nil
+		runFunc: func(context.Context, compute.PlacementRequest, compute.PostHook) (compute.PlacementResult, error) {
+			return compute.PlacementResult{OrderedHosts: nil}, nil
 		},
 	}
 	api := newTestAPI(HTTPAPIConfig{}, r)
@@ -363,11 +363,11 @@ func TestHTTPAPI_NovaExternalScheduler_EmptyHostsSerializedAsArray(t *testing.T)
 }
 
 func TestHTTPAPI_NovaExternalScheduler_RequestMapping(t *testing.T) {
-	var captured compute.SchedulerRequest
+	var captured compute.PlacementRequest
 	r := &mockRunner{
-		runFunc: func(_ context.Context, req compute.SchedulerRequest, _ compute.PostHook) (compute.SchedulerResult, error) {
+		runFunc: func(_ context.Context, req compute.PlacementRequest, _ compute.PostHook) (compute.PlacementResult, error) {
 			captured = req
-			return compute.SchedulerResult{OrderedHosts: []string{"host1"}}, nil
+			return compute.PlacementResult{OrderedHosts: []string{"host1"}}, nil
 		},
 	}
 
@@ -435,9 +435,9 @@ func TestHTTPAPI_NovaExternalScheduler_ForcedDestination(t *testing.T) {
 
 	schedulerCalled := false
 	r := &mockRunner{
-		runFunc: func(context.Context, compute.SchedulerRequest, compute.PostHook) (compute.SchedulerResult, error) {
+		runFunc: func(context.Context, compute.PlacementRequest, compute.PostHook) (compute.PlacementResult, error) {
 			schedulerCalled = true
-			return compute.SchedulerResult{}, nil
+			return compute.PlacementResult{}, nil
 		},
 	}
 	api := newTestAPI(HTTPAPIConfig{}, r)
@@ -485,9 +485,9 @@ func TestHTTPAPI_NovaExternalScheduler_ForcedDestinationNoWeights(t *testing.T) 
 
 	schedulerCalled := false
 	r := &mockRunner{
-		runFunc: func(context.Context, compute.SchedulerRequest, compute.PostHook) (compute.SchedulerResult, error) {
+		runFunc: func(context.Context, compute.PlacementRequest, compute.PostHook) (compute.PlacementResult, error) {
 			schedulerCalled = true
-			return compute.SchedulerResult{}, nil
+			return compute.PlacementResult{}, nil
 		},
 	}
 	api := newTestAPI(HTTPAPIConfig{}, r)
@@ -538,9 +538,9 @@ func TestHTTPAPI_NovaExternalScheduler_ForcedDestinationDisabled(t *testing.T) {
 
 	schedulerCalled := false
 	r := &mockRunner{
-		runFunc: func(context.Context, compute.SchedulerRequest, compute.PostHook) (compute.SchedulerResult, error) {
+		runFunc: func(context.Context, compute.PlacementRequest, compute.PostHook) (compute.PlacementResult, error) {
 			schedulerCalled = true
-			return compute.SchedulerResult{}, nil
+			return compute.PlacementResult{}, nil
 		},
 	}
 	disabled := false

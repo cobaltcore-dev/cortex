@@ -65,11 +65,11 @@ func (o KVMBinpackStepOpts) Validate() error {
 // Explanation of the algorithm: https://volcano.sh/en/docs/plugins/#binpack
 type KVMBinpackStep struct {
 	// Base weigher providing common functionality.
-	lib.BaseWeigher[compute.SchedulerRequest, KVMBinpackStepOpts]
+	lib.BaseWeigher[compute.PlacementRequest, KVMBinpackStepOpts]
 }
 
 // Run this weigher in the pipeline after filters have been executed.
-func (s *KVMBinpackStep) Run(traceLog logr.Logger, request compute.SchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMBinpackStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	result.Statistics["binpack score"] = s.PrepareStats(request, "float")
 
@@ -141,7 +141,7 @@ func (s *KVMBinpackStep) Run(traceLog logr.Logger, request compute.SchedulerRequ
 }
 
 // calcVMResources calculates the total resource requests for the VM to be scheduled.
-func (s *KVMBinpackStep) calcVMResources(req compute.SchedulerRequest) map[hv1.ResourceName]resource.Quantity {
+func (s *KVMBinpackStep) calcVMResources(req compute.PlacementRequest) map[hv1.ResourceName]resource.Quantity {
 	resources := make(map[hv1.ResourceName]resource.Quantity)
 	resourcesMemBytes := int64(req.Flavor.MemoryMB) * (1024 * 1024) //nolint:gosec // memory values are bounded by Nova
 	resourcesMemBytes *= int64(req.NumInstances)                    //nolint:gosec // instance count is bounded by Nova
