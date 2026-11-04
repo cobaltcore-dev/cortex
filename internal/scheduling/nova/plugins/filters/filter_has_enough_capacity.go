@@ -12,9 +12,9 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib/capacity"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib/capacity"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
