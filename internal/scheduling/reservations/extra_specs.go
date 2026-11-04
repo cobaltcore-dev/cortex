@@ -4,33 +4,30 @@
 package reservations
 
 import (
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 )
 
-// ExtractTraits splits a flavor's "trait:<name>" extra specs into required and
-// forbidden trait names, mirroring the Nova spec adapter so reservation
-// scheduling honors the same trait constraints as regular placement. The
-// reservation controllers build the typed compute.SchedulerRequest directly
-// (not via the Nova wire adapter), so they must populate RequiredTraits/
-// ForbiddenTraits themselves — otherwise filter_has_requested_traits sees empty
-// slices and becomes a no-op. It delegates to compute.SplitTraits so the trait
-// convention lives in one place.
-func ExtractTraits(extraSpecs map[string]string) (required, forbidden []string) {
-	return compute.SplitTraits(extraSpecs)
-}
+// The reservation controllers build the typed compute.SchedulerRequest directly
+// (not via the Nova wire adapter), yet their flavors still carry Nova's extra-spec
+// string conventions. This thin wrapper delegates to the shared parsers in
+// api/external/nova so reservation scheduling honors the same capability
+// constraints as regular placement, with the conventions understood in one place.
 
-// HypervisorTypeCapability returns the capabilities:hypervisor_type match (QEMU
-// vs CH) for a reservation scheduler request, so filter_capabilities keeps a
-// workload off an incompatible hypervisor. When the flavor names no hypervisor
-// type, it returns "qemu" if defaultQEMU is set (the failover controller seeds
-// from running VMs whose flavor may omit it) and nil otherwise.
+// HypervisorTypeCapability returns the required (key=value) hypervisor capabilities
+// for a reservation scheduler request, so filter_capabilities keeps a workload off
+// incompatible hosts. It extracts ALL of the flavor's "capabilities:<key>" extra
+// specs (via api.SplitCapabilities, which canonicalizes the hypervisor_type casing
+// and drops everything on an unsupported operator) — not just hypervisor_type.
+//
+// When the flavor names no hypervisor type and defaultQEMU is set (the failover
+// controller seeds from running VMs whose flavor may omit it), the canonical "QEMU"
+// hypervisor_type is added. Without defaultQEMU, a missing hypervisor type adds no
+// hypervisor_type constraint.
 func HypervisorTypeCapability(extraSpecs map[string]string, defaultQEMU bool) []compute.Capability {
-	hvType := extraSpecs["capabilities:hypervisor_type"]
-	if hvType == "" {
-		if !defaultQEMU {
-			return nil
-		}
-		hvType = "qemu"
+	caps := api.SplitCapabilities(extraSpecs)
+	if extraSpecs["capabilities:hypervisor_type"] == "" && defaultQEMU {
+		caps = append(caps, compute.Capability{Name: "hypervisor_type", Value: "QEMU"})
 	}
-	return []compute.Capability{{Name: "hypervisor_type", Value: hvType}}
+	return caps
 }

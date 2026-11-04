@@ -4,23 +4,10 @@
 package nova
 
 import (
-	"strings"
-
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 )
-
-// unsupportedCapabilityOps are the Nova extra-spec comparison operators the
-// capabilities filter does not implement. A capability value containing any of
-// these means the request uses an advanced match the pipeline can't honor, so
-// we drop capabilities entirely (the filter then becomes a no-op), matching the
-// old filter's "skip" behavior.
-// See: https://github.com/sapcc/nova/blob/3ebf80/nova/scheduler/filters/extra_specs_ops.py#L23
-var unsupportedCapabilityOps = []string{
-	"=", "<in>", "<all-in>", "==", "!=", ">=", "<=",
-	"s==", "s!=", "s<", "s<=", "s>", "s>=", "<or>",
-}
 
 // ToSchedulerRequest translates the Nova over-the-wire request into the typed,
 // Nova-agnostic compute.SchedulerRequest the pipeline consumes. This is the one
@@ -83,9 +70,9 @@ func ToSchedulerRequest(
 	req.ImageHypervisorType = toImageHypervisorType(spec.Image.Data)
 
 	// Traits, capabilities, accelerators from flavor extra specs.
-	req.RequiredTraits, req.ForbiddenTraits = compute.SplitTraits(spec.Flavor.Data.ExtraSpecs)
-	req.RequestedCapabilities = toCapabilities(spec.Flavor.Data.ExtraSpecs)
-	_, req.AcceleratorsRequested = spec.Flavor.Data.ExtraSpecs["accel:device_profile"]
+	req.RequiredTraits, req.ForbiddenTraits = api.SplitTraits(spec.Flavor.Data.ExtraSpecs)
+	req.RequestedCapabilities = api.SplitCapabilities(spec.Flavor.Data.ExtraSpecs)
+	req.AcceleratorsRequested = api.RequestsAccelerators(spec.Flavor.Data.ExtraSpecs)
 
 	// Nested objects.
 	req.RequestedDestination = toRequestedDestination(spec.RequestedDestination)
@@ -145,26 +132,6 @@ func toImageHypervisorType(image api.NovaImageMeta) compute.ImageHypervisorType 
 		return compute.ImageHypervisorTypeKVM
 	}
 	return compute.ImageHypervisorTypeUnset
-}
-
-// toCapabilities extracts the "capabilities:<key>" extra specs as typed Capability
-// equalities. If any value uses an unsupported comparison operator, it returns
-// nil so the capabilities filter is skipped entirely (matching Nova behavior).
-func toCapabilities(extraSpecs map[string]string) []compute.Capability {
-	var caps []compute.Capability
-	for key, value := range extraSpecs {
-		name, ok := strings.CutPrefix(key, "capabilities:")
-		if !ok {
-			continue
-		}
-		for _, op := range unsupportedCapabilityOps {
-			if strings.Contains(value, op) {
-				return nil // Unsupported operator: skip the whole filter.
-			}
-		}
-		caps = append(caps, compute.Capability{Name: name, Value: value})
-	}
-	return caps
 }
 
 func toRequestedDestination(rd *api.NovaObject[api.NovaRequestedDestination]) *compute.RequestedDestination {

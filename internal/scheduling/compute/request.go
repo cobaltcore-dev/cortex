@@ -346,24 +346,3 @@ func (r SchedulerRequest) ForcedHosts() []string {
 	}
 	return matched
 }
-
-// SplitTraits splits a flavor's "trait:<name>" extra specs into required and
-// forbidden trait names, classified by the "required"/"forbidden" value. It is
-// the single place that understands Nova's trait extra-spec convention, so both
-// the Nova wire adapter and the reservation controllers (which build a
-// SchedulerRequest directly) populate RequiredTraits/ForbiddenTraits the same way.
-func SplitTraits(extraSpecs map[string]string) (required, forbidden []string) {
-	for key, value := range extraSpecs {
-		name, ok := strings.CutPrefix(key, "trait:")
-		if !ok {
-			continue
-		}
-		switch value {
-		case "required":
-			required = append(required, name)
-		case "forbidden":
-			forbidden = append(forbidden, name)
-		}
-	}
-	return required, forbidden
-}

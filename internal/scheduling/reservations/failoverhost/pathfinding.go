@@ -253,7 +253,7 @@ func (f *evacuationPathFinder) fetchSeedCandidates(ctx context.Context, seed See
 	// considers compatible hosts (filter_has_requested_traits/filter_capabilities
 	// would otherwise see empty slices and become no-ops). The seeder only emits
 	// seeds whose flavor names a supported hypervisor type, so no default is needed.
-	requiredTraits, forbiddenTraits := reservations.ExtractTraits(seed.Flavor.ExtraSpecs)
+	requiredTraits, forbiddenTraits := api.SplitTraits(seed.Flavor.ExtraSpecs)
 	req := compute.SchedulerRequest{
 		// Same HANA vs general-purpose split as regular failover placement.
 		Pipeline: failover.InferFailoverPipeline(seed.Flavor.ExtraSpecs),
@@ -281,6 +281,7 @@ func (f *evacuationPathFinder) fetchSeedCandidates(ctx context.Context, seed See
 		// seeds whose flavor names a supported hypervisor type, so this is always
 		// set (no default needed).
 		RequestedCapabilities: reservations.HypervisorTypeCapability(seed.Flavor.ExtraSpecs, false),
+		AcceleratorsRequested: api.RequestsAccelerators(seed.Flavor.ExtraSpecs),
 		Flavor: compute.FlavorSpec{
 			VCPUs:    seed.Flavor.VCPUs,
 			MemoryMB: seed.Flavor.MemoryMB,

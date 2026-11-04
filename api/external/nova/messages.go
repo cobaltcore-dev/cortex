@@ -6,10 +6,13 @@ package api
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
+	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
@@ -219,6 +222,90 @@ func (req ExternalSchedulerRequest) IsKVMRequest() bool {
 		return false
 	}
 	return hvType == HypervisorTypeQEMU || hvType == HypervisorTypeCH
+}
+
+// The helpers below resolve Nova's loosely-typed flavor extra-spec string
+// conventions into the typed values the scheduling pipeline consumes. They live
+// here, with the Nova wire message types, because the "trait:"/"capabilities:"/
+// "accel:" key conventions are Nova's — not the pipeline's. Both the Nova wire
+// adapter and the in-process reservation controllers (which hold a flavor's
+// extra-spec map directly) call them, so the conventions are understood in exactly
+// one place.
+
+// unsupportedCapabilityOps are the Nova extra-spec comparison operators the
+// capabilities filter does not implement. A capability value containing any of
+// these means the request uses an advanced match the pipeline can't honor, so
+// SplitCapabilities drops capabilities entirely (the filter then becomes a
+// no-op), matching Nova's "skip" behavior.
+// See: https://github.com/sapcc/nova/blob/3ebf80/nova/scheduler/filters/extra_specs_ops.py#L23
+var unsupportedCapabilityOps = []string{
+	"=", "<in>", "<all-in>", "==", "!=", ">=", "<=",
+	"s==", "s!=", "s<", "s<=", "s>", "s>=", "<or>",
+}
+
+// SplitTraits splits a flavor's "trait:<name>" extra specs into required and
+// forbidden trait names, classified by the "required"/"forbidden" value.
+func SplitTraits(extraSpecs map[string]string) (required, forbidden []string) {
+	for key, value := range extraSpecs {
+		name, ok := strings.CutPrefix(key, "trait:")
+		if !ok {
+			continue
+		}
+		switch value {
+		case "required":
+			required = append(required, name)
+		case "forbidden":
+			forbidden = append(forbidden, name)
+		}
+	}
+	return required, forbidden
+}
+
+// SplitCapabilities extracts a flavor's "capabilities:<key>" extra specs as typed
+// compute.Capability equalities (prefix stripped). The "hypervisor_type" value is
+// canonicalized (qemu->QEMU, ch->CH) so it matches what hypervisors advertise
+// (filter_capabilities compares case-sensitively); all other values pass through
+// unchanged. If any value uses an unsupported comparison operator it returns nil so
+// the capabilities filter is skipped entirely (matching Nova behavior).
+func SplitCapabilities(extraSpecs map[string]string) []compute.Capability {
+	var caps []compute.Capability
+	for key, value := range extraSpecs {
+		name, ok := strings.CutPrefix(key, "capabilities:")
+		if !ok {
+			continue
+		}
+		for _, op := range unsupportedCapabilityOps {
+			if strings.Contains(value, op) {
+				return nil // Unsupported operator: skip the whole filter.
+			}
+		}
+		if name == "hypervisor_type" {
+			value = CanonicalHypervisorType(value)
+		}
+		caps = append(caps, compute.Capability{Name: name, Value: value})
+	}
+	return caps
+}
+
+// CanonicalHypervisorType normalizes a flavor's capabilities:hypervisor_type value
+// to the casing hypervisors advertise (QEMU/CH), since filter_capabilities compares
+// values case-sensitively. Unrecognized values pass through unchanged.
+func CanonicalHypervisorType(value string) string {
+	switch strings.ToLower(value) {
+	case "qemu":
+		return "QEMU"
+	case "ch":
+		return "CH"
+	default:
+		return value
+	}
+}
+
+// RequestsAccelerators reports whether a flavor requests a hardware accelerator,
+// resolved from the presence of the "accel:device_profile" extra spec.
+func RequestsAccelerators(extraSpecs map[string]string) bool {
+	_, ok := extraSpecs["accel:device_profile"]
+	return ok
 }
 
 const (
@@ -518,4 +605,83 @@ type NovaRequestContext struct {
 	QuotaClass    *string `json:"quota_class"`
 	UserName      string  `json:"user_name"`
 	ProjectName   string  `json:"project_name"`
+}
+
+func TestSplitTraits(t *testing.T) {
+	required, forbidden := SplitTraits(map[string]string{
+		"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "required",
+		"trait:CUSTOM_NO_GPU":              "forbidden",
+		"trait:IGNORED":                    "preferred", // neither required nor forbidden
+		"capabilities:hypervisor_type":     "qemu",      // not a trait
+	})
+	if !slices.Equal(required, []string{"CUSTOM_HANA_EXCLUSIVE_HOST"}) {
+		t.Errorf("required = %v, want [CUSTOM_HANA_EXCLUSIVE_HOST]", required)
+	}
+	if !slices.Equal(forbidden, []string{"CUSTOM_NO_GPU"}) {
+		t.Errorf("forbidden = %v, want [CUSTOM_NO_GPU]", forbidden)
+	}
+}
+
+func TestSplitCapabilities(t *testing.T) {
+	sortCaps := func(c []compute.Capability) {
+		slices.SortFunc(c, func(a, b compute.Capability) int { return strings.Compare(a.Name, b.Name) })
+	}
+	cases := []struct {
+		name       string
+		extraSpecs map[string]string
+		want       []compute.Capability
+	}{
+		{
+			name:       "canonicalizes lowercase hypervisor_type to match hosts",
+			extraSpecs: map[string]string{"capabilities:hypervisor_type": "qemu"},
+			want:       []compute.Capability{{Name: "hypervisor_type", Value: "QEMU"}},
+		},
+		{
+			name:       "ch canonicalized",
+			extraSpecs: map[string]string{"capabilities:hypervisor_type": "ch"},
+			want:       []compute.Capability{{Name: "hypervisor_type", Value: "CH"}},
+		},
+		{
+			name: "non-hypervisor_type capabilities preserved verbatim",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "QEMU",
+				"capabilities:cpu_arch":        "aarch64",
+			},
+			want: []compute.Capability{
+				{Name: "cpu_arch", Value: "aarch64"},
+				{Name: "hypervisor_type", Value: "QEMU"},
+			},
+		},
+		{
+			name: "unsupported operator drops all capabilities",
+			extraSpecs: map[string]string{
+				"capabilities:hypervisor_type": "QEMU",
+				"capabilities:cpu_arch":        "<in> aarch64 x86_64",
+			},
+			want: nil,
+		},
+		{
+			name:       "non-capability extra specs ignored",
+			extraSpecs: map[string]string{"trait:CUSTOM_X": "required", "quota:hw_version": "2101"},
+			want:       nil,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := SplitCapabilities(c.extraSpecs)
+			sortCaps(got)
+			if !slices.Equal(got, c.want) {
+				t.Errorf("got %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+func TestRequestsAccelerators(t *testing.T) {
+	if !RequestsAccelerators(map[string]string{"accel:device_profile": "gpu-v100"}) {
+		t.Error("expected accelerators requested when accel:device_profile is present")
+	}
+	if RequestsAccelerators(map[string]string{"capabilities:cpu_arch": "x86_64"}) {
+		t.Error("expected no accelerators requested without accel:device_profile")
+	}
 }

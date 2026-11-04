@@ -608,12 +608,12 @@ func TestFailoverSchedulerFlavorConstraints(t *testing.T) {
 		wantHVType string
 		wantTraits []string
 	}{
-		{name: "flavor without hypervisor_type defaults to qemu", extraSpecs: nil, wantHVType: "qemu"},
+		{name: "flavor without hypervisor_type defaults to canonical QEMU", extraSpecs: nil, wantHVType: "QEMU"},
 		{name: "explicit CH preserved", extraSpecs: map[string]string{"capabilities:hypervisor_type": "CH"}, wantHVType: "CH"},
 		{
-			name:       "required trait is forwarded",
+			name:       "lowercase qemu canonicalized and trait forwarded",
 			extraSpecs: map[string]string{"capabilities:hypervisor_type": "qemu", "trait:CUSTOM_HANA_EXCLUSIVE_HOST": "required"},
-			wantHVType: "qemu",
+			wantHVType: "QEMU",
 			wantTraits: []string{"CUSTOM_HANA_EXCLUSIVE_HOST"},
 		},
 	}

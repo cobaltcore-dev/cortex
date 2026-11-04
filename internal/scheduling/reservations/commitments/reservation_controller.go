@@ -359,7 +359,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	// request is built directly, so filter_has_requested_traits/filter_capabilities
 	// would otherwise see empty slices and become no-ops). No hypervisor-type
 	// default here — only match when the flavor names one.
-	requiredTraits, forbiddenTraits := reservations.ExtractTraits(flavorDetails.ExtraSpecs)
+	requiredTraits, forbiddenTraits := schedulerdelegationapi.SplitTraits(flavorDetails.ExtraSpecs)
 	schedReq := compute.SchedulerRequest{
 		Pipeline:              pipelineName,
 		GatherAllCandidates:   true,
@@ -375,6 +375,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		RequiredTraits:        requiredTraits,
 		ForbiddenTraits:       forbiddenTraits,
 		RequestedCapabilities: reservations.HypervisorTypeCapability(flavorDetails.ExtraSpecs, false),
+		AcceleratorsRequested: schedulerdelegationapi.RequestsAccelerators(flavorDetails.ExtraSpecs),
 		Flavor: compute.FlavorSpec{
 			VCPUs:    flavorDetails.VCPUs,
 			MemoryMB: flavorDetails.MemoryMB,

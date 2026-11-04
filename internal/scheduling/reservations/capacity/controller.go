@@ -826,7 +826,7 @@ func (c *Reconciler) probeScheduler(
 	// filter_has_requested_traits/filter_capabilities would otherwise see empty
 	// slices and become no-ops). No hypervisor-type default — only match when the
 	// flavor names one.
-	requiredTraits, forbiddenTraits := reservations.ExtractTraits(flavor.ExtraSpecs)
+	requiredTraits, forbiddenTraits := schedulerapi.SplitTraits(flavor.ExtraSpecs)
 	out, err := c.scheduler.RunWithoutLock(ctx, sched.SchedulerRequest{
 		Pipeline:              pipeline,
 		GatherAllCandidates:   true,
@@ -841,6 +841,7 @@ func (c *Reconciler) probeScheduler(
 		RequiredTraits:        requiredTraits,
 		ForbiddenTraits:       forbiddenTraits,
 		RequestedCapabilities: reservations.HypervisorTypeCapability(flavor.ExtraSpecs, false),
+		AcceleratorsRequested: schedulerapi.RequestsAccelerators(flavor.ExtraSpecs),
 		Flavor: sched.FlavorSpec{
 			VCPUs:    flavor.VCPUs,
 			MemoryMB: flavor.MemoryMB,
