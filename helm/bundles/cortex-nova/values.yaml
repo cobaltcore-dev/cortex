@@ -109,13 +109,13 @@ kvm:
     # Domain names that are explicitly treated as non-external-customer domains and
     # skipped by the filter, even if they match one of the prefixes above.
     ignoredDomainNames: []
-  # Options for the failover host scheduling steps. The filter_failover_host
-  # filter keeps new VMs off hosts with a failover host reservation (and, for
-  # evacuations, prunes all but the deterministically selected failover host so
-  # another failure keeps a free landing zone); the weigher_failover_host weigher
-  # lifts that selected host to the front of the candidate list. Applied to every
-  # KVM pipeline that uses the steps.
-  failoverHost:
+  # Options for the failover host matching scheduling steps. The
+  # filter_failover_host filter keeps new VMs off hosts with a failover host
+  # reservation (and, for evacuations, prunes all but the deterministically
+  # selected failover host so another failure keeps a free landing zone); the
+  # weigher_failover_host weigher lifts that selected host to the front of the
+  # candidate list. Applied to every KVM pipeline that uses the steps.
+  failoverHostMatching:
     # Disabled by default until the failover host draining controller logic is
     # implemented. Set to true to enable failover-host-aware scheduling.
     enabled: false

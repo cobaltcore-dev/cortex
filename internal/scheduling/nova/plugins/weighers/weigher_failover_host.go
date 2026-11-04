@@ -41,8 +41,8 @@ func (WeigherFailoverHostOpts) Validate() error { return nil }
 // filter_failover_host filter (which has already removed the other reserved
 // hosts), so the two agree without coordinating: both run over the same
 // reservation snapshot in one pipeline execution. The filter keeps only the
-// selected target among the reserved hosts; this weigher then ensures that
-// target outranks the retained ordinary candidates.
+// selected target among the reserved hosts; this weigher then ensures that target
+// outranks the retained ordinary candidates.
 type WeigherFailoverHost struct {
 	lib.BaseWeigher[api.ExternalSchedulerRequest, WeigherFailoverHostOpts]
 }
@@ -65,7 +65,40 @@ func (s *WeigherFailoverHost) Run(traceLog logr.Logger, request api.ExternalSche
 	if err := s.Client.List(context.Background(), &reservations); err != nil {
 		return nil, err
 	}
-	target := selectFailoverHost(reservations.Items, sourceHost)
+
+	// Select the one failover host this source should gang-evacuate onto, with the
+	// same deterministic rule the filter_failover_host filter used over the same
+	// snapshot: among the reservations whose partition includes the source host,
+	// prefer the one already in use by this very source (gang-evacuation reuse),
+	// never one in use by a different source, otherwise the first by target host
+	// name.
+	var matching []v1alpha1.Reservation
+	for _, res := range reservations.Items {
+		if res.Spec.Type != v1alpha1.ReservationTypeFailoverHost || res.Spec.FailoverHostReservation == nil {
+			continue
+		}
+		if slices.Contains(res.Spec.FailoverHostReservation.SourceHosts, sourceHost) {
+			matching = append(matching, res)
+		}
+	}
+	sort.Slice(matching, func(i, j int) bool {
+		return matching[i].Spec.TargetHost < matching[j].Spec.TargetHost
+	})
+	var target string
+	for i := range matching {
+		res := &matching[i]
+		if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
+			if target == "" {
+				target = res.Spec.TargetHost
+			}
+			continue
+		}
+		if res.Status.FailoverHostReservation != nil &&
+			res.Status.FailoverHostReservation.SourceHost == sourceHost {
+			target = res.Spec.TargetHost
+			break
+		}
+	}
 	if target == "" {
 		return result, nil
 	}
@@ -83,45 +116,6 @@ func (s *WeigherFailoverHost) Run(traceLog logr.Logger, request api.ExternalSche
 	traceLog.V(1).Info("weighting failover host target to the front",
 		"sourceHost", sourceHost, "targetHost", target)
 	return result, nil
-}
-
-// selectFailoverHost picks the target host of the one failover host reservation a
-// source host should gang-evacuate onto, deterministically. It is a pure function
-// of the reservation snapshot, so the filter and weigher (which run over the same
-// snapshot) select the same target without coordinating.
-//
-// Among the reservations whose partition includes sourceHost it prefers the one
-// already in use by this very source (the gang-evacuation path), never picks one
-// in use by a different source (which would steal an active landing zone), and
-// otherwise takes the first by target host name. Returns "" when nothing matches.
-func selectFailoverHost(reservations []v1alpha1.Reservation, sourceHost string) string {
-	var matching []v1alpha1.Reservation
-	for _, res := range reservations {
-		if res.Spec.Type != v1alpha1.ReservationTypeFailoverHost || res.Spec.FailoverHostReservation == nil {
-			continue
-		}
-		if slices.Contains(res.Spec.FailoverHostReservation.SourceHosts, sourceHost) {
-			matching = append(matching, res)
-		}
-	}
-	sort.Slice(matching, func(i, j int) bool {
-		return matching[i].Spec.TargetHost < matching[j].Spec.TargetHost
-	})
-	var firstFree string
-	for i := range matching {
-		res := &matching[i]
-		if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
-			if firstFree == "" {
-				firstFree = res.Spec.TargetHost
-			}
-			continue
-		}
-		if res.Status.FailoverHostReservation != nil &&
-			res.Status.FailoverHostReservation.SourceHost == sourceHost {
-			return res.Spec.TargetHost
-		}
-	}
-	return firstFree
 }
 
 func init() {

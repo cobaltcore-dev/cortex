@@ -96,7 +96,7 @@ spec:
         It honors the call-time ignoredReservationTypes option so the failover
         host path finder probe still discovers reserved hosts.
       params:
-        - {key: enabled, boolValue: {{ .Values.kvm.failoverHost.enabled }}}
+        - {key: enabled, boolValue: {{ .Values.kvm.failoverHostMatching.enabled }}}
     - name: filter_allowed_projects
       description: |
         This step filters hosts based on allowed projects defined in the
@@ -179,7 +179,7 @@ spec:
         host the filter_failover_host filter kept. For non-evacuation requests it
         has no effect.
       params:
-        - {key: enabled, boolValue: {{ .Values.kvm.failoverHost.enabled }}}
+        - {key: enabled, boolValue: {{ .Values.kvm.failoverHostMatching.enabled }}}
     - name: kvm_committed_resource_reservation
       description: |
         This weigher boosts hosts that have a ready CommittedResourceReservation
@@ -293,7 +293,7 @@ spec:
         It honors the call-time ignoredReservationTypes option so the failover
         host path finder probe still discovers reserved hosts.
       params:
-        - {key: enabled, boolValue: {{ .Values.kvm.failoverHost.enabled }}}
+        - {key: enabled, boolValue: {{ .Values.kvm.failoverHostMatching.enabled }}}
     - name: filter_allowed_projects
       description: |
         This step filters hosts based on allowed projects defined in the
@@ -373,7 +373,7 @@ spec:
         host the filter_failover_host filter kept. For non-evacuation requests it
         has no effect.
       params:
-        - {key: enabled, boolValue: {{ .Values.kvm.failoverHost.enabled }}}
+        - {key: enabled, boolValue: {{ .Values.kvm.failoverHostMatching.enabled }}}
     - name: kvm_committed_resource_reservation
       description: |
         This weigher boosts hosts that have a ready CommittedResourceReservation
@@ -640,7 +640,7 @@ spec:
         It honors the call-time ignoredReservationTypes option so the failover
         host path finder probe still discovers reserved hosts.
       params:
-        - {key: enabled, boolValue: {{ .Values.kvm.failoverHost.enabled }}}
+        - {key: enabled, boolValue: {{ .Values.kvm.failoverHostMatching.enabled }}}
     - name: filter_has_requested_traits
       description: |
         This step filters hosts that do not have the requested traits given by the
@@ -690,7 +690,7 @@ spec:
         host the filter_failover_host filter kept. For non-evacuation requests it
         has no effect.
       params:
-        - {key: enabled, boolValue: {{ .Values.kvm.failoverHost.enabled }}}
+        - {key: enabled, boolValue: {{ .Values.kvm.failoverHostMatching.enabled }}}
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline

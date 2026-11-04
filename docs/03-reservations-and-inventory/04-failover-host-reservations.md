@@ -503,7 +503,7 @@ snapshot within one pipeline run, so they always agree without coordinating:
 
 The **`filter_failover_host`** pipeline filter is purely *subtractive* — it only ever removes hosts — so its
 position in the pipeline does not matter and all other filters and weighers still apply around it. It is
-toggled by the `kvm.failoverHost.enabled` Helm value (default `false`) and is a no-op when disabled. What it
+toggled by the `kvm.failoverHostMatching.enabled` Helm value (default `false`) and is a no-op when disabled. What it
 removes depends on the request:
 
 - **Ordinary (non-evacuation) requests:** it removes *every* failover host, so no new VM is placed on a host

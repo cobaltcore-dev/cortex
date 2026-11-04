@@ -70,8 +70,12 @@ func (m *Matcher) ConfirmAndMarkInUse(ctx context.Context, request api.ExternalS
 	if err := m.List(ctx, &reservations); err != nil {
 		return err
 	}
-	// Collect the failover host reservations whose partition includes the source
-	// host, i.e. the reservations this host may evacuate onto.
+	// Re-derive the selected reservation with the same deterministic rule the
+	// filter and weigher used over the same snapshot, so we confirm the one they
+	// shaped the candidates around: among the reservations whose partition
+	// includes the source host, prefer the one already in use by this very source
+	// (gang-evacuation reuse), never one in use by a different source (that would
+	// steal an active landing zone), otherwise the first by target host name.
 	var matching []v1alpha1.Reservation
 	for _, res := range reservations.Items {
 		if res.Spec.Type != v1alpha1.ReservationTypeFailoverHost || res.Spec.FailoverHostReservation == nil {
@@ -81,15 +85,6 @@ func (m *Matcher) ConfirmAndMarkInUse(ctx context.Context, request api.ExternalS
 			matching = append(matching, res)
 		}
 	}
-	if len(matching) == 0 {
-		log.V(1).Info("no failover host reservation for source host", "sourceHost", sourceHost)
-		m.Monitor.RecordEvacuationWithoutReservation(request.Spec.Data.AvailabilityZone)
-		return nil
-	}
-
-	// Re-derive the selected reservation with the same deterministic rule the
-	// filter and weigher used, so we confirm the one they shaped the candidates
-	// around. Sort by target host so selection is stable.
 	sort.Slice(matching, func(i, j int) bool {
 		return matching[i].Spec.TargetHost < matching[j].Spec.TargetHost
 	})
@@ -102,8 +97,6 @@ func (m *Matcher) ConfirmAndMarkInUse(ctx context.Context, request api.ExternalS
 			}
 			continue
 		}
-		// In use: reuse it only if it is in use by this very source host, which is
-		// the gang-evacuation path — the whole gang lands on the same target.
 		if res.Status.FailoverHostReservation != nil &&
 			res.Status.FailoverHostReservation.SourceHost == sourceHost {
 			selected = res
@@ -111,10 +104,9 @@ func (m *Matcher) ConfirmAndMarkInUse(ctx context.Context, request api.ExternalS
 		}
 	}
 	if selected == nil {
-		// Every matching reservation is already absorbing another source host's
-		// gang. Surface it like the no-reservation case.
-		log.V(1).Info("all failover host reservations for source host are in use by other sources",
-			"sourceHost", sourceHost)
+		// Either no reservation can rescue this source, or every matching one is
+		// already absorbing another source host's gang. Surface it either way.
+		log.V(1).Info("no selectable failover host reservation for source host", "sourceHost", sourceHost)
 		m.Monitor.RecordEvacuationWithoutReservation(request.Spec.Data.AvailabilityZone)
 		return nil
 	}
