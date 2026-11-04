@@ -120,15 +120,18 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 	}
 
 	// Subtract reserved resources by Reservations.
-	// TODO: in-flight reservations double-count against the landed VM. Once a
-	// VM has landed on a host, that host's Status.Allocation already includes
-	// the VM, but the in-flight reservation for the same VM/host (held until the
-	// owning operation completes) is subtracted again below. The capacity filter
-	// should not count both the VM allocation and its in-flight reservation for
-	// the same subject on the same host. Fixed in a follow-up commit.
 	var reservations v1alpha1.ReservationList
 	if err := s.Client.List(context.Background(), &reservations); err != nil {
 		return nil, err
+	}
+	// Per-(VM, host) in-flight rule (ADR 8, UC2): once a VM lands on a host, its
+	// smallest in-flight hold there is already counted in hv.Status.Allocation,
+	// so skip it to avoid double-counting. Compute the skip set per host.
+	skipInFlightByHost := make(map[string]map[string]struct{})
+	for _, hv := range hvs.Items {
+		if skip := inFlightHoldsToSkip(reservations.Items, hv); len(skip) > 0 {
+			skipInFlightByHost[hv.Name] = skip
+		}
 	}
 	for _, reservation := range reservations.Items {
 		// Check if this reservation type should be ignored — applies regardless of ready state.
@@ -254,6 +257,15 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request api.External
 					"reservation", reservation.Name,
 					"host", host)
 				continue
+			}
+			// Skip the smallest in-flight hold of a VM already landed on this
+			// host; its resources are already in hv.Status.Allocation.
+			if skip, ok := skipInFlightByHost[host]; ok {
+				if _, drop := skip[reservationKey(&reservation)]; drop {
+					traceLog.V(1).Info("skipping in-flight hold already counted in host allocation",
+						"reservation", reservation.Name, "host", host)
+					continue
+				}
 			}
 			if cpu, ok := resourcesToBlock["cpu"]; ok {
 				if freeCPU, exists := freeResourcesByHost[host]["cpu"]; exists {

@@ -1719,3 +1719,57 @@ func TestFilterHasEnoughCapacity_VMInterReservationMigration(t *testing.T) {
 		})
 	}
 }
+
+// TestFilterHasEnoughCapacity_InFlightDoubleCount verifies the per-(VM, host)
+// in-flight rule (ADR 8, UC2): once a VM is Active on a host, that host's
+// Allocation already includes it, so its smallest in-flight hold there must not
+// be subtracted again. The larger target hold of a resize is still counted.
+func TestFilterHasEnoughCapacity_InFlightDoubleCount(t *testing.T) {
+	scheme := buildTestScheme(t)
+	// host1: 16 CPU effective, 8 CPU allocated (vm-landed uses 8) -> 8 CPU free.
+	landedHost := newHypervisor("host1", "16", "8", "32Gi", "16Gi")
+	landedHost.Status.Instances = []hv1.Instance{{ID: "vm-landed", Active: true}}
+	otherHost := newHypervisor("host2", "16", "0", "32Gi", "0")
+
+	tests := []struct {
+		name          string
+		reservations  []*v1alpha1.Reservation
+		expectedHosts []string
+		filteredHosts []string
+	}{
+		{
+			// vm-landed's single in-flight hold (8 CPU) is already in Allocation;
+			// skipping it leaves 8 CPU free, enough for the 4-CPU request.
+			name:          "landed VM in-flight hold is not double-counted",
+			reservations:  []*v1alpha1.Reservation{newInFlightReservation("inflight-landed", "vm-landed", "8", "16Gi")},
+			expectedHosts: []string{"host1", "host2"},
+		},
+		{
+			// Resize of vm-landed on host1: source hold 8 CPU (old, in Allocation,
+			// skipped) and target hold 12 CPU (new, still counted) -> host1 filtered.
+			name: "resize target hold on landed host is still counted",
+			reservations: []*v1alpha1.Reservation{
+				newInFlightReservation("inflight-source", "vm-landed", "8", "16Gi"),
+				newInFlightReservation("inflight-target", "vm-landed", "12", "24Gi"),
+			},
+			expectedHosts: []string{"host2"},
+			filteredHosts: []string{"host1"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objects := []client.Object{landedHost.DeepCopy(), otherHost.DeepCopy()}
+			for _, r := range tt.reservations {
+				objects = append(objects, r.DeepCopy())
+			}
+			step := &FilterHasEnoughCapacity{}
+			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+			request := newNovaRequest("instance-new", "project-A", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2"})
+			result, err := step.Run(logr.Discard(), request)
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			assertActivations(t, result.Activations, tt.expectedHosts, tt.filteredHosts)
+		})
+	}
+}
