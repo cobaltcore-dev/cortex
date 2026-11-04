@@ -75,7 +75,9 @@ func (m *Matcher) ConfirmAndMarkInUse(ctx context.Context, request api.ExternalS
 	// shaped the candidates around: among the reservations whose partition
 	// includes the source host, prefer the one already in use by this very source
 	// (gang-evacuation reuse), never one in use by a different source (that would
-	// steal an active landing zone), otherwise the first by target host name.
+	// steal an active landing zone), otherwise the first Active one by target host
+	// name. A not-yet-in-use reservation is only eligible once it is Active
+	// (drained and empty); a still-draining, not-yet-Active one is never pinned.
 	var matching []v1alpha1.Reservation
 	for _, res := range reservations.Items {
 		if res.Spec.Type != v1alpha1.ReservationTypeFailoverHost || res.Spec.FailoverHostReservation == nil {
@@ -92,7 +94,7 @@ func (m *Matcher) ConfirmAndMarkInUse(ctx context.Context, request api.ExternalS
 	for i := range matching {
 		res := &matching[i]
 		if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
-			if selected == nil {
+			if selected == nil && meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive) {
 				selected = res
 			}
 			continue

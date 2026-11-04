@@ -17,10 +17,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-// failoverHostReservation builds a failover host reservation targeting targetHost
-// (with statusHost as its actual host), able to rescue the given source hosts.
+// failoverHostReservation builds an Active failover host reservation targeting
+// targetHost (with statusHost as its actual host), able to rescue the given
+// source hosts. Active is the state in which a reservation can be selected as an
+// evacuation target; use notActive() to drop it back to the draining state.
 func failoverHostReservation(targetHost, statusHost string, sourceHosts ...string) *v1alpha1.Reservation {
-	return &v1alpha1.Reservation{
+	res := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{Name: "failover-host-" + targetHost},
 		Spec: v1alpha1.ReservationSpec{
 			Type:       v1alpha1.ReservationTypeFailoverHost,
@@ -31,6 +33,24 @@ func failoverHostReservation(targetHost, statusHost string, sourceHosts ...strin
 		},
 		Status: v1alpha1.ReservationStatus{Host: statusHost},
 	}
+	meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+		Type:   v1alpha1.ConditionTypeFailoverHostActive,
+		Status: metav1.ConditionTrue,
+		Reason: "HostDrained",
+	})
+	return res
+}
+
+// notActive drops a reservation out of the Active state, back to the draining
+// stage (the same as a freshly created reservation): it still blocks ordinary
+// VMs but cannot yet be selected for evacuation.
+func notActive(res *v1alpha1.Reservation) *v1alpha1.Reservation {
+	meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+		Type:   v1alpha1.ConditionTypeFailoverHostActive,
+		Status: metav1.ConditionFalse,
+		Reason: "Draining",
+	})
+	return res
 }
 
 // inUseBy marks a failover host reservation as in use by the given source host.
@@ -161,6 +181,28 @@ func TestFilterFailoverHost_Run(t *testing.T) {
 			opts:          FilterFailoverHostOpts{Enabled: true},
 			reservations:  []client.Object{failoverHostReservation("h1", "", "source1")},
 			request:       requestWithHosts(evacuationHints(""), "h1", "h2", "h3"),
+			expectedHosts: []string{"h2", "h3"},
+		},
+		{
+			name: "evacuation - a not-yet-active target is still blocked",
+			opts: FilterFailoverHostOpts{Enabled: true},
+			// h1 is freshly created (not Active yet), so it cannot be a landing
+			// zone and is removed like any other reserved host, even though the
+			// source could otherwise evacuate onto it.
+			reservations:  []client.Object{notActive(failoverHostReservation("h1", "", "source1"))},
+			request:       requestWithHosts(evacuationHints("source1"), "h1", "h2", "h3"),
+			expectedHosts: []string{"h2", "h3"},
+		},
+		{
+			name: "evacuation - selects the active target and prunes a not-yet-active one",
+			opts: FilterFailoverHostOpts{Enabled: true},
+			// h1 sorts first but is not Active yet; h2 is Active, so h2 is the
+			// selected target and h1 is pruned as an unusable reserved host.
+			reservations: []client.Object{
+				notActive(failoverHostReservation("h1", "", "source1")),
+				failoverHostReservation("h2", "", "source1"),
+			},
+			request:       requestWithHosts(evacuationHints("source1"), "h1", "h2", "h3"),
 			expectedHosts: []string{"h2", "h3"},
 		},
 	}

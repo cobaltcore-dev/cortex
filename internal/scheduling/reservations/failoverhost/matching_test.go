@@ -15,10 +15,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// matcherReservation builds a failover host reservation targeting targetHost
-// and able to rescue the given source hosts.
+// matcherReservation builds an Active failover host reservation targeting
+// targetHost and able to rescue the given source hosts. Active is the state in
+// which a reservation can be selected as an evacuation target.
 func matcherReservation(targetHost string, sourceHosts ...string) *v1alpha1.Reservation {
-	return &v1alpha1.Reservation{
+	res := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{Name: "failover-host-" + targetHost},
 		Spec: v1alpha1.ReservationSpec{
 			Type:       v1alpha1.ReservationTypeFailoverHost,
@@ -28,6 +29,23 @@ func matcherReservation(targetHost string, sourceHosts ...string) *v1alpha1.Rese
 			},
 		},
 	}
+	meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+		Type:   v1alpha1.ConditionTypeFailoverHostActive,
+		Status: metav1.ConditionTrue,
+		Reason: "HostDrained",
+	})
+	return res
+}
+
+// notActive drops a reservation out of the Active state (the same as a freshly
+// created, still-draining reservation).
+func notActive(res *v1alpha1.Reservation) *v1alpha1.Reservation {
+	meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+		Type:   v1alpha1.ConditionTypeFailoverHostActive,
+		Status: metav1.ConditionFalse,
+		Reason: "Draining",
+	})
+	return res
 }
 
 // inUse marks a reservation as in use by the given source host.
@@ -131,6 +149,20 @@ func TestMatcher_ConfirmAndMarkInUse(t *testing.T) {
 				res := getReservation(t, c, "failover-host-target1")
 				if meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
 					t.Error("expected target1 to NOT be pinned when it is not the top candidate")
+				}
+			},
+		},
+		{
+			name: "does not pin a not-yet-active reservation",
+			// target1 is the top candidate but is still draining (not Active), so
+			// it is not a selectable landing zone and must not be pinned.
+			reservations: []*v1alpha1.Reservation{notActive(matcherReservation("target1", "source1"))},
+			request:      evacuationRequest("source1"),
+			orderedHosts: []string{"target1", "host2"},
+			check: func(t *testing.T, c client.Client) {
+				res := getReservation(t, c, "failover-host-target1")
+				if meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
+					t.Error("expected a not-yet-active target1 to NOT be pinned")
 				}
 			},
 		},

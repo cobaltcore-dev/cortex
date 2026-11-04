@@ -70,8 +70,9 @@ func (s *WeigherFailoverHost) Run(traceLog logr.Logger, request api.ExternalSche
 	// same deterministic rule the filter_failover_host filter used over the same
 	// snapshot: among the reservations whose partition includes the source host,
 	// prefer the one already in use by this very source (gang-evacuation reuse),
-	// never one in use by a different source, otherwise the first by target host
-	// name.
+	// never one in use by a different source, otherwise the first Active one by
+	// target host name. A not-yet-in-use reservation is only eligible once it is
+	// Active (drained and empty); a still-draining, not-yet-Active one is never lifted.
 	var matching []v1alpha1.Reservation
 	for _, res := range reservations.Items {
 		if res.Spec.Type != v1alpha1.ReservationTypeFailoverHost || res.Spec.FailoverHostReservation == nil {
@@ -88,7 +89,7 @@ func (s *WeigherFailoverHost) Run(traceLog logr.Logger, request api.ExternalSche
 	for i := range matching {
 		res := &matching[i]
 		if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
-			if target == "" {
+			if target == "" && meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive) {
 				target = res.Spec.TargetHost
 			}
 			continue

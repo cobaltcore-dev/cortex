@@ -16,8 +16,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+// failoverHostReservation builds an Active failover host reservation (the state
+// in which it can be selected as an evacuation target).
 func failoverHostReservation(targetHost string, sourceHosts ...string) *v1alpha1.Reservation {
-	return &v1alpha1.Reservation{
+	res := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{Name: "failover-host-" + targetHost},
 		Spec: v1alpha1.ReservationSpec{
 			Type:       v1alpha1.ReservationTypeFailoverHost,
@@ -27,6 +29,23 @@ func failoverHostReservation(targetHost string, sourceHosts ...string) *v1alpha1
 			},
 		},
 	}
+	meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+		Type:   v1alpha1.ConditionTypeFailoverHostActive,
+		Status: metav1.ConditionTrue,
+		Reason: "HostDrained",
+	})
+	return res
+}
+
+// notActive drops a reservation out of the Active state (the same as a freshly
+// created, still-draining reservation).
+func notActive(res *v1alpha1.Reservation) *v1alpha1.Reservation {
+	meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+		Type:   v1alpha1.ConditionTypeFailoverHostActive,
+		Status: metav1.ConditionFalse,
+		Reason: "Draining",
+	})
+	return res
 }
 
 func failoverInUseBy(res *v1alpha1.Reservation, sourceHost string) *v1alpha1.Reservation {
@@ -114,6 +133,23 @@ func TestWeigherFailoverHost_Run(t *testing.T) {
 			reservations: []client.Object{failoverHostReservation("h1", "otherSource")},
 			request:      weigherRequest(evacHints("source1"), "h1", "h2"),
 			wantTarget:   "",
+		},
+		{
+			name:         "evacuation - not-yet-active target is not lifted",
+			opts:         WeigherFailoverHostOpts{Enabled: true},
+			reservations: []client.Object{notActive(failoverHostReservation("h1", "source1"))},
+			request:      weigherRequest(evacHints("source1"), "h1", "h2"),
+			wantTarget:   "",
+		},
+		{
+			name: "evacuation - lifts the active target over a not-yet-active one",
+			opts: WeigherFailoverHostOpts{Enabled: true},
+			reservations: []client.Object{
+				notActive(failoverHostReservation("h1", "source1")),
+				failoverHostReservation("h2", "source1"),
+			},
+			request:    weigherRequest(evacHints("source1"), "h1", "h2", "h3"),
+			wantTarget: "h2",
 		},
 		{
 			name:         "evacuation - selected target not among candidates - no effect",

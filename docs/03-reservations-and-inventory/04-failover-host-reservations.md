@@ -460,8 +460,11 @@ stateDiagram-v2
 ```
 
 - **Designated** — the host has been chosen as a target but may still have VMs that need draining off it. No
-  *new* VMs are placed here. It stays in this stage until the host is empty.
-- **Active** — the host is empty and ready to absorb an evacuation.
+  *new* VMs are placed here. It stays in this stage until the host is empty. This is the *absence* of the
+  `FailoverHostActive` condition rather than a condition of its own: a freshly created reservation is
+  Designated by default.
+- **Active** — the host is empty and ready to absorb an evacuation (the `FailoverHostActive` condition is
+  True). Only from here on can an evacuation be routed onto it.
 - **Failed** — draining failed repeatedly or took too long; the host is held back from being re-chosen for a
   cooldown period.
 - **In Use** — a gang evacuation onto this host is underway (and may absorb further failures until it
@@ -496,8 +499,17 @@ snapshot within one pipeline run, so they always agree without coordinating:
 2. If one is already **In Use** *by this same source host*, that is the selected target (the
    gang-evacuation path — the whole gang lands on the same target).
 3. Otherwise ignore any reservation **In Use** by a *different* source (pinning it would steal a landing
-   zone actively absorbing another host's gang), sort the rest by target host name, and take the first.
+   zone actively absorbing another host's gang), and any reservation that is not yet **Active** (still
+   draining, so not a usable landing zone yet — see the lifecycle below), then sort the rest by target
+   host name and take the first.
 4. If nothing remains, there is no match and the evacuation simply uses the ordinary candidates.
+
+> [!NOTE]
+> A reservation only becomes a *selectable* evacuation target once it is **Active** (its host has been
+> fully drained). Before that — from the moment it is created, while it is still draining — it already
+> **blocks** ordinary placements (the filter removes it for non-evacuation requests), but it is skipped by
+> step 3 above. This keeps VMs off a host that is being emptied without yet routing an evacuation onto a
+> host that is not actually empty.
 
 ### The filter: block reserved hosts, keep only the selected target
 

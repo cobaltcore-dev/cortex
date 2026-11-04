@@ -35,11 +35,11 @@ const (
 	// its workloads to a designated spot. If this type is set, the reservation
 	// will follow this lifecycle:
 	//
-	// 1. Designation. The reservation has been created on a host. There may be
-	// virtual machines running on this host that need live migration away. As
-	// long as not all virtual machines can be migrated away from the host, the
-	// reservation stays in this state. For pipeline: no new virtual machine
-	// onto this host.
+	// 1. Designation. The reservation has been created on a host, but is not yet
+	// Active (it has no FailoverHostActive=True condition). There may be virtual
+	// machines running on this host that need live migration away. As long as not
+	// all virtual machines can be migrated away from the host, the reservation
+	// stays in this state. For pipeline: no new virtual machine onto this host.
 	//
 	// 2. Active. No more virtual machines on this host. On evacuation this
 	// space can be used.
@@ -308,21 +308,14 @@ type FailoverHostReservationStatus struct {
 type ReservationConditionType = string
 
 const (
-	// ConditionTypeFailoverHostDesignated indicates that the reservation has
-	// been created on a host. There may be virtual machines running on this
-	// host that need live migration away. As long as not all virtual machines
-	// can be migrated away from the host, the reservation stays in this state.
-	// For pipeline: no new virtual machine onto this host.
-	//
-	// status=Unknown: It is unknown if the failover host has been designated.
-	// status=False: The failover host has not been designated (there was an error).
-	// status=True: The failover host has been designated successfully.
-	ConditionTypeFailoverHostDesignated ReservationConditionType = "FailoverHostDesignated"
-
 	// ConditionTypeFailoverHostActive indicates that the failover host is
 	// active and ready to accept evacuations. No more virtual machines have
 	// been seen on this host, so it is empty and ready to receive all vms
 	// from another host.
+	//
+	// A reservation without this condition set to True (including a freshly
+	// created one) represents the draining stage: it already blocks new virtual
+	// machines from the host, but is not yet a selectable evacuation target.
 	//
 	// status=Unknown: The failover host is not yet ready to be used.
 	// status=False: There has been some error or issue preventing the failover

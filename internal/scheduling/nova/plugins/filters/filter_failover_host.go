@@ -73,9 +73,15 @@ func (s *FilterFailoverHost) Run(traceLog logr.Logger, request api.ExternalSched
 	// pure function of the reservation snapshot — among the reservations whose
 	// partition includes the source host, prefer the one already in use by this
 	// very source (gang-evacuation reuse), never one in use by a different source
-	// (that would steal an active landing zone), otherwise the first by target
-	// host name — so the weigher_failover_host weigher reaches the same target
-	// over the same snapshot without coordinating.
+	// (that would steal an active landing zone), otherwise the first Active one
+	// by target host name — so the weigher_failover_host weigher reaches the same
+	// target over the same snapshot without coordinating.
+	//
+	// A not-yet-in-use reservation is only eligible once it is Active (host
+	// drained and empty, ready to absorb an evacuation). A reservation still being
+	// drained (not yet Active, e.g. freshly created) is not a valid landing zone
+	// yet, so it is never selected here — but note it is still blocked below,
+	// keeping ordinary VMs off it while it drains.
 	var keep string
 	if intent, err := request.GetIntent(); err == nil && intent == api.EvacuateIntent {
 		if sourceHost, err := request.Spec.Data.GetSchedulerHintStr("source_host"); err == nil && sourceHost != "" {
@@ -94,7 +100,7 @@ func (s *FilterFailoverHost) Run(traceLog logr.Logger, request api.ExternalSched
 			for i := range matching {
 				res := &matching[i]
 				if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
-					if keep == "" {
+					if keep == "" && meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive) {
 						keep = res.Spec.TargetHost
 					}
 					continue
@@ -114,9 +120,9 @@ func (s *FilterFailoverHost) Run(traceLog logr.Logger, request api.ExternalSched
 		}
 		// Block both the desired (TargetHost) and actual (Status.Host) host to
 		// cover the window while the reservation is being placed. A reservation
-		// only exists from the Designated stage onward (the controller deletes
-		// Revoked/Used ones), so its presence is enough to keep new virtual
-		// machines off the host.
+		// blocks from creation onward (the controller deletes Revoked/Used ones),
+		// so its presence is enough to keep new virtual machines off the host,
+		// whether or not it is Active yet.
 		for _, host := range []string{reservation.Spec.TargetHost, reservation.Status.Host} {
 			if host == "" || host == keep {
 				continue
