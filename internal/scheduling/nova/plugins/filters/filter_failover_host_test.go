@@ -258,3 +258,12 @@ func TestFilterFailoverHost_Index(t *testing.T) {
 		t.Fatal("expected factory to return a *FilterFailoverHost")
 	}
 }
+
+func TestFilterFailoverHost_OptsValidate(t *testing.T) {
+	if err := (FilterFailoverHostOpts{}).Validate(); err != nil {
+		t.Errorf("expected nil error, got %v", err)
+	}
+	if err := (FilterFailoverHostOpts{Enabled: true}).Validate(); err != nil {
+		t.Errorf("expected nil error, got %v", err)
+	}
+}

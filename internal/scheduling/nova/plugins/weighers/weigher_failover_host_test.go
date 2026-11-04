@@ -197,3 +197,12 @@ func TestWeigherFailoverHost_Index(t *testing.T) {
 		t.Fatal("expected factory to return a *WeigherFailoverHost")
 	}
 }
+
+func TestWeigherFailoverHost_OptsValidate(t *testing.T) {
+	if err := (WeigherFailoverHostOpts{}).Validate(); err != nil {
+		t.Errorf("expected nil error, got %v", err)
+	}
+	if err := (WeigherFailoverHostOpts{Enabled: true}).Validate(); err != nil {
+		t.Errorf("expected nil error, got %v", err)
+	}
+}

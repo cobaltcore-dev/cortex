@@ -243,3 +243,130 @@ func TestMatcher_ConfirmAndMarkInUse(t *testing.T) {
 		})
 	}
 }
+
+// nonFailoverReservation builds a reservation of a different type, to prove
+// SelectFailoverHost ignores anything that is not a failover host reservation.
+func nonFailoverReservation(targetHost string) v1alpha1.Reservation {
+	return v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "cr-" + targetHost},
+		Spec: v1alpha1.ReservationSpec{
+			Type:       v1alpha1.ReservationTypeCommittedResource,
+			TargetHost: targetHost,
+		},
+	}
+}
+
+// TestSelectFailoverHost pins the deterministic selection rule that the filter,
+// the weigher and the matcher all share. Each case lists the reservation
+// snapshot and asserts which target host (if any) is selected for source1.
+func TestSelectFailoverHost(t *testing.T) {
+	// nilSpec is a failover host reservation whose FailoverHostReservation spec is
+	// nil; it must be skipped rather than panic.
+	nilSpec := matcherReservation("nilspec", "source1")
+	nilSpec.Spec.FailoverHostReservation = nil
+
+	tests := []struct {
+		name         string
+		reservations []v1alpha1.Reservation
+		sourceHost   string
+		want         string // target host, or "" for no selection
+	}{
+		{
+			name:         "no reservations at all",
+			reservations: nil,
+			sourceHost:   "source1",
+			want:         "",
+		},
+		{
+			name:         "ignores non-failover-host reservations",
+			reservations: []v1alpha1.Reservation{nonFailoverReservation("t1")},
+			sourceHost:   "source1",
+			want:         "",
+		},
+		{
+			name:         "ignores a failover host reservation with a nil spec",
+			reservations: []v1alpha1.Reservation{*nilSpec},
+			sourceHost:   "source1",
+			want:         "",
+		},
+		{
+			name:         "ignores a reservation whose partition excludes the source",
+			reservations: []v1alpha1.Reservation{*matcherReservation("t1", "otherSource")},
+			sourceHost:   "source1",
+			want:         "",
+		},
+		{
+			name:         "picks the single active match",
+			reservations: []v1alpha1.Reservation{*matcherReservation("t1", "source1")},
+			sourceHost:   "source1",
+			want:         "t1",
+		},
+		{
+			name: "picks the first active match by target host name",
+			reservations: []v1alpha1.Reservation{
+				*matcherReservation("t2", "source1"),
+				*matcherReservation("t1", "source1"),
+			},
+			sourceHost: "source1",
+			want:       "t1",
+		},
+		{
+			name:         "a not-yet-active reservation is not selectable",
+			reservations: []v1alpha1.Reservation{*notActive(matcherReservation("t1", "source1"))},
+			sourceHost:   "source1",
+			want:         "",
+		},
+		{
+			name: "skips a not-yet-active one and picks the next active by name",
+			reservations: []v1alpha1.Reservation{
+				*notActive(matcherReservation("t1", "source1")),
+				*matcherReservation("t2", "source1"),
+			},
+			sourceHost: "source1",
+			want:       "t2",
+		},
+		{
+			name: "reuses the in-use reservation for this source over a name-earlier free one",
+			reservations: []v1alpha1.Reservation{
+				*matcherReservation("t0", "source1"),
+				*inUse(matcherReservation("t1", "source1"), "source1"),
+			},
+			sourceHost: "source1",
+			want:       "t1",
+		},
+		{
+			name: "never selects a reservation in use by another source",
+			reservations: []v1alpha1.Reservation{
+				*inUse(matcherReservation("t1", "source1", "source2"), "source2"),
+				*matcherReservation("t2", "source1", "source2"),
+			},
+			sourceHost: "source1",
+			want:       "t2",
+		},
+		{
+			name: "all matches in use by others yields no selection",
+			reservations: []v1alpha1.Reservation{
+				*inUse(matcherReservation("t1", "source1", "source2"), "source2"),
+			},
+			sourceHost: "source1",
+			want:       "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := SelectFailoverHost(tt.reservations, tt.sourceHost)
+			if tt.want == "" {
+				if got != nil {
+					t.Fatalf("expected no selection, got %q", got.Spec.TargetHost)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatalf("expected %q, got no selection", tt.want)
+			}
+			if got.Spec.TargetHost != tt.want {
+				t.Fatalf("expected %q, got %q", tt.want, got.Spec.TargetHost)
+			}
+		})
+	}
+}
