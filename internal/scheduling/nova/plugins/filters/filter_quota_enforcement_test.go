@@ -86,7 +86,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 						Amount:           resource.MustParse("100Gi"),
 					},
 					Status: v1alpha1.CommittedResourceStatus{
-						UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("50Gi")},
+						Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("50Gi")}},
 					},
 				},
 			},
@@ -113,7 +113,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 						Amount:           resource.MustParse("100Gi"),
 					},
 					Status: v1alpha1.CommittedResourceStatus{
-						UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("90Gi")},
+						Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("90Gi")}},
 					},
 				},
 			},
@@ -140,7 +140,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 						Amount:           resource.MustParse("50Gi"),
 					},
 					Status: v1alpha1.CommittedResourceStatus{
-						UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("50Gi")},
+						Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("50Gi")}},
 					},
 				},
 				&v1alpha1.ProjectQuota{
@@ -182,7 +182,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 						Amount:           resource.MustParse("50Gi"),
 					},
 					Status: v1alpha1.CommittedResourceStatus{
-						UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("50Gi")},
+						Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("50Gi")}},
 					},
 				},
 				&v1alpha1.ProjectQuota{
@@ -344,7 +344,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 						Amount:           resource.MustParse("100Gi"),
 					},
 					Status: v1alpha1.CommittedResourceStatus{
-						UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("0")},
+						Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("0")}},
 					},
 				},
 				&v1alpha1.ProjectQuota{
@@ -386,7 +386,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 						Amount:           resource.MustParse("100Gi"),
 					},
 					Status: v1alpha1.CommittedResourceStatus{
-						UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("0")},
+						Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("0")}},
 					},
 				},
 				&v1alpha1.ProjectQuota{
@@ -824,7 +824,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 						Amount:           resource.MustParse("100Gi"),
 					},
 					Status: v1alpha1.CommittedResourceStatus{
-						UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("50Gi")},
+						Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("50Gi")}},
 					},
 				},
 				&v1alpha1.ProjectQuota{

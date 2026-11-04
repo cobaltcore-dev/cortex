@@ -52,8 +52,8 @@ func mkVM(id, az, flavorName string, ramMiB, vcpus int64, createdAt time.Time, p
 		FlavorName:       flavorName,
 		ProjectID:        projectID,
 		Resources: map[string]resource.Quantity{
-			"memory": *resource.NewQuantity(ramMiB*1024*1024, resource.BinarySI),
-			"vcpus":  *resource.NewQuantity(vcpus, resource.DecimalSI),
+			string(hv1.ResourceMemory): *resource.NewQuantity(ramMiB*1024*1024, resource.BinarySI),
+			string(hv1.ResourceCPU):    *resource.NewQuantity(vcpus, resource.DecimalSI),
 		},
 	}
 }
@@ -533,7 +533,7 @@ func makeUsageTestReservationWithTimes(commitmentUUID, projectID, flavorGroup, a
 			Type:             v1alpha1.ReservationTypeCommittedResource,
 			AvailabilityZone: az,
 			Resources: map[hv1.ResourceName]resource.Quantity{
-				"memory": *resource.NewQuantity(memoryBytes, resource.BinarySI),
+				hv1.ResourceMemory: *resource.NewQuantity(memoryBytes, resource.BinarySI),
 			},
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 				CommitmentUUID: commitmentUUID,

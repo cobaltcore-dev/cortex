@@ -10,6 +10,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,6 +35,7 @@ func TestCRLifecycle_PAYGRollback(t *testing.T) {
 		UUID:              "vm-payg-rollback",
 		FlavorName:        "test-flavor",
 		CurrentHypervisor: "host-1",
+		Resources:         map[string]resource.Quantity{string(hv1.ResourceMemory): resource.MustParse("4Gi")},
 	}}})
 	defer env.close()
 
@@ -56,8 +58,8 @@ func TestCRLifecycle_PAYGRollback(t *testing.T) {
 	if slots[0].Spec.TargetHost != "host-1" {
 		t.Errorf("phase 1: expected pre-allocated slot on host-1, got %q", slots[0].Spec.TargetHost)
 	}
-	if _, ok := slots[0].Spec.CommittedResourceReservation.Allocations["vm-payg-rollback"]; !ok {
-		t.Error("phase 1: expected vm-payg-rollback in Spec.Allocations")
+	if slots[0].Annotations[v1alpha1.AnnotationCandidateAllocation] != "vm-payg-rollback" {
+		t.Errorf("phase 1: expected annotation %s=vm-payg-rollback, got %q", v1alpha1.AnnotationCandidateAllocation, slots[0].Annotations[v1alpha1.AnnotationCandidateAllocation])
 	}
 	preAllocatedSlotName := slots[0].Name
 
@@ -112,8 +114,8 @@ func TestCRLifecycle_PAYGRollback(t *testing.T) {
 	if surviving.Spec.TargetHost != "host-1" {
 		t.Errorf("rollback: expected TargetHost host-1, got %q", surviving.Spec.TargetHost)
 	}
-	if _, ok := surviving.Spec.CommittedResourceReservation.Allocations["vm-payg-rollback"]; !ok {
-		t.Error("rollback: expected vm-payg-rollback in Spec.Allocations of surviving slot")
+	if surviving.Annotations[v1alpha1.AnnotationCandidateAllocation] != "vm-payg-rollback" {
+		t.Errorf("rollback: expected annotation %s=vm-payg-rollback, got %q", v1alpha1.AnnotationCandidateAllocation, surviving.Annotations[v1alpha1.AnnotationCandidateAllocation])
 	}
 	intgAssertCRCondition(t, env.k8sClient, []string{cr.Name}, metav1.ConditionFalse, v1alpha1.CommittedResourceReasonRejected)
 }

@@ -111,7 +111,6 @@ func newE2EEnv(t *testing.T, flavors []*TestFlavor, infoVersion int64, scheduler
 		Scheme: scheme,
 		Conf: commitments.ReservationControllerConfig{
 			SchedulerURL:          schedulerSrv.URL,
-			AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute},
 			RequeueIntervalActive: metav1.Duration{Duration: 5 * time.Minute},
 			RequeueIntervalRetry:  metav1.Duration{Duration: 100 * time.Millisecond},
 		},

@@ -53,8 +53,10 @@ func ClassifyNoHostFound(
 	totalUsed := resource.Quantity{}
 	for _, cr := range activeCRs {
 		totalCapacity.Add(cr.Spec.Amount)
-		if used, ok := cr.Status.UsedResources["memory"]; ok {
-			totalUsed.Add(used)
+		if cr.Status.Billing != nil {
+			if used, ok := cr.Status.Billing.UsedResources["memory"]; ok {
+				totalUsed.Add(used)
+			}
 		}
 	}
 	if totalUsed.Cmp(totalCapacity) >= 0 {
@@ -87,8 +89,10 @@ func ClassifyPlacement(
 	totalUsed := resource.Quantity{}
 	for _, cr := range activeCRs {
 		totalCapacity.Add(cr.Spec.Amount)
-		if used, ok := cr.Status.UsedResources["memory"]; ok {
-			totalUsed.Add(used)
+		if cr.Status.Billing != nil {
+			if used, ok := cr.Status.Billing.UsedResources["memory"]; ok {
+				totalUsed.Add(used)
+			}
 		}
 	}
 	if totalUsed.Cmp(totalCapacity) >= 0 {

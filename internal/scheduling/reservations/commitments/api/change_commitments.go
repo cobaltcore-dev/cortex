@@ -140,7 +140,7 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	api.changeMutex.Lock()
 	defer api.changeMutex.Unlock()
 
-	ctx := reservations.WithGlobalRequestID(context.Background(), "committed-resource-"+requestID)
+	ctx := reservations.WithGlobalRequestID(context.Background(), requestID)
 	logger := commitments.LoggerFromContext(ctx).WithValues("endpoint", "/commitments/v1/change-commitments")
 
 	if r.Method != http.MethodPost {
@@ -456,7 +456,7 @@ ProcessLoop:
 			if len(toWatch) == 1 {
 				sanitisedReason = "internal error on commitment " + strings.TrimPrefix(toWatch[0].name, "commitment-")
 			} else {
-				sanitisedReason = "internal error (request ID: " + strings.TrimPrefix(reservations.GlobalRequestIDFromContext(ctx), "committed-resource-") + ")"
+				sanitisedReason = "internal error (request ID: " + reservations.GlobalRequestIDFromContext(ctx) + ")"
 			}
 			api.monitor.timeouts.WithLabelValues("false").Inc()
 			rollback = true
@@ -728,7 +728,7 @@ func (api *HTTPAPI) performDryRun(ctx context.Context, logger logr.Logger, req l
 	probeDomainID := firstProjectMeta.Domain.UUID
 
 	// Probe ID is derived from the HTTP request ID for log traceability.
-	ctxRequestID := strings.TrimPrefix(reservations.GlobalRequestIDFromContext(ctx), "committed-resource-")
+	ctxRequestID := reservations.GlobalRequestIDFromContext(ctx)
 	if len(ctxRequestID) > 8 {
 		ctxRequestID = ctxRequestID[:8]
 	}

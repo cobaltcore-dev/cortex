@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 )
@@ -37,8 +38,9 @@ type CommittedResourceChangeReconciler struct {
 }
 
 func (r *CommittedResourceChangeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx = commitments.WithNewGlobalRequestID(ctx)
-	logger := commitments.LoggerFromContext(ctx).WithValues("committedResourceChangeRequest", req.Name)
+	ctx = commitments.WithNewReconcileID(ctx)
+	ctx = reservations.WithRequestID(ctx, req.Name)
+	logger := commitments.LoggerFromContext(ctx)
 
 	var tx v1alpha1.CommittedResourceChange
 	if err := r.Get(ctx, req.NamespacedName, &tx); err != nil {

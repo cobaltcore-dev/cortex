@@ -76,7 +76,6 @@ func newCommittedReservation(name, targetHost, observedHost, projectID, flavorNa
 				ProjectID:     projectID,
 				ResourceName:  flavorName,
 				ResourceGroup: flavorGroup,
-				Allocations:   nil,
 			},
 		},
 		Status: v1alpha1.ReservationStatus{
