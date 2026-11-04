@@ -105,7 +105,7 @@ func (d ResourceDemand) Scaled(n int64) ResourceDemand {
 	scaled := make(ResourceDemand, len(d))
 	for rn, perInstance := range d {
 		total := perInstance.DeepCopy()
-		total.Set(total.Value() * n)
+		total.Mul(n)
 		scaled[rn] = total
 	}
 	return scaled
