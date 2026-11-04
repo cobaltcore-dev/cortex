@@ -63,18 +63,15 @@ func newFailoverReservationRequest(resourceGroup string, hosts []string) compute
 	}
 
 	return compute.PlacementRequest{
-		ProjectID:        "project-A",
-		InstanceUUID:     "test-instance",
-		NumInstances:     1,
-		Intent:           api.ReserveForFailoverIntent,
-		ResourceGroup:    resourceGroup,
-		HypervisorFamily: compute.HypervisorFamilyKVM,
-		Flavor: compute.FlavorSpec{
-			VCPUs:    4,
-			MemoryMB: 8192,
-		},
-		Hosts:   hostList,
-		Weights: weights,
+		ProjectID:          "project-A",
+		InstanceUUID:       "test-instance",
+		NumInstances:       1,
+		Intent:             api.ReserveForFailoverIntent,
+		ResourceGroup:      resourceGroup,
+		HypervisorFamily:   compute.HypervisorFamilyKVM,
+		RequestedResources: compute.NewResourceDemand(4, 8192),
+		Hosts:              hostList,
+		Weights:            weights,
 	}
 }
 

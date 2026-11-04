@@ -120,15 +120,12 @@ func newNovaRequest(instanceUUID string, evacuation bool, hosts []string) comput
 	}
 
 	req := compute.PlacementRequest{
-		ProjectID:        "project-A",
-		InstanceUUID:     instanceUUID,
-		NumInstances:     1,
-		HypervisorFamily: compute.HypervisorFamilyKVM,
-		Flavor: compute.FlavorSpec{
-			VCPUs:    4,
-			MemoryMB: parseMemoryToMB("8Gi"),
-		},
-		Hosts: hostList,
+		ProjectID:          "project-A",
+		InstanceUUID:       instanceUUID,
+		NumInstances:       1,
+		HypervisorFamily:   compute.HypervisorFamilyKVM,
+		RequestedResources: compute.NewResourceDemand(4, parseMemoryToMB("8Gi")),
+		Hosts:              hostList,
 	}
 	if evacuation {
 		req.Intent = api.EvacuateIntent

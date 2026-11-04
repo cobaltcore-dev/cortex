@@ -20,6 +20,9 @@ package compute
 import (
 	"strings"
 
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
@@ -74,16 +77,38 @@ type Capability struct {
 	Value string
 }
 
-// FlavorSpec is the typed, Nova-agnostic description of the requested flavor.
-// It carries no extra-spec map: the adapter resolves every extra spec the
-// pipeline needs into the typed fields on this struct and on PlacementRequest.
-type FlavorSpec struct {
-	// MemoryMB is the requested memory per instance. 0 means a zero-memory
-	// instance to capacity/bin-pack steps (fits anywhere), so the adapter sets it.
-	MemoryMB uint64
-	// VCPUs is the requested vCPUs per instance. 0 means a zero-CPU instance to
-	// capacity/bin-pack steps (fits anywhere), so the adapter sets it.
-	VCPUs uint64
+// ResourceDemand is the typed, Nova-agnostic description of the resources a
+// placement requests, as a per-resource quantity map keyed by hv1.ResourceName and
+// aligned with the units hypervisors report in their status: memory in bytes, CPU
+// as a plain count. The adapter resolves the flavor sizing into this map; it carries
+// no extra-spec map.
+//
+// A resource absent from the map is not requested — capacity and bin-pack steps
+// treat a missing entry as a zero-sized requirement (fits anywhere).
+type ResourceDemand map[hv1.ResourceName]resource.Quantity
+
+// VCPUs returns the requested vCPU count (0 if unset).
+func (d ResourceDemand) VCPUs() int64 {
+	q := d[hv1.ResourceCPU]
+	return q.Value()
+}
+
+// MemoryBytes returns the requested memory in bytes (0 if unset).
+func (d ResourceDemand) MemoryBytes() int64 {
+	q := d[hv1.ResourceMemory]
+	return q.Value()
+}
+
+// Scaled returns a copy of the demand with every quantity multiplied by n. It is
+// used to turn a per-instance demand into the total for a multi-instance request.
+func (d ResourceDemand) Scaled(n int64) ResourceDemand {
+	scaled := make(ResourceDemand, len(d))
+	for rn, perInstance := range d {
+		total := perInstance.DeepCopy()
+		total.Set(total.Value() * n)
+		scaled[rn] = total
+	}
+	return scaled
 }
 
 // RequestedDestination mirrors the subset of Nova's requested_destination that
@@ -203,10 +228,10 @@ type PlacementRequest struct {
 	// means no hardware-version constraint.
 	HardwareVersion string
 
-	// Flavor is the requested flavor sizing. A zero FlavorSpec means capacity and
-	// bin-pack steps see a zero-sized instance (fits anywhere) — the adapter
-	// always populates it for real placements.
-	Flavor FlavorSpec
+	// RequestedResources is the requested instance sizing as a per-resource quantity
+	// map. A nil or empty map means capacity and bin-pack steps see a zero-sized
+	// instance (fits anywhere) — the adapter always populates it for real placements.
+	RequestedResources ResourceDemand
 
 	// RequiredTraits are trait names the host must have (adapter stripped the
 	// "trait:" prefix and kept the "required" ones). Empty/nil means no required
@@ -258,6 +283,15 @@ var _ lib.FilterWeigherPipelineRequest = PlacementRequest{}
 
 // GetIntent returns the resolved scheduling intent.
 func (r PlacementRequest) GetIntent() v1alpha1.SchedulingIntent { return r.Intent }
+
+// TotalResources returns the full per-request resource demand: the per-instance
+// RequestedResources scaled by NumInstances. Capacity and bin-pack steps place all
+// instances on one host, so they size against this total. NumInstances is used raw
+// (not normalized to 1) — the adapter always sets it >= 1.
+func (r PlacementRequest) TotalResources() ResourceDemand {
+	//nolint:gosec // instance count is a small, non-negative count.
+	return r.RequestedResources.Scaled(int64(r.NumInstances))
+}
 
 // GetHosts returns the compute host names of all candidates.
 func (r PlacementRequest) GetHosts() []string {

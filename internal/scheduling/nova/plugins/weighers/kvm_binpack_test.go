@@ -46,16 +46,13 @@ func newBinpackRequest(memoryMB, vcpus, numInstances uint64, hosts []string) com
 	}
 
 	return compute.PlacementRequest{
-		ProjectID:        "project-A",
-		InstanceUUID:     "instance-123",
-		NumInstances:     numInstances,
-		HypervisorFamily: compute.HypervisorFamilyKVM,
-		Flavor: compute.FlavorSpec{
-			VCPUs:    vcpus,
-			MemoryMB: memoryMB,
-		},
-		Hosts:   hostList,
-		Weights: weights,
+		ProjectID:          "project-A",
+		InstanceUUID:       "instance-123",
+		NumInstances:       numInstances,
+		HypervisorFamily:   compute.HypervisorFamilyKVM,
+		RequestedResources: compute.NewResourceDemand(vcpus, memoryMB),
+		Hosts:              hostList,
+		Weights:            weights,
 	}
 }
 
@@ -471,7 +468,7 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 	}
 }
 
-func TestKVMBinpackStep_calcVMResources(t *testing.T) {
+func TestKVMBinpackStep_TotalResources(t *testing.T) {
 	tests := []struct {
 		name             string
 		request          compute.PlacementRequest
@@ -512,8 +509,7 @@ func TestKVMBinpackStep_calcVMResources(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			step := &KVMBinpackStep{}
-			resources := step.calcVMResources(tt.request)
+			resources := tt.request.TotalResources()
 
 			memResource, ok := resources[hv1.ResourceMemory]
 			if !ok {

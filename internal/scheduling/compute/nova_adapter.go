@@ -6,6 +6,9 @@ package compute
 import (
 	"strings"
 
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 )
@@ -52,11 +55,8 @@ func ToSchedulerRequest(
 		GlobalRequestID: derefString(wire.Context.GlobalRequestID),
 	}
 
-	// Flavor sizing.
-	req.Flavor = FlavorSpec{
-		VCPUs:    spec.Flavor.Data.VCPUs,
-		MemoryMB: spec.Flavor.Data.MemoryMB,
-	}
+	// Resource sizing.
+	req.RequestedResources = NewResourceDemand(spec.Flavor.Data.VCPUs, spec.Flavor.Data.MemoryMB)
 
 	// Hypervisor family.
 	req.HypervisorFamily = toHypervisorFamily(wire)
@@ -200,6 +200,19 @@ func firstNonEmpty(a, b string) string {
 // key conventions are Nova's — not the pipeline's. Both this adapter and the
 // in-process reservation controllers (which hold a flavor's extra-spec map
 // directly) call them, so the conventions are understood in exactly one place.
+
+// NewResourceDemand builds a ResourceDemand from Nova's vCPU count and memory in
+// mebibytes. Nova's memory_mb field is documented as "megabytes" but its values are
+// mebibytes (1 MiB = 2^20 bytes); this converts to the bytes hv.Status and the
+// capacity lib use, so the Nova unit convention is applied in exactly one place.
+// Resources left at 0 are still written, so callers can rely on the keys being present.
+func NewResourceDemand(vcpus, memoryMB uint64) ResourceDemand {
+	//nolint:gosec // vCPU and memory values are small, non-negative flavor counts.
+	return ResourceDemand{
+		hv1.ResourceCPU:    *resource.NewQuantity(int64(vcpus), resource.DecimalSI),
+		hv1.ResourceMemory: *resource.NewQuantity(int64(memoryMB*(1<<20)), resource.BinarySI),
+	}
+}
 
 // unsupportedCapabilityOps are the Nova extra-spec comparison operators the
 // capabilities filter does not implement. A capability value containing any of

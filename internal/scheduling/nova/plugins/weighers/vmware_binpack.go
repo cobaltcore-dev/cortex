@@ -15,6 +15,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,7 +27,7 @@ type VMwareBinpackStepOpts struct {
 	// node's resource utilizations after placing the VM.
 	// If a resource is not specified, is ignored in the score calculation
 	// (equivalent to a weight of 0).
-	ResourceWeights map[corev1.ResourceName]float64 `json:"resourceWeights"`
+	ResourceWeights map[hv1.ResourceName]float64 `json:"resourceWeights"`
 }
 
 // Validate the options to ensure they are correct before running the weigher.
@@ -34,9 +35,9 @@ func (o VMwareBinpackStepOpts) Validate() error {
 	if len(o.ResourceWeights) == 0 {
 		return errors.New("at least one resource weight must be specified")
 	}
-	supportedResources := []corev1.ResourceName{
-		corev1.ResourceMemory,
-		corev1.ResourceCPU,
+	supportedResources := []hv1.ResourceName{
+		hv1.ResourceMemory,
+		hv1.ResourceCPU,
 	}
 	for resourceName, value := range o.ResourceWeights {
 		if !slices.Contains(supportedResources, resourceName) {
@@ -107,7 +108,7 @@ func (s *VMwareBinpackStep) Run(traceLog logr.Logger, request sched.PlacementReq
 	for _, hostUtilization := range hostUtilizations {
 		utilizationByHost[hostUtilization.ComputeHost] = hostUtilization
 	}
-	vmResources := s.calcVMResources(request)
+	vmResources := request.TotalResources()
 
 	for host := range result.Activations {
 		utilization, ok := utilizationByHost[host]
@@ -163,38 +164,24 @@ func (s *VMwareBinpackStep) Run(traceLog logr.Logger, request sched.PlacementReq
 }
 
 // calcHostCapacity calculates the total capacity of the host.
-func (s *VMwareBinpackStep) calcHostCapacity(hostUtilization compute.HostUtilization) map[corev1.ResourceName]resource.Quantity {
-	resources := make(map[corev1.ResourceName]resource.Quantity)
+func (s *VMwareBinpackStep) calcHostCapacity(hostUtilization compute.HostUtilization) map[hv1.ResourceName]resource.Quantity {
+	resources := make(map[hv1.ResourceName]resource.Quantity)
 	capaMemoryBytes := int64(hostUtilization.TotalRAMAllocatableMB) * (1 << 20)
-	resources[corev1.ResourceMemory] = *resource.
+	resources[hv1.ResourceMemory] = *resource.
 		NewQuantity(capaMemoryBytes, resource.BinarySI)
 	capaCPU := int64(hostUtilization.TotalVCPUsAllocatable)
-	resources[corev1.ResourceCPU] = *resource.
+	resources[hv1.ResourceCPU] = *resource.
 		NewQuantity(capaCPU, resource.DecimalSI)
 	return resources
 }
 
 // calcHostAllocation calculates the total allocated resources on the host.
-func (s *VMwareBinpackStep) calcHostAllocation(hostUtilization compute.HostUtilization) map[corev1.ResourceName]resource.Quantity {
-	resources := make(map[corev1.ResourceName]resource.Quantity)
-	resources[corev1.ResourceMemory] = *resource.
+func (s *VMwareBinpackStep) calcHostAllocation(hostUtilization compute.HostUtilization) map[hv1.ResourceName]resource.Quantity {
+	resources := make(map[hv1.ResourceName]resource.Quantity)
+	resources[hv1.ResourceMemory] = *resource.
 		NewQuantity(int64(hostUtilization.RAMUsedMB)*(1<<20), resource.BinarySI)
-	resources[corev1.ResourceCPU] = *resource.
+	resources[hv1.ResourceCPU] = *resource.
 		NewQuantity(int64(hostUtilization.VCPUsUsed), resource.DecimalSI)
-	return resources
-}
-
-// calcVMResources calculates the total resource requests for the VM to be scheduled.
-func (s *VMwareBinpackStep) calcVMResources(req sched.PlacementRequest) map[corev1.ResourceName]resource.Quantity {
-	resources := make(map[corev1.ResourceName]resource.Quantity)
-	resourcesMemBytes := int64(req.Flavor.MemoryMB) * (1 << 20) //nolint:gosec // memory values are bounded by Nova
-	resourcesMemBytes *= int64(req.NumInstances)                //nolint:gosec // instance count is bounded by Nova
-	resources[corev1.ResourceMemory] = *resource.
-		NewQuantity(resourcesMemBytes, resource.BinarySI)
-	resourcesCPU := int64(req.Flavor.VCPUs) //nolint:gosec // vCPU values are bounded by Nova
-	resourcesCPU *= int64(req.NumInstances) //nolint:gosec // instance count is bounded by Nova
-	resources[corev1.ResourceCPU] = *resource.
-		NewQuantity(resourcesCPU, resource.DecimalSI)
 	return resources
 }
 

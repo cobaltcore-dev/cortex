@@ -16,7 +16,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib/capacity"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 type FilterHasEnoughCapacityOpts struct {
@@ -200,22 +199,17 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 		usageByHost[hv.Name] = usage
 	}
 
-	// A host must fit the full request: flavor resources × NumInstances. We can't spread
-	// instances across hosts, so all requested instances must land on the same host.
-	if request.Flavor.VCPUs == 0 {
+	// A host must fit the full request: requested resources × NumInstances. We can't
+	// spread instances across hosts, so all requested instances must land on the same host.
+	if request.RequestedResources.VCPUs() == 0 {
 		return nil, errors.New("flavor has 0 vcpus")
 	}
-	if request.Flavor.MemoryMB == 0 {
+	if request.RequestedResources.MemoryBytes() == 0 {
 		return nil, errors.New("flavor has 0 memory")
 	}
-	// Nova's memory_mb field is named "megabytes" in the API docs, but the values are in
-	// mebibytes (1 MiB = 2^20 bytes). Multiply by 1<<20 to convert to the bytes used in
-	// hv.Status.
-	//nolint:gosec // flavor fields are small, non-negative counts.
-	required := map[hv1.ResourceName]resource.Quantity{
-		"cpu":    *resource.NewQuantity(int64(request.Flavor.VCPUs*request.NumInstances), resource.DecimalSI),
-		"memory": *resource.NewQuantity(int64(request.Flavor.MemoryMB*request.NumInstances*(1<<20)), resource.BinarySI),
-	}
+	// RequestedResources holds per-instance quantities in the units hv.Status reports
+	// (memory in bytes); TotalResources scales by NumInstances for the full request.
+	required := request.TotalResources()
 
 	hostsEncountered := make(map[string]struct{})
 	for host, usage := range usageByHost {
@@ -227,8 +221,8 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 			traceLog.V(1).Info(
 				"filtering host due to insufficient capacity",
 				"host", host,
-				"requested_cpus", request.Flavor.VCPUs,
-				"requested_memory_mb", request.Flavor.MemoryMB,
+				"requested_cpus", request.RequestedResources.VCPUs(),
+				"requested_memory_bytes", request.RequestedResources.MemoryBytes(),
 				"num_instances", request.NumInstances,
 				"available_cpus", freeCPU.String(),
 				"available_memory", freeMemory.String(),
@@ -238,9 +232,9 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 		}
 		traceLog.V(1).Info(
 			"host has enough capacity", "host", host,
-			"requested_cpus", request.Flavor.VCPUs,
+			"requested_cpus", request.RequestedResources.VCPUs(),
 			"available_cpus", freeCPU.String(),
-			"requested_memory_mb", request.Flavor.MemoryMB,
+			"requested_memory_bytes", request.RequestedResources.MemoryBytes(),
 			"available_memory", freeMemory.String(),
 		)
 	}

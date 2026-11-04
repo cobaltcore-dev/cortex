@@ -42,16 +42,13 @@ func newPreferSmallerHostsRequest(hosts []string) compute.PlacementRequest {
 	}
 
 	return compute.PlacementRequest{
-		ProjectID:        "project-A",
-		InstanceUUID:     "instance-123",
-		NumInstances:     1,
-		HypervisorFamily: compute.HypervisorFamilyKVM,
-		Flavor: compute.FlavorSpec{
-			VCPUs:    4,
-			MemoryMB: 8192,
-		},
-		Hosts:   hostList,
-		Weights: weights,
+		ProjectID:          "project-A",
+		InstanceUUID:       "instance-123",
+		NumInstances:       1,
+		HypervisorFamily:   compute.HypervisorFamilyKVM,
+		RequestedResources: compute.NewResourceDemand(4, 8192),
+		Hosts:              hostList,
+		Weights:            weights,
 	}
 }
 

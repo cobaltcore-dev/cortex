@@ -843,10 +843,7 @@ func (c *Reconciler) probeScheduler(
 		ForbiddenTraits:       forbiddenTraits,
 		RequestedCapabilities: reservations.HypervisorTypeCapability(flavor.ExtraSpecs, false),
 		AcceleratorsRequested: sched.RequestsAccelerators(flavor.ExtraSpecs),
-		Flavor: sched.FlavorSpec{
-			VCPUs:    flavor.VCPUs,
-			MemoryMB: flavor.MemoryMB,
-		},
+		RequestedResources:    sched.NewResourceDemand(flavor.VCPUs, flavor.MemoryMB),
 		Options: scheduling.Options{
 			ReadOnly:                      true,
 			AssumeEmptyHosts:              ignoreAllocations,

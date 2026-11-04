@@ -260,18 +260,15 @@ func newNovaRequestWithIntent(instanceUUID, projectID, flavorGroup string, vcpus
 	}
 
 	return compute.PlacementRequest{
-		ProjectID:        projectID,
-		InstanceUUID:     instanceUUID,
-		NumInstances:     1,
-		Intent:           intent,
-		HardwareVersion:  flavorGroup,
-		HypervisorFamily: compute.HypervisorFamilyKVM,
-		Flavor: compute.FlavorSpec{
-			VCPUs:    uint64(vcpus), //nolint:gosec // test code
-			MemoryMB: memoryMB,
-		},
-		Hosts:   hostList,
-		Weights: weights,
+		ProjectID:          projectID,
+		InstanceUUID:       instanceUUID,
+		NumInstances:       1,
+		Intent:             intent,
+		HardwareVersion:    flavorGroup,
+		HypervisorFamily:   compute.HypervisorFamilyKVM,
+		RequestedResources: compute.NewResourceDemand(uint64(vcpus), memoryMB), //nolint:gosec // test code
+		Hosts:              hostList,
+		Weights:            weights,
 	}
 }
 

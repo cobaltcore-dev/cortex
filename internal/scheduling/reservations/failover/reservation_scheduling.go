@@ -125,10 +125,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		ForbiddenTraits:       forbiddenTraits,
 		RequestedCapabilities: reservations.HypervisorTypeCapability(vm.FlavorExtraSpecs, true),
 		AcceleratorsRequested: compute.RequestsAccelerators(vm.FlavorExtraSpecs),
-		Flavor: compute.FlavorSpec{
-			VCPUs:    resSpec.VCPUs,
-			MemoryMB: resSpec.MemoryMB,
-		},
+		RequestedResources:    compute.NewResourceDemand(resSpec.VCPUs, resSpec.MemoryMB),
 	}
 
 	logger.V(1).Info("scheduling failover reservation",
@@ -282,10 +279,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		ForbiddenTraits:       forbiddenTraits,
 		RequestedCapabilities: reservations.HypervisorTypeCapability(flavorExtraSpecs, true),
 		AcceleratorsRequested: compute.RequestsAccelerators(flavorExtraSpecs),
-		Flavor: compute.FlavorSpec{
-			VCPUs:    vcpus,
-			MemoryMB: memoryMB,
-		},
+		RequestedResources:    compute.NewResourceDemand(vcpus, memoryMB),
 	}
 
 	logger.V(1).Info("validating VM via scheduler evacuation",

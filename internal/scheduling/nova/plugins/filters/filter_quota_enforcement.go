@@ -179,12 +179,16 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request compute.Place
 	if numInstances == 0 {
 		numInstances = 1
 	}
-	memoryMB := request.Flavor.MemoryMB
-	vcpus := request.Flavor.VCPUs
+	// RequestedResources holds per-instance memory in bytes; convert to MiB for the
+	// liquid RAM math below.
+	memoryMB := request.RequestedResources.MemoryBytes() / (1 << 20)
+	vcpus := request.RequestedResources.VCPUs()
+	//nolint:gosec // instance count is a small, non-negative count.
+	instances := int64(numInstances)
 	// MB to GiB: using 1024 as divisor is slightly conservative (overestimates GiB needed).
-	requestRAM := int64(math.Ceil(float64(memoryMB*numInstances) / 1024.0))
-	requestCores := int64(vcpus * numInstances) //nolint:gosec // VCPUs from flavor specs, realistically bounded
-	requestInstances := int64(numInstances)
+	requestRAM := int64(math.Ceil(float64(memoryMB*instances) / 1024.0))
+	requestCores := vcpus * instances
+	requestInstances := instances
 
 	// Step 4: Derive the liquid resource names.
 	resourceRAM := "hw_version_" + hwVersion + "_ram"

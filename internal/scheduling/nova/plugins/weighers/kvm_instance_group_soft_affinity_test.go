@@ -40,15 +40,12 @@ func newInstanceGroupRequest(policy string, members, hosts []string) compute.Pla
 	}
 
 	req := compute.PlacementRequest{
-		ProjectID:        "project-A",
-		InstanceUUID:     "new-instance-uuid",
-		NumInstances:     1,
-		HypervisorFamily: compute.HypervisorFamilyKVM,
-		Flavor: compute.FlavorSpec{
-			VCPUs:    4,
-			MemoryMB: 8192,
-		},
-		Hosts: hostList,
+		ProjectID:          "project-A",
+		InstanceUUID:       "new-instance-uuid",
+		NumInstances:       1,
+		HypervisorFamily:   compute.HypervisorFamilyKVM,
+		RequestedResources: compute.NewResourceDemand(4, 8192),
+		Hosts:              hostList,
 	}
 
 	// Only set InstanceGroup if policy is provided

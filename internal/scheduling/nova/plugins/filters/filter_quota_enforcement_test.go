@@ -47,15 +47,12 @@ func intentFromHint(hints map[string]any) v1alpha1.SchedulingIntent {
 
 func makeQuotaEnforcementRequest(projectID, az, hwVersion string, memoryMB, numInstances uint64, hints map[string]any) compute.PlacementRequest {
 	return compute.PlacementRequest{
-		ProjectID:        projectID,
-		AvailabilityZone: az,
-		NumInstances:     numInstances,
-		Intent:           intentFromHint(hints),
-		HardwareVersion:  hwVersion,
-		Flavor: compute.FlavorSpec{
-			VCPUs:    4,
-			MemoryMB: memoryMB,
-		},
+		ProjectID:          projectID,
+		AvailabilityZone:   az,
+		NumInstances:       numInstances,
+		Intent:             intentFromHint(hints),
+		HardwareVersion:    hwVersion,
+		RequestedResources: compute.NewResourceDemand(4, memoryMB),
 		Hosts: []compute.Host{
 			{ComputeHost: "host1"},
 			{ComputeHost: "host2"},
