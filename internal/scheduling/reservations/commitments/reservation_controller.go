@@ -32,7 +32,10 @@ import (
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
@@ -49,8 +52,8 @@ type CommitmentReservationController struct {
 	Scheme *runtime.Scheme
 	// Configuration for the controller.
 	Conf ReservationControllerConfig
-	// SchedulerClient for making scheduler API calls.
-	SchedulerClient *reservations.SchedulerClient
+	// Scheduler is the in-process scheduler used to place reservations.
+	Scheduler *compute.Placement
 	// DomainResolver resolves OpenStack domain IDs to domain names so the
 	// domain_name scheduler hint can be populated for filter_external_customer.
 	// Nil when KeystoneSecretRef is not configured; hint is omitted in that case.
@@ -218,27 +221,25 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		availabilityZone = res.Spec.AvailabilityZone
 	}
 
-	// Resolve domain name for the domain_name scheduler hint consumed by
-	// filter_external_customer to enforce host restrictions for external customers.
-	// Resolution is best-effort: if the DomainResolver is not configured (no
-	// KeystoneSecretRef) or the lookup fails, we log and proceed without the hint.
-	// filter_external_customer already handles a missing hint by skipping the filter,
-	// so omitting it degrades gracefully rather than blocking scheduling.
-	schedulerHints := map[string]any{
-		"_nova_check_type": string(schedulerdelegationapi.ReserveForCommittedResourceIntent),
-	}
+	// Resolve domain name so filter_external_customer can enforce host
+	// restrictions for external customers. Resolution is best-effort: if the
+	// DomainResolver is not configured (no KeystoneSecretRef) or the lookup
+	// fails, we log and proceed without it. filter_external_customer handles a
+	// missing domain name by skipping the filter, so omitting it degrades
+	// gracefully rather than blocking scheduling.
+	domainName := ""
 	if r.DomainResolver != nil && res.Spec.CommittedResourceReservation != nil && res.Spec.CommittedResourceReservation.DomainID != "" {
-		domainName, err := r.DomainResolver.ResolveDomainName(ctx, res.Spec.CommittedResourceReservation.DomainID)
+		resolved, err := r.DomainResolver.ResolveDomainName(ctx, res.Spec.CommittedResourceReservation.DomainID)
 		if err != nil {
 			logger.Error(err, "failed to resolve domain name for scheduler hint, proceeding without it",
 				"domainID", res.Spec.CommittedResourceReservation.DomainID)
 		} else {
-			schedulerHints["domain_name"] = domainName
+			domainName = resolved
 		}
 	}
 
 	// Get flavor details from flavor group knowledge CRD
-	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: r.Client}
+	knowledge := &accounting.FlavorGroupKnowledgeClient{Client: r.Client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		logger.V(1).Info("flavor knowledge not ready, requeueing",
@@ -248,7 +249,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	}
 
 	// Search for the flavor across all flavor groups
-	flavorGroupName, flavorDetails, err := reservations.FindFlavorInGroups(resourceName, flavorGroups)
+	flavorGroupName, flavorDetails, err := accounting.FindFlavorInGroups(resourceName, flavorGroups)
 	if err != nil {
 		logger.Error(err, "flavor not found in any flavor group",
 			"resourceName", resourceName)
@@ -301,36 +302,56 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			return "initial"
 		}())
 
-	// Use the SchedulerClient to schedule the reservation
-	scheduleReq := reservations.ScheduleReservationRequest{
-		InstanceUUID:     res.Name,
-		ProjectID:        projectID,
-		FlavorName:       flavorDetails.Name,
-		FlavorExtraSpecs: flavorDetails.ExtraSpecs,
-		MemoryMB:         flavorDetails.MemoryMB,
-		VCPUs:            flavorDetails.VCPUs,
-		EligibleHosts:    eligibleHosts,
-		Pipeline:         pipelineName,
-		AvailabilityZone: availabilityZone,
-		SchedulerHints:   schedulerHints,
+	// Build the typed scheduler request directly (in-process; no HTTP). KVM
+	// reservations gather all candidates, so the eligible-host list is a starting
+	// set; GatherAllCandidates mirrors the previous ignore-preselection behavior.
+	hosts := make([]compute.Host, 0, len(eligibleHosts))
+	weights := make(map[string]float64, len(eligibleHosts))
+	for _, h := range eligibleHosts {
+		hosts = append(hosts, compute.Host{ComputeHost: h.ComputeHost, HypervisorHostname: h.HypervisorHostname})
+		weights[h.ComputeHost] = 0.0
 	}
-	scheduleOpts := scheduling.Options{
-		ReadOnly:                      false, // mutates state (reservation placement)
-		LockReservations:              true,  // don't unlock CR reservations; finding a slot, not placing a VM
-		AssumeEmptyHosts:              false,
-		IgnoredReservationTypes:       nil,
-		MaxCandidates:                 1,
-		SkipInflight:                  false, // TODO pessimistic blocking needed, will be addressed in follow up ticket
-		SkipCommittedResourceTracking: true,  // CR slot scheduling, not a VM placement
+	// Honor the flavor's trait and hypervisor-type constraints so a
+	// committed-resource reservation lands on a compatible host (the typed
+	// request is built directly, so filter_has_requested_traits/filter_capabilities
+	// would otherwise see empty slices and become no-ops). No hypervisor-type
+	// default here — only match when the flavor names one.
+	requiredTraits, forbiddenTraits := nova.SplitTraits(flavorDetails.ExtraSpecs)
+	schedReq := compute.PlacementRequest{
+		Pipeline:              pipelineName,
+		GatherAllCandidates:   true,
+		HypervisorFamily:      compute.HypervisorFamilyKVM,
+		Hosts:                 hosts,
+		Weights:               weights,
+		Intent:                schedulerdelegationapi.ReserveForCommittedResourceIntent,
+		InstanceUUID:          res.Name,
+		NumInstances:          1, // one reservation slot; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
+		ProjectID:             projectID,
+		AvailabilityZone:      availabilityZone,
+		DomainName:            domainName,
+		RequiredTraits:        requiredTraits,
+		ForbiddenTraits:       forbiddenTraits,
+		RequestedCapabilities: reservations.HypervisorTypeCapability(flavorDetails.ExtraSpecs, false),
+		AcceleratorsRequested: nova.RequestsAccelerators(flavorDetails.ExtraSpecs),
+		Flavor: compute.FlavorSpec{
+			VCPUs:    flavorDetails.VCPUs,
+			MemoryMB: flavorDetails.MemoryMB,
+		},
+		Options: scheduling.Options{
+			ReadOnly:                      false, // mutates state (reservation placement)
+			LockReservations:              true,  // don't unlock CR reservations; finding a slot, not placing a VM
+			MaxCandidates:                 1,
+			SkipCommittedResourceTracking: true, // CR slot scheduling, not a VM placement
+		},
 	}
 
-	scheduleResp, err := r.SchedulerClient.ScheduleReservation(ctx, scheduleReq, scheduleOpts)
+	out, err := r.Scheduler.Run(ctx, schedReq, nil, nil)
 	if err != nil {
 		logger.Error(err, "failed to schedule reservation")
 		return ctrl.Result{}, err
 	}
 
-	if len(scheduleResp.Hosts) == 0 {
+	if len(out.OrderedHosts) == 0 {
 		logger.Info("no hosts found for reservation, will retry", "reservation", res.Name, "flavorName", resourceName)
 		old := res.DeepCopy()
 		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
@@ -356,7 +377,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	// Update the reservation Spec with the found host (idx 0)
 	// Only update Spec here - the Status will be synced in the next reconcile cycle
 	// This avoids race conditions from doing two patches in one reconcile
-	host := scheduleResp.Hosts[0]
+	host := out.OrderedHosts[0]
 	logger.Info("found host for reservation", "host", host, "flavorName", resourceName)
 
 	old := res.DeepCopy()
@@ -663,9 +684,6 @@ func (r *CommitmentReservationController) hypervisorToReservations(ctx context.C
 
 // Init initializes the reconciler with required clients and DB connection.
 func (r *CommitmentReservationController) Init(ctx context.Context, conf ReservationControllerConfig) error {
-	r.SchedulerClient = reservations.NewSchedulerClient(conf.SchedulerURL)
-	logf.FromContext(ctx).Info("scheduler client initialized for commitment reservation controller", "url", conf.SchedulerURL)
-
 	if conf.KeystoneSecretRef.Name != "" {
 		var authenticatedHTTP *http.Client
 		if conf.SSOSecretRef != nil {

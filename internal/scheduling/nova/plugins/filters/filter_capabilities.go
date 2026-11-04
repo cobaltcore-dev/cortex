@@ -7,15 +7,14 @@ import (
 	"context"
 	"fmt"
 	"github.com/go-logr/logr"
-	"strings"
 
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 type FilterCapabilitiesStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Get the provided capabilities of a hypervisor resource in the format Nova expects.
@@ -45,44 +44,12 @@ func hvToNovaCapabilities(hv hv1.Hypervisor) (map[string]string, error) {
 
 // Check the capabilities of each host and if they match the extra spec provided
 // in the request spec flavor.
-func (s *FilterCapabilitiesStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterCapabilitiesStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
-	extraSpecs := request.Spec.Data.Flavor.Data.ExtraSpecs
-	if len(extraSpecs) == 0 {
-		traceLog.V(1).Info("no flavor extra spec capabilities in request, skipping filter")
-		return result, nil
-	}
-
-	// Extract only capability-related extra specs into a separate map.
-	// We must not modify the original ExtraSpecs map as it's shared across filters.
-	requestedCapabilities := make(map[string]string)
-	for key, value := range extraSpecs {
-		if strings.HasPrefix(key, "capabilities:") {
-			requestedCapabilities[key] = value
-		}
-	}
+	requestedCapabilities := request.RequestedCapabilities
 	if len(requestedCapabilities) == 0 {
-		traceLog.V(1).Info("no capabilities in flavor extra specs, skipping filter")
+		traceLog.V(1).Info("no capabilities requested, skipping filter")
 		return result, nil
-	}
-
-	// Note: currently none of the advanced operators for capabilities are
-	// supported because they are not used by any of our flavors in production.
-	// Ops: https://github.com/sapcc/nova/blob/3ebf80/nova/scheduler/filters/extra_specs_ops.py#L23
-	unsupportedOps := []string{
-		"=", "<in>", "<all-in>", "==", "!=", ">=", "<=",
-		"s==", "s!=", "s<", "s<=", "s>", "s>=", "<or>", // or is special
-	}
-	for key, expr := range requestedCapabilities {
-		for _, op := range unsupportedOps {
-			if strings.Contains(expr, op) {
-				traceLog.V(1).Info(
-					"unsupported extra spec operator in capabilities filter, skipping filter",
-					"key", key, "expr", expr, "flavor", request.Spec.Data.Flavor,
-				)
-				return result, nil
-			}
-		}
 	}
 
 	hvs := &hv1.HypervisorList{}
@@ -118,11 +85,12 @@ func (s *FilterCapabilitiesStep) Run(traceLog logr.Logger, request api.ExternalS
 			continue
 		}
 		// Check if the provided capabilities match the requested ones.
-		for keyRequested, valueRequested := range requestedCapabilities {
-			if providedValue, ok := provided[keyRequested]; !ok || providedValue != valueRequested {
+		for _, requested := range requestedCapabilities {
+			key := "capabilities:" + requested.Name
+			if providedValue, ok := provided[key]; !ok || providedValue != requested.Value {
 				traceLog.V(1).Info(
 					"filtering host with mismatched capabilities", "host", host,
-					"wantKey", keyRequested, "wantValue", valueRequested,
+					"wantKey", key, "wantValue", requested.Value,
 					"haveKey?", ok, "haveValue", providedValue,
 				)
 				delete(result.Activations, host)

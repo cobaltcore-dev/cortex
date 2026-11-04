@@ -15,7 +15,6 @@ spec:
     Specifically, this pipeline is used for general purpose workloads.
   type: filter-weigher
   # Fetch all placement candidates, ignoring nova's preselection.
-  ignorePreselection: true
   filters:
     - name: filter_status_conditions
       description: |
@@ -189,7 +188,6 @@ spec:
     Specifically, this pipeline is used for hana virtual machines.
   type: filter-weigher
   # Fetch all placement candidates, ignoring nova's preselection.
-  ignorePreselection: true
   filters:
     - name: filter_status_conditions
       description: |
@@ -355,7 +353,6 @@ spec:
     Deprecated: no longer used by the failover reservation controller. Kept for backwards
     compatibility with deployments that reference this pipeline by name in Helm values.
   type: filter-weigher
-  ignorePreselection: true
   filters:
     - name: filter_status_conditions
       description: |
@@ -637,7 +634,6 @@ spec:
     considered.
   type: filter-weigher
   # Fetch all placement candidates, ignoring nova's preselection.
-  ignorePreselection: true
   filters:
     - name: filter_status_conditions
       description: |

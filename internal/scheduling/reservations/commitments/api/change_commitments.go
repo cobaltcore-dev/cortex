@@ -15,6 +15,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/go-logr/logr"
@@ -180,7 +181,7 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	}
 
 	{
-		knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
+		knowledge := &accounting.FlavorGroupKnowledgeClient{Client: api.client}
 		if knowledgeCRD, err := knowledge.Get(ctx); err == nil && knowledgeCRD != nil {
 			var currentVersion int64 = -1
 			if !knowledgeCRD.Status.LastContentChange.IsZero() {
@@ -231,7 +232,7 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 }
 
 func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.ResponseWriter, logger logr.Logger, req liquid.CommitmentChangeRequest, resp *liquid.CommitmentChangeResponse) error {
-	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
+	knowledge := &accounting.FlavorGroupKnowledgeClient{Client: api.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		logger.Info("failed to get flavor groups from knowledge extractor", "error", err)
@@ -640,7 +641,7 @@ func rollbackCR(ctx context.Context, logger logr.Logger, k8sClient client.Client
 // performDryRun checks whether the net capacity delta in req can be placed by running
 // temporary probe CommittedResource CRDs through the controller, then always cleaning them up.
 func (api *HTTPAPI) performDryRun(ctx context.Context, logger logr.Logger, req liquid.CommitmentChangeRequest, resp *liquid.CommitmentChangeResponse) {
-	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
+	knowledge := &accounting.FlavorGroupKnowledgeClient{Client: api.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		resp.RejectionReason = "dry run: caches not ready, please retry later"

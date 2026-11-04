@@ -11,6 +11,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
@@ -46,31 +47,31 @@ func (o KVMCommittedResourceReservationOpts) GetDefaultHostWeight() float64 {
 // Hosts that have a ready Reservation matching the request's project and flavor group,
 // with enough free memory capacity for the requested VM, receive a higher weight.
 type KVMCommittedResourceReservationStep struct {
-	lib.BaseWeigher[api.ExternalSchedulerRequest, KVMCommittedResourceReservationOpts]
+	lib.BaseWeigher[compute.PlacementRequest, KVMCommittedResourceReservationOpts]
 }
 
 // Run the weigher step.
 // Hosts with a matching CommittedResourceReservation (project + flavor group + free capacity) get a higher weight.
-func (s *KVMCommittedResourceReservationStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMCommittedResourceReservationStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	// Skip for failover reservation scheduling — CR reservations should not influence
 	// where failover capacity is placed.
-	if intent, err := request.GetIntent(); err == nil && intent == api.ReserveForFailoverIntent {
+	if request.Intent == api.ReserveForFailoverIntent {
 		traceLog.V(1).Info("skipping committed resource reservation weigher for failover reservation intent")
 		return result, nil
 	}
 
-	projectID := request.Spec.Data.ProjectID
-	az := request.Spec.Data.AvailabilityZone
-	resourceGroup, err := request.Spec.Data.GetSchedulerHintStr(api.HintKeyResourceGroup)
-	if err != nil || resourceGroup == "" {
+	projectID := request.ProjectID
+	az := request.AvailabilityZone
+	resourceGroup := request.ResourceGroup
+	if resourceGroup == "" {
 		traceLog.V(1).Info("skipping committed resource reservation weigher: no resource group in request")
-		return result, nil //nolint:nilerr
+		return result, nil
 	}
 
 	// Flavor memory in bytes for free-capacity check.
-	flavorMemoryBytes := int64(request.Spec.Data.Flavor.Data.MemoryMB) * 1024 * 1024 //nolint:gosec
+	flavorMemoryBytes := int64(request.Flavor.MemoryMB) * 1024 * 1024 //nolint:gosec
 
 	var reservations v1alpha1.ReservationList
 	if err := s.Client.List(context.Background(), &reservations); err != nil {

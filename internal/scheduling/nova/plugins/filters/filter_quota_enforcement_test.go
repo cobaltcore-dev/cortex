@@ -9,6 +9,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -18,27 +19,44 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func makeQuotaEnforcementRequest(projectID, az, hwVersion string, memoryMB, numInstances uint64, hints map[string]any) api.ExternalSchedulerRequest {
-	flavor := api.NovaFlavor{
-		MemoryMB: memoryMB,
-		VCPUs:    4,
+// intentFromHint maps an old "_nova_check_type" scheduler hint value to the
+// typed scheduling intent the plugin now reads. The hints map carries at most
+// the "_nova_check_type" key in these tests.
+func intentFromHint(hints map[string]any) v1alpha1.SchedulingIntent {
+	raw, ok := hints["_nova_check_type"]
+	if !ok {
+		return ""
 	}
-	if hwVersion != "" {
-		flavor.ExtraSpecs = map[string]string{"quota:hw_version": hwVersion}
-	} else {
-		flavor.ExtraSpecs = map[string]string{}
+	switch raw {
+	case "evacuate":
+		return api.EvacuateIntent
+	case "live_migrate":
+		return api.LiveMigrationIntent
+	case "reserve_for_failover":
+		return api.ReserveForFailoverIntent
+	case "reserve_for_committed_resource":
+		return api.ReserveForCommittedResourceIntent
+	case "resize":
+		return api.ResizeIntent
+	case "capacity_probe":
+		return api.CapacityProbeIntent
+	default:
+		return ""
 	}
-	return api.ExternalSchedulerRequest{
-		Spec: api.NovaObject[api.NovaSpec]{
-			Data: api.NovaSpec{
-				ProjectID:        projectID,
-				AvailabilityZone: az,
-				NumInstances:     numInstances,
-				SchedulerHints:   hints,
-				Flavor:           api.NovaObject[api.NovaFlavor]{Data: flavor},
-			},
+}
+
+func makeQuotaEnforcementRequest(projectID, az, hwVersion string, memoryMB, numInstances uint64, hints map[string]any) compute.PlacementRequest {
+	return compute.PlacementRequest{
+		ProjectID:        projectID,
+		AvailabilityZone: az,
+		NumInstances:     numInstances,
+		Intent:           intentFromHint(hints),
+		HardwareVersion:  hwVersion,
+		Flavor: compute.FlavorSpec{
+			VCPUs:    4,
+			MemoryMB: memoryMB,
 		},
-		Hosts: []api.ExternalSchedulerHost{
+		Hosts: []compute.Host{
 			{ComputeHost: "host1"},
 			{ComputeHost: "host2"},
 			{ComputeHost: "host3"},
@@ -55,7 +73,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 	type tc struct {
 		name    string
 		objects []client.Object
-		request api.ExternalSchedulerRequest
+		request compute.PlacementRequest
 		enforce bool
 		// crStateFilter sets Options.CRStateFilter; nil exercises the default (confirmed).
 		crStateFilter []v1alpha1.CommitmentStatus
@@ -461,7 +479,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 					// Fully used, so it provides no CR headroom itself — the request
 					// falls through to the PAYG check where its amount is deducted.
 					Status: v1alpha1.CommittedResourceStatus{
-						UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("100Gi")},
+						Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("100Gi")}},
 					},
 				},
 				&v1alpha1.ProjectQuota{
@@ -500,7 +518,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 						Amount:           resource.MustParse("100Gi"),
 					},
 					Status: v1alpha1.CommittedResourceStatus{
-						UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("100Gi")},
+						Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("100Gi")}},
 					},
 				},
 				&v1alpha1.ProjectQuota{

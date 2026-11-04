@@ -6,13 +6,15 @@ package filters
 import (
 	"context"
 	"fmt"
-	"github.com/go-logr/logr"
 	"math"
 	"slices"
 	"time"
 
+	"github.com/go-logr/logr"
+
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -96,7 +98,7 @@ func (FilterQuotaEnforcementOpts) Validate() error { return nil }
 //
 // Disabled by default; activated by adding "filter_quota_enforcement" to the pipeline config.
 type FilterQuotaEnforcement struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, FilterQuotaEnforcementOpts]
+	lib.BaseFilter[compute.PlacementRequest, FilterQuotaEnforcementOpts]
 }
 
 // recordDecision appends an accept/reject/skip outcome as a named pipeline
@@ -117,7 +119,7 @@ func recordDecision(result *lib.FilterWeigherPipelineStepResult, mode, decision,
 	})
 }
 
-func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	mode := "shadow"
@@ -130,34 +132,31 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 	// external non-consuming intents (evacuate / live-migrate — VM already exists,
 	// being moved) apart from cortex-internal reservation intents (failover /
 	// committed-resource reservations — new schedules driven by cortex itself).
-	intent, err := request.GetIntent()
-	if err == nil {
-		switch intent {
-		case api.EvacuateIntent, api.LiveMigrationIntent:
-			traceLog.V(1).Info("skipping quota enforcement for non-consuming intent", "intent", intent)
-			recordDecision(result, mode, "accept_skipped_intent_migration", "", "", "")
-			return result, nil
-		case api.ReserveForFailoverIntent, api.ReuseFailoverReservationIntent:
-			traceLog.V(1).Info("skipping quota enforcement for failover reservation intent")
-			recordDecision(result, mode, "accept_skipped_intent_internal", "", "", "")
-			return result, nil
-		case api.ReserveForCommittedResourceIntent:
-			traceLog.V(1).Info("skipping quota enforcement for committed resource reservation intent")
-			recordDecision(result, mode, "accept_skipped_intent_internal", "", "", "")
-			return result, nil
-		case api.CapacityProbeIntent:
-			traceLog.V(1).Info("skipping quota enforcement for capacity probe intent")
-			recordDecision(result, mode, "accept_skipped", "", "", "")
-			return result, nil
-		}
+	switch request.Intent {
+	case api.EvacuateIntent, api.LiveMigrationIntent:
+		traceLog.V(1).Info("skipping quota enforcement for non-consuming intent", "intent", request.Intent)
+		recordDecision(result, mode, "accept_skipped_intent_migration", "", "", "")
+		return result, nil
+	case api.ReserveForFailoverIntent, api.ReuseFailoverReservationIntent:
+		traceLog.V(1).Info("skipping quota enforcement for failover reservation intent")
+		recordDecision(result, mode, "accept_skipped_intent_internal", "", "", "")
+		return result, nil
+	case api.ReserveForCommittedResourceIntent:
+		traceLog.V(1).Info("skipping quota enforcement for committed resource reservation intent")
+		recordDecision(result, mode, "accept_skipped_intent_internal", "", "", "")
+		return result, nil
+	case api.CapacityProbeIntent:
+		traceLog.V(1).Info("skipping quota enforcement for capacity probe intent")
+		recordDecision(result, mode, "accept_skipped", "", "", "")
+		return result, nil
 	}
 
 	// Step 2: Extract project, AZ, and hw_version from the request.
 	// Missing-data skips share a single decision bucket; the specific missing
 	// field is in the trace log.
-	projectID := request.Spec.Data.ProjectID
-	az := request.Spec.Data.AvailabilityZone
-	hwVersion := request.Spec.Data.Flavor.Data.ExtraSpecs["quota:hw_version"]
+	projectID := request.ProjectID
+	az := request.AvailabilityZone
+	hwVersion := request.HardwareVersion
 
 	if projectID == "" {
 		traceLog.V(1).Info("no project ID in request, skipping quota enforcement")
@@ -176,12 +175,12 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 	}
 
 	// Step 3: Compute resource demands from the request.
-	numInstances := request.Spec.Data.NumInstances
+	numInstances := request.NumInstances
 	if numInstances == 0 {
 		numInstances = 1
 	}
-	memoryMB := request.Spec.Data.Flavor.Data.MemoryMB
-	vcpus := request.Spec.Data.Flavor.Data.VCPUs
+	memoryMB := request.Flavor.MemoryMB
+	vcpus := request.Flavor.VCPUs
 	// MB to GiB: using 1024 as divisor is slightly conservative (overestimates GiB needed).
 	requestRAM := int64(math.Ceil(float64(memoryMB*numInstances) / 1024.0))
 	requestCores := int64(vcpus * numInstances) //nolint:gosec // VCPUs from flavor specs, realistically bounded

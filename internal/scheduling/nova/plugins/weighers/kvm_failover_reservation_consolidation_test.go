@@ -10,6 +10,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,30 +51,10 @@ func newFailoverReservationWithGroup(name, targetHost, resourceGroup string) *v1
 	}
 }
 
-func newFailoverReservationRequest(resourceGroup string, hosts []string) api.ExternalSchedulerRequest {
-	hostList := make([]api.ExternalSchedulerHost, len(hosts))
+func newFailoverReservationRequest(resourceGroup string, hosts []string) compute.PlacementRequest {
+	hostList := make([]compute.Host, len(hosts))
 	for i, h := range hosts {
-		hostList[i] = api.ExternalSchedulerHost{ComputeHost: h}
-	}
-
-	spec := api.NovaSpec{
-		ProjectID:    "project-A",
-		InstanceUUID: "test-instance",
-		NumInstances: 1,
-		SchedulerHints: map[string]any{
-			"_nova_check_type":       string(api.ReserveForFailoverIntent),
-			api.HintKeyResourceGroup: resourceGroup,
-		},
-		Flavor: api.NovaObject[api.NovaFlavor]{
-			Data: api.NovaFlavor{
-				Name:     "m1.large",
-				VCPUs:    4,
-				MemoryMB: 8192,
-				ExtraSpecs: map[string]string{
-					"capabilities:hypervisor_type": "qemu",
-				},
-			},
-		},
+		hostList[i] = compute.Host{ComputeHost: h}
 	}
 
 	weights := make(map[string]float64)
@@ -81,8 +62,17 @@ func newFailoverReservationRequest(resourceGroup string, hosts []string) api.Ext
 		weights[h] = 1.0
 	}
 
-	return api.ExternalSchedulerRequest{
-		Spec:    api.NovaObject[api.NovaSpec]{Data: spec},
+	return compute.PlacementRequest{
+		ProjectID:        "project-A",
+		InstanceUUID:     "test-instance",
+		NumInstances:     1,
+		Intent:           api.ReserveForFailoverIntent,
+		ResourceGroup:    resourceGroup,
+		HypervisorFamily: compute.HypervisorFamilyKVM,
+		Flavor: compute.FlavorSpec{
+			VCPUs:    4,
+			MemoryMB: 8192,
+		},
 		Hosts:   hostList,
 		Weights: weights,
 	}
@@ -98,7 +88,7 @@ func TestKVMFailoverReservationConsolidationStep_Run(t *testing.T) {
 	tests := []struct {
 		name            string
 		reservations    []*v1alpha1.Reservation
-		request         api.ExternalSchedulerRequest
+		request         compute.PlacementRequest
 		opts            KVMFailoverReservationConsolidationOpts
 		expectedWeights map[string]float64
 	}{

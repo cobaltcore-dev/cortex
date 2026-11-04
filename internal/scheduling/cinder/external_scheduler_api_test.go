@@ -14,26 +14,24 @@ import (
 	"testing"
 
 	cinderapi "github.com/cobaltcore-dev/cortex/api/external/cinder"
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
-type mockHTTPAPIDelegate struct {
-	processDecisionFunc func(ctx context.Context, decision *v1alpha1.Decision) error
+type mockScheduler struct {
+	scheduleFunc func(ctx context.Context, pipelineName string, request cinderapi.ExternalSchedulerRequest) (lib.PipelineResult, error)
 }
 
-func (m *mockHTTPAPIDelegate) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error {
-	if m.processDecisionFunc != nil {
-		return m.processDecisionFunc(ctx, decision)
+func (m *mockScheduler) Schedule(ctx context.Context, pipelineName string, request cinderapi.ExternalSchedulerRequest) (lib.PipelineResult, error) {
+	if m.scheduleFunc != nil {
+		return m.scheduleFunc(ctx, pipelineName, request)
 	}
-	return nil
+	return lib.PipelineResult{}, nil
 }
 
 func TestNewAPI(t *testing.T) {
-	delegate := &mockHTTPAPIDelegate{}
+	scheduler := &mockScheduler{}
 
-	api := NewAPI(delegate)
+	api := NewAPI(scheduler)
 
 	if api == nil {
 		t.Fatal("NewAPI returned nil")
@@ -44,8 +42,8 @@ func TestNewAPI(t *testing.T) {
 		t.Fatal("NewAPI did not return httpAPI type")
 	}
 
-	if httpAPI.delegate != delegate {
-		t.Error("Delegate not set correctly")
+	if httpAPI.scheduler != scheduler {
+		t.Error("Scheduler not set correctly")
 	}
 
 	if httpAPI.monitor.ApiRequestsTimer == nil {
@@ -54,8 +52,7 @@ func TestNewAPI(t *testing.T) {
 }
 
 func TestHTTPAPI_Init(t *testing.T) {
-	delegate := &mockHTTPAPIDelegate{}
-	api := NewAPI(delegate)
+	api := NewAPI(&mockScheduler{})
 
 	mux := http.NewServeMux()
 	api.Init(mux)
@@ -72,8 +69,7 @@ func TestHTTPAPI_Init(t *testing.T) {
 }
 
 func TestHTTPAPI_canRunScheduler(t *testing.T) {
-	delegate := &mockHTTPAPIDelegate{}
-	api := NewAPI(delegate).(*httpAPI)
+	api := NewAPI(&mockScheduler{}).(*httpAPI)
 
 	tests := []struct {
 		name        string
@@ -141,14 +137,27 @@ func TestHTTPAPI_canRunScheduler(t *testing.T) {
 }
 
 func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
+	validBody := func(t *testing.T) string {
+		req := cinderapi.ExternalSchedulerRequest{
+			Hosts:    []cinderapi.ExternalSchedulerHost{{VolumeHost: "host1"}},
+			Weights:  map[string]float64{"host1": 1.0},
+			Pipeline: "test-pipeline",
+		}
+		data, err := json.Marshal(req)
+		if err != nil {
+			t.Fatalf("Failed to marshal request data: %v", err)
+		}
+		return string(data)
+	}
+
 	tests := []struct {
-		name               string
-		method             string
-		body               string
-		processDecisionErr error
-		decisionResult     *v1alpha1.Decision
-		expectedStatus     int
-		expectedHosts      []string
+		name           string
+		method         string
+		body           string
+		scheduleResult lib.PipelineResult
+		scheduleErr    error
+		expectedStatus int
+		expectedHosts  []string
 	}{
 		{
 			name:           "invalid method",
@@ -162,106 +171,31 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			name:   "valid request with successful processing",
-			method: http.MethodPost,
-			body: func() string {
-				req := cinderapi.ExternalSchedulerRequest{
-					Hosts: []cinderapi.ExternalSchedulerHost{
-						{VolumeHost: "host1"},
-					},
-					Weights: map[string]float64{
-						"host1": 1.0,
-					},
-					Pipeline: "test-pipeline",
-				}
-				data, err := json.Marshal(req)
-				if err != nil {
-					t.Fatalf("Failed to marshal request data: %v", err)
-				}
-				return string(data)
-			}(),
-			decisionResult: &v1alpha1.Decision{
-				Status: v1alpha1.DecisionStatus{
-					Result: &v1alpha1.DecisionResult{
-						OrderedHosts: []string{"host1"},
-					},
-				},
-			},
+			name:           "valid request with successful processing",
+			method:         http.MethodPost,
+			body:           validBody(t),
+			scheduleResult: lib.PipelineResult{OrderedHosts: []string{"host1"}},
 			expectedStatus: http.StatusOK,
 			expectedHosts:  []string{"host1"},
 		},
 		{
-			name:   "processing error",
-			method: http.MethodPost,
-			body: func() string {
-				req := cinderapi.ExternalSchedulerRequest{
-					Hosts: []cinderapi.ExternalSchedulerHost{
-						{VolumeHost: "host1"},
-					},
-					Weights: map[string]float64{
-						"host1": 1.0,
-					},
-					Pipeline: "test-pipeline",
-				}
-				data, err := json.Marshal(req)
-				if err != nil {
-					t.Fatalf("Failed to marshal request data: %v", err)
-				}
-				return string(data)
-			}(),
-			processDecisionErr: errors.New("processing failed"),
-			expectedStatus:     http.StatusInternalServerError,
-		},
-		{
-			name:   "decision failed",
-			method: http.MethodPost,
-			body: func() string {
-				req := cinderapi.ExternalSchedulerRequest{
-					Hosts: []cinderapi.ExternalSchedulerHost{
-						{VolumeHost: "host1"},
-					},
-					Weights: map[string]float64{
-						"host1": 1.0,
-					},
-					Pipeline: "test-pipeline",
-				}
-				data, err := json.Marshal(req)
-				if err != nil {
-					t.Fatalf("Failed to marshal request data: %v", err)
-				}
-				return string(data)
-			}(),
-			decisionResult: &v1alpha1.Decision{
-				Status: v1alpha1.DecisionStatus{
-					Conditions: []metav1.Condition{
-						{
-							Type:   v1alpha1.DecisionConditionReady,
-							Status: metav1.ConditionFalse,
-							Reason: "SchedulingError",
-						},
-					},
-				},
-			},
+			name:           "processing error",
+			method:         http.MethodPost,
+			body:           validBody(t),
+			scheduleErr:    errors.New("processing failed"),
 			expectedStatus: http.StatusInternalServerError,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			delegate := &mockHTTPAPIDelegate{
-				processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
-					if tt.processDecisionErr != nil {
-						return tt.processDecisionErr
-					}
-					if tt.decisionResult != nil {
-						decision.Status = tt.decisionResult.Status
-						return nil
-					}
-					return nil
+			scheduler := &mockScheduler{
+				scheduleFunc: func(ctx context.Context, pipelineName string, request cinderapi.ExternalSchedulerRequest) (lib.PipelineResult, error) {
+					return tt.scheduleResult, tt.scheduleErr
 				},
 			}
 
-			api := NewAPI(delegate).(*httpAPI)
+			api := NewAPI(scheduler).(*httpAPI)
 
 			var body *strings.Reader
 			if tt.body != "" {
@@ -300,8 +234,7 @@ func TestHTTPAPI_CinderExternalScheduler(t *testing.T) {
 }
 
 func TestHTTPAPI_inferPipelineName(t *testing.T) {
-	delegate := &mockHTTPAPIDelegate{}
-	api := NewAPI(delegate).(*httpAPI)
+	api := NewAPI(&mockScheduler{}).(*httpAPI)
 
 	tests := []struct {
 		name         string
@@ -347,31 +280,25 @@ func TestHTTPAPI_inferPipelineName(t *testing.T) {
 	}
 }
 
-func TestHTTPAPI_CinderExternalScheduler_DecisionCreation(t *testing.T) {
-	var capturedDecision *v1alpha1.Decision
-	delegate := &mockHTTPAPIDelegate{
-		processDecisionFunc: func(ctx context.Context, decision *v1alpha1.Decision) error {
-			capturedDecision = decision
-			// Set a successful result to avoid "decision didn't produce a result" error
-			decision.Status.Result = &v1alpha1.DecisionResult{
-				OrderedHosts: []string{"host1"},
-			}
-			return nil
+// When the request carries no pipeline, the handler infers the default name and
+// passes it to the scheduler.
+func TestHTTPAPI_CinderExternalScheduler_InfersPipeline(t *testing.T) {
+	var capturedPipeline string
+	var capturedRequest cinderapi.ExternalSchedulerRequest
+	scheduler := &mockScheduler{
+		scheduleFunc: func(ctx context.Context, pipelineName string, request cinderapi.ExternalSchedulerRequest) (lib.PipelineResult, error) {
+			capturedPipeline = pipelineName
+			capturedRequest = request
+			return lib.PipelineResult{OrderedHosts: []string{"host1"}}, nil
 		},
 	}
 
-	api := NewAPI(delegate).(*httpAPI)
+	api := NewAPI(scheduler).(*httpAPI)
 
 	requestData := cinderapi.ExternalSchedulerRequest{
-		Hosts: []cinderapi.ExternalSchedulerHost{
-			{VolumeHost: "host1"},
-		},
-		Weights: map[string]float64{
-			"host1": 1.0,
-		},
-		Pipeline: "test-pipeline",
+		Hosts:   []cinderapi.ExternalSchedulerHost{{VolumeHost: "host1"}},
+		Weights: map[string]float64{"host1": 1.0},
 	}
-
 	body, err := json.Marshal(requestData)
 	if err != nil {
 		t.Fatalf("Failed to marshal request data: %v", err)
@@ -384,25 +311,10 @@ func TestHTTPAPI_CinderExternalScheduler_DecisionCreation(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
 	}
-
-	if capturedDecision == nil {
-		t.Fatal("Decision was not captured")
+	if capturedPipeline != "cinder-external-scheduler" {
+		t.Errorf("Expected inferred pipeline 'cinder-external-scheduler', got %q", capturedPipeline)
 	}
-
-	// Verify decision fields
-	if capturedDecision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainCinder {
-		t.Errorf("Expected scheduling domain %s, got %s", v1alpha1.SchedulingDomainCinder, capturedDecision.Spec.SchedulingDomain)
-	}
-
-	if capturedDecision.Spec.PipelineRef.Name != "test-pipeline" {
-		t.Errorf("Expected pipeline 'test-pipeline', got %s", capturedDecision.Spec.PipelineRef.Name)
-	}
-
-	if capturedDecision.GenerateName != "cinder-" {
-		t.Errorf("Expected generate name 'cinder-', got %s", capturedDecision.GenerateName)
-	}
-
-	if capturedDecision.Spec.CinderRaw == nil {
-		t.Error("CinderRaw should not be nil")
+	if len(capturedRequest.Hosts) != 1 || capturedRequest.Hosts[0].VolumeHost != "host1" {
+		t.Errorf("Request not passed through to scheduler: %+v", capturedRequest)
 	}
 }

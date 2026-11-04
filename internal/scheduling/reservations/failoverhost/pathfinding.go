@@ -4,20 +4,20 @@
 package failoverhost
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"maps"
-	"net/http"
 	"slices"
 	"sort"
-	"strconv"
 	"time"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -71,21 +71,19 @@ type PathFinder interface {
 	FindPaths(ctx context.Context, topo topology, seeds []Seed) ([]Path, error)
 }
 
-// evacuationPathFinder finds failover paths by asking the external cortex
-// scheduler, per seed, which hosts would accept that flavor, then pairing up the
-// co-accepting hosts subject to gang-level fit.
+// evacuationPathFinder finds failover paths by probing the shared in-process
+// scheduler, per seed, for which hosts would accept that flavor, then pairing up
+// the co-accepting hosts subject to gang-level fit.
 //
 // Asking the real scheduler (rather than reimplementing placement here) is
 // deliberate: it means failover paths are computed with exactly the same
 // filters, weighers and constraints that govern ordinary placement, so a
 // partition can never contain a target the scheduler would actually reject.
 type evacuationPathFinder struct {
-	// httpClient issues the scheduler requests. Give it a timeout so a hung
-	// scheduler cannot stall the whole calculation loop. Separately injected so
-	// tests can point it at a stub server.
-	httpClient *http.Client
-	// schedulerURL is the external cortex scheduler endpoint to POST to.
-	schedulerURL string
+	// scheduler is the shared in-process scheduler used to probe placement. The
+	// pathfinder issues read-only runs via RunWithoutLock. Separately injected so
+	// tests can point it at a fake pipeline.
+	scheduler *compute.Placement
 	// monitor records scheduler request metrics. May be nil (e.g. in tests).
 	monitor *Monitor
 }
@@ -242,25 +240,53 @@ func hvCapacity(hv hv1.Hypervisor) map[hv1.ResourceName]resource.Quantity {
 func (f *evacuationPathFinder) fetchSeedCandidates(ctx context.Context, seed Seed, hvsByName map[string]hv1.Hypervisor) ([]hv1.Hypervisor, error) {
 	log := logf.FromContext(ctx)
 
-	// Build valid image properties. We set the image hypervisor type explicitly so
-	// the filter that checks flavor/image compatibility can evaluate it. Since we
-	// only handle KVM virtual machines, we set it to KVM.
-	imageProps := map[string]any{
-		"img_hv_type": string(api.NovaImageMetaHVTypeKVM),
-	}
 	// Offer every known host as a candidate. The scheduler filters/weighs over
 	// exactly this host set — it does not gather the cluster itself — so leaving
 	// Hosts empty would make it return no candidates. Each host also needs a
 	// weight entry, which the scheduler requires to accompany the host set.
-	hosts := make([]api.ExternalSchedulerHost, 0, len(hvsByName))
+	hosts := make([]compute.Host, 0, len(hvsByName))
 	weights := make(map[string]float64, len(hvsByName))
 	for name := range hvsByName {
-		hosts = append(hosts, api.ExternalSchedulerHost{ComputeHost: name})
+		hosts = append(hosts, compute.Host{ComputeHost: name})
 		weights[name] = 0
 	}
-	requestObj := api.ExternalSchedulerRequest{
-		Hosts:   hosts,
-		Weights: weights,
+	// Honor the flavor's trait and hypervisor-type constraints so the probe only
+	// considers compatible hosts (filter_has_requested_traits/filter_capabilities
+	// would otherwise see empty slices and become no-ops). The seeder only emits
+	// seeds whose flavor names a supported hypervisor type, so no default is needed.
+	requiredTraits, forbiddenTraits := nova.SplitTraits(seed.Flavor.ExtraSpecs)
+	req := compute.PlacementRequest{
+		// Same HANA vs general-purpose split as regular failover placement.
+		Pipeline: failover.InferFailoverPipeline(seed.Flavor.ExtraSpecs),
+		// We offer the host set ourselves; the scheduler must not gather the
+		// cluster itself and overwrite our candidates.
+		GatherAllCandidates: false,
+		HypervisorFamily:    compute.HypervisorFamilyKVM,
+		// We only handle KVM virtual machines, so the flavor/image compatibility
+		// filter must see a KVM image hypervisor type.
+		ImageHypervisorType: compute.ImageHypervisorTypeKVM,
+		Hosts:               hosts,
+		Weights:             weights,
+		// Probe with evacuation intent. A failover cold-migrates (evacuates) the
+		// workload, and evacuation does not run the live-migratability feature
+		// check, so no source host is needed. This is deliberately weaker than a
+		// live-migration probe — see the PathFinder doc.
+		Intent: api.EvacuateIntent,
+		// Probe a single flavor slot; NumInstances must be >= 1 or capacity/
+		// bin-pack math treats the host as free.
+		NumInstances:     1,
+		AvailabilityZone: seed.AvailabilityZone,
+		RequiredTraits:   requiredTraits,
+		ForbiddenTraits:  forbiddenTraits,
+		// Match the flavor's hypervisor type (QEMU vs CH). The seeder only emits
+		// seeds whose flavor names a supported hypervisor type, so this is always
+		// set (no default needed).
+		RequestedCapabilities: reservations.HypervisorTypeCapability(seed.Flavor.ExtraSpecs, false),
+		AcceleratorsRequested: nova.RequestsAccelerators(seed.Flavor.ExtraSpecs),
+		Flavor: compute.FlavorSpec{
+			VCPUs:    seed.Flavor.VCPUs,
+			MemoryMB: seed.Flavor.MemoryMB,
+		},
 		Options: scheduling.Options{
 			// Read-only probe: don't write any resources. ReadOnly additionally
 			// requires SkipInflight and SkipCommittedResourceTracking, else the
@@ -280,80 +306,23 @@ func (f *evacuationPathFinder) fetchSeedCandidates(ctx context.Context, seed See
 				v1alpha1.ReservationTypeFailoverHost,
 			},
 		},
-		Spec: api.NovaObject[api.NovaSpec]{
-			Data: api.NovaSpec{
-				NumInstances:     1,
-				AvailabilityZone: seed.AvailabilityZone,
-				// Probe with evacuation intent. A failover cold-migrates (evacuates)
-				// the workload, and evacuation does not run the live-migratability
-				// feature check, so no source_host is needed. The check type must be
-				// the literal "evacuate" nova uses, which maps to EvacuateIntent in
-				// GetIntent. See the PathFinder doc for why this is deliberately
-				// weaker than a live-migration probe.
-				SchedulerHints: map[string]any{
-					"_nova_check_type": "evacuate",
-				},
-				Flavor: api.NovaObject[api.NovaFlavor]{
-					Data: api.NovaFlavor{
-						Name:       seed.Flavor.Name,
-						ExtraSpecs: seed.Flavor.ExtraSpecs,
-						MemoryMB:   seed.Flavor.MemoryMB,
-						VCPUs:      seed.Flavor.VCPUs,
-					},
-				},
-				Image: api.NovaObject[api.NovaImageMeta]{
-					Data: api.NovaImageMeta{
-						Properties: api.NovaObject[map[string]any]{
-							Data: imageProps,
-						},
-					},
-				},
-			},
-		},
 	}
-	log.V(1).Info("external scheduler request prepared", "request", requestObj)
-
-	reqBody, err := json.Marshal(requestObj)
-	if err != nil {
-		log.Error(err, "failed to marshal external scheduler request")
-		return nil, fmt.Errorf("failed to marshal external scheduler request: %w", err)
-	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		f.schedulerURL, bytes.NewReader(reqBody))
-	if err != nil {
-		log.Error(err, "failed to create HTTP request")
-		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
+	log.V(1).Info("scheduler probe prepared", "request", req)
 
 	startTime := time.Now()
-	response, err := f.httpClient.Do(httpReq)
+	result, err := f.scheduler.RunWithoutLock(ctx, req, nil, nil)
 	duration := time.Since(startTime)
 	if err != nil {
 		f.monitor.RecordSchedulerRequest("error", duration)
-		log.Error(err, "failed to send external scheduler request")
-		return nil, fmt.Errorf("failed to send external scheduler request: %w", err)
+		log.Error(err, "scheduler probe failed")
+		return nil, fmt.Errorf("scheduler probe failed: %w", err)
 	}
-	defer response.Body.Close()
-	f.monitor.RecordSchedulerRequest(strconv.Itoa(response.StatusCode), duration)
-	log.V(1).Info("external scheduler request sent",
-		"duration", duration, "status", response.StatusCode)
-
-	if response.StatusCode != http.StatusOK {
-		log.Error(nil, "external scheduler request failed", "status", response.StatusCode)
-		return nil, fmt.Errorf("external scheduler request failed with status: %d", response.StatusCode)
-	}
-
-	var responseObj api.ExternalSchedulerResponse
-	if err := json.NewDecoder(response.Body).Decode(&responseObj); err != nil {
-		log.Error(err, "failed to decode external scheduler response")
-		return nil, fmt.Errorf("failed to decode external scheduler response: %w", err)
-	}
-	log.V(1).Info("external scheduler response received", "response", responseObj)
+	f.monitor.RecordSchedulerRequest("200", duration)
+	log.V(1).Info("scheduler probe completed", "duration", duration, "hosts", result.OrderedHosts)
 
 	candidates := []hv1.Hypervisor{}
 	for _, hv := range hvsByName {
-		if slices.Contains(responseObj.Hosts, hv.Name) {
+		if slices.Contains(result.OrderedHosts, hv.Name) {
 			candidates = append(candidates, hv)
 		}
 	}
