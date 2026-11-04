@@ -36,7 +36,7 @@ func (api *HTTPAPI) HandleInfo(w http.ResponseWriter, r *http.Request) {
 	// Set request ID in response header for client correlation
 	w.Header().Set("X-Request-ID", requestID)
 
-	ctx := reservations.WithGlobalRequestID(r.Context(), "committed-resource-"+requestID)
+	ctx := reservations.WithGlobalRequestID(r.Context(), requestID)
 	logger := commitments.LoggerFromContext(ctx).WithValues("endpoint", "/commitments/v1/info")
 
 	// Only accept GET method

@@ -648,10 +648,10 @@ func (env *IntegrationTestEnv) LogStateSummary() {
 		for _, vm := range vmsByHypervisor[hypervisorName] {
 			memoryMB := int64(0)
 			vcpus := int64(0)
-			if mem, ok := vm.Resources["memory"]; ok {
+			if mem, ok := vm.Resources[string(hv1.ResourceMemory)]; ok {
 				memoryMB = mem.Value() / (1024 * 1024)
 			}
-			if cpu, ok := vm.Resources["vcpus"]; ok {
+			if cpu, ok := vm.Resources[string(hv1.ResourceCPU)]; ok {
 				vcpus = cpu.Value()
 			}
 			vmParts = append(vmParts, fmt.Sprintf("%s(%dMB,%dCPU)", vm.UUID, memoryMB, vcpus))
@@ -1448,8 +1448,8 @@ func newHypervisorWithAZ(name string, cpuCap, memoryGi, cpuAlloc, memoryGiAlloc 
 		labels[corev1.LabelTopologyZone] = az
 	}
 	capacity := map[hv1.ResourceName]resource.Quantity{
-		"cpu":    resource.MustParse(strconv.Itoa(cpuCap)),
-		"memory": resource.MustParse(strconv.Itoa(memoryGi) + "Gi"),
+		hv1.ResourceCPU:    resource.MustParse(strconv.Itoa(cpuCap)),
+		hv1.ResourceMemory: resource.MustParse(strconv.Itoa(memoryGi) + "Gi"),
 	}
 	return &hv1.Hypervisor{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1458,14 +1458,14 @@ func newHypervisorWithAZ(name string, cpuCap, memoryGi, cpuAlloc, memoryGiAlloc 
 		},
 		Spec: hv1.HypervisorSpec{
 			Overcommit: map[hv1.ResourceName]float64{
-				"cpu":    1.0,
-				"memory": 1.0,
+				hv1.ResourceCPU:    1.0,
+				hv1.ResourceMemory: 1.0,
 			},
 		},
 		Status: hv1.HypervisorStatus{
 			Capacity:          capacity,
 			EffectiveCapacity: capacity,
-			Allocation:        map[hv1.ResourceName]resource.Quantity{"cpu": resource.MustParse(strconv.Itoa(cpuAlloc)), "memory": resource.MustParse(strconv.Itoa(memoryGiAlloc) + "Gi")},
+			Allocation:        map[hv1.ResourceName]resource.Quantity{hv1.ResourceCPU: resource.MustParse(strconv.Itoa(cpuAlloc)), hv1.ResourceMemory: resource.MustParse(strconv.Itoa(memoryGiAlloc) + "Gi")},
 			NumInstances:      len(instances),
 			Instances:         instances,
 			Traits:            traits,
@@ -1487,8 +1487,8 @@ func newReservation(name, host string, memoryMB, vcpus uint64, allocations map[s
 			Type:       v1alpha1.ReservationTypeFailover,
 			TargetHost: host,
 			Resources: map[hv1.ResourceName]resource.Quantity{
-				"memory": resource.MustParse(strconv.FormatUint(memoryMB, 10) + "Mi"),
-				"cpu":    resource.MustParse(strconv.FormatUint(vcpus, 10)),
+				hv1.ResourceMemory: resource.MustParse(strconv.FormatUint(memoryMB, 10) + "Mi"),
+				hv1.ResourceCPU:    resource.MustParse(strconv.FormatUint(vcpus, 10)),
 			},
 			FailoverReservation: &v1alpha1.FailoverReservationSpec{
 				ResourceGroup: "m1.large",
@@ -1525,8 +1525,8 @@ func newVMWithAZ(uuid, flavorName, projectID, host string, memoryMB, vcpus uint6
 		CurrentHypervisor: host,
 		AvailabilityZone:  az,
 		Resources: map[string]resource.Quantity{
-			"memory": resource.MustParse(strconv.FormatUint(memoryMB, 10) + "Mi"),
-			"vcpus":  resource.MustParse(strconv.FormatUint(vcpus, 10)),
+			string(hv1.ResourceMemory): resource.MustParse(strconv.FormatUint(memoryMB, 10) + "Mi"),
+			string(hv1.ResourceCPU):    resource.MustParse(strconv.FormatUint(vcpus, 10)),
 		},
 		FlavorExtraSpecs: make(map[string]string),
 	}

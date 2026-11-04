@@ -15,6 +15,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
 	"github.com/sapcc/go-api-declarations/liquid"
 	. "go.xyrillian.de/gg/option"
@@ -157,7 +158,10 @@ func (c *UsageCalculator) BuildVMAssignmentsFromStatus(ctx context.Context, proj
 	}
 	assignments := make(map[string]string)
 	for _, cr := range crList.Items {
-		for _, vmUUID := range cr.Status.AssignedInstances {
+		if cr.Status.Billing == nil {
+			continue
+		}
+		for _, vmUUID := range cr.Status.Billing.AssignedInstances {
 			assignments[vmUUID] = cr.Spec.CommitmentUUID
 		}
 	}
@@ -275,10 +279,10 @@ func getProjectVMs(
 
 		memoryMB := uint64(0)
 		vcpus := uint64(0)
-		if qty, ok := vm.Resources["memory"]; ok {
+		if qty, ok := vm.Resources[string(hv1.ResourceMemory)]; ok {
 			memoryMB = uint64(qty.Value()) / (1024 * 1024) //nolint:gosec
 		}
-		if qty, ok := vm.Resources["vcpus"]; ok {
+		if qty, ok := vm.Resources[string(hv1.ResourceCPU)]; ok {
 			vcpus = uint64(qty.Value()) //nolint:gosec
 		}
 

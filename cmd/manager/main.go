@@ -624,6 +624,7 @@ func main() {
 			Scheme:    mgr.GetScheme(),
 			Conf:      commitmentsConfig.ReservationController,
 			Scheduler: novaScheduler,
+			VMSource:  commitmentsVMSource,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "CommitmentReservation")
 			os.Exit(1)

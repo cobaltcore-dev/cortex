@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -18,17 +19,7 @@ import (
 )
 
 func newCRReservation(name, host, projectID, resourceGroup, az, totalMemory string, allocatedMemory ...string) *v1alpha1.Reservation {
-	allocs := make(map[string]v1alpha1.CommittedResourceAllocation)
-	for i, mem := range allocatedMemory {
-		vmUUID := "vm-" + string(rune('a'+i))
-		allocs[vmUUID] = v1alpha1.CommittedResourceAllocation{
-			CreationTimestamp: metav1.Now(),
-			Resources: map[hv1.ResourceName]resource.Quantity{
-				hv1.ResourceMemory: resource.MustParse(mem),
-			},
-		}
-	}
-	return &v1alpha1.Reservation{
+	res := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Spec: v1alpha1.ReservationSpec{
 			Type:             v1alpha1.ReservationTypeCommittedResource,
@@ -40,7 +31,6 @@ func newCRReservation(name, host, projectID, resourceGroup, az, totalMemory stri
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 				ProjectID:     projectID,
 				ResourceGroup: resourceGroup,
-				Allocations:   allocs,
 			},
 		},
 		Status: v1alpha1.ReservationStatus{
@@ -52,6 +42,22 @@ func newCRReservation(name, host, projectID, resourceGroup, az, totalMemory stri
 			Host: host,
 		},
 	}
+	if len(allocatedMemory) > 0 {
+		statusAllocs := make(map[string]v1alpha1.CommittedResourceAllocation, len(allocatedMemory))
+		for i := range allocatedMemory {
+			vmUUID := "vm-" + string(rune('a'+i))
+			statusAllocs[vmUUID] = v1alpha1.CommittedResourceAllocation{
+				ObjectRef: corev1.ObjectReference{Name: vmUUID},
+				Resources: map[hv1.ResourceName]resource.Quantity{
+					hv1.ResourceMemory: resource.MustParse(allocatedMemory[i]),
+				},
+			}
+		}
+		res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{
+			Allocation: statusAllocs,
+		}
+	}
+	return res
 }
 
 func newCRRequest(hosts []string) compute.PlacementRequest {
@@ -106,7 +112,7 @@ func TestKVMCommittedResourceReservationStep_Run(t *testing.T) {
 			expectedWeights: map[string]float64{"host1": 0.1, "host2": 0.1},
 		},
 		{
-			name: "reservation partially allocated with enough free capacity",
+			name: "reservation with confirmed VM: free capacity proportional to allocation size",
 			reservations: []*v1alpha1.Reservation{
 				newCRReservation("res-1", "host1", "project-A", "group-2101", "qa-de-1a", "16Gi", "4Gi"),
 			},

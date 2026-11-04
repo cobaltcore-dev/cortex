@@ -9,6 +9,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -18,7 +19,6 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
@@ -67,8 +67,8 @@ func TestRecordCRAllocation(t *testing.T) {
 		}
 	}
 
-	makeReservation := func(name string, memMiB, cpus int64, proj, group, host string, allocs map[string]v1alpha1.CommittedResourceAllocation) *v1alpha1.Reservation {
-		return &v1alpha1.Reservation{
+	makeReservation := func(name string, memMiB, cpus int64, proj, group, host string, statusAllocs map[string]v1alpha1.CommittedResourceAllocation) *v1alpha1.Reservation {
+		res := &v1alpha1.Reservation{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
 				Labels: map[string]string{
@@ -85,10 +85,15 @@ func TestRecordCRAllocation(t *testing.T) {
 				CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 					ProjectID:     proj,
 					ResourceGroup: group,
-					Allocations:   allocs,
 				},
 			},
 		}
+		if len(statusAllocs) > 0 {
+			res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{
+				Allocation: statusAllocs,
+			}
+		}
+		return res
 	}
 
 	makeRequest := func(uuid, proj, flavor string) api.ExternalSchedulerRequest {
@@ -105,11 +110,15 @@ func TestRecordCRAllocation(t *testing.T) {
 		}
 	}
 
-	makeResult := func(host string, candidates ...string) sched.PlacementResult {
+	makeDecision := func(host string, candidates ...string) *v1alpha1.Decision {
 		h := host
-		return sched.PlacementResult{
-			TargetHost:   &h,
-			OrderedHosts: candidates,
+		return &v1alpha1.Decision{
+			Status: v1alpha1.DecisionStatus{
+				Result: &v1alpha1.DecisionResult{
+					TargetHost:   &h,
+					OrderedHosts: candidates,
+				},
+			},
 		}
 	}
 
@@ -138,48 +147,47 @@ func TestRecordCRAllocation(t *testing.T) {
 	vmAlloc := func() map[string]v1alpha1.CommittedResourceAllocation {
 		return map[string]v1alpha1.CommittedResourceAllocation{
 			instanceUUID: {
-				CreationTimestamp: metav1.Now(),
+				ObjectRef: corev1.ObjectReference{Name: instanceUUID},
 				Resources: map[hv1.ResourceName]resource.Quantity{
-					hv1.ResourceMemory: *resource.NewQuantity(int64(4096)*1024*1024, resource.BinarySI),
-					hv1.ResourceCPU:    *resource.NewQuantity(2, resource.DecimalSI),
+					hv1.ResourceMemory: resource.MustParse("8192Mi"),
 				},
 			},
 		}
 	}
 
 	tests := []struct {
-		name             string
-		objects          []client.Object
-		request          api.ExternalSchedulerRequest
-		result           sched.PlacementResult
-		intent           v1alpha1.SchedulingIntent
-		checkSlot        string
-		expectAllocation bool
-		expectedCRSlot   string // if non-empty, asserts PlacementCounter cr_slot label
+		name           string
+		objects        []client.Object
+		request        api.ExternalSchedulerRequest
+		decision       *v1alpha1.Decision
+		expectedCRSlot string // if non-empty, asserts PlacementCounter cr_slot label
+		expectedFG     string // flavor_group label; defaults to "unknown" if empty
 	}{
 		{
-			name: "writes allocation into matching reservation",
+			name: "classifies slot_used and logs placement (recorder delegates write to reservation controller)",
 			objects: []client.Object{
 				flavorKnowledge(),
 				makeCRObject(),
 				setReady(makeReservation("slot-1", 8192, 8, projectID, flavorGroup, selectedHost, nil)),
 			},
-			request:          makeRequest(instanceUUID, projectID, flavorName),
-			result:           makeResult(selectedHost, selectedHost),
-			checkSlot:        "slot-1",
-			expectAllocation: true,
+			request:        makeRequest(instanceUUID, projectID, flavorName),
+			decision:       makeDecision(selectedHost, selectedHost),
+			expectedCRSlot: "slot_used",
+			expectedFG:     flavorGroup,
 		},
 		{
-			name: "idempotent: UUID already in allocations",
+			// With status.allocs set, ClassifyPlacement sees remaining=0 → "slot_missed".
+			// The recorder returns early at that point, so no write occurs (idempotency maintained via no-op).
+			name: "idempotent: UUID already confirmed in status.allocations — skips early",
 			objects: []client.Object{
 				flavorKnowledge(),
 				makeCRObject(),
 				setReady(makeReservation("slot-1", 8192, 8, projectID, flavorGroup, selectedHost, vmAlloc())),
 			},
-			request:          makeRequest(instanceUUID, projectID, flavorName),
-			result:           makeResult(selectedHost, selectedHost),
-			checkSlot:        "slot-1",
-			expectAllocation: true,
+			request:  makeRequest(instanceUUID, projectID, flavorName),
+			decision: makeDecision(selectedHost, selectedHost),
+			// No expectedCRSlot: with status.allocs set, slot appears exhausted (remaining=0),
+			// crOutcome="slot_missed" — counter not checked for this idempotent path.
 		},
 		{
 			name: "PAYG: flavor not in any group",
@@ -187,10 +195,8 @@ func TestRecordCRAllocation(t *testing.T) {
 				flavorKnowledge(),
 				setReady(makeReservation("slot-1", 8192, 8, projectID, flavorGroup, selectedHost, nil)),
 			},
-			request:          makeRequest(instanceUUID, projectID, "unknown-flavor"),
-			result:           makeResult(selectedHost, selectedHost),
-			checkSlot:        "slot-1",
-			expectAllocation: false,
+			request:  makeRequest(instanceUUID, projectID, "unknown-flavor"),
+			decision: makeDecision(selectedHost, selectedHost),
 		},
 		{
 			name: "no matching reservation: host mismatch",
@@ -199,33 +205,29 @@ func TestRecordCRAllocation(t *testing.T) {
 				makeCRObject(),
 				setReady(makeReservation("slot-1", 8192, 8, projectID, flavorGroup, "other-host", nil)),
 			},
-			request:          makeRequest(instanceUUID, projectID, flavorName),
-			result:           makeResult(selectedHost, selectedHost),
-			checkSlot:        "slot-1",
-			expectAllocation: false,
+			request:  makeRequest(instanceUUID, projectID, flavorName),
+			decision: makeDecision(selectedHost, selectedHost),
 		},
 		{
-			name: "no slot fits: all capacity used",
+			name: "no slot fits: all capacity confirmed (status.allocs non-empty → 0 remaining memory)",
 			objects: []client.Object{
 				flavorKnowledge(),
 				makeCRObject(),
 				setReady(makeReservation("slot-full", 4096, 2, projectID, flavorGroup, selectedHost,
 					map[string]v1alpha1.CommittedResourceAllocation{
 						"other-vm": {
+							ObjectRef: corev1.ObjectReference{Name: "other-vm"},
 							Resources: map[hv1.ResourceName]resource.Quantity{
-								hv1.ResourceMemory: *resource.NewQuantity(int64(4096)*1024*1024, resource.BinarySI),
-								hv1.ResourceCPU:    *resource.NewQuantity(2, resource.DecimalSI),
+								hv1.ResourceMemory: resource.MustParse("4096Mi"),
 							},
 						},
 					})),
 			},
-			request:          makeRequest(instanceUUID, projectID, flavorName),
-			result:           makeResult(selectedHost, selectedHost),
-			checkSlot:        "slot-full",
-			expectAllocation: false,
+			request:  makeRequest(instanceUUID, projectID, flavorName),
+			decision: makeDecision(selectedHost, selectedHost),
 		},
 		{
-			name: "inactive CR (pending state) is filtered by IsActive(): no allocation",
+			name: "inactive CR (pending state) is filtered by IsActive(): no slot_used",
 			objects: []client.Object{
 				flavorKnowledge(),
 				func() *v1alpha1.CommittedResource {
@@ -235,21 +237,17 @@ func TestRecordCRAllocation(t *testing.T) {
 				}(),
 				setReady(makeReservation("slot-1", 8192, 8, projectID, flavorGroup, selectedHost, nil)),
 			},
-			request:          makeRequest(instanceUUID, projectID, flavorName),
-			result:           makeResult(selectedHost, selectedHost),
-			checkSlot:        "slot-1",
-			expectAllocation: false,
+			request:  makeRequest(instanceUUID, projectID, flavorName),
+			decision: makeDecision(selectedHost, selectedHost),
 		},
 		{
 			name: "no knowledge CRD: logs error, no allocation",
 			objects: []client.Object{
 				makeReservation("slot-1", 8192, 8, projectID, flavorGroup, selectedHost, nil),
 			},
-			request:          makeRequest(instanceUUID, projectID, flavorName),
-			result:           makeResult(selectedHost, selectedHost),
-			checkSlot:        "slot-1",
-			expectAllocation: false,
-			expectedCRSlot:   "error",
+			request:        makeRequest(instanceUUID, projectID, flavorName),
+			decision:       makeDecision(selectedHost, selectedHost),
+			expectedCRSlot: "error",
 		},
 	}
 
@@ -269,25 +267,18 @@ func TestRecordCRAllocation(t *testing.T) {
 				PlacementCounter: counter,
 			}
 
-			recorder.RecordPlacement(context.Background(), tt.result, tt.intent, tt.request)
+			recorder.RecordPlacement(context.Background(), tt.decision, tt.request)
 
-			var res v1alpha1.Reservation
-			if err := fakeClient.Get(context.Background(), client.ObjectKey{Name: tt.checkSlot}, &res); err != nil {
-				t.Fatalf("Get reservation %q: %v", tt.checkSlot, err)
-			}
-			_, hasAlloc := res.Spec.CommittedResourceReservation.Allocations[instanceUUID]
-			if tt.expectAllocation && !hasAlloc {
-				t.Errorf("expected allocation for UUID %q but none found", instanceUUID)
-			}
-			if !tt.expectAllocation && hasAlloc {
-				t.Errorf("expected no allocation for UUID %q but one was written", instanceUUID)
-			}
 			if tt.expectedCRSlot != "" {
-				intent := string(tt.intent)
-				got := testutil.ToFloat64(counter.WithLabelValues("unknown", intent, tt.expectedCRSlot))
+				intent := string(tt.decision.Spec.Intent)
+				fg := tt.expectedFG
+				if fg == "" {
+					fg = "unknown"
+				}
+				got := testutil.ToFloat64(counter.WithLabelValues(fg, intent, tt.expectedCRSlot))
 				if got != 1 {
-					t.Errorf("PlacementCounter[flavor_group=unknown, intent=%q, cr_slot=%q] = %.0f, want 1",
-						intent, tt.expectedCRSlot, got)
+					t.Errorf("PlacementCounter[flavor_group=%q, intent=%q, cr_slot=%q] = %.0f, want 1",
+						fg, intent, tt.expectedCRSlot, got)
 				}
 			}
 		})

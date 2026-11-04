@@ -16,20 +16,14 @@ import (
 // Use LoggerFromContext to get a logger with request tracking values.
 var baseLog = ctrl.Log.WithName("committed-resource").WithValues("module", "committed-resources")
 
-// WithNewGlobalRequestID creates a new context with a committed-resource-prefixed global request ID.
-func WithNewGlobalRequestID(ctx context.Context) context.Context {
-	return reservations.WithGlobalRequestID(ctx, "committed-resource-"+uuid.New().String())
-}
-
-// WithGlobalRequestID creates a new context with the specified global request ID.
-// This is used to propagate existing request IDs (e.g., from the creator annotation).
-func WithGlobalRequestID(ctx context.Context, greq string) context.Context {
-	return reservations.WithGlobalRequestID(ctx, greq)
+// WithNewReconcileID creates a new context with a unique per-reconcile correlation ID.
+// Use this at the entry point of each Reconcile call so every log line in that run
+// carries the same greq, making a single reconcile easy to isolate in logs.
+func WithNewReconcileID(ctx context.Context) context.Context {
+	return reservations.WithGlobalRequestID(ctx, "reconcile-"+uuid.New().String())
 }
 
 // LoggerFromContext returns a logger with greq and req values from the context.
-// This creates a child logger with the request tracking values pre-attached,
-// so you don't need to repeat them in every log call.
 func LoggerFromContext(ctx context.Context) logr.Logger {
 	return baseLog.WithValues(
 		"greq", reservations.GlobalRequestIDFromContext(ctx),

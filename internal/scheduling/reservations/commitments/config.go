@@ -55,13 +55,6 @@ type ReservationControllerConfig struct {
 	RequeueIntervalActive metav1.Duration `json:"requeueIntervalActive"`
 	// RequeueIntervalRetry is the back-off interval when knowledge is unavailable.
 	RequeueIntervalRetry metav1.Duration `json:"requeueIntervalRetry"`
-	// RequeueIntervalGracePeriod is how often to re-check while a VM allocation
-	// is still within AllocationGracePeriod. Shorter than RequeueIntervalActive.
-	RequeueIntervalGracePeriod metav1.Duration `json:"requeueIntervalGracePeriod"`
-	// AllocationGracePeriod is the time window after a VM is allocated to a
-	// reservation during which it's expected to appear on the target host.
-	// VMs not confirmed within this period are considered stale and removed.
-	AllocationGracePeriod metav1.Duration `json:"allocationGracePeriod"`
 	// OversubscriptionGracePeriod is how long to wait after detecting host over-subscription
 	// before evicting slots. Gives other controllers (e.g. failover) time to self-heal.
 	OversubscriptionGracePeriod metav1.Duration `json:"oversubscriptionGracePeriod,omitempty"`

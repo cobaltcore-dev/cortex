@@ -616,10 +616,10 @@ func (c *FailoverReservationController) selectVMsToProcess(
 func sortVMsByMemory(vms []vmFailoverNeed) {
 	sort.Slice(vms, func(i, j int) bool {
 		var memI, memJ int64
-		if mem, ok := vms[i].VM.Resources["memory"]; ok {
+		if mem, ok := vms[i].VM.Resources[string(hv1.ResourceMemory)]; ok {
 			memI = mem.Value()
 		}
-		if mem, ok := vms[j].VM.Resources["memory"]; ok {
+		if mem, ok := vms[j].VM.Resources[string(hv1.ResourceMemory)]; ok {
 			memJ = mem.Value()
 		}
 		return memI > memJ
