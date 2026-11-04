@@ -38,7 +38,7 @@ type VM struct {
 	// CreatedAt is the ISO 8601 timestamp when the VM was created in Nova.
 	// Used by the quota controller to distinguish new VMs from migrations.
 	CreatedAt string
-	// Resources contains the VM's resource allocations (e.g., "memory", "vcpus").
+	// Resources contains the VM's resource allocations (e.g., "memory", "cpu").
 	Resources map[string]resource.Quantity
 	// FlavorExtraSpecs contains the flavor's extra specifications (e.g., traits, capabilities).
 	// This is used by filters like filter_has_requested_traits and filter_capabilities.
@@ -130,8 +130,8 @@ func (s *DBVMSource) ListVMs(ctx context.Context) ([]VM, error) {
 			continue
 		}
 		resources := map[string]resource.Quantity{
-			"vcpus":  *resource.NewQuantity(int64(flavor.VCPUs), resource.DecimalSI),        //nolint:gosec
-			"memory": *resource.NewQuantity(int64(flavor.RAM)*1024*1024, resource.BinarySI), //nolint:gosec
+			string(hv1.ResourceCPU):    *resource.NewQuantity(int64(flavor.VCPUs), resource.DecimalSI),        //nolint:gosec
+			string(hv1.ResourceMemory): *resource.NewQuantity(int64(flavor.RAM)*1024*1024, resource.BinarySI), //nolint:gosec
 		}
 		vms = append(vms, VM{
 			UUID:              server.ID,
@@ -194,8 +194,8 @@ func (s *DBVMSource) ListVMsByProject(ctx context.Context, projectID string) ([]
 			continue
 		}
 		resources := map[string]resource.Quantity{
-			"vcpus":  *resource.NewQuantity(int64(flavor.VCPUs), resource.DecimalSI),        //nolint:gosec
-			"memory": *resource.NewQuantity(int64(flavor.RAM)*1024*1024, resource.BinarySI), //nolint:gosec
+			string(hv1.ResourceCPU):    *resource.NewQuantity(int64(flavor.VCPUs), resource.DecimalSI),        //nolint:gosec
+			string(hv1.ResourceMemory): *resource.NewQuantity(int64(flavor.RAM)*1024*1024, resource.BinarySI), //nolint:gosec
 		}
 		vms = append(vms, VM{
 			UUID:              server.ID,
@@ -235,8 +235,8 @@ func (s *DBVMSource) GetVM(ctx context.Context, vmUUID string) (*VM, error) {
 	}
 
 	resources := map[string]resource.Quantity{
-		"vcpus":  *resource.NewQuantity(int64(flavor.VCPUs), resource.DecimalSI),        //nolint:gosec
-		"memory": *resource.NewQuantity(int64(flavor.RAM)*1024*1024, resource.BinarySI), //nolint:gosec
+		string(hv1.ResourceCPU):    *resource.NewQuantity(int64(flavor.VCPUs), resource.DecimalSI),        //nolint:gosec
+		string(hv1.ResourceMemory): *resource.NewQuantity(int64(flavor.RAM)*1024*1024, resource.BinarySI), //nolint:gosec
 	}
 
 	return &VM{

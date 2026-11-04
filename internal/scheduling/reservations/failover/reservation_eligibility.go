@@ -291,7 +291,7 @@ func (g *DependencyGraph) isVMEligibleForReservation(candidateResName string) bo
 
 // doesVMFitInReservation checks if a VM's resources fit within a reservation's resources.
 func doesVMFitInReservation(vm reservations.VM, reservation v1alpha1.Reservation) bool {
-	if vmMemory, ok := vm.Resources["memory"]; ok {
+	if vmMemory, ok := vm.Resources[string(hv1.ResourceMemory)]; ok {
 		if resMemory, ok := reservation.Spec.Resources[hv1.ResourceMemory]; ok {
 			if vmMemory.Cmp(resMemory) > 0 {
 				return false
@@ -301,7 +301,7 @@ func doesVMFitInReservation(vm reservations.VM, reservation v1alpha1.Reservation
 		}
 	}
 
-	if vmVCPUs, ok := vm.Resources["vcpus"]; ok {
+	if vmVCPUs, ok := vm.Resources[string(hv1.ResourceCPU)]; ok {
 		if resCPU, ok := reservation.Spec.Resources[hv1.ResourceCPU]; ok {
 			if vmVCPUs.Cmp(resCPU) > 0 {
 				return false

@@ -178,23 +178,21 @@ func TestBuildNewFailoverReservation(t *testing.T) {
 			}
 
 			// Verify resources are derived from VM
-			// Note: VM uses "vcpus" but reservation uses "cpu" as the canonical key.
 			// Memory uses binary MiB (bytes / 1024*1024 → MiB → MiB * 1024*1024), matching
 			// commitments/state.go and vm_source.go conventions.
 			if tt.vm.Resources != nil {
-				if memory, ok := tt.vm.Resources["memory"]; ok {
+				if memory, ok := tt.vm.Resources[string(hv1.ResourceMemory)]; ok {
 					if resMemory, ok := result.Spec.Resources[hv1.ResourceMemory]; !ok {
 						t.Error("reservation missing memory resource")
 					} else if !memory.Equal(resMemory) {
 						t.Errorf("memory resource = %v, want %v", resMemory, memory)
 					}
 				}
-				if vcpus, ok := tt.vm.Resources["vcpus"]; ok {
-					// VM uses "vcpus" but reservation should use "cpu"
+				if cpu, ok := tt.vm.Resources[string(hv1.ResourceCPU)]; ok {
 					if resCPU, ok := result.Spec.Resources[hv1.ResourceCPU]; !ok {
 						t.Error("reservation missing cpu resource")
-					} else if !vcpus.Equal(resCPU) {
-						t.Errorf("cpu resource = %v, want %v", resCPU, vcpus)
+					} else if !cpu.Equal(resCPU) {
+						t.Errorf("cpu resource = %v, want %v", resCPU, cpu)
 					}
 				}
 			}
@@ -276,8 +274,8 @@ func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
 				FlavorName:        "hana_c60_m960",
 				ProjectID:         "test-project",
 				Resources: map[string]resource.Quantity{
-					"vcpus":  *resource.NewQuantity(60, resource.DecimalSI),
-					"memory": *resource.NewQuantity(983040*1024*1024, resource.BinarySI),
+					string(hv1.ResourceCPU):    *resource.NewQuantity(60, resource.DecimalSI),
+					string(hv1.ResourceMemory): *resource.NewQuantity(983040*1024*1024, resource.BinarySI),
 				},
 			},
 			useFlavorGroupResources: true,
@@ -296,8 +294,8 @@ func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
 				FlavorName:        "hana_c60_m960",
 				ProjectID:         "test-project",
 				Resources: map[string]resource.Quantity{
-					"vcpus":  *resource.NewQuantity(60, resource.DecimalSI),
-					"memory": *resource.NewQuantity(983040*1024*1024, resource.BinarySI),
+					string(hv1.ResourceCPU):    *resource.NewQuantity(60, resource.DecimalSI),
+					string(hv1.ResourceMemory): *resource.NewQuantity(983040*1024*1024, resource.BinarySI),
 				},
 			},
 			useFlavorGroupResources: false,
@@ -316,8 +314,8 @@ func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
 				FlavorName:        "unknown_flavor",
 				ProjectID:         "test-project",
 				Resources: map[string]resource.Quantity{
-					"vcpus":  *resource.NewQuantity(8, resource.DecimalSI),
-					"memory": *resource.NewQuantity(16384*1024*1024, resource.BinarySI),
+					string(hv1.ResourceCPU):    *resource.NewQuantity(8, resource.DecimalSI),
+					string(hv1.ResourceMemory): *resource.NewQuantity(16384*1024*1024, resource.BinarySI),
 				},
 			},
 			useFlavorGroupResources: true,
@@ -336,8 +334,8 @@ func TestResolveVMForSchedulingAndNewFailoverReservation(t *testing.T) {
 				FlavorName:        "hana_c60_m960",
 				ProjectID:         "test-project",
 				Resources: map[string]resource.Quantity{
-					"vcpus":  *resource.NewQuantity(60, resource.DecimalSI),
-					"memory": *resource.NewQuantity(983040*1024*1024, resource.BinarySI),
+					string(hv1.ResourceCPU):    *resource.NewQuantity(60, resource.DecimalSI),
+					string(hv1.ResourceMemory): *resource.NewQuantity(983040*1024*1024, resource.BinarySI),
 				},
 			},
 			useFlavorGroupResources: true,
@@ -415,8 +413,8 @@ func buildSchedulingTestReservation(name, host string, allocations map[string]st
 			Type:       v1alpha1.ReservationTypeFailover,
 			TargetHost: host,
 			Resources: map[hv1.ResourceName]resource.Quantity{
-				"memory": resource.MustParse("8Gi"),
-				"vcpus":  resource.MustParse("4"),
+				hv1.ResourceMemory: resource.MustParse("8Gi"),
+				hv1.ResourceCPU:    resource.MustParse("4"),
 			},
 		},
 		Status: v1alpha1.ReservationStatus{
@@ -438,8 +436,8 @@ func buildSchedulingTestReservationNoStatus(name, host string) v1alpha1.Reservat
 			Type:       v1alpha1.ReservationTypeFailover,
 			TargetHost: host,
 			Resources: map[hv1.ResourceName]resource.Quantity{
-				"memory": resource.MustParse("8Gi"),
-				"vcpus":  resource.MustParse("4"),
+				hv1.ResourceMemory: resource.MustParse("8Gi"),
+				hv1.ResourceCPU:    resource.MustParse("4"),
 			},
 		},
 		Status: v1alpha1.ReservationStatus{
@@ -457,8 +455,8 @@ func buildSchedulingTestVM(uuid, hypervisor string) reservations.VM { //nolint:u
 		ProjectID:         "test-project",
 		AvailabilityZone:  "az1",
 		Resources: map[string]resource.Quantity{
-			"vcpus":  resource.MustParse("4"),
-			"memory": resource.MustParse("8Gi"),
+			string(hv1.ResourceCPU):    resource.MustParse("4"),
+			string(hv1.ResourceMemory): resource.MustParse("8Gi"),
 		},
 	}
 }
@@ -471,8 +469,8 @@ func buildSchedulingTestVMWithResources(uuid, hypervisor string, memoryMB, vcpus
 		ProjectID:         "test-project",
 		AvailabilityZone:  "az1",
 		Resources: map[string]resource.Quantity{
-			"vcpus":  *resource.NewQuantity(vcpus, resource.DecimalSI),
-			"memory": *resource.NewQuantity(memoryMB*1024*1024, resource.BinarySI),
+			string(hv1.ResourceCPU):    *resource.NewQuantity(vcpus, resource.DecimalSI),
+			string(hv1.ResourceMemory): *resource.NewQuantity(memoryMB*1024*1024, resource.BinarySI),
 		},
 	}
 }

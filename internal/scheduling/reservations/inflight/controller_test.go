@@ -297,12 +297,12 @@ func TestReconcile_ResizeSizeMismatchRequeues(t *testing.T) {
 	// Ready condition to VMSizeMismatch.
 	scheme := newTestScheme(t)
 	reserved := map[hv1.ResourceName]resource.Quantity{
-		"cpu":    resource.MustParse("4"),
-		"memory": resource.MustParse("8Gi"),
+		hv1.ResourceCPU:    resource.MustParse("4"),
+		hv1.ResourceMemory: resource.MustParse("8Gi"),
 	}
 	current := map[hv1.ResourceName]resource.Quantity{
-		"cpu":    resource.MustParse("2"),
-		"memory": resource.MustParse("4Gi"),
+		hv1.ResourceCPU:    resource.MustParse("2"),
+		hv1.ResourceMemory: resource.MustParse("4Gi"),
 	}
 	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.ResizeIntent, reserved)
 	hv := newHypervisor("host-1", "vm-uuid-1")
@@ -332,8 +332,8 @@ func TestReconcile_ResizeSizeMatchesDeletesReservation(t *testing.T) {
 	// reservation can be freed like a normal in-flight reservation.
 	scheme := newTestScheme(t)
 	reserved := map[hv1.ResourceName]resource.Quantity{
-		"cpu":    resource.MustParse("4"),
-		"memory": resource.MustParse("8Gi"),
+		hv1.ResourceCPU:    resource.MustParse("4"),
+		hv1.ResourceMemory: resource.MustParse("8Gi"),
 	}
 	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.ResizeIntent, reserved)
 	hv := newHypervisor("host-1", "vm-uuid-1")
@@ -362,13 +362,13 @@ func TestReconcile_ResizeSizeMatchesSemanticallyDeletesReservation(t *testing.T)
 	scheme := newTestScheme(t)
 	// Reservation spec side: built like the API server would (MustParse).
 	reserved := map[hv1.ResourceName]resource.Quantity{
-		"cpu":    resource.MustParse("4"),
-		"memory": resource.MustParse("8Gi"),
+		hv1.ResourceCPU:    resource.MustParse("4"),
+		hv1.ResourceMemory: resource.MustParse("8Gi"),
 	}
 	// VM client side: built like the nova vm client does (NewQuantity).
 	current := map[hv1.ResourceName]resource.Quantity{
-		"cpu":    *resource.NewQuantity(4, resource.DecimalSI),
-		"memory": *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
+		hv1.ResourceCPU:    *resource.NewQuantity(4, resource.DecimalSI),
+		hv1.ResourceMemory: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
 	}
 	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.ResizeIntent, reserved)
 	hv := newHypervisor("host-1", "vm-uuid-1")
@@ -395,7 +395,7 @@ func TestReconcile_ResizeSizeMatchesSemanticallyDeletesReservation(t *testing.T)
 func TestReconcile_ResizeStaleReservationSkipsVMClient(t *testing.T) {
 	scheme := newTestScheme(t)
 	reserved := map[hv1.ResourceName]resource.Quantity{
-		"cpu": resource.MustParse("4"),
+		hv1.ResourceCPU: resource.MustParse("4"),
 	}
 	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.ResizeIntent, reserved)
 	// Instance ended up on host-2, not the target host-1.
@@ -431,10 +431,10 @@ func TestReconcile_RebuildSizeMismatchRequeues(t *testing.T) {
 	// both intents actually trip the vmClient check.
 	scheme := newTestScheme(t)
 	reserved := map[hv1.ResourceName]resource.Quantity{
-		"cpu": resource.MustParse("4"),
+		hv1.ResourceCPU: resource.MustParse("4"),
 	}
 	current := map[hv1.ResourceName]resource.Quantity{
-		"cpu": resource.MustParse("2"),
+		hv1.ResourceCPU: resource.MustParse("2"),
 	}
 	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.RebuildIntent, reserved)
 	hv := newHypervisor("host-1", "vm-uuid-1")
@@ -459,7 +459,7 @@ func TestReconcile_ResizeVMClientErrorReturnsError(t *testing.T) {
 	// reservation here would be a resource-accounting bug.
 	scheme := newTestScheme(t)
 	reserved := map[hv1.ResourceName]resource.Quantity{
-		"cpu": resource.MustParse("4"),
+		hv1.ResourceCPU: resource.MustParse("4"),
 	}
 	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.ResizeIntent, reserved)
 	hv := newHypervisor("host-1", "vm-uuid-1")
@@ -486,7 +486,7 @@ func TestReconcile_NonResizeIntentSkipsVMClient(t *testing.T) {
 	// all — we leave it nil to make an accidental call panic loudly.
 	scheme := newTestScheme(t)
 	res := newResizeReservation("res-1", "vm-uuid-1", "host-1", novaapi.LiveMigrationIntent,
-		map[hv1.ResourceName]resource.Quantity{"cpu": resource.MustParse("4")})
+		map[hv1.ResourceName]resource.Quantity{hv1.ResourceCPU: resource.MustParse("4")})
 	hv := newHypervisor("host-1", "vm-uuid-1")
 	k8sClient := newTestClient(scheme, res, hv)
 	c := &Controller{Client: k8sClient, VMClient: nil}

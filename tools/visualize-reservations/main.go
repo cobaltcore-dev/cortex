@@ -822,10 +822,10 @@ func main() {
 					var sizeStr string
 					if len(res.Spec.Resources) > 0 {
 						var parts []string
-						if vcpus, ok := res.Spec.Resources["vcpus"]; ok {
+						if vcpus, ok := res.Spec.Resources[hv1.ResourceCPU]; ok {
 							parts = append(parts, fmt.Sprintf("%dvcpu", vcpus.Value()))
 						}
-						if mem, ok := res.Spec.Resources["memory"]; ok {
+						if mem, ok := res.Spec.Resources[hv1.ResourceMemory]; ok {
 							memGB := mem.Value() / (1024 * 1024 * 1024)
 							parts = append(parts, fmt.Sprintf("%dGB", memGB))
 						}
@@ -1156,7 +1156,7 @@ func main() {
 				for name, qty := range res.Spec.Resources {
 					// Convert to appropriate units
 					switch name {
-					case "memory":
+					case hv1.ResourceMemory:
 						// Memory is in bytes (resource.Quantity.Value() returns bytes)
 						// 4080Mi = 4080 * 1024 * 1024 bytes
 						memBytes := qty.Value()
@@ -1168,7 +1168,7 @@ func main() {
 							memMB := memBytes / (1024 * 1024)
 							sizeInfo = append(sizeInfo, fmt.Sprintf("%s: %dMB", name, memMB))
 						}
-					case "cpu":
+					case hv1.ResourceCPU:
 						sizeInfo = append(sizeInfo, fmt.Sprintf("%s: %d", name, qty.Value()))
 					default:
 						sizeInfo = append(sizeInfo, fmt.Sprintf("%s: %s", name, qty.String()))
@@ -1427,10 +1427,10 @@ func main() {
 		// Calculate total reservation resources
 		for _, res := range failoverReservations {
 			if len(res.Spec.Resources) > 0 {
-				if vcpus, ok := res.Spec.Resources["vcpus"]; ok {
+				if vcpus, ok := res.Spec.Resources[hv1.ResourceCPU]; ok {
 					totalResCPU += vcpus.Value()
 				}
-				if mem, ok := res.Spec.Resources["memory"]; ok {
+				if mem, ok := res.Spec.Resources[hv1.ResourceMemory]; ok {
 					totalResRAMGB += mem.Value() / (1024 * 1024 * 1024)
 				}
 			}
@@ -1513,42 +1513,40 @@ func printHypervisorSummary(hypervisors []hv1.Hypervisor, reservations []v1alpha
 		}
 
 		// Get capacity from hypervisor status
-		if cpu, ok := hv.Status.Capacity["cpu"]; ok {
+		if cpu, ok := hv.Status.Capacity[hv1.ResourceCPU]; ok {
 			summary.CapacityCPU = cpu.Value()
 		}
-		if mem, ok := hv.Status.Capacity["memory"]; ok {
+		if mem, ok := hv.Status.Capacity[hv1.ResourceMemory]; ok {
 			// Memory is in bytes, convert to GB
 			summary.CapacityMemoryGB = mem.Value() / (1024 * 1024 * 1024)
 		}
 
 		// Get allocation (used by VMs) from hypervisor status
-		if cpu, ok := hv.Status.Allocation["cpu"]; ok {
+		if cpu, ok := hv.Status.Allocation[hv1.ResourceCPU]; ok {
 			summary.UsedByVMsCPU = cpu.Value()
 		}
-		if mem, ok := hv.Status.Allocation["memory"]; ok {
+		if mem, ok := hv.Status.Allocation[hv1.ResourceMemory]; ok {
 			// Memory is in bytes, convert to GB
 			summary.UsedByVMsMemoryGB = mem.Value() / (1024 * 1024 * 1024)
 		}
 
 		// Get failover reservation resources
-		// Note: Reservations use "vcpus" key, not "cpu"
 		if failoverRes, ok := failoverResPerHost[hv.Name]; ok {
-			if cpu, ok := failoverRes["vcpus"]; ok {
+			if cpu, ok := failoverRes[string(hv1.ResourceCPU)]; ok {
 				summary.FailoverResCPU = cpu
 			}
-			if mem, ok := failoverRes["memory"]; ok {
+			if mem, ok := failoverRes[string(hv1.ResourceMemory)]; ok {
 				// Memory from reservations is in bytes
 				summary.FailoverResMemGB = mem / (1024 * 1024 * 1024)
 			}
 		}
 
 		// Get committed reservation resources
-		// Note: Reservations use "vcpus" key, not "cpu"
 		if committedRes, ok := committedResPerHost[hv.Name]; ok {
-			if cpu, ok := committedRes["vcpus"]; ok {
+			if cpu, ok := committedRes[string(hv1.ResourceCPU)]; ok {
 				summary.CommittedResCPU = cpu
 			}
-			if mem, ok := committedRes["memory"]; ok {
+			if mem, ok := committedRes[string(hv1.ResourceMemory)]; ok {
 				// Memory from reservations is in bytes
 				summary.CommittedResMemGB = mem / (1024 * 1024 * 1024)
 			}
