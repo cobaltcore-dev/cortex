@@ -340,6 +340,26 @@ func randomRequest(dc datacenter, seed int) api.ExternalSchedulerRequest {
 		Hosts:   hosts,
 		Weights: weights,
 	}
+	// Synthesize image properties from flavor extra specs so filter_image_properties
+	// can determine the hypervisor type. Mirrors imagePropertiesFromFlavor in reservation_scheduling.go.
+	switch strings.ToLower(extraSpecs["capabilities:hypervisor_type"]) {
+	case "qemu", "ch":
+		request.Spec.Data.Image = api.NovaObject[api.NovaImageMeta]{
+			Data: api.NovaImageMeta{
+				Properties: api.NovaObject[map[string]any]{
+					Data: map[string]any{"img_hv_type": string(api.NovaImageMetaHVTypeKVM)},
+				},
+			},
+		}
+	case "vmware vcenter server":
+		request.Spec.Data.Image = api.NovaObject[api.NovaImageMeta]{
+			Data: api.NovaImageMeta{
+				Properties: api.NovaObject[map[string]any]{
+					Data: map[string]any{"hypervisor_type": string(api.NovaImageMetaHVTypeVMware)},
+				},
+			},
+		}
+	}
 	// Force to use the pipeline with all filters enabled for kvm flavors.
 	hvType, err := request.GetHypervisorType()
 	if err != nil {
