@@ -27,10 +27,10 @@ import (
 
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/capacity"
 	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -1388,9 +1388,12 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 			placedSlots = append(placedSlots, r)
 		}
 	}
-	free := accounting.HostFreeCapacity(placedSlots, *hv)
+	b, err := capacity.DescribeHostUsage(*hv, placedSlots, capacity.Options{})
+	if err != nil {
+		t.Fatalf("unexpected error computing host capacity: %v", err)
+	}
 	zero := resource.MustParse("0")
-	for rn, f := range free {
+	for rn, f := range b.Free {
 		if f.Cmp(zero) < 0 {
 			t.Errorf("host still over-subscribed for %s by %s after remediation", rn, f.String())
 		}

@@ -1,6 +1,10 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
+// Package accounting holds flavor-group lookup over Knowledge CRDs, with no
+// dependency on the scheduling pipeline, so it can live below both the reservation
+// controllers and the Nova scheduler tree without forming an import cycle. The
+// per-host capacity math lives in the sibling capacity package.
 package accounting
 
 import (

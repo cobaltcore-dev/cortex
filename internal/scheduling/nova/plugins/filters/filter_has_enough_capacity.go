@@ -12,9 +12,9 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/capacity"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	resv "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -72,59 +72,24 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 	ignoreAllocations := s.Options.IgnoreAllocations || opts.AssumeEmptyHosts
 	ignoredReservationTypes := slices.Concat(s.Options.IgnoredReservationTypes, opts.IgnoredReservationTypes)
 
-	// This map holds the free resources per host.
-	freeResourcesByHost := make(map[string]map[hv1.ResourceName]resource.Quantity)
-
-	// The hypervisor resource auto-discovers its current utilization.
-	// We can use the hypervisor status to calculate the total capacity
-	// and then subtract the actual resource allocation from virtual machines.
+	// Collect the candidate hypervisors for this request.
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
 		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
-	for _, hv := range hvs.Items {
-		if _, ok := result.Activations[hv.Name]; !ok {
-			continue
-		}
-		var sourceMap map[hv1.ResourceName]resource.Quantity
-		if hv.Status.EffectiveCapacity == nil {
-			traceLog.V(1).Info("hypervisor with nil effective capacity, use capacity instead (overprovisioning not considered)", "host", hv.Name)
-			sourceMap = hv.Status.Capacity
-		} else {
-			// Start with the total effective capacity which is capacity * overcommit ratio.
-			sourceMap = hv.Status.EffectiveCapacity
-		}
-		// Deep-copy the map to avoid mutating the informer cache.
-		copied := make(map[hv1.ResourceName]resource.Quantity, len(sourceMap))
-		for k, v := range sourceMap {
-			copied[k] = v.DeepCopy()
-		}
-		freeResourcesByHost[hv.Name] = copied
 
-		// Subtract allocated resources (skip when ignoring allocations for empty-datacenter capacity queries).
-		if !ignoreAllocations {
-			for resourceName, allocated := range hv.Status.Allocation {
-				free, ok := freeResourcesByHost[hv.Name][resourceName]
-				if !ok {
-					traceLog.Error(
-						nil,
-						"hypervisor with allocation for unknown resource",
-						"host", hv.Name, "resource", resourceName,
-					)
-					continue
-				}
-				free.Sub(allocated)
-				freeResourcesByHost[hv.Name][resourceName] = free
-			}
-		}
-	}
-
-	// Subtract reserved resources by Reservations.
+	// Decide, per reservation, whether it should block capacity for THIS request.
+	// The request-aware unlock/slotting logic (CR project+flavor match, failover
+	// evacuation/reuse, not-ready double-booking) lives here; the resulting set of
+	// blocking reservations is then fed to the shared capacity math, which performs
+	// the effective-capacity / allocation / reservation subtraction identically for
+	// every consumer.
 	var reservations v1alpha1.ReservationList
 	if err := s.Client.List(context.Background(), &reservations); err != nil {
 		return nil, err
 	}
+	reservationsToBlock := make([]v1alpha1.Reservation, 0, len(reservations.Items))
 	for _, reservation := range reservations.Items {
 		// Check if this reservation type should be ignored — applies regardless of ready state.
 		if slices.Contains(ignoredReservationTypes, reservation.Spec.Type) {
@@ -205,124 +170,68 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 			}
 		}
 
-		// Block resources on BOTH Spec.TargetHost (desired) AND Status.Host (actual).
-		// This ensures capacity is blocked during the transition period when a reservation
-		// is being placed (TargetHost set) and after it's placed (Host set).
-		// If both are the same, we only subtract once.
-		hostsToBlock := make(map[string]struct{})
-		if reservation.Spec.TargetHost != "" {
-			hostsToBlock[reservation.Spec.TargetHost] = struct{}{}
-		}
-		if reservation.Status.Host != "" {
-			hostsToBlock[reservation.Status.Host] = struct{}{}
-		}
-		if len(hostsToBlock) == 0 {
+		if reservation.Spec.TargetHost == "" && reservation.Status.Host == "" {
 			traceLog.V(1).Info("skipping reservation with no host", "reservation", reservation.Name)
 			continue
 		}
+		reservationsToBlock = append(reservationsToBlock, reservation)
+	}
 
-		// CommittedResourceReservations: block = max(slot − confirmed VM resources, 0).
-		// Confirmed VMs appear in hv.Status.Allocation; this subtracts only the unconfirmed remainder
-		// to avoid double-counting. FailoverReservations: block = Spec.Resources (always fully blocked).
-		resourcesToBlock := resv.UnusedReservationCapacity(&reservation, ignoreAllocations)
-
-		// Block the calculated resources on each host
-		for host := range hostsToBlock {
-			// Skip hosts that don't have a corresponding Hypervisor resource.
-			if _, hostExists := freeResourcesByHost[host]; !hostExists {
-				traceLog.V(1).Info("skipping reservation for unknown host",
-					"reservation", reservation.Name,
-					"host", host)
-				continue
-			}
-			if cpu, ok := resourcesToBlock["cpu"]; ok {
-				if freeCPU, exists := freeResourcesByHost[host]["cpu"]; exists {
-					freeCPU.Sub(cpu)
-					if freeCPU.Value() < 0 {
-						traceLog.V(1).Info("negative free CPU after blocking reservation",
-							"host", host,
-							"reservation", reservation.Name,
-							"reservationType", reservation.Spec.Type,
-							"freeCPU", freeCPU.String(),
-							"blocked", cpu.String())
-						freeCPU = resource.Quantity{}
-					}
-					freeResourcesByHost[host]["cpu"] = freeCPU
-				}
-			}
-			if memory, ok := resourcesToBlock["memory"]; ok {
-				if freeMemory, exists := freeResourcesByHost[host]["memory"]; exists {
-					freeMemory.Sub(memory)
-					if freeMemory.Value() < 0 {
-						traceLog.V(1).Info("negative free memory after blocking reservation",
-							"host", host,
-							"reservation", reservation.Name,
-							"reservationType", reservation.Spec.Type,
-							"freeMemory", freeMemory.String(),
-							"blocked", memory.String())
-						freeMemory = resource.Quantity{}
-					}
-					freeResourcesByHost[host]["memory"] = freeMemory
-				}
-			}
+	// Compute usage per candidate host via the shared capacity math.
+	// DescribeHostUsage starts from EffectiveCapacity (falling back to Capacity), subtracts
+	// allocation (unless ignored), and subtracts each surviving reservation's block on
+	// both its TargetHost and Status.Host, flooring at zero.
+	usageByHost := make(map[string]capacity.HostUsage)
+	for _, hv := range hvs.Items {
+		if _, ok := result.Activations[hv.Name]; !ok {
+			continue
 		}
+		if hv.Status.EffectiveCapacity == nil {
+			traceLog.V(1).Info("hypervisor with nil effective capacity, use capacity instead (overprovisioning not considered)", "host", hv.Name)
+		}
+		usage, err := capacity.DescribeHostUsage(hv, reservationsToBlock, capacity.Options{
+			IgnoreAllocations:         ignoreAllocations,
+			BlockUnplacedReservations: true,
+			ClampToZero:               true,
+		})
+		if err != nil {
+			continue // no capacity data; dropped below as an un-encountered host
+		}
+		usageByHost[hv.Name] = usage
+	}
+
+	// A host must fit the full request: flavor resources × NumInstances. We can't spread
+	// instances across hosts, so all requested instances must land on the same host.
+	if request.Flavor.VCPUs == 0 {
+		return nil, errors.New("flavor has 0 vcpus")
+	}
+	if request.Flavor.MemoryMB == 0 {
+		return nil, errors.New("flavor has 0 memory")
+	}
+	// Nova's memory_mb field is named "megabytes" in the API docs, but the values are in
+	// mebibytes (1 MiB = 2^20 bytes). Multiply by 1<<20 to convert to the bytes used in
+	// hv.Status.
+	//nolint:gosec // flavor fields are small, non-negative counts.
+	required := map[hv1.ResourceName]resource.Quantity{
+		"cpu":    *resource.NewQuantity(int64(request.Flavor.VCPUs*request.NumInstances), resource.DecimalSI),
+		"memory": *resource.NewQuantity(int64(request.Flavor.MemoryMB*request.NumInstances*(1<<20)), resource.BinarySI),
 	}
 
 	hostsEncountered := make(map[string]struct{})
-	for host, free := range freeResourcesByHost {
+	for host, usage := range usageByHost {
 		hostsEncountered[host] = struct{}{}
 
-		// Check cpu capacity.
-		if request.Flavor.VCPUs == 0 {
-			return nil, errors.New("flavor has 0 vcpus")
-		}
-		freeCPU, ok := free["cpu"]
-		if !ok || freeCPU.Value() < 0 {
+		freeCPU := usage.Free["cpu"]
+		freeMemory := usage.Free["memory"]
+		if !usage.Fits(required) {
 			traceLog.V(1).Info(
-				"host with invalid CPU capacity",
-				"host", host, "freeCPU", freeCPU.String(),
-			)
-			delete(result.Activations, host) // host is already overloaded, remove from activations
-			continue
-		}
-		// Calculate how many instances can fit on this host, based on cpu.
-		//nolint:gosec // We're checking for underflows above (< 0).
-		vcpuSlots := uint64(freeCPU.Value()) /
-			request.Flavor.VCPUs
-		if vcpuSlots < request.NumInstances {
-			traceLog.V(1).Info(
-				"filtering host due to insufficient CPU capacity",
-				"host", host, "requested", request.Flavor.VCPUs,
-				"available", freeCPU.String(),
-			)
-			delete(result.Activations, host)
-			continue
-		}
-
-		// Check memory capacity.
-		if request.Flavor.MemoryMB == 0 {
-			return nil, errors.New("flavor has 0 memory")
-		}
-		freeMemory, ok := free["memory"]
-		if !ok || freeMemory.Value() < 0 {
-			traceLog.V(1).Info(
-				"host with invalid memory capacity",
-				"host", host, "freeMemory", freeMemory.String(),
-			)
-			delete(result.Activations, host) // host is already overloaded, remove from activations
-			continue
-		}
-		// Calculate how many instances can fit on this host, based on memory.
-		// Nova's memory_mb field is named "megabytes" in the API docs, but the values
-		// are in mebibytes (1 MiB = 2^20 bytes). Multiply by 1<<20 to convert to bytes.
-		//nolint:gosec // We're checking for underflows above (< 0).
-		memorySlots := uint64(freeMemory.Value()) /
-			(request.Flavor.MemoryMB * (1 << 20))
-		if memorySlots < request.NumInstances {
-			traceLog.V(1).Info(
-				"filtering host due to insufficient RAM capacity",
-				"host", host, "requested_mb", request.Flavor.MemoryMB,
-				"available_mb", freeMemory.String(),
+				"filtering host due to insufficient capacity",
+				"host", host,
+				"requested_cpus", request.Flavor.VCPUs,
+				"requested_memory_mb", request.Flavor.MemoryMB,
+				"num_instances", request.NumInstances,
+				"available_cpus", freeCPU.String(),
+				"available_memory", freeMemory.String(),
 			)
 			delete(result.Activations, host)
 			continue

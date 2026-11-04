@@ -12,17 +12,12 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/capacity"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/prometheus/client_golang/prometheus"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
-
-// hostReservationResources holds aggregated CPU and memory reservation quantities for a single hypervisor.
-type hostReservationResources struct {
-	cpu    resource.Quantity
-	memory resource.Quantity
-}
 
 type KVMHostCapacityKPI struct {
 	// Common base for all KPIs that provides standard functionality.
@@ -59,69 +54,16 @@ func (k *KVMHostCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
 	ch <- k.capacityPerHost
 }
 
-// aggregateReservationsByHost groups Ready reservations by host, returning per-host
-// failover totals and committed-resource "not yet in use" totals.
-func aggregateReservationsByHost(reservations []v1alpha1.Reservation) (
-	failoverByHost map[string]hostReservationResources,
-	committedNotInUseByHost map[string]hostReservationResources,
-) {
-
-	failoverByHost = make(map[string]hostReservationResources)
-	committedNotInUseByHost = make(map[string]hostReservationResources)
-
-	for _, reservation := range reservations {
-		if reservation.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
-			continue
-		}
-
-		if !reservation.IsReady() {
-			continue
-		}
-
-		host := reservation.Status.Host
-		if host == "" {
-			continue
-		}
-
-		switch reservation.Spec.Type {
-		case v1alpha1.ReservationTypeFailover:
-			entry := failoverByHost[host]
-			cpuQty := reservation.Spec.Resources[hv1.ResourceCPU]
-			entry.cpu.Add(cpuQty)
-			memQty := reservation.Spec.Resources[hv1.ResourceMemory]
-			entry.memory.Add(memQty)
-			failoverByHost[host] = entry
-
-		case v1alpha1.ReservationTypeCommittedResource:
-			// Compute remaining slot capacity: slot - sum of confirmed VM resources.
-			cpuNotInUse := reservation.Spec.Resources[hv1.ResourceCPU].DeepCopy()
-			memNotInUse := reservation.Spec.Resources[hv1.ResourceMemory].DeepCopy()
-			if reservation.Status.CommittedResourceReservation != nil {
-				zero := resource.MustParse("0")
-				for _, alloc := range reservation.Status.CommittedResourceReservation.Allocation {
-					if cpu, ok := alloc.Resources[hv1.ResourceCPU]; ok {
-						cpuNotInUse.Sub(cpu)
-					}
-					if mem, ok := alloc.Resources[hv1.ResourceMemory]; ok {
-						memNotInUse.Sub(mem)
-					}
-				}
-				if cpuNotInUse.Cmp(zero) < 0 {
-					cpuNotInUse = zero.DeepCopy()
-				}
-				if memNotInUse.Cmp(zero) < 0 {
-					memNotInUse = zero.DeepCopy()
-				}
-			}
-
-			entry := committedNotInUseByHost[host]
-			entry.cpu.Add(cpuNotInUse)
-			entry.memory.Add(memNotInUse)
-			committedNotInUseByHost[host] = entry
+// novaReservations returns the subset of reservations in the Nova scheduling domain.
+// The shared capacity math is domain-agnostic; this KPI only accounts for Nova.
+func novaReservations(reservations []v1alpha1.Reservation) []v1alpha1.Reservation {
+	out := make([]v1alpha1.Reservation, 0, len(reservations))
+	for _, r := range reservations {
+		if r.Spec.SchedulingDomain == v1alpha1.SchedulingDomainNova {
+			out = append(out, r)
 		}
 	}
-
-	return failoverByHost, committedNotInUseByHost
+	return out
 }
 
 func (k *KVMHostCapacityKPI) getHypervisors() ([]kvmHost, error) {
@@ -150,7 +92,20 @@ func (k *KVMHostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	failoverByHost, committedNotInUseByHost := aggregateReservationsByHost(reservations.Items)
+	// This KPI only accounts for ready Nova reservations, grouped by Status.Host. The
+	// shared capacity math is domain- and readiness-agnostic and keys off both TargetHost
+	// and Status.Host, so filter to ready Nova reservations and pin TargetHost to
+	// Status.Host — this reproduces the KPI's historical "committed slot minus confirmed
+	// VMs" accounting (UnusedReservationCapacity only nets out confirmed VMs when
+	// TargetHost == Status.Host, i.e. not mid-migration).
+	blocking := make([]v1alpha1.Reservation, 0, len(reservations.Items))
+	for _, r := range novaReservations(reservations.Items) {
+		if !r.IsReady() || r.Status.Host == "" {
+			continue
+		}
+		r.Spec.TargetHost = r.Status.Host
+		blocking = append(blocking, r)
+	}
 
 	for _, hypervisor := range hypervisors {
 		cpuTotal, hasCPUTotal := hypervisor.getResourceCapacity(hv1.ResourceCPU)
@@ -165,15 +120,21 @@ func (k *KVMHostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		cpuUsed := hypervisor.getResourceAllocation(hv1.ResourceCPU)
 		ramUsed := hypervisor.getResourceAllocation(hv1.ResourceMemory)
 
-		// Get reservation data for this hypervisor (zero-value if absent).
-		failoverRes := failoverByHost[hypervisor.Name]
-		committedRes := committedNotInUseByHost[hypervisor.Name]
-
-		cpuReserved := committedRes.cpu
-		ramReserved := committedRes.memory
-
-		cpuFailover := failoverRes.cpu
-		ramFailover := failoverRes.memory
+		// Reservation blocks for this host, split into committed-not-in-use and failover
+		// by the shared capacity math (ClampToZero is irrelevant here — we clamp PAYG below).
+		b, err := capacity.DescribeHostUsage(hypervisor.Hypervisor, blocking, capacity.Options{
+			BlockUnplacedReservations: true,
+		})
+		if err != nil {
+			// getResourceCapacity already confirmed cpu+ram above, so this is unreachable
+			// in practice; skip defensively if the capacity source ever disagrees.
+			log.V(1).Info("skipping hypervisor without capacity data", "host", hypervisor.Name)
+			continue
+		}
+		cpuReserved := b.ReservedCommitted[hv1.ResourceCPU]
+		ramReserved := b.ReservedCommitted[hv1.ResourceMemory]
+		cpuFailover := b.ReservedFailover[hv1.ResourceCPU]
+		ramFailover := b.ReservedFailover[hv1.ResourceMemory]
 
 		labels := hypervisor.getHostLabels()
 
