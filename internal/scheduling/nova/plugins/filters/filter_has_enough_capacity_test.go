@@ -249,13 +249,13 @@ func parseMemoryToMB(memory string) uint64 {
 	return uint64(bytes / (1024 * 1024)) //nolint:gosec // test code
 }
 
-func newNovaRequest(instanceUUID, projectID, flavorName, flavorGroup string, vcpus int, memory string, evacuation bool, hosts []string) compute.SchedulerRequest {
-	return newNovaRequestWithIntent(instanceUUID, projectID, flavorName, flavorGroup, vcpus, memory, "", evacuation, hosts)
+func newNovaRequest(instanceUUID, projectID, flavorGroup string, vcpus int, memory string, evacuation bool, hosts []string) compute.SchedulerRequest {
+	return newNovaRequestWithIntent(instanceUUID, projectID, flavorGroup, vcpus, memory, "", evacuation, hosts)
 }
 
 // newNovaRequestWithIntent creates a nova request with a specific intent.
 // intentHint can be: "evacuate", "reserve_for_committed_resource", "reserve_for_failover", or "" for create.
-func newNovaRequestWithIntent(instanceUUID, projectID, flavorName, flavorGroup string, vcpus int, memory, intentHint string, evacuation bool, hosts []string) compute.SchedulerRequest {
+func newNovaRequestWithIntent(instanceUUID, projectID, flavorGroup string, vcpus int, memory, intentHint string, evacuation bool, hosts []string) compute.SchedulerRequest {
 	hostList := make([]compute.Host, len(hosts))
 	for i, h := range hosts {
 		hostList[i] = compute.Host{ComputeHost: h}
@@ -285,9 +285,7 @@ func newNovaRequestWithIntent(instanceUUID, projectID, flavorName, flavorGroup s
 		Intent:           intent,
 		HardwareVersion:  flavorGroup,
 		HypervisorFamily: compute.HypervisorFamilyKVM,
-		HypervisorType:   compute.HypervisorTypeQEMU,
 		Flavor: compute.FlavorSpec{
-			Name:     flavorName,
 			VCPUs:    uint64(vcpus), //nolint:gosec // test code
 			MemoryMB: memoryMB,
 		},
@@ -361,7 +359,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 		{
 			name:          "No reservations - all hosts with capacity pass",
 			reservations:  []*v1alpha1.Reservation{},
-			request:       newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			request:       newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host1", "host2", "host3"},
 			filteredHosts: []string{"host4"},
@@ -372,7 +370,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 				newCommittedReservation("res-1", "host1", "project-A", "m1.large", "gp-1", "8", "16Gi", nil, nil),
 				newCommittedReservation("res-2", "host2", "project-A", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 			},
-			request:       newNovaRequest("instance-123", "project-B", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			request:       newNovaRequest("instance-123", "project-B", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host3"},
 			filteredHosts: []string{"host1", "host2", "host4"},
@@ -383,7 +381,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 				newCommittedReservation("res-1 half used", "host1", "project-A", "m1.large", "gp-1", "8", "16Gi", crSpecAllocs(crVm("vm-1", "4", "8Gi")), map[string]string{"vm-1": "host1"}),
 				newCommittedReservation("res-2 fully used", "host2", "project-A", "m1.large", "gp-1", "4", "8Gi", crSpecAllocs(crVm("vm-2", "4", "8Gi")), map[string]string{"vm-2": "host2"}),
 			},
-			request:       newNovaRequest("instance-123", "project-B", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			request:       newNovaRequest("instance-123", "project-B", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host1", "host2", "host3"},
 			filteredHosts: []string{"host4"},
@@ -400,7 +398,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 					map[string]string{"vm-1": "host1", "vm-2": "host1"},
 				),
 			},
-			request:       newNovaRequest("instance-123", "project-B", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			request:       newNovaRequest("instance-123", "project-B", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host1", "host2", "host3"}, // host1: 5cpu/10Gi free → 4cpu/8Gi request passes
 			filteredHosts: []string{"host4"},
@@ -412,7 +410,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 				newMigratingReservation("res-2", "host1", "host2", "project-A", "m1.large", "gp-1", "2", "4Gi", nil, nil),                                                                   // migration reservation from host1 to host2
 				newMigratingReservation("res-3", "host2", "host1", "project-A", "m1.large", "gp-1", "2", "4Gi", crSpecAllocs(crVm("vm-1", "2", "4Gi")), map[string]string{"vm-1": "host1"}), // migration reservation from host2 to host1
 			},
-			request:       newNovaRequest("instance-123", "project-B", "m1.small", "gp-1", 2, "4Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			request:       newNovaRequest("instance-123", "project-B", "gp-1", 2, "4Gi", false, []string{"host1", "host2", "host3", "host4"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host3"},
 			filteredHosts: []string{"host1", "host2", "host4"},
@@ -426,7 +424,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 				newCommittedReservation("res-3-used", "host1", "project-A", "some flavor", "gp-1", "2", "4Gi", crSpecAllocs(crVm("vm-2", "1", "1Gi")), map[string]string{"vm-2": "host1"}), // used reservation
 				newCommittedReservation("res-4", "host2", "project-A", "some flavor", "gp-2", "4", "8Gi", nil, nil),                                                                        // different flavor group, should still block
 			},
-			request:       newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			request:       newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1", "host2", "host3", "host4"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host1", "host3"},
 			filteredHosts: []string{"host4", "host2"},
@@ -437,7 +435,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 				newCommittedReservation("res-1", "host1", "project-A", "m1.large", "gp-1", "8", "16Gi", nil, nil),
 				newCommittedReservation("res-2", "host3", "project-A", "m1.large", "gp-1", "16", "32Gi", nil, nil),
 			},
-			request:       newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			request:       newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: true},
 			expectedHosts: []string{"host2"},
 			filteredHosts: []string{"host1", "host3", "host4"},
@@ -447,7 +445,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{
 				newCommittedReservation("legacy-res", "host1", "project-A", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 			},
-			request:       newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 4, "8Gi", false, []string{"host1", "host2"}),
+			request:       newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1", "host2"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host1", "host2"},
 			filteredHosts: []string{},
@@ -459,7 +457,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 				newCommittedReservation("res-2", "host2", "project-X", "m1.xlarge", "gp-1", "4", "8Gi", nil, nil),
 				newCommittedReservation("res-3", "host3", "project-X", "m1.xlarge", "gp-1", "16", "32Gi", nil, nil),
 			},
-			request:       newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			request:       newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{},
 			filteredHosts: []string{"host1", "host2", "host3", "host4"},
@@ -469,7 +467,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{
 				newMigratingReservation("pending-res", "host1", "", "project-X", "m1.large", "gp-1", "8", "16Gi", nil, nil),
 			},
-			request:       newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			request:       newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host2", "host3"}, // host1 blocked by pending reservation
 			filteredHosts: []string{"host1", "host4"},
@@ -480,7 +478,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 				newMigratingReservation("pending-res", "host1", "", "project-X", "m1.large", "gp-1", "8", "16Gi", nil, nil),
 				newMigratingReservation("placed-res", "host2", "host3", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 			},
-			request:       newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			request:       newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host3"}, // host1 blocked by pending, host2 blocked by placed, host3 still has capacity
 			filteredHosts: []string{"host1", "host2", "host4"},
@@ -490,7 +488,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{
 				newCommittedReservation("no-host-res", "", "project-X", "m1.large", "gp-1", "8", "16Gi", nil, nil),
 			},
-			request:       newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			request:       newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host1", "host2", "host3"},
 			filteredHosts: []string{"host4"},
@@ -507,7 +505,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 					map[string]string{"vm-1": "host1"},
 				),
 			},
-			request: newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 9, "17Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			request: newNovaRequest("instance-123", "project-A", "gp-1", 9, "17Gi", false, []string{"host1", "host2", "host3", "host4"}),
 			opts:    FilterHasEnoughCapacityOpts{LockReserved: false},
 			// host1: 8 free CPU < 9, 16Gi < 17Gi → filtered; host2: 4 < 9 → filtered; host4: no capacity → filtered
 			expectedHosts: []string{"host3"},
@@ -526,7 +524,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 					map[string]string{"vm-1": "host1"}, // vm-2 is spec-only
 				),
 			},
-			request: newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 3, "5Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			request: newNovaRequest("instance-123", "project-A", "gp-1", 3, "5Gi", false, []string{"host1", "host2", "host3", "host4"}),
 			opts:    FilterHasEnoughCapacityOpts{LockReserved: false},
 			// host1: 2 free CPU < 3 requested, 4Gi < 5Gi → filtered; host4: no capacity → filtered
 			expectedHosts: []string{"host2", "host3"},
@@ -538,7 +536,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 				newFailoverReservation("failover-1", "host1", "8", "16Gi", map[string]string{"instance-123": "host5"}),
 				newFailoverReservation("failover-2", "host2", "4", "8Gi", map[string]string{"instance-123": "host6"}),
 			},
-			request:       newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			request:       newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host3"},
 			filteredHosts: []string{"host1", "host2", "host4"},
@@ -549,7 +547,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 				newFailoverReservation("failover-1", "host1", "4", "8Gi", map[string]string{"instance-123": "host5"}),
 				newFailoverReservation("failover-2", "host2", "4", "8Gi", map[string]string{"instance-123": "host6"}),
 			},
-			request:       newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 4, "8Gi", true, []string{"host1", "host2", "host3", "host4"}),
+			request:       newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", true, []string{"host1", "host2", "host3", "host4"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host1", "host2", "host3"},
 			filteredHosts: []string{"host4"},
@@ -560,7 +558,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 				newFailoverReservation("failover-1", "host1", "8", "16Gi", map[string]string{"other-instance": "host5"}),
 				newFailoverReservation("failover-2", "host2", "4", "8Gi", map[string]string{"another-instance": "host6"}),
 			},
-			request:       newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 4, "8Gi", true, []string{"host1", "host2", "host3", "host4"}),
+			request:       newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", true, []string{"host1", "host2", "host3", "host4"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host3"},
 			filteredHosts: []string{"host1", "host2", "host4"},
@@ -570,7 +568,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{
 				newFailoverReservation("failover-1", "host1", "8", "16Gi", map[string]string{}),
 			},
-			request:       newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 4, "8Gi", true, []string{"host1", "host2", "host3"}),
+			request:       newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", true, []string{"host1", "host2", "host3"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host2", "host3"},
 			filteredHosts: []string{"host1"},
@@ -580,7 +578,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{
 				newFailoverReservation("failover-1", "host1", "4", "8Gi", map[string]string{"instance-111": "host5", "instance-222": "host6", "instance-333": "host7"}),
 			},
-			request:       newNovaRequest("instance-222", "project-A", "m1.large", "gp-1", 4, "8Gi", true, []string{"host1", "host2", "host3", "host4"}),
+			request:       newNovaRequest("instance-222", "project-A", "gp-1", 4, "8Gi", true, []string{"host1", "host2", "host3", "host4"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host1", "host2", "host3"},
 			filteredHosts: []string{"host4"},
@@ -593,7 +591,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 			reservations: []*v1alpha1.Reservation{
 				newUnconfirmedReservation("unconfirmed-res", "host1", "project-X", "gp-1", "8", "16Gi"),
 			},
-			request:       newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			request:       newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host2", "host3"},
 			filteredHosts: []string{"host1", "host4"},
@@ -606,7 +604,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 				newUnconfirmedReservation("unconfirmed-1", "host1", "project-X", "gp-1", "8", "16Gi"),
 				newUnconfirmedReservation("unconfirmed-2", "host2", "project-X", "gp-1", "4", "8Gi"),
 			},
-			request:       newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			request:       newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host3"},
 			filteredHosts: []string{"host1", "host2", "host4"},
@@ -631,7 +629,7 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 					Status: v1alpha1.ReservationStatus{},
 				},
 			},
-			request:       newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			request:       newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host2", "host3"},
 			filteredHosts: []string{"host1", "host4"},
@@ -721,7 +719,7 @@ func TestFilterHasEnoughCapacity_LockReservations(t *testing.T) {
 		},
 	}
 
-	request := newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 4, "8Gi", false, []string{"host1", "host2"})
+	request := newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1", "host2"})
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &FilterHasEnoughCapacity{}
@@ -776,7 +774,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 			name:                    "Two hosts: No ignore - both hosts blocked by reservations",
 			hypervisors:             twoHostHVs,
 			reservations:            twoHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
+			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
 			ignoredReservationTypes: nil,
 			expectedHosts:           []string{},
 			filteredHosts:           []string{"host1", "host2"},
@@ -785,7 +783,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 			name:                    "Two hosts: Ignore CR only - host1 passes, host2 blocked by failover",
 			hypervisors:             twoHostHVs,
 			reservations:            twoHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
+			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
 			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
 			expectedHosts:           []string{"host1"},
 			filteredHosts:           []string{"host2"},
@@ -794,7 +792,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 			name:                    "Two hosts: Ignore Failover only - host2 passes, host1 blocked by CR",
 			hypervisors:             twoHostHVs,
 			reservations:            twoHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
+			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
 			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
 			expectedHosts:           []string{"host2"},
 			filteredHosts:           []string{"host1"},
@@ -803,7 +801,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 			name:                    "Two hosts: Ignore both - both hosts pass",
 			hypervisors:             twoHostHVs,
 			reservations:            twoHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
+			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
 			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
 			expectedHosts:           []string{"host1", "host2"},
 			filteredHosts:           []string{},
@@ -816,7 +814,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 			name:                    "Single host, Large VM (12 CPU): No ignore - blocked (6 free < 12 needed)",
 			hypervisors:             singleHostHVs,
 			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 12, "24Gi", false, []string{"host1"}),
+			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 12, "24Gi", false, []string{"host1"}),
 			ignoredReservationTypes: nil,
 			expectedHosts:           []string{},
 			filteredHosts:           []string{"host1"},
@@ -825,7 +823,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 			name:                    "Single host, Large VM (12 CPU): Ignore CR - blocked (10 free < 12 needed)",
 			hypervisors:             singleHostHVs,
 			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 12, "24Gi", false, []string{"host1"}),
+			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 12, "24Gi", false, []string{"host1"}),
 			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
 			expectedHosts:           []string{},
 			filteredHosts:           []string{"host1"},
@@ -834,7 +832,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 			name:                    "Single host, Large VM (12 CPU): Ignore Failover - blocked (8 free < 12 needed)",
 			hypervisors:             singleHostHVs,
 			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 12, "24Gi", false, []string{"host1"}),
+			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 12, "24Gi", false, []string{"host1"}),
 			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
 			expectedHosts:           []string{},
 			filteredHosts:           []string{"host1"},
@@ -843,7 +841,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 			name:                    "Single host, Large VM (12 CPU): Ignore both - passes (12 free = 12 needed)",
 			hypervisors:             singleHostHVs,
 			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 12, "24Gi", false, []string{"host1"}),
+			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 12, "24Gi", false, []string{"host1"}),
 			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
 			expectedHosts:           []string{"host1"},
 			filteredHosts:           []string{},
@@ -854,7 +852,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 			name:                    "Single host, Failover-size VM (10 CPU): No ignore - blocked (6 free < 10 needed)",
 			hypervisors:             singleHostHVs,
 			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 10, "20Gi", false, []string{"host1"}),
+			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 10, "20Gi", false, []string{"host1"}),
 			ignoredReservationTypes: nil,
 			expectedHosts:           []string{},
 			filteredHosts:           []string{"host1"},
@@ -863,7 +861,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 			name:                    "Single host, Failover-size VM (10 CPU): Ignore CR - passes (10 free = 10 needed)",
 			hypervisors:             singleHostHVs,
 			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 10, "20Gi", false, []string{"host1"}),
+			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 10, "20Gi", false, []string{"host1"}),
 			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
 			expectedHosts:           []string{"host1"},
 			filteredHosts:           []string{},
@@ -872,7 +870,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 			name:                    "Single host, Failover-size VM (10 CPU): Ignore Failover - blocked (8 free < 10 needed)",
 			hypervisors:             singleHostHVs,
 			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 10, "20Gi", false, []string{"host1"}),
+			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 10, "20Gi", false, []string{"host1"}),
 			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
 			expectedHosts:           []string{},
 			filteredHosts:           []string{"host1"},
@@ -881,7 +879,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 			name:                    "Single host, Failover-size VM (10 CPU): Ignore both - passes (12 free > 10 needed)",
 			hypervisors:             singleHostHVs,
 			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 10, "20Gi", false, []string{"host1"}),
+			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 10, "20Gi", false, []string{"host1"}),
 			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
 			expectedHosts:           []string{"host1"},
 			filteredHosts:           []string{},
@@ -892,7 +890,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 			name:                    "Single host, CR-size VM (8 CPU): No ignore - blocked (6 free < 8 needed)",
 			hypervisors:             singleHostHVs,
 			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1"}),
+			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1"}),
 			ignoredReservationTypes: nil,
 			expectedHosts:           []string{},
 			filteredHosts:           []string{"host1"},
@@ -901,7 +899,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 			name:                    "Single host, CR-size VM (8 CPU): Ignore CR - passes (10 free > 8 needed)",
 			hypervisors:             singleHostHVs,
 			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1"}),
+			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1"}),
 			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
 			expectedHosts:           []string{"host1"},
 			filteredHosts:           []string{},
@@ -910,7 +908,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 			name:                    "Single host, CR-size VM (8 CPU): Ignore Failover - passes (8 free = 8 needed)",
 			hypervisors:             singleHostHVs,
 			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1"}),
+			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1"}),
 			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
 			expectedHosts:           []string{"host1"},
 			filteredHosts:           []string{},
@@ -919,7 +917,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
 			name:                    "Single host, CR-size VM (8 CPU): Ignore both - passes (12 free > 8 needed)",
 			hypervisors:             singleHostHVs,
 			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1"}),
+			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1"}),
 			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
 			expectedHosts:           []string{"host1"},
 			filteredHosts:           []string{},
@@ -960,7 +958,7 @@ func TestFilterHasEnoughCapacity_AssumeEmptyHosts(t *testing.T) {
 	hypervisors := []*hv1.Hypervisor{
 		newHypervisor("host1", "8", "6", "32Gi", "0"),
 	}
-	request := newNovaRequest("vm", "proj", "m1.large", "gp", 4, "1Gi", false, []string{"host1"})
+	request := newNovaRequest("vm", "proj", "gp", 4, "1Gi", false, []string{"host1"})
 
 	objects := make([]client.Object, 0, len(hypervisors))
 	for _, h := range hypervisors {
@@ -1000,7 +998,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes_CallTime(t *testing.T) 
 		newCommittedReservation("cr-res", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 		newFailoverReservation("failover-res", "host2", "4", "8Gi", map[string]string{"other-vm": "host3"}),
 	}
-	request := newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2"})
+	request := newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1", "host2"})
 
 	objects := make([]client.Object, 0, len(hypervisors)+len(reservations))
 	for _, h := range hypervisors {
@@ -1039,7 +1037,7 @@ func TestFilterHasEnoughCapacity_IgnoredReservationTypes_CallTimeMerge(t *testin
 		newCommittedReservation("cr-res", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil, nil),
 		newFailoverReservation("failover-res", "host2", "4", "8Gi", map[string]string{"other-vm": "host3"}),
 	}
-	request := newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 8, "16Gi", false, []string{"host1", "host2"})
+	request := newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1", "host2"})
 
 	objects := make([]client.Object, 0, len(hypervisors)+len(reservations))
 	for _, h := range hypervisors {
@@ -1095,7 +1093,7 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 			},
 			// Request with reserve_for_committed_resource intent (scheduling a new CR reservation).
 			// The intent causes the filter to keep CR reservations locked (prevents overbooking).
-			request:       newNovaRequestWithIntent("new-reservation-uuid", "project-A", "m1.large", "gp-1", 4, "8Gi", "reserve_for_committed_resource", false, []string{"host1", "host2"}),
+			request:       newNovaRequestWithIntent("new-reservation-uuid", "project-A", "gp-1", 4, "8Gi", "reserve_for_committed_resource", false, []string{"host1", "host2"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host2"}, // host1 blocked because existing-cr stays locked
 			filteredHosts: []string{"host1"},
@@ -1111,7 +1109,7 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 				newCommittedReservation("existing-cr", "host1", "project-A", "m1.large", "gp-1", "8", "16Gi", nil, nil),
 			},
 			// Normal VM create request (no special intent) - CR reservation should be unlocked
-			request:       newNovaRequest("vm-instance-123", "project-A", "m1.large", "gp-1", 4, "8Gi", false, []string{"host1", "host2"}),
+			request:       newNovaRequest("vm-instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1", "host2"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host1", "host2"}, // host1 passes because existing-cr is unlocked for matching project+flavor
 			filteredHosts: []string{},
@@ -1127,7 +1125,7 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 				newCommittedReservation("other-project-cr", "host1", "project-B", "m1.large", "gp-1", "8", "16Gi", nil, nil),
 			},
 			// Request with reserve_for_committed_resource intent
-			request:       newNovaRequestWithIntent("new-reservation-uuid", "project-A", "m1.large", "gp-1", 4, "8Gi", "reserve_for_committed_resource", false, []string{"host1", "host2"}),
+			request:       newNovaRequestWithIntent("new-reservation-uuid", "project-A", "gp-1", 4, "8Gi", "reserve_for_committed_resource", false, []string{"host1", "host2"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host2"},
 			filteredHosts: []string{"host1"}, // host1 blocked by other project's reservation (would be blocked anyway)
@@ -1145,7 +1143,7 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 			},
 			// Request with reserve_for_committed_resource intent, needs 10 CPU
 			// After blocking all 3 reservations (24 CPU), only 8 CPU free -> should fail
-			request:       newNovaRequestWithIntent("new-reservation-uuid", "project-A", "m1.large", "gp-1", 10, "20Gi", "reserve_for_committed_resource", false, []string{"host1"}),
+			request:       newNovaRequestWithIntent("new-reservation-uuid", "project-A", "gp-1", 10, "20Gi", "reserve_for_committed_resource", false, []string{"host1"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{},
 			filteredHosts: []string{"host1"}, // All reservations stay locked (intent prevents unlock), not enough capacity
@@ -1163,7 +1161,7 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 			},
 			// Normal VM create request, needs 10 CPU
 			// All 3 reservations unlocked for matching project+flavor -> 32 CPU free -> should pass
-			request:       newNovaRequest("vm-instance-123", "project-A", "m1.large", "gp-1", 10, "20Gi", false, []string{"host1"}),
+			request:       newNovaRequest("vm-instance-123", "project-A", "gp-1", 10, "20Gi", false, []string{"host1"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host1"}, // All reservations unlocked, enough capacity
 			filteredHosts: []string{},
@@ -1179,7 +1177,7 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 			},
 			// Request with reserve_for_committed_resource intent.
 			// IgnoredReservationTypes is a YAML-level safety override that bypasses the intent check.
-			request: newNovaRequestWithIntent("new-reservation-uuid", "project-A", "m1.large", "gp-1", 4, "8Gi", "reserve_for_committed_resource", false, []string{"host1"}),
+			request: newNovaRequestWithIntent("new-reservation-uuid", "project-A", "gp-1", 4, "8Gi", "reserve_for_committed_resource", false, []string{"host1"}),
 			opts: FilterHasEnoughCapacityOpts{
 				LockReserved:            false,
 				IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
@@ -1198,7 +1196,7 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 			},
 			// Normal VM create request (different project, so unlocking via project match won't work)
 			// But IgnoredReservationTypes should make it work
-			request: newNovaRequest("vm-instance-123", "project-A", "m1.large", "gp-1", 4, "8Gi", false, []string{"host1"}),
+			request: newNovaRequest("vm-instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1"}),
 			opts: FilterHasEnoughCapacityOpts{
 				LockReserved:            false,
 				IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
@@ -1271,7 +1269,7 @@ func TestFilterHasEnoughCapacity_PlannedCRDoesNotBlock(t *testing.T) {
 	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 	step.Options = FilterHasEnoughCapacityOpts{LockReserved: false}
 
-	request := newNovaRequest("instance-123", "project-A", "m1.large", "gp-1", 4, "8Gi", false, []string{"host1"})
+	request := newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1"})
 	result, err := step.Run(logr.Discard(), request)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -1299,7 +1297,7 @@ func TestFilterHasEnoughCapacity_NilEffectiveCapacityFallback(t *testing.T) {
 				newHypervisorWithCapacityOnly("host3", "2", "4Gi"),   // nil EffectiveCapacity, uses Capacity: 2 CPU free (not enough)
 				newHypervisorWithCapacityOnly("host4", "16", "32Gi"), // nil EffectiveCapacity, uses Capacity: 16 CPU free, 32Gi free
 			},
-			request:       newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			request:       newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
 			expectedHosts: []string{"host1", "host2", "host4"},
 			filteredHosts: []string{"host3"},
 		},
@@ -1309,7 +1307,7 @@ func TestFilterHasEnoughCapacity_NilEffectiveCapacityFallback(t *testing.T) {
 				newHypervisorWithCapacityOnly("host1", "8", "16Gi"),
 				newHypervisorWithCapacityOnly("host2", "4", "8Gi"),
 			},
-			request:       newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 4, "8Gi", false, []string{"host1", "host2"}),
+			request:       newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1", "host2"}),
 			expectedHosts: []string{"host1", "host2"},
 			filteredHosts: []string{},
 		},
@@ -1328,7 +1326,7 @@ func TestFilterHasEnoughCapacity_NilEffectiveCapacityFallback(t *testing.T) {
 				// Both: 4 free -> filtered (need 5)
 				newHypervisorWithBothCapacities("host3", "4", "4", "8Gi", "8Gi"),
 			},
-			request:       newNovaRequest("instance-123", "project-A", "m1.small", "gp-1", 5, "8Gi", false, []string{"host1", "host2", "host3"}),
+			request:       newNovaRequest("instance-123", "project-A", "gp-1", 5, "8Gi", false, []string{"host1", "host2", "host3"}),
 			expectedHosts: []string{"host1", "host2"},
 			filteredHosts: []string{"host3"},
 		},
@@ -1460,7 +1458,7 @@ func TestFilterHasEnoughCapacity_CapacityBoundaries(t *testing.T) {
 			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.hv.DeepCopy()).Build()
 			step.Options = FilterHasEnoughCapacityOpts{LockReserved: false}
 
-			req := newNovaRequest("inst-1", "project-A", "m1.small", "gp-1", flavorVCPUs, flavorMem, false, []string{"h"})
+			req := newNovaRequest("inst-1", "project-A", "gp-1", flavorVCPUs, flavorMem, false, []string{"h"})
 			result, err := step.Run(logr.Discard(), req)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -1663,7 +1661,7 @@ func TestFilterHasEnoughCapacity_VMInterReservationMigration(t *testing.T) {
 			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 			step.Options = FilterHasEnoughCapacityOpts{LockReserved: false}
 
-			request := newNovaRequest("instance-new", thirdParty, "m1.small", flavorGroup, 3, "6Gi", false, []string{"hv-a", "hv-b"})
+			request := newNovaRequest("instance-new", thirdParty, flavorGroup, 3, "6Gi", false, []string{"hv-a", "hv-b"})
 			result, err := step.Run(logr.Discard(), request)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)

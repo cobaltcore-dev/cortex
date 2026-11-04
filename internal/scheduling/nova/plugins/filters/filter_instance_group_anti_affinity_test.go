@@ -393,7 +393,7 @@ func TestFilterInstanceGroupAntiAffinityStep_SkipsForNonPlacementIntent(t *testi
 
 	for _, intent := range []string{"reserve_for_failover", "reuse_failover_reservation", "reserve_for_committed_resource", "capacity_probe"} {
 		t.Run(intent, func(t *testing.T) {
-			request := newNovaRequest("vm-new", "proj", "m1.small", "gp", 1, "1Gi", false, []string{"host1", "host2"})
+			request := newNovaRequest("vm-new", "proj", "gp", 1, "1Gi", false, []string{"host1", "host2"})
 			request.InstanceGroup = &compute.InstanceGroupSpec{
 				Policy:           "anti-affinity",
 				Members:          []string{"vm-existing"},

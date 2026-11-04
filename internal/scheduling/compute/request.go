@@ -26,10 +26,8 @@ import (
 )
 
 // HypervisorFamily is the coarse hypervisor family a request targets. It is the
-// distinction the pipeline and request routing care about; the more specific
-// HypervisorType (QEMU vs CH within the KVM family) is only needed by Nova side
-// effects. The adapter resolves the family from Nova's
-// "capabilities:hypervisor_type" flavor extra spec.
+// distinction the pipeline and request routing care about. The adapter resolves
+// the family from Nova's "capabilities:hypervisor_type" flavor extra spec.
 type HypervisorFamily string
 
 const (
@@ -37,30 +35,6 @@ const (
 	HypervisorFamilyKVM HypervisorFamily = "kvm"
 	// HypervisorFamilyVMware covers VMware hypervisors.
 	HypervisorFamilyVMware HypervisorFamily = "vmware"
-)
-
-// HypervisorType is the specific hypervisor type of a request. The adapter
-// resolves it from Nova's "capabilities:hypervisor_type" flavor extra spec.
-type HypervisorType string
-
-const (
-	// HypervisorTypeQEMU represents QEMU/KVM hypervisors.
-	HypervisorTypeQEMU HypervisorType = "qemu"
-	// HypervisorTypeCH represents Cloud-Hypervisor/KVM hypervisors.
-	HypervisorTypeCH HypervisorType = "ch"
-	// HypervisorTypeVMware represents VMware hypervisors.
-	HypervisorTypeVMware HypervisorType = "vmware"
-)
-
-// FlavorType classifies the workload type. The adapter resolves it from Nova's
-// "trait:CUSTOM_HANA_EXCLUSIVE_HOST" flavor extra spec.
-type FlavorType string
-
-const (
-	// FlavorTypeGeneralPurpose represents general purpose workloads.
-	FlavorTypeGeneralPurpose FlavorType = "general-purpose"
-	// FlavorTypeHANA represents HANA workloads.
-	FlavorTypeHANA FlavorType = "hana"
 )
 
 // ImageHypervisorType is the hypervisor type declared by the image. The adapter
@@ -104,22 +78,12 @@ type Capability struct {
 // It carries no extra-spec map: the adapter resolves every extra spec the
 // pipeline needs into the typed fields on this struct and on SchedulerRequest.
 type FlavorSpec struct {
-	// Name is the flavor name. Empty only affects CR/flavor-group lookups in
-	// side effects, not the pipeline math.
-	Name string
-	// FlavorID is the flavor ID. Empty only affects the VM resource written by
-	// side effects.
-	FlavorID string
 	// MemoryMB is the requested memory per instance. 0 means a zero-memory
 	// instance to capacity/bin-pack steps (fits anywhere), so the adapter sets it.
 	MemoryMB uint64
 	// VCPUs is the requested vCPUs per instance. 0 means a zero-CPU instance to
 	// capacity/bin-pack steps (fits anywhere), so the adapter sets it.
 	VCPUs uint64
-	// Type classifies the workload (general-purpose/hana), resolved by the
-	// adapter from the flavor's extra specs. Empty is treated as general-purpose
-	// by pipeline inference.
-	Type FlavorType
 }
 
 // RequestedDestination mirrors the subset of Nova's requested_destination that
@@ -229,10 +193,6 @@ type SchedulerRequest struct {
 	// routing. Empty means unresolved: KVM-only gates (e.g. VM creation) treat it
 	// as not-KVM and skip.
 	HypervisorFamily HypervisorFamily
-	// HypervisorType is the specific type (qemu/ch/vmware), needed only by Nova
-	// side effects. Empty means unresolved; the VM-upsert side effect errors
-	// rather than guessing.
-	HypervisorType HypervisorType
 	// ImageHypervisorType is the hypervisor type declared by the image. The empty
 	// value (ImageHypervisorTypeUnset) means the image declared none ("no image
 	// constraint"); ImageHypervisorTypeUnparseable means it declared one that
@@ -247,9 +207,6 @@ type SchedulerRequest struct {
 	// bin-pack steps see a zero-sized instance (fits anywhere) — the adapter
 	// always populates it for real placements.
 	Flavor FlavorSpec
-	// ImageID is the Glance image UUID. Empty only affects the VM resource
-	// written by side effects, not pipeline decisions.
-	ImageID string
 
 	// RequiredTraits are trait names the host must have (adapter stripped the
 	// "trait:" prefix and kept the "required" ones). Empty/nil means no required
@@ -296,7 +253,7 @@ type SchedulerRequest struct {
 	GlobalRequestID string
 }
 
-// TODO: REMOVE ME Compile-time check that SchedulerRequest satisfies the pipeline request contract.
+// Compile-time check that SchedulerRequest satisfies the pipeline request contract.
 var _ lib.FilterWeigherPipelineRequest = SchedulerRequest{}
 
 // GetIntent returns the resolved scheduling intent.
@@ -388,4 +345,25 @@ func (r SchedulerRequest) ForcedHosts() []string {
 		matched = append(matched, h.ComputeHost)
 	}
 	return matched
+}
+
+// SplitTraits splits a flavor's "trait:<name>" extra specs into required and
+// forbidden trait names, classified by the "required"/"forbidden" value. It is
+// the single place that understands Nova's trait extra-spec convention, so both
+// the Nova wire adapter and the reservation controllers (which build a
+// SchedulerRequest directly) populate RequiredTraits/ForbiddenTraits the same way.
+func SplitTraits(extraSpecs map[string]string) (required, forbidden []string) {
+	for key, value := range extraSpecs {
+		name, ok := strings.CutPrefix(key, "trait:")
+		if !ok {
+			continue
+		}
+		switch value {
+		case "required":
+			required = append(required, name)
+		case "forbidden":
+			forbidden = append(forbidden, name)
+		}
+	}
+	return required, forbidden
 }

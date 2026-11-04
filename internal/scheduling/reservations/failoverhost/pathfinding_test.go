@@ -53,7 +53,12 @@ type stubPipeline struct {
 }
 
 func (s *stubPipeline) Run(req compute.SchedulerRequest) (compute.SchedulerResult, error) {
-	flavor := req.Flavor.Name
+	// Identify which seed this probe is for by the trait the seed constructor
+	// puts on the flavor (see seed()), which the probe carries in RequiredTraits.
+	flavor := ""
+	if len(req.RequiredTraits) > 0 {
+		flavor = req.RequiredTraits[0]
+	}
 	if err := req.Options.Validate(); err != nil {
 		s.t.Errorf("invalid scheduling options: %v", err)
 	}
@@ -108,9 +113,14 @@ func hostTopo(hostMemGi map[string]int64) topology {
 	return topology{hypervisors: hypervisors}
 }
 
-// seed is a tiny constructor for a flavor seed named name in az1.
+// seed is a tiny constructor for a flavor seed named name in az1. The name is
+// also set as a required trait so the stub pipeline can tell which seed a probe
+// request belongs to (the probe carries the flavor's traits in RequiredTraits).
 func seed(name string) Seed {
-	return Seed{Flavor: Flavor{Name: name}, AvailabilityZone: "az1"}
+	return Seed{
+		Flavor:           Flavor{Name: name, ExtraSpecs: map[string]string{"trait:" + name: "required"}},
+		AvailabilityZone: "az1",
+	}
 }
 
 func TestFindPathsErrorsOnLookupFailure(t *testing.T) {

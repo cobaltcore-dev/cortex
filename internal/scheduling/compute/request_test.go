@@ -10,25 +10,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 )
 
-func TestHypervisorFamily(t *testing.T) {
-	// The family is the distinction the pipeline uses; the specific type carries
-	// the QEMU/CH detail only Nova side effects need.
-	cases := []struct {
-		hvType HypervisorType
-		family HypervisorFamily
-	}{
-		{HypervisorTypeQEMU, HypervisorFamilyKVM},
-		{HypervisorTypeCH, HypervisorFamilyKVM},
-		{HypervisorTypeVMware, HypervisorFamilyVMware},
-	}
-	for _, c := range cases {
-		r := SchedulerRequest{HypervisorType: c.hvType, HypervisorFamily: c.family}
-		if r.HypervisorFamily != c.family {
-			t.Errorf("type %q: family = %q, want %q", c.hvType, r.HypervisorFamily, c.family)
-		}
-	}
-}
-
 func TestIsForcedDestination(t *testing.T) {
 	cases := []struct {
 		name   string

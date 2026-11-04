@@ -282,7 +282,6 @@ func (f *evacuationPathFinder) fetchSeedCandidates(ctx context.Context, seed See
 		// set (no default needed).
 		RequestedCapabilities: reservations.HypervisorTypeCapability(seed.Flavor.ExtraSpecs, false),
 		Flavor: compute.FlavorSpec{
-			Name:     seed.Flavor.Name,
 			VCPUs:    seed.Flavor.VCPUs,
 			MemoryMB: seed.Flavor.MemoryMB,
 		},

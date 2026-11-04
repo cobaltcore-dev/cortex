@@ -64,17 +64,14 @@ func ToSchedulerRequest(
 		GlobalRequestID: derefString(wire.Context.GlobalRequestID),
 	}
 
-	// Flavor sizing + classification.
+	// Flavor sizing.
 	req.Flavor = compute.FlavorSpec{
-		Name:     spec.Flavor.Data.Name,
-		FlavorID: spec.Flavor.Data.FlavorID,
 		VCPUs:    spec.Flavor.Data.VCPUs,
 		MemoryMB: spec.Flavor.Data.MemoryMB,
-		Type:     toFlavorType(wire),
 	}
 
-	// Hypervisor family + specific type.
-	req.HypervisorFamily, req.HypervisorType = toHypervisorFamilyAndType(wire)
+	// Hypervisor family.
+	req.HypervisorFamily = toHypervisorFamily(wire)
 
 	// Whether to gather all placement candidates (ignore the caller's host
 	// preselection) is determined by the hypervisor family: cortex can enumerate
@@ -83,11 +80,10 @@ func ToSchedulerRequest(
 	req.GatherAllCandidates = req.HypervisorFamily == compute.HypervisorFamilyKVM
 
 	// Image.
-	req.ImageID = spec.Image.Data.ID
 	req.ImageHypervisorType = toImageHypervisorType(spec.Image.Data)
 
 	// Traits, capabilities, accelerators from flavor extra specs.
-	req.RequiredTraits, req.ForbiddenTraits = toTraits(spec.Flavor.Data.ExtraSpecs)
+	req.RequiredTraits, req.ForbiddenTraits = compute.SplitTraits(spec.Flavor.Data.ExtraSpecs)
 	req.RequestedCapabilities = toCapabilities(spec.Flavor.Data.ExtraSpecs)
 	_, req.AcceleratorsRequested = spec.Flavor.Data.ExtraSpecs["accel:device_profile"]
 
@@ -106,34 +102,20 @@ func toComputeHosts(hosts []api.ExternalSchedulerHost) []compute.Host {
 	return out
 }
 
-// toFlavorType maps the wire flavor type enum onto the compute enum.
-func toFlavorType(wire api.ExternalSchedulerRequest) compute.FlavorType {
-	ft, err := wire.GetFlavorType()
-	if err != nil {
-		return compute.FlavorTypeGeneralPurpose
-	}
-	if ft == api.FlavorTypeHANA {
-		return compute.FlavorTypeHANA
-	}
-	return compute.FlavorTypeGeneralPurpose
-}
-
-// toHypervisorFamilyAndType resolves the coarse family and the specific type
-// from the wire hypervisor type. Both are empty when unresolved.
-func toHypervisorFamilyAndType(wire api.ExternalSchedulerRequest) (compute.HypervisorFamily, compute.HypervisorType) {
+// toHypervisorFamily resolves the coarse family from the wire hypervisor type.
+// It is empty when unresolved.
+func toHypervisorFamily(wire api.ExternalSchedulerRequest) compute.HypervisorFamily {
 	hv, err := wire.GetHypervisorType()
 	if err != nil {
-		return "", ""
+		return ""
 	}
 	switch hv {
-	case api.HypervisorTypeQEMU:
-		return compute.HypervisorFamilyKVM, compute.HypervisorTypeQEMU
-	case api.HypervisorTypeCH:
-		return compute.HypervisorFamilyKVM, compute.HypervisorTypeCH
+	case api.HypervisorTypeQEMU, api.HypervisorTypeCH:
+		return compute.HypervisorFamilyKVM
 	case api.HypervisorTypeVMware:
-		return compute.HypervisorFamilyVMware, compute.HypervisorTypeVMware
+		return compute.HypervisorFamilyVMware
 	}
-	return "", ""
+	return ""
 }
 
 // toImageHypervisorType maps the image-declared hypervisor type. It returns
@@ -163,24 +145,6 @@ func toImageHypervisorType(image api.NovaImageMeta) compute.ImageHypervisorType 
 		return compute.ImageHypervisorTypeKVM
 	}
 	return compute.ImageHypervisorTypeUnset
-}
-
-// toTraits splits the flavor extra specs' "trait:<name>" entries into required
-// and forbidden trait names (classified by the "required"/"forbidden" value).
-func toTraits(extraSpecs map[string]string) (required, forbidden []string) {
-	for key, value := range extraSpecs {
-		name, ok := strings.CutPrefix(key, "trait:")
-		if !ok {
-			continue
-		}
-		switch value {
-		case "required":
-			required = append(required, name)
-		case "forbidden":
-			forbidden = append(forbidden, name)
-		}
-	}
-	return required, forbidden
 }
 
 // toCapabilities extracts the "capabilities:<key>" extra specs as typed Capability

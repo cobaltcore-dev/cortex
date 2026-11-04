@@ -4,8 +4,6 @@
 package reservations
 
 import (
-	"strings"
-
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 )
 
@@ -15,21 +13,10 @@ import (
 // reservation controllers build the typed compute.SchedulerRequest directly
 // (not via the Nova wire adapter), so they must populate RequiredTraits/
 // ForbiddenTraits themselves — otherwise filter_has_requested_traits sees empty
-// slices and becomes a no-op.
+// slices and becomes a no-op. It delegates to compute.SplitTraits so the trait
+// convention lives in one place.
 func ExtractTraits(extraSpecs map[string]string) (required, forbidden []string) {
-	for key, value := range extraSpecs {
-		name, ok := strings.CutPrefix(key, "trait:")
-		if !ok {
-			continue
-		}
-		switch value {
-		case "required":
-			required = append(required, name)
-		case "forbidden":
-			forbidden = append(forbidden, name)
-		}
-	}
-	return required, forbidden
+	return compute.SplitTraits(extraSpecs)
 }
 
 // HypervisorTypeCapability returns the capabilities:hypervisor_type match (QEMU

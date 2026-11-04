@@ -376,7 +376,6 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		ForbiddenTraits:       forbiddenTraits,
 		RequestedCapabilities: reservations.HypervisorTypeCapability(flavorDetails.ExtraSpecs, false),
 		Flavor: compute.FlavorSpec{
-			Name:     flavorDetails.Name,
 			VCPUs:    flavorDetails.VCPUs,
 			MemoryMB: flavorDetails.MemoryMB,
 		},

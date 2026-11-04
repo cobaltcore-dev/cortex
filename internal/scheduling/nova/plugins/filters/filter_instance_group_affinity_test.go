@@ -234,7 +234,7 @@ func TestFilterInstanceGroupAffinityStep_SkipsForNonPlacementIntent(t *testing.T
 	// Affinity group on host1 only — host2 would normally be filtered.
 	for _, intent := range []string{"reserve_for_failover", "reuse_failover_reservation", "reserve_for_committed_resource", "capacity_probe"} {
 		t.Run(intent, func(t *testing.T) {
-			request := newNovaRequest("vm", "proj", "m1.small", "gp", 1, "1Gi", false, []string{"host1", "host2"})
+			request := newNovaRequest("vm", "proj", "gp", 1, "1Gi", false, []string{"host1", "host2"})
 			request.InstanceGroup = &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host1"}}
 			request.Intent = v1alpha1.SchedulingIntent(intent)
 			step := &FilterInstanceGroupAffinityStep{}

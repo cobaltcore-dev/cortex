@@ -46,9 +46,7 @@ func newPreferSmallerHostsRequest(hosts []string) compute.SchedulerRequest {
 		InstanceUUID:     "instance-123",
 		NumInstances:     1,
 		HypervisorFamily: compute.HypervisorFamilyKVM,
-		HypervisorType:   compute.HypervisorTypeQEMU,
 		Flavor: compute.FlavorSpec{
-			Name:     "m1.large",
 			VCPUs:    4,
 			MemoryMB: 8192,
 		},

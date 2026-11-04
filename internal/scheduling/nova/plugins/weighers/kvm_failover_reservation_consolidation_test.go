@@ -69,9 +69,7 @@ func newFailoverReservationRequest(resourceGroup string, hosts []string) compute
 		Intent:           api.ReserveForFailoverIntent,
 		ResourceGroup:    resourceGroup,
 		HypervisorFamily: compute.HypervisorFamilyKVM,
-		HypervisorType:   compute.HypervisorTypeQEMU,
 		Flavor: compute.FlavorSpec{
-			Name:     "m1.large",
 			VCPUs:    4,
 			MemoryMB: 8192,
 		},

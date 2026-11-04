@@ -842,7 +842,6 @@ func (c *Reconciler) probeScheduler(
 		ForbiddenTraits:       forbiddenTraits,
 		RequestedCapabilities: reservations.HypervisorTypeCapability(flavor.ExtraSpecs, false),
 		Flavor: sched.FlavorSpec{
-			Name:     flavor.Name,
 			VCPUs:    flavor.VCPUs,
 			MemoryMB: flavor.MemoryMB,
 		},

@@ -80,7 +80,6 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 			},
 			request: compute.SchedulerRequest{
 				HypervisorFamily: compute.HypervisorFamilyKVM,
-				HypervisorType:   compute.HypervisorTypeQEMU,
 			},
 			expectError:    false,
 			expectedHosts:  []string{"host1", "host2", "host3"},
@@ -97,7 +96,6 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 			},
 			request: compute.SchedulerRequest{
 				HypervisorFamily: compute.HypervisorFamilyKVM,
-				HypervisorType:   compute.HypervisorTypeQEMU,
 			},
 			expectError:    false,
 			expectedHosts:  []string{"host1"},
@@ -119,7 +117,6 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 			},
 			request: compute.SchedulerRequest{
 				HypervisorFamily: compute.HypervisorFamilyKVM,
-				HypervisorType:   compute.HypervisorTypeCH,
 			},
 			expectError:    false,
 			expectedHosts:  []string{"ch-host1", "ch-host2"},
@@ -136,7 +133,6 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 			},
 			request: compute.SchedulerRequest{
 				HypervisorFamily: compute.HypervisorFamilyKVM,
-				HypervisorType:   compute.HypervisorTypeCH,
 			},
 			expectError:    false,
 			expectedHosts:  []string{"ch-host1"},
@@ -147,7 +143,6 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 			hypervisors: []client.Object{},
 			request: compute.SchedulerRequest{
 				HypervisorFamily: compute.HypervisorFamilyKVM,
-				HypervisorType:   compute.HypervisorTypeQEMU,
 			},
 			expectError:    false,
 			expectedHosts:  []string{},
@@ -164,7 +159,6 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 			},
 			request: compute.SchedulerRequest{
 				HypervisorFamily: compute.HypervisorFamilyKVM,
-				HypervisorType:   compute.HypervisorTypeQEMU,
 				Hosts: []compute.Host{
 					{ComputeHost: "old-host", HypervisorHostname: "old-hv"},
 				},

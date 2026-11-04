@@ -50,9 +50,7 @@ func newBinpackRequest(memoryMB, vcpus, numInstances uint64, hosts []string) com
 		InstanceUUID:     "instance-123",
 		NumInstances:     numInstances,
 		HypervisorFamily: compute.HypervisorFamilyKVM,
-		HypervisorType:   compute.HypervisorTypeQEMU,
 		Flavor: compute.FlavorSpec{
-			Name:     "m1.large",
 			VCPUs:    vcpus,
 			MemoryMB: memoryMB,
 		},
