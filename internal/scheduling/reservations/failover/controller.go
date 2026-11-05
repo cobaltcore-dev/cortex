@@ -13,10 +13,9 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	knowledge "github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/google/uuid"
@@ -346,10 +345,9 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 	summary.reservationsDeleted = len(emptyReservationsToDelete)
 
 	// 6. Fetch flavor groups for reservation sizing (if configured)
-	var flavorGroups map[string]compute.FlavorGroupFeature
+	var flavorGroups map[string]knowledge.FlavorGroupFeature
 	if c.Config.UseFlavorGroupResources {
-		knowledge := &accounting.FlavorGroupKnowledgeClient{Client: c.Client}
-		fg, err := knowledge.GetAllFlavorGroups(ctx, nil)
+		fg, err := knowledge.GetAllFlavorGroups(ctx, c.Client, nil)
 		if err != nil {
 			logger.Info("flavor group knowledge not available, will fall back to VM resources for sizing",
 				"error", err)
@@ -632,7 +630,7 @@ func (c *FailoverReservationController) reconcileCreateAndAssignReservations(
 	vms []reservations.VM,
 	failoverReservations []v1alpha1.Reservation,
 	allHypervisors []string,
-	flavorGroups map[string]compute.FlavorGroupFeature, // passed to resolveVMForScheduling per-VM
+	flavorGroups map[string]knowledge.FlavorGroupFeature, // passed to resolveVMForScheduling per-VM
 ) (reconcileSummary, bool) {
 
 	logger := LoggerFromContext(ctx)
