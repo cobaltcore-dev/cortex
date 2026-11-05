@@ -15,7 +15,6 @@ spec:
     Specifically, this pipeline is used for general purpose workloads.
   type: filter-weigher
   # Fetch all placement candidates, ignoring nova's preselection.
-  ignorePreselection: true
   filters:
     - name: filter_status_conditions
       description: |
@@ -121,6 +120,8 @@ spec:
         requests without headroom, add `params: [{key: enforce, boolValue: true}]`
         to this step. The shadow default is intentional so that newly-rolled-out
         releases never silently start rejecting requests.
+      params:
+        - {key: crStateFilter, stringListValue: {{ .Values.kvm.crStateFilter | toJson }}}
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -189,7 +190,6 @@ spec:
     Specifically, this pipeline is used for hana virtual machines.
   type: filter-weigher
   # Fetch all placement candidates, ignoring nova's preselection.
-  ignorePreselection: true
   filters:
     - name: filter_status_conditions
       description: |
@@ -295,6 +295,8 @@ spec:
         requests without headroom, add `params: [{key: enforce, boolValue: true}]`
         to this step. The shadow default is intentional so that newly-rolled-out
         releases never silently start rejecting requests.
+      params:
+        - {key: crStateFilter, stringListValue: {{ .Values.kvm.crStateFilter | toJson }}}
   weighers:
     - name: kvm_prefer_smaller_hosts
       params:
@@ -355,7 +357,6 @@ spec:
     Deprecated: no longer used by the failover reservation controller. Kept for backwards
     compatibility with deployments that reference this pipeline by name in Helm values.
   type: filter-weigher
-  ignorePreselection: true
   filters:
     - name: filter_status_conditions
       description: |
@@ -637,7 +638,6 @@ spec:
     considered.
   type: filter-weigher
   # Fetch all placement candidates, ignoring nova's preselection.
-  ignorePreselection: true
   filters:
     - name: filter_status_conditions
       description: |

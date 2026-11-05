@@ -9,26 +9,27 @@ import (
 	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 type FilterAllowedProjectsStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Lock certain hosts for certain projects, based on the hypervisor spec.
 // Note that hosts without specified projects are still accessible.
-func (s *FilterAllowedProjectsStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterAllowedProjectsStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	// Capacity probe calls are synthetic and not placed on behalf of a tenant
 	// project, so they must ignore tenant pinning. Failover reservations DO respect
 	// tenant pinning: a reservation on a host the VM's project cannot use is dead
 	// weight and would be deleted at validation time.
-	if intent, err := request.GetIntent(); err == nil && intent == api.CapacityProbeIntent {
+	if request.Intent == api.CapacityProbeIntent {
 		return result, nil
 	}
-	if request.Spec.Data.ProjectID == "" {
+	if request.ProjectID == "" {
 		traceLog.V(1).Info("no project ID in request, skipping filter")
 		return result, nil
 	}
@@ -48,13 +49,13 @@ func (s *FilterAllowedProjectsStep) Run(traceLog logr.Logger, request api.Extern
 			traceLog.V(1).Info("host allows all projects, keeping", "host", hv.Name)
 			continue
 		}
-		if !slices.Contains(hv.Spec.AllowedProjects, request.Spec.Data.ProjectID) {
+		if !slices.Contains(hv.Spec.AllowedProjects, request.ProjectID) {
 			// Project is not allowed on this hypervisor, filter it out.
 			delete(result.Activations, hv.Name)
 			traceLog.V(1).Info(
 				"filtering host not allowing project",
 				"host", hv.Name,
-				"project", request.Spec.Data.ProjectID,
+				"project", request.ProjectID,
 			)
 		}
 	}

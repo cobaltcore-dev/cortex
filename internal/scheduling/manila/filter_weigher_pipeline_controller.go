@@ -5,16 +5,12 @@ package manila
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/manila"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/manila/plugins/filters"
@@ -27,17 +23,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-// The decision pipeline controller takes decision resources containing a
-// placement request spec and runs the scheduling pipeline to make a decision.
-// This decision is then written back to the decision resource status.
-//
-// Additionally, the controller watches for pipeline and step changes to
-// reconfigure the pipelines as needed.
+// FilterWeigherPipelineController owns the manila filter-weigher pipelines: it
+// watches Pipeline and Knowledge resources to (re)configure the pipelines and
+// runs a pipeline on demand via Schedule, called directly by the external
+// scheduler HTTP API.
 type FilterWeigherPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
 	lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]
 
-	// Mutex to only allow one process at a time
+	// Mutex to only allow one scheduling run at a time.
 	processMu sync.Mutex
 
 	// Monitor to pass down to all pipelines.
@@ -49,83 +43,34 @@ func (c *FilterWeigherPipelineController) PipelineType() v1alpha1.PipelineType {
 	return v1alpha1.PipelineTypeFilterWeigher
 }
 
-// Callback executed when kubernetes asks to reconcile a decision resource.
-func (c *FilterWeigherPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	c.processMu.Lock()
-	defer c.processMu.Unlock()
-
-	decision := &v1alpha1.Decision{}
-	if err := c.Get(ctx, req.NamespacedName, decision); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-	old := decision.DeepCopy()
-	if err := c.process(ctx, decision); err != nil {
-		return ctrl.Result{}, err
-	}
-	patch := client.MergeFrom(old)
-	if err := c.Status().Patch(ctx, decision, patch); err != nil {
-		return ctrl.Result{}, err
-	}
+// Reconcile is a no-op: this controller reconfigures pipelines through its
+// Pipeline/Knowledge watch handlers and runs placements via Schedule. A
+// Reconcile method is required to satisfy the controller builder.
+func (c *FilterWeigherPipelineController) Reconcile(context.Context, ctrl.Request) (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
 
-// Process the decision from the API. Should create and return the updated decision.
-func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error {
+// Schedule runs the named pipeline for the given request and returns the
+// result. It serializes runs with the process lock.
+func (c *FilterWeigherPipelineController) Schedule(ctx context.Context, pipelineName string, request api.ExternalSchedulerRequest) (lib.PipelineResult, error) {
 	c.processMu.Lock()
 	defer c.processMu.Unlock()
-
-	err := c.process(ctx, decision)
-	if err != nil {
-		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DecisionConditionReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "PipelineRunFailed",
-			Message: "pipeline run failed: " + err.Error(),
-		})
-	} else {
-		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DecisionConditionReady,
-			Status:  metav1.ConditionTrue,
-			Reason:  "PipelineRunSucceeded",
-			Message: "pipeline run succeeded",
-		})
-	}
-	return err
-}
-
-func (c *FilterWeigherPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) error {
 	log := ctrl.LoggerFrom(ctx)
 	startedAt := time.Now() // So we can measure sync duration.
 
-	pipeline, ok := c.GetPipeline(decision.Spec.PipelineRef.Name)
+	pipeline, ok := c.GetPipeline(pipelineName)
 	if !ok {
-		log.Error(nil, "skipping decision, pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
-		return fmt.Errorf("pipeline not found or not ready: %q", decision.Spec.PipelineRef.Name)
-	}
-	if decision.Spec.ManilaRaw == nil {
-		log.Error(nil, "skipping decision, no manilaRaw spec defined")
-		return errors.New("no manilaRaw spec defined")
-	}
-	var request api.ExternalSchedulerRequest
-	if err := json.Unmarshal(decision.Spec.ManilaRaw.Raw, &request); err != nil {
-		log.Error(err, "failed to unmarshal manilaRaw spec")
-		return err
+		log.Error(nil, "pipeline not found or not ready", "pipelineName", pipelineName)
+		return lib.PipelineResult{}, fmt.Errorf("pipeline not found or not ready: %q", pipelineName)
 	}
 
 	result, err := pipeline.Run(request)
-	if err == nil {
-		decision.Status.Result = &result
-	}
-	// Record a human-readable explanation of the decision for downstream
-	// consumers. On error the result is nil and the explanation carries the
-	// failure reason.
-	decision.Status.Explanation = lib.GenerateExplanation(decision.Status.Result, err)
 	if err != nil {
 		log.Error(err, "failed to run pipeline")
-		return err
+		return lib.PipelineResult{}, err
 	}
 	log.Info("decision processed successfully", "duration", time.Since(startedAt))
-	return nil
+	return result, nil
 }
 
 // The base controller will delegate the pipeline creation down to this method.
@@ -186,25 +131,6 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 	if err != nil {
 		return err
 	}
-	// Watch decision changes across all clusters.
-	bldr, err = bldr.WatchesMulticluster(
-		&v1alpha1.Decision{},
-		&handler.EnqueueRequestForObject{},
-		predicate.NewPredicateFuncs(func(obj client.Object) bool {
-			decision := obj.(*v1alpha1.Decision)
-			if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainManila {
-				return false
-			}
-			// Ignore already decided schedulings.
-			if decision.Status.Result != nil {
-				return false
-			}
-			return true
-		}),
-	)
-	if err != nil {
-		return err
-	}
-	return bldr.Named("cortex-manila-decisions").
+	return bldr.Named("cortex-manila-pipelines").
 		Complete(c)
 }

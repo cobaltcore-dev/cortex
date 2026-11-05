@@ -6,12 +6,15 @@ package filters
 import (
 	"context"
 	"fmt"
-	"github.com/go-logr/logr"
 	"math"
+	"slices"
 	"time"
+
+	"github.com/go-logr/logr"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -29,6 +32,21 @@ type FilterQuotaEnforcementOpts struct {
 	// enforcement, and so that newly-rolled-out pipelines never silently start
 	// rejecting requests.
 	Enforce bool `json:"enforce,omitempty"`
+
+	// CRStateFilter selects which CommittedResource states count toward the CR
+	// portion of quota, i.e. which CRs are deducted when computing PAYG headroom
+	// (headroom = Quota - sum(CR amounts) - PaygUsage). It MUST mirror the quota
+	// controller's crStateFilter (see internal/scheduling/reservations/quota/config.go)
+	// so the filter's CR deduction and the controller's PaygUsage derivation agree
+	// on what quota already accounts for. Empty means no CR states count; the
+	// deployment supplies the default (confirmed) via Helm.
+	CRStateFilter []v1alpha1.CommitmentStatus `json:"crStateFilter,omitempty"`
+}
+
+// crStateIncluded reports whether a CR in the given state counts toward the CR
+// portion of quota.
+func (o FilterQuotaEnforcementOpts) crStateIncluded(state v1alpha1.CommitmentStatus) bool {
+	return slices.Contains(o.CRStateFilter, state)
 }
 
 func (FilterQuotaEnforcementOpts) Validate() error { return nil }
@@ -40,7 +58,7 @@ func (FilterQuotaEnforcementOpts) Validate() error { return nil }
 //
 //  1. CR headroom (RAM only): checks if any CommittedResource CRD for the project has
 //     unused capacity that can accommodate the request
-//     (AcceptedSpec.Amount - Status.UsedResources >= requestRAM).
+//     (AcceptedSpec.Amount - Status.Billing.UsedResources >= requestRAM).
 //     If a matching CR has headroom, the request is accepted immediately — PAYG checks
 //     are skipped entirely.
 //
@@ -71,7 +89,7 @@ func (FilterQuotaEnforcementOpts) Validate() error { return nil }
 //
 // Disabled by default; activated by adding "filter_quota_enforcement" to the pipeline config.
 type FilterQuotaEnforcement struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, FilterQuotaEnforcementOpts]
+	lib.BaseFilter[compute.PlacementRequest, FilterQuotaEnforcementOpts]
 }
 
 // recordDecision appends an accept/reject/skip outcome as a named pipeline
@@ -92,7 +110,7 @@ func recordDecision(result *lib.FilterWeigherPipelineStepResult, mode, decision,
 	})
 }
 
-func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	mode := "shadow"
@@ -105,34 +123,31 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 	// external non-consuming intents (evacuate / live-migrate — VM already exists,
 	// being moved) apart from cortex-internal reservation intents (failover /
 	// committed-resource reservations — new schedules driven by cortex itself).
-	intent, err := request.GetIntent()
-	if err == nil {
-		switch intent {
-		case api.EvacuateIntent, api.LiveMigrationIntent:
-			traceLog.V(1).Info("skipping quota enforcement for non-consuming intent", "intent", intent)
-			recordDecision(result, mode, "accept_skipped_intent_migration", "", "", "")
-			return result, nil
-		case api.ReserveForFailoverIntent, api.ReuseFailoverReservationIntent:
-			traceLog.V(1).Info("skipping quota enforcement for failover reservation intent")
-			recordDecision(result, mode, "accept_skipped_intent_internal", "", "", "")
-			return result, nil
-		case api.ReserveForCommittedResourceIntent:
-			traceLog.V(1).Info("skipping quota enforcement for committed resource reservation intent")
-			recordDecision(result, mode, "accept_skipped_intent_internal", "", "", "")
-			return result, nil
-		case api.CapacityProbeIntent:
-			traceLog.V(1).Info("skipping quota enforcement for capacity probe intent")
-			recordDecision(result, mode, "accept_skipped", "", "", "")
-			return result, nil
-		}
+	switch request.Intent {
+	case api.EvacuateIntent, api.LiveMigrationIntent:
+		traceLog.V(1).Info("skipping quota enforcement for non-consuming intent", "intent", request.Intent)
+		recordDecision(result, mode, "accept_skipped_intent_migration", "", "", "")
+		return result, nil
+	case api.ReserveForFailoverIntent, api.ReuseFailoverReservationIntent:
+		traceLog.V(1).Info("skipping quota enforcement for failover reservation intent")
+		recordDecision(result, mode, "accept_skipped_intent_internal", "", "", "")
+		return result, nil
+	case api.ReserveForCommittedResourceIntent:
+		traceLog.V(1).Info("skipping quota enforcement for committed resource reservation intent")
+		recordDecision(result, mode, "accept_skipped_intent_internal", "", "", "")
+		return result, nil
+	case api.CapacityProbeIntent:
+		traceLog.V(1).Info("skipping quota enforcement for capacity probe intent")
+		recordDecision(result, mode, "accept_skipped", "", "", "")
+		return result, nil
 	}
 
 	// Step 2: Extract project, AZ, and hw_version from the request.
 	// Missing-data skips share a single decision bucket; the specific missing
 	// field is in the trace log.
-	projectID := request.Spec.Data.ProjectID
-	az := request.Spec.Data.AvailabilityZone
-	hwVersion := request.Spec.Data.Flavor.Data.ExtraSpecs["quota:hw_version"]
+	projectID := request.ProjectID
+	az := request.AvailabilityZone
+	hwVersion := request.HardwareVersion
 
 	if projectID == "" {
 		traceLog.V(1).Info("no project ID in request, skipping quota enforcement")
@@ -151,12 +166,12 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 	}
 
 	// Step 3: Compute resource demands from the request.
-	numInstances := request.Spec.Data.NumInstances
+	numInstances := request.NumInstances
 	if numInstances == 0 {
 		numInstances = 1
 	}
-	memoryMB := request.Spec.Data.Flavor.Data.MemoryMB
-	vcpus := request.Spec.Data.Flavor.Data.VCPUs
+	memoryMB := request.Flavor.MemoryMB
+	vcpus := request.Flavor.VCPUs
 	// MB to GiB: using 1024 as divisor is slightly conservative (overestimates GiB needed).
 	requestRAM := int64(math.Ceil(float64(memoryMB*numInstances) / 1024.0))
 	requestCores := int64(vcpus * numInstances) //nolint:gosec // VCPUs from flavor specs, realistically bounded
@@ -199,7 +214,8 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 			spec = cr.Status.AcceptedSpec
 		}
 
-		// Must match project, AZ, flavor group, resource type, and be active.
+		// Must match project, AZ, flavor group, resource type, and be in a
+		// quota-counting state (see Options.CRStateFilter).
 		if spec.ProjectID != projectID {
 			continue
 		}
@@ -212,7 +228,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 		if spec.ResourceType != v1alpha1.CommittedResourceTypeMemory {
 			continue
 		}
-		if !spec.IsActive() {
+		if !s.Options.crStateIncluded(spec.State) {
 			continue
 		}
 		now := time.Now()
@@ -230,8 +246,8 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request api.ExternalS
 		// Check if this specific CR has headroom for the request.
 		if !crHasHeadroom {
 			usedGiB := int64(0)
-			if cr.Status.UsedResources != nil {
-				if usedQty, ok := cr.Status.UsedResources["memory"]; ok {
+			if cr.Status.Billing != nil {
+				if usedQty, ok := cr.Status.Billing.UsedResources["memory"]; ok {
 					usedGiB = quantityToGiB(usedQty)
 				}
 			}

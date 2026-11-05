@@ -4,9 +4,12 @@
 package nova
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -21,6 +24,7 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -81,8 +85,10 @@ func TestLogNoHostFound(t *testing.T) {
 			},
 		}
 		if usedMiB > 0 {
-			cr.Status.UsedResources = map[string]resource.Quantity{
-				"memory": *resource.NewQuantity(usedMiB*1024*1024, resource.BinarySI),
+			cr.Status.Billing = &v1alpha1.BillingStatus{
+				UsedResources: map[string]resource.Quantity{
+					"memory": *resource.NewQuantity(usedMiB*1024*1024, resource.BinarySI),
+				},
 			}
 		}
 		return cr
@@ -107,10 +113,13 @@ func TestLogNoHostFound(t *testing.T) {
 			},
 		}
 		if allocatedMemMiB > 0 {
-			res.Spec.CommittedResourceReservation.Allocations = map[string]v1alpha1.CommittedResourceAllocation{
-				"some-vm": {
-					Resources: map[hv1.ResourceName]resource.Quantity{
-						hv1.ResourceMemory: *resource.NewQuantity(allocatedMemMiB*1024*1024, resource.BinarySI),
+			res.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{
+				Allocation: map[string]v1alpha1.CommittedResourceAllocation{
+					"some-vm": {
+						ObjectRef: corev1.ObjectReference{Name: "some-vm"},
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceMemory: *resource.NewQuantity(allocatedMemMiB*1024*1024, resource.BinarySI),
+						},
 					},
 				},
 			}
@@ -182,7 +191,7 @@ func TestLogNoHostFound(t *testing.T) {
 				flavorKnowledge(),
 				makeCRObject(v1alpha1.CommitmentStatusConfirmed, 8192, 4096),
 				makeHV("host-1", 16384),
-				makeReadyReservationSlot("slot-free", "host-1", 8192, 4096),
+				makeReadyReservationSlot("slot-free", "host-1", 8192, 0),
 			},
 			requestHosts: []api.ExternalSchedulerHost{{ComputeHost: "host-1"}},
 			expectedCase: "slot_blocked",
@@ -234,13 +243,10 @@ func TestLogNoHostFound(t *testing.T) {
 			reg := prometheus.NewRegistry()
 			reg.MustRegister(counter)
 
-			controller := &FilterWeigherPipelineController{
-				CRRecorder: crs.Recorder{
-					Client:             fakeClient,
-					NoHostFoundCounter: counter,
-				},
+			recorder := crs.Recorder{
+				Client:             fakeClient,
+				NoHostFoundCounter: counter,
 			}
-			controller.Client = fakeClient
 
 			requestFlavorName := flavorName
 			if tt.payg {
@@ -258,11 +264,7 @@ func TestLogNoHostFound(t *testing.T) {
 				Context: api.NovaRequestContext{ProjectID: projectID},
 				Hosts:   tt.requestHosts,
 			}
-			decision := &v1alpha1.Decision{
-				Spec: v1alpha1.DecisionSpec{Intent: api.CreateIntent},
-			}
-
-			controller.CRRecorder.RecordNoHostFound(context.Background(), decision, request)
+			recorder.RecordNoHostFound(context.Background(), api.CreateIntent, request)
 
 			if tt.expectedCase == "" {
 				total := testutil.ToFloat64(counter.WithLabelValues("no_cr", flavorGroup, string(api.CreateIntent))) +
@@ -359,7 +361,6 @@ func TestFeatureGate_CommittedResourceTracking(t *testing.T) {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(flavorKnowledge).
-				WithStatusSubresource(&v1alpha1.Decision{}).
 				Build()
 
 			counter := crs.NewNoHostFoundCounter()
@@ -367,15 +368,10 @@ func TestFeatureGate_CommittedResourceTracking(t *testing.T) {
 			reg.MustRegister(counter)
 
 			controller := &FilterWeigherPipelineController{
-				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
+				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[sched.PlacementRequest]]{
 					Client:          fakeClient,
-					Pipelines:       make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
+					Pipelines:       make(map[string]lib.FilterWeigherPipeline[sched.PlacementRequest]),
 					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
-				},
-				FeatureGates: FeatureGates{CommittedResourceTracking: enabled},
-				CRRecorder: crs.Recorder{
-					Client:             fakeClient,
-					NoHostFoundCounter: counter,
 				},
 			}
 			controller.PipelineConfigs["test-pipeline"] = pipelineConf
@@ -385,18 +381,20 @@ func TestFeatureGate_CommittedResourceTracking(t *testing.T) {
 			}
 			controller.Pipelines["test-pipeline"] = initResult.Pipeline
 
-			decision := &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-decision", Namespace: "default"},
-				Spec: v1alpha1.DecisionSpec{
-					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					PipelineRef:      corev1.ObjectReference{Name: "test-pipeline"},
-					NovaRaw:          &runtime.RawExtension{Raw: novaRaw},
-				},
-			}
+			// Drive the committed-resource tracking path through the real HTTP API
+			// handler, where the feature gate now lives (as a post-hook).
+			scheduler := sched.NewPlacement(controller, passthroughGatherer{})
+			crRecorder := crs.Recorder{Client: fakeClient, NoHostFoundCounter: counter}
+			api := newTestAPIWithScheduler(
+				HTTPAPIConfig{},
+				scheduler,
+				crRecorder,
+				FeatureGates{CommittedResourceTracking: enabled},
+			)
 
-			if err := controller.ProcessNewDecisionFromAPI(context.Background(), decision); err != nil {
-				t.Fatalf("ProcessNewDecisionFromAPI: %v", err)
-			}
+			req := httptest.NewRequest(http.MethodPost, "/scheduler/nova/external", bytes.NewReader(novaRaw))
+			w := httptest.NewRecorder()
+			api.NovaExternalScheduler(w, req)
 
 			count := testutil.CollectAndCount(counter)
 			if enabled && count == 0 {

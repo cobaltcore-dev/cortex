@@ -7,8 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"testing"
-
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -16,7 +14,7 @@ func ptr[T any](v T) *T { return &v }
 func TestGenerateExplanation(t *testing.T) {
 	tests := []struct {
 		name     string
-		result   *v1alpha1.DecisionResult
+		result   *PipelineResult
 		err      error
 		expected string
 	}{
@@ -34,20 +32,20 @@ func TestGenerateExplanation(t *testing.T) {
 		},
 		{
 			name: "result with target host only no steps",
-			result: &v1alpha1.DecisionResult{
+			result: &PipelineResult{
 				TargetHost: ptr("host-1"),
 			},
 			expected: "Selected host: host-1.",
 		},
 		{
 			name: "result with RawInWeights and filtering steps",
-			result: &v1alpha1.DecisionResult{
+			result: &PipelineResult{
 				RawInWeights: map[string]float64{
 					"host-a": 1.0,
 					"host-b": 0.5,
 					"host-c": 0.3,
 				},
-				StepResults: []v1alpha1.StepResult{
+				StepResults: []StepResult{
 					{
 						StepName: "filter_capacity",
 						Activations: map[string]float64{
@@ -72,12 +70,12 @@ func TestGenerateExplanation(t *testing.T) {
 		},
 		{
 			name: "uses NormalizedInWeights when RawInWeights empty",
-			result: &v1alpha1.DecisionResult{
+			result: &PipelineResult{
 				NormalizedInWeights: map[string]float64{
 					"host-x": 0.6,
 					"host-y": 0.4,
 				},
-				StepResults: []v1alpha1.StepResult{
+				StepResults: []StepResult{
 					{
 						StepName: "weigher_cpu",
 						Activations: map[string]float64{
@@ -92,8 +90,8 @@ func TestGenerateExplanation(t *testing.T) {
 		},
 		{
 			name: "no weights no target",
-			result: &v1alpha1.DecisionResult{
-				StepResults: []v1alpha1.StepResult{
+			result: &PipelineResult{
+				StepResults: []StepResult{
 					{StepName: "some-step", Activations: map[string]float64{}},
 				},
 			},
@@ -101,9 +99,9 @@ func TestGenerateExplanation(t *testing.T) {
 		},
 		{
 			name: "no weights with target",
-			result: &v1alpha1.DecisionResult{
+			result: &PipelineResult{
 				TargetHost: ptr("host-1"),
-				StepResults: []v1alpha1.StepResult{
+				StepResults: []StepResult{
 					{StepName: "some-step", Activations: map[string]float64{}},
 				},
 			},
@@ -111,12 +109,12 @@ func TestGenerateExplanation(t *testing.T) {
 		},
 		{
 			name: "all hosts survive all steps",
-			result: &v1alpha1.DecisionResult{
+			result: &PipelineResult{
 				RawInWeights: map[string]float64{
 					"host-a": 1.0,
 					"host-b": 0.5,
 				},
-				StepResults: []v1alpha1.StepResult{
+				StepResults: []StepResult{
 					{
 						StepName: "noop",
 						Activations: map[string]float64{
@@ -131,7 +129,7 @@ func TestGenerateExplanation(t *testing.T) {
 		},
 		{
 			name: "large cluster caps host lists",
-			result: func() *v1alpha1.DecisionResult {
+			result: func() *PipelineResult {
 				weights := make(map[string]float64, 50)
 				for i := range 50 {
 					weights[fmt.Sprintf("host-%03d", i)] = 1.0
@@ -141,9 +139,9 @@ func TestGenerateExplanation(t *testing.T) {
 				for i := range 30 {
 					surviving[fmt.Sprintf("host-%03d", i)] = 1.0
 				}
-				return &v1alpha1.DecisionResult{
+				return &PipelineResult{
 					RawInWeights: weights,
-					StepResults: []v1alpha1.StepResult{
+					StepResults: []StepResult{
 						{
 							StepName:    "filter_big",
 							Activations: surviving,

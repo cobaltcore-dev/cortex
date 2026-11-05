@@ -10,12 +10,13 @@ import (
 	"slices"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 type FilterLiveMigratableStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Check if a vm can be live migrated from a source to a given target host.
@@ -50,25 +51,19 @@ func (s *FilterLiveMigratableStep) checkHasSufficientFeatures(
 // Ensure the target host of a live migration can accept the migrating VM.
 func (s *FilterLiveMigratableStep) Run(
 	traceLog logr.Logger,
-	request api.ExternalSchedulerRequest,
+	request compute.PlacementRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 
 	result := s.IncludeAllHostsFromRequest(request)
 
-	intent, err := request.GetIntent()
-	if err != nil {
-		traceLog.V(1).Info("failed to determine request intent, skipping filter", "error", err)
-		return result, nil
-	}
-	if intent != api.LiveMigrationIntent {
+	if request.Intent != api.LiveMigrationIntent {
 		traceLog.V(1).Info("not a live migration request, skipping filter")
 		return result, nil
 	}
 
-	sourceHost, err := request.Spec.Data.GetSchedulerHintStr("source_host")
-	if err != nil || sourceHost == "" {
-		traceLog.V(1).Info("no source_host scheduler hint, skipping filter")
-		//nolint:nilerr // Not an error we want to fail the scheduling for.
+	sourceHost := request.SourceHost
+	if sourceHost == "" {
+		traceLog.V(1).Info("no source host set, skipping filter")
 		return result, nil
 	}
 

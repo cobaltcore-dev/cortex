@@ -5,16 +5,13 @@ package failoverhost
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"slices"
 	"sync"
 	"testing"
 
-	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
@@ -22,9 +19,17 @@ import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// passthroughGatherer is a nova.CandidateGatherer that leaves the request's
+// preselected hosts unchanged. The integration tests seed their own eligible
+// hosts, so gathering is a no-op here.
+type passthroughGatherer struct{}
+
+func (passthroughGatherer) MutateWithAllCandidates(context.Context, *sched.PlacementRequest) error {
+	return nil
+}
 
 // ============================================================================
 // Integration Tests
@@ -199,7 +204,6 @@ func TestIntegration(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
 			env := newIntegrationTestEnv(t, tc.Hypervisors, tc.Flavors)
-			defer env.Close()
 
 			ratio, minimum := tc.Ratio, tc.Minimum
 			if ratio == 0 {
@@ -234,18 +238,16 @@ func TestIntegration(t *testing.T) {
 // Test Environment
 // ============================================================================
 
-// integrationTestEnv wires a real Nova filter/weigher pipeline (served over
-// HTTP) on top of a fake k8s client holding the fleet and the flavor-groups
-// Knowledge CRD, so the generation pipeline can be driven end to end.
+// integrationTestEnv wires a real Nova filter/weigher pipeline behind the shared
+// in-process scheduler on top of a fake k8s client holding the fleet and the
+// flavor-groups Knowledge CRD, so the generation pipeline can be driven end to
+// end.
 type integrationTestEnv struct {
-	k8sClient    client.Client
-	server       *httptest.Server
-	schedulerURL string
-	flavors      []compute.FlavorInGroup
-	hypervisors  map[string]hv1.Hypervisor
+	k8sClient   client.Client
+	scheduler   *sched.Placement
+	flavors     []compute.FlavorInGroup
+	hypervisors map[string]hv1.Hypervisor
 }
-
-func (env *integrationTestEnv) Close() { env.server.Close() }
 
 // newIntegrationTestEnv builds the fake cluster and the real scheduler pipeline.
 func newIntegrationTestEnv(t *testing.T, hypervisors []*hv1.Hypervisor, flavors []compute.FlavorInGroup) *integrationTestEnv {
@@ -262,9 +264,9 @@ func newIntegrationTestEnv(t *testing.T, hypervisors []*hv1.Hypervisor, flavors 
 	k8sClient := newTestClient(t, objects...)
 
 	controller := &nova.FilterWeigherPipelineController{
-		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]]{
+		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[sched.PlacementRequest]]{
 			Client:          k8sClient,
-			Pipelines:       make(map[string]lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]),
+			Pipelines:       make(map[string]lib.FilterWeigherPipeline[sched.PlacementRequest]),
 			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 		},
 		Monitor: sharedPipelineMonitor(),
@@ -294,17 +296,15 @@ func newIntegrationTestEnv(t *testing.T, hypervisors []*hv1.Hypervisor, flavors 
 	controller.Pipelines[pipeline.Name] = result.Pipeline
 	controller.PipelineConfigs[pipeline.Name] = pipeline
 
-	api := &integrationHTTPAPI{delegate: controller}
-	mux := http.NewServeMux()
-	mux.HandleFunc("/scheduler/nova/external", api.handle)
-	server := httptest.NewServer(mux)
+	// KVM requests trigger candidate gathering; the test seeds its own eligible
+	// hosts, so use a passthrough gatherer that preserves them.
+	scheduler := sched.NewPlacement(controller, passthroughGatherer{})
 
 	return &integrationTestEnv{
-		k8sClient:    k8sClient,
-		server:       server,
-		schedulerURL: server.URL + "/scheduler/nova/external",
-		flavors:      flavors,
-		hypervisors:  hvsByName,
+		k8sClient:   k8sClient,
+		scheduler:   scheduler,
+		flavors:     flavors,
+		hypervisors: hvsByName,
 	}
 }
 
@@ -319,7 +319,7 @@ func (env *integrationTestEnv) Generate(t *testing.T, ratio float64, minimum int
 	g := &pipelineGenerator{
 		Client:             env.k8sClient,
 		seeder:             &seeder{k8s: env.k8sClient},
-		pathFinder:         &evacuationPathFinder{httpClient: http.DefaultClient, schedulerURL: env.schedulerURL},
+		pathFinder:         &evacuationPathFinder{scheduler: env.scheduler},
 		partitionBuilder:   cliquePartitionBuilder{},
 		reservationPlanner: ratioReservationPlanner{ratio: ratio, minimum: minimum},
 	}
@@ -342,7 +342,7 @@ func (env *integrationTestEnv) AcceptsByHost(t *testing.T) map[string]map[string
 	for _, hv := range env.hypervisors {
 		zones[hv.Labels[corev1.LabelTopologyZone]] = true
 	}
-	finder := &evacuationPathFinder{httpClient: http.DefaultClient, schedulerURL: env.schedulerURL}
+	finder := &evacuationPathFinder{scheduler: env.scheduler}
 	accepts := map[string]map[string]bool{}
 	for _, flavor := range env.flavors {
 		for zone := range zones {
@@ -428,49 +428,6 @@ func (env *integrationTestEnv) VerifySiblingSources(t *testing.T, desired map[co
 // evacProbePipeline is the name of the real Nova filter/weigher pipeline the
 // probe exercises.
 const evacProbePipeline = "kvm-general-purpose-load-balancing"
-
-// integrationHTTPAPI is a thin, deterministic HTTP front-end for the real Nova
-// filter/weigher pipeline — the same shape the failover package's integration
-// tests use. It does NOT shuffle, so the probe answers are stable.
-type integrationHTTPAPI struct {
-	delegate nova.HTTPAPIDelegate
-}
-
-func (a *integrationHTTPAPI) handle(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-	var reqData novaapi.ExternalSchedulerRequest
-	if err := json.NewDecoder(r.Body).Decode(&reqData); err != nil {
-		http.Error(w, "decode", http.StatusBadRequest)
-		return
-	}
-	rawBytes, err := json.Marshal(reqData)
-	if err != nil {
-		http.Error(w, "marshal", http.StatusInternalServerError)
-		return
-	}
-	decision := &v1alpha1.Decision{
-		TypeMeta:   metav1.TypeMeta{Kind: "Decision", APIVersion: "cortex.cloud/v1alpha1"},
-		ObjectMeta: metav1.ObjectMeta{GenerateName: "nova-"},
-		Spec: v1alpha1.DecisionSpec{
-			SchedulingDomain: v1alpha1.SchedulingDomainNova,
-			PipelineRef:      corev1.ObjectReference{Name: evacProbePipeline},
-			ResourceID:       reqData.Spec.Data.InstanceUUID,
-			NovaRaw:          &runtime.RawExtension{Raw: rawBytes},
-		},
-	}
-	if err := a.delegate.ProcessNewDecisionFromAPI(r.Context(), decision); err != nil {
-		http.Error(w, "process", http.StatusInternalServerError)
-		return
-	}
-	if decision.Status.Result == nil {
-		http.Error(w, "no result", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(novaapi.ExternalSchedulerResponse{Hosts: decision.Status.Result.OrderedHosts}); err != nil {
-		http.Error(w, "encode", http.StatusInternalServerError)
-	}
-}
 
 // ============================================================================
 // Object Creation Functions

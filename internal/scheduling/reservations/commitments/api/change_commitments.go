@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	knowledge "github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
@@ -140,7 +141,7 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	api.changeMutex.Lock()
 	defer api.changeMutex.Unlock()
 
-	ctx := reservations.WithGlobalRequestID(context.Background(), "committed-resource-"+requestID)
+	ctx := reservations.WithGlobalRequestID(context.Background(), requestID)
 	logger := commitments.LoggerFromContext(ctx).WithValues("endpoint", "/commitments/v1/change-commitments")
 
 	if r.Method != http.MethodPost {
@@ -179,23 +180,20 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	{
-		knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
-		if knowledgeCRD, err := knowledge.Get(ctx); err == nil && knowledgeCRD != nil {
-			var currentVersion int64 = -1
-			if !knowledgeCRD.Status.LastContentChange.IsZero() {
-				currentVersion = knowledgeCRD.Status.LastContentChange.Unix()
-			}
-			if req.InfoVersion != currentVersion {
-				logger.Info("version mismatch in commitment change request",
-					"requestVersion", req.InfoVersion,
-					"currentVersion", currentVersion)
-				statusCode = http.StatusConflict
-				http.Error(w, fmt.Sprintf("Version mismatch: request version %d, current version %d. Please refresh and retry.",
-					req.InfoVersion, currentVersion), statusCode)
-				api.recordMetrics(req, resp, statusCode, startTime)
-				return
-			}
+	if knowledgeCRD, err := knowledge.GetFlavorGroupsKnowledge(ctx, api.client); err == nil && knowledgeCRD != nil {
+		var currentVersion int64 = -1
+		if !knowledgeCRD.Status.LastContentChange.IsZero() {
+			currentVersion = knowledgeCRD.Status.LastContentChange.Unix()
+		}
+		if req.InfoVersion != currentVersion {
+			logger.Info("version mismatch in commitment change request",
+				"requestVersion", req.InfoVersion,
+				"currentVersion", currentVersion)
+			statusCode = http.StatusConflict
+			http.Error(w, fmt.Sprintf("Version mismatch: request version %d, current version %d. Please refresh and retry.",
+				req.InfoVersion, currentVersion), statusCode)
+			api.recordMetrics(req, resp, statusCode, startTime)
+			return
 		}
 	}
 
@@ -231,8 +229,7 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 }
 
 func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.ResponseWriter, logger logr.Logger, req liquid.CommitmentChangeRequest, resp *liquid.CommitmentChangeResponse) error {
-	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
-	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
+	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, api.client, nil)
 	if err != nil {
 		logger.Info("failed to get flavor groups from knowledge extractor", "error", err)
 		http.Error(w, "caches not ready, please retry later", http.StatusServiceUnavailable)
@@ -456,7 +453,7 @@ ProcessLoop:
 			if len(toWatch) == 1 {
 				sanitisedReason = "internal error on commitment " + strings.TrimPrefix(toWatch[0].name, "commitment-")
 			} else {
-				sanitisedReason = "internal error (request ID: " + strings.TrimPrefix(reservations.GlobalRequestIDFromContext(ctx), "committed-resource-") + ")"
+				sanitisedReason = "internal error (request ID: " + reservations.GlobalRequestIDFromContext(ctx) + ")"
 			}
 			api.monitor.timeouts.WithLabelValues("false").Inc()
 			rollback = true
@@ -640,8 +637,7 @@ func rollbackCR(ctx context.Context, logger logr.Logger, k8sClient client.Client
 // performDryRun checks whether the net capacity delta in req can be placed by running
 // temporary probe CommittedResource CRDs through the controller, then always cleaning them up.
 func (api *HTTPAPI) performDryRun(ctx context.Context, logger logr.Logger, req liquid.CommitmentChangeRequest, resp *liquid.CommitmentChangeResponse) {
-	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
-	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
+	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, api.client, nil)
 	if err != nil {
 		resp.RejectionReason = "dry run: caches not ready, please retry later"
 		return
@@ -728,7 +724,7 @@ func (api *HTTPAPI) performDryRun(ctx context.Context, logger logr.Logger, req l
 	probeDomainID := firstProjectMeta.Domain.UUID
 
 	// Probe ID is derived from the HTTP request ID for log traceability.
-	ctxRequestID := strings.TrimPrefix(reservations.GlobalRequestIDFromContext(ctx), "committed-resource-")
+	ctxRequestID := reservations.GlobalRequestIDFromContext(ctx)
 	if len(ctxRequestID) > 8 {
 		ctxRequestID = ctxRequestID[:8]
 	}

@@ -14,15 +14,15 @@ import (
 )
 
 // Default resources for test VMs and reservations (4GB memory, 2 vcpus)
-// Note: Reservations use "cpu" as the canonical key, VMs use "vcpus"
+// Note: Both reservations and VMs use "cpu" as the canonical CPU resource key.
 var defaultResources = map[hv1.ResourceName]resource.Quantity{
-	"memory": resource.MustParse("4Gi"),
-	"cpu":    resource.MustParse("2"),
+	hv1.ResourceMemory: resource.MustParse("4Gi"),
+	hv1.ResourceCPU:    resource.MustParse("2"),
 }
 
 var defaultVMResources = map[string]resource.Quantity{
-	"memory": resource.MustParse("4Gi"),
-	"vcpus":  resource.MustParse("2"),
+	string(hv1.ResourceMemory): resource.MustParse("4Gi"),
+	string(hv1.ResourceCPU):    resource.MustParse("2"),
 }
 
 // makeReservation creates a test reservation with the given parameters.
@@ -622,48 +622,48 @@ func TestDoesVMFitInReservation(t *testing.T) {
 		{
 			name: "fits: VM fits exactly in reservation",
 			vm: makeVMWithResources("vm-1", "host1", map[string]resource.Quantity{
-				"memory": resource.MustParse("4Gi"),
-				"vcpus":  resource.MustParse("2"),
+				string(hv1.ResourceMemory): resource.MustParse("4Gi"),
+				string(hv1.ResourceCPU):    resource.MustParse("2"),
 			}),
 			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[hv1.ResourceName]resource.Quantity{
-				"memory": resource.MustParse("4Gi"),
-				"cpu":    resource.MustParse("2"),
+				hv1.ResourceMemory: resource.MustParse("4Gi"),
+				hv1.ResourceCPU:    resource.MustParse("2"),
 			}),
 			expected: true,
 		},
 		{
 			name: "fits: VM is smaller than reservation",
 			vm: makeVMWithResources("vm-1", "host1", map[string]resource.Quantity{
-				"memory": resource.MustParse("2Gi"),
-				"vcpus":  resource.MustParse("1"),
+				string(hv1.ResourceMemory): resource.MustParse("2Gi"),
+				string(hv1.ResourceCPU):    resource.MustParse("1"),
 			}),
 			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[hv1.ResourceName]resource.Quantity{
-				"memory": resource.MustParse("4Gi"),
-				"cpu":    resource.MustParse("2"),
+				hv1.ResourceMemory: resource.MustParse("4Gi"),
+				hv1.ResourceCPU:    resource.MustParse("2"),
 			}),
 			expected: true,
 		},
 		{
 			name: "exceeds: VM memory exceeds reservation",
 			vm: makeVMWithResources("vm-1", "host1", map[string]resource.Quantity{
-				"memory": resource.MustParse("8Gi"),
-				"vcpus":  resource.MustParse("2"),
+				string(hv1.ResourceMemory): resource.MustParse("8Gi"),
+				string(hv1.ResourceCPU):    resource.MustParse("2"),
 			}),
 			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[hv1.ResourceName]resource.Quantity{
-				"memory": resource.MustParse("4Gi"),
-				"cpu":    resource.MustParse("2"),
+				hv1.ResourceMemory: resource.MustParse("4Gi"),
+				hv1.ResourceCPU:    resource.MustParse("2"),
 			}),
 			expected: false,
 		},
 		{
 			name: "exceeds: VM vcpus exceeds reservation cpu",
 			vm: makeVMWithResources("vm-1", "host1", map[string]resource.Quantity{
-				"memory": resource.MustParse("4Gi"),
-				"vcpus":  resource.MustParse("4"),
+				string(hv1.ResourceMemory): resource.MustParse("4Gi"),
+				string(hv1.ResourceCPU):    resource.MustParse("4"),
 			}),
 			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[hv1.ResourceName]resource.Quantity{
-				"memory": resource.MustParse("4Gi"),
-				"cpu":    resource.MustParse("2"),
+				hv1.ResourceMemory: resource.MustParse("4Gi"),
+				hv1.ResourceCPU:    resource.MustParse("2"),
 			}),
 			expected: false,
 		},
@@ -671,30 +671,30 @@ func TestDoesVMFitInReservation(t *testing.T) {
 			name: "fits: VM has no resources defined",
 			vm:   makeVMWithResources("vm-1", "host1", map[string]resource.Quantity{}),
 			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[hv1.ResourceName]resource.Quantity{
-				"memory": resource.MustParse("4Gi"),
-				"cpu":    resource.MustParse("2"),
+				hv1.ResourceMemory: resource.MustParse("4Gi"),
+				hv1.ResourceCPU:    resource.MustParse("2"),
 			}),
 			expected: true,
 		},
 		{
 			name: "exceeds: reservation has no memory resource",
 			vm: makeVMWithResources("vm-1", "host1", map[string]resource.Quantity{
-				"memory": resource.MustParse("4Gi"),
-				"vcpus":  resource.MustParse("2"),
+				string(hv1.ResourceMemory): resource.MustParse("4Gi"),
+				string(hv1.ResourceCPU):    resource.MustParse("2"),
 			}),
 			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[hv1.ResourceName]resource.Quantity{
-				"cpu": resource.MustParse("2"),
+				hv1.ResourceCPU: resource.MustParse("2"),
 			}),
 			expected: false,
 		},
 		{
 			name: "exceeds: reservation has no cpu resource",
 			vm: makeVMWithResources("vm-1", "host1", map[string]resource.Quantity{
-				"memory": resource.MustParse("4Gi"),
-				"vcpus":  resource.MustParse("2"),
+				string(hv1.ResourceMemory): resource.MustParse("4Gi"),
+				string(hv1.ResourceCPU):    resource.MustParse("2"),
 			}),
 			reservation: makeReservationWithResources("res-1", "host2", map[string]string{}, map[hv1.ResourceName]resource.Quantity{
-				"memory": resource.MustParse("4Gi"),
+				hv1.ResourceMemory: resource.MustParse("4Gi"),
 			}),
 			expected: false,
 		},

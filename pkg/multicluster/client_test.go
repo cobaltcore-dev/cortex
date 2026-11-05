@@ -563,8 +563,8 @@ func TestGVKFromHomeScheme_Success(t *testing.T) {
 	}{
 		{"ConfigMap", &corev1.ConfigMap{}, configMapGVK},
 		{"ConfigMapList", &corev1.ConfigMapList{}, configMapListGVK},
-		{"Decision", &v1alpha1.Decision{}, schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Decision"}},
-		{"DecisionList", &v1alpha1.DecisionList{}, schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "DecisionList"}},
+		{"Pipeline", &v1alpha1.Pipeline{}, schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Pipeline"}},
+		{"PipelineList", &v1alpha1.PipelineList{}, schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "PipelineList"}},
 	}
 
 	for _, tt := range tests {
@@ -1778,7 +1778,7 @@ func TestClient_InitFromConf_GVKFormatting(t *testing.T) {
 		expectedStr string
 	}{
 		{"core ConfigMap", configMapGVK, "v1/ConfigMap"},
-		{"cortex Decision", schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Decision"}, "cortex.cloud/v1alpha1/Decision"},
+		{"cortex Pipeline", schema.GroupVersionKind{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Pipeline"}, "cortex.cloud/v1alpha1/Pipeline"},
 	}
 
 	for _, tt := range tests {

@@ -1292,7 +1292,7 @@ func (vm *TestVM) ToVM() VM {
 		AvailabilityZone:  vm.AZ,
 		Resources: map[string]int64{
 			"memory": vm.Flavor.MemoryMB,
-			"vcpus":  vm.Flavor.VCPUs,
+			"cpu":    vm.Flavor.VCPUs,
 		},
 		FlavorExtraSpecs: map[string]string{
 			"quota:hw_version": vm.Flavor.Group,

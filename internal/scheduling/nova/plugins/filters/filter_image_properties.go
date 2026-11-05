@@ -5,68 +5,55 @@ package filters
 
 import (
 	"context"
-	"github.com/go-logr/logr"
 	"slices"
+
+	"github.com/go-logr/logr"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 type FilterImagePropertiesStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Filter hosts based on image properties given in the request spec.
-func (s *FilterImagePropertiesStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterImagePropertiesStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
-
-	// Resolve the scheduling intent once and fall back to a readable default
-	// when it cannot be determined.
-	intent, intentErr := request.GetIntent()
-	intentLabel := "unknown"
-	if intentErr == nil {
-		intentLabel = string(intent)
-	}
 
 	// Apply this filter to all requests, unless we know from the request's
 	// intent that image metadata is expected to not be set.
-	if intentErr == nil {
-		intentsExpectedToNotHaveImageMeta := []v1alpha1.SchedulingIntent{
-			// Cortex-internal intents in which scheduling requests are sent
-			// mainly based on flavor-related metadata, independent of the
-			// image that'll land there.
-			api.ReserveForFailoverIntent,
-			api.ReuseFailoverReservationIntent,
-			api.ReserveForCommittedResourceIntent,
-			api.CapacityProbeIntent,
-		}
-		if slices.Contains(intentsExpectedToNotHaveImageMeta, intent) {
-			traceLog.V(1).Info("skipping filter: expected to have no image metadata",
-				"intent", intent)
-			return result, nil
-		}
+	intentsExpectedToNotHaveImageMeta := []v1alpha1.SchedulingIntent{
+		// Cortex-internal intents in which scheduling requests are sent
+		// mainly based on flavor-related metadata, independent of the
+		// image that'll land there.
+		api.ReserveForFailoverIntent,
+		api.ReuseFailoverReservationIntent,
+		api.ReserveForCommittedResourceIntent,
+		api.CapacityProbeIntent,
 	}
-
-	// If the image properties indicate any other hypervisor type than kvm,
-	// we filter out all known kvm hypervisors.
-	hvType, err := request.Spec.Data.Image.Data.GetHypervisorType()
-	if err != nil {
-		// Hypervisor type could not be determined. In this case, just
-		// ignore the filter and return all hosts.
-		traceLog.Error(err, "could not determine hypervisor type from image properties")
-		// Expose this event through the step monitor to alert on high-frequency
-		// occurrences of this situation. Include the request intent as a dynamic
-		// label so the alert can pinpoint which scheduling intents are affected.
-		result.Events = append(result.Events, lib.FilterWeigherPipelineStepEvent{
-			Name:   "image_properties_hv_type_undetermined",
-			Labels: map[string]string{"intent": intentLabel},
-		})
+	if slices.Contains(intentsExpectedToNotHaveImageMeta, request.Intent) {
+		traceLog.V(1).Info("skipping filter: expected to have no image metadata",
+			"intent", request.Intent)
 		return result, nil
 	}
 
-	if hvType != api.NovaImageMetaHVTypeKVM {
+	hvType := request.ImageHypervisorType
+
+	// If the image hypervisor type is unset, we treat it as if no
+	// constraint is applied.
+	if hvType == api.ImageHypervisorTypeUnparseable || hvType == api.ImageHypervisorTypeUnset {
+		traceLog.Info("image hypervisor type is unset or unparseable, skipping filter")
+		return result, nil
+	}
+
+	// If the image properties indicate any other hypervisor type than kvm,
+	// we filter out all known kvm hypervisors. An unset image hypervisor type
+	// means the image declared none, so no image constraint applies.
+	if hvType != api.ImageHypervisorTypeUnset && hvType != api.ImageHypervisorTypeKVM {
 		traceLog.V(1).Info("filtering out all known kvm hypervisors since image properties indicate a different hypervisor type",
 			"image_hypervisor_type", hvType)
 		hvs := new(hv1.HypervisorList)

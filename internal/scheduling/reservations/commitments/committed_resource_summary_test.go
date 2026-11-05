@@ -41,8 +41,9 @@ func makeStatusWithMessage(reason, message string, accepted *v1alpha1.CommittedR
 }
 
 func makeStatus(reason string, accepted *v1alpha1.CommittedResourceSpec, instances []string) v1alpha1.CommittedResourceStatus {
-	status := v1alpha1.CommittedResourceStatus{
-		AssignedInstances: instances,
+	status := v1alpha1.CommittedResourceStatus{}
+	if len(instances) > 0 {
+		status.Billing = &v1alpha1.BillingStatus{AssignedInstances: instances}
 	}
 	if accepted != nil {
 		status.AcceptedSpec = accepted.DeepCopy()

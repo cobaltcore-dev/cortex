@@ -8,14 +8,12 @@ import (
 	"sort"
 	"strings"
 	"testing"
-
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 )
 
 func TestExplainWeighing(t *testing.T) {
 	tests := []struct {
 		name     string
-		result   *v1alpha1.DecisionResult
+		result   *PipelineResult
 		contains []string // substrings that must appear in output
 		excludes []string // substrings that must NOT appear in output
 		empty    bool     // expect empty string
@@ -27,7 +25,7 @@ func TestExplainWeighing(t *testing.T) {
 		},
 		{
 			name: "single host returns empty",
-			result: &v1alpha1.DecisionResult{
+			result: &PipelineResult{
 				OrderedHosts:         []string{"host-a"},
 				NormalizedInWeights:  map[string]float64{"host-a": 0.5},
 				AggregatedOutWeights: map[string]float64{"host-a": 0.8},
@@ -36,11 +34,11 @@ func TestExplainWeighing(t *testing.T) {
 		},
 		{
 			name: "only filter steps returns empty",
-			result: &v1alpha1.DecisionResult{
+			result: &PipelineResult{
 				NormalizedInWeights:  map[string]float64{"host-a": 0.5, "host-b": 0.3, "host-c": 0.1},
 				AggregatedOutWeights: map[string]float64{"host-a": 0.5, "host-b": 0.3},
 				OrderedHosts:         []string{"host-a", "host-b"},
-				StepResults: []v1alpha1.StepResult{
+				StepResults: []StepResult{
 					// A true filter: activations do NOT include host-b (it was filtered after this step).
 					{StepName: "filter_az", Activations: map[string]float64{"host-a": 1.0}},
 				},
@@ -49,7 +47,7 @@ func TestExplainWeighing(t *testing.T) {
 		},
 		{
 			name: "two hosts single weigher positive multiplier",
-			result: func() *v1alpha1.DecisionResult {
+			result: func() *PipelineResult {
 				// Simulate: multiplier = 2.0, act[a] = 1.0, act[b] = -0.5
 				// contrib[a] = 2.0 * tanh(1.0) = 1.5231
 				// contrib[b] = 2.0 * tanh(-0.5) = -0.9242
@@ -58,11 +56,11 @@ func TestExplainWeighing(t *testing.T) {
 				inA, inB := 0.3, 0.3
 				outA := inA + mult*math.Tanh(actA)
 				outB := inB + mult*math.Tanh(actB)
-				return &v1alpha1.DecisionResult{
+				return &PipelineResult{
 					NormalizedInWeights:  map[string]float64{"host-a": inA, "host-b": inB},
 					AggregatedOutWeights: map[string]float64{"host-a": outA, "host-b": outB},
 					OrderedHosts:         []string{"host-a", "host-b"},
-					StepResults: []v1alpha1.StepResult{
+					StepResults: []StepResult{
 						{StepName: "weigher_cpu", Activations: map[string]float64{"host-a": actA, "host-b": actB}},
 					},
 				}
@@ -71,7 +69,7 @@ func TestExplainWeighing(t *testing.T) {
 		},
 		{
 			name: "two hosts single weigher negative multiplier",
-			result: func() *v1alpha1.DecisionResult {
+			result: func() *PipelineResult {
 				// Simulate: multiplier = -1.0 (inverts behavior)
 				// A host with HIGH raw activation is penalized.
 				// act[a] = -2.0 (high penalty activates less due to neg mult -> boosts)
@@ -83,11 +81,11 @@ func TestExplainWeighing(t *testing.T) {
 				outB := inB + mult*math.Tanh(actB)
 				// outA = 0 + (-1)*tanh(-2) = 0 + (-1)*(-0.964) = +0.964
 				// outB = 0 + (-1)*tanh(3) = 0 + (-1)*(0.995) = -0.995
-				return &v1alpha1.DecisionResult{
+				return &PipelineResult{
 					NormalizedInWeights:  map[string]float64{"host-a": inA, "host-b": inB},
 					AggregatedOutWeights: map[string]float64{"host-a": outA, "host-b": outB},
 					OrderedHosts:         []string{"host-a", "host-b"},
-					StepResults: []v1alpha1.StepResult{
+					StepResults: []StepResult{
 						{StepName: "kvm_binpack", Activations: map[string]float64{"host-a": actA, "host-b": actB}},
 					},
 				}
@@ -96,7 +94,7 @@ func TestExplainWeighing(t *testing.T) {
 		},
 		{
 			name: "three hosts two weighers with counterfactual",
-			result: func() *v1alpha1.DecisionResult {
+			result: func() *PipelineResult {
 				// weigher_cpu (mult=3.0) strongly favors host-a
 				// weigher_mem (mult=1.0) slightly favors host-b
 				// Without weigher_cpu, host-b should be #1.
@@ -111,11 +109,11 @@ func TestExplainWeighing(t *testing.T) {
 				// Sort to determine OrderedHosts.
 				hosts := []string{"h1", "h2", "h3"}
 				sortByWeight(hosts, out)
-				return &v1alpha1.DecisionResult{
+				return &PipelineResult{
 					NormalizedInWeights:  in,
 					AggregatedOutWeights: out,
 					OrderedHosts:         hosts,
-					StepResults: []v1alpha1.StepResult{
+					StepResults: []StepResult{
 						{StepName: "weigher_cpu", Activations: actCPU},
 						{StepName: "weigher_mem", Activations: actMem},
 					},
@@ -125,7 +123,7 @@ func TestExplainWeighing(t *testing.T) {
 		},
 		{
 			name: "opposing weigher reported",
-			result: func() *v1alpha1.DecisionResult {
+			result: func() *PipelineResult {
 				// weigher_boost (mult=2.0) pushes host-a up
 				// weigher_penalty (mult=-0.5) opposes host-a
 				// Net: host-a still wins due to weigher_boost dominance.
@@ -139,11 +137,11 @@ func TestExplainWeighing(t *testing.T) {
 				}
 				hosts := []string{"x", "y"}
 				sortByWeight(hosts, out)
-				return &v1alpha1.DecisionResult{
+				return &PipelineResult{
 					NormalizedInWeights:  in,
 					AggregatedOutWeights: out,
 					OrderedHosts:         hosts,
-					StepResults: []v1alpha1.StepResult{
+					StepResults: []StepResult{
 						{StepName: "weigher_boost", Activations: actBoost},
 						{StepName: "weigher_penalty", Activations: actPenalty},
 					},
@@ -153,7 +151,7 @@ func TestExplainWeighing(t *testing.T) {
 		},
 		{
 			name: "negligible impact weigher reported",
-			result: func() *v1alpha1.DecisionResult {
+			result: func() *PipelineResult {
 				// weigher_big (mult=5.0) dominates
 				// weigher_tiny (mult=0.001) is negligible
 				multBig, multTiny := 5.0, 0.001
@@ -166,11 +164,11 @@ func TestExplainWeighing(t *testing.T) {
 				}
 				hosts := []string{"a", "b"}
 				sortByWeight(hosts, out)
-				return &v1alpha1.DecisionResult{
+				return &PipelineResult{
 					NormalizedInWeights:  in,
 					AggregatedOutWeights: out,
 					OrderedHosts:         hosts,
-					StepResults: []v1alpha1.StepResult{
+					StepResults: []StepResult{
 						{StepName: "weigher_big", Activations: actBig},
 						{StepName: "weigher_tiny", Activations: actTiny},
 					},
@@ -180,11 +178,11 @@ func TestExplainWeighing(t *testing.T) {
 		},
 		{
 			name: "initial weight bias dominates when activations are zero",
-			result: &v1alpha1.DecisionResult{
+			result: &PipelineResult{
 				NormalizedInWeights:  map[string]float64{"fast": 0.8, "slow": 0.2},
 				AggregatedOutWeights: map[string]float64{"fast": 0.8, "slow": 0.2},
 				OrderedHosts:         []string{"fast", "slow"},
-				StepResults: []v1alpha1.StepResult{
+				StepResults: []StepResult{
 					{StepName: "weigher_noop", Activations: map[string]float64{"fast": 0.0, "slow": 0.0}},
 				},
 			},
@@ -193,7 +191,7 @@ func TestExplainWeighing(t *testing.T) {
 		},
 		{
 			name: "mixed filter and weigher steps ignores filters",
-			result: func() *v1alpha1.DecisionResult {
+			result: func() *PipelineResult {
 				mult := 1.5
 				actW := map[string]float64{"a": 1.0, "b": -0.5}
 				in := map[string]float64{"a": 0.0, "b": 0.0, "c": 0.0}
@@ -203,11 +201,11 @@ func TestExplainWeighing(t *testing.T) {
 				}
 				hosts := []string{"a", "b"}
 				sortByWeight(hosts, out)
-				return &v1alpha1.DecisionResult{
+				return &PipelineResult{
 					NormalizedInWeights:  map[string]float64{"a": 0.0, "b": 0.0},
 					AggregatedOutWeights: out,
 					OrderedHosts:         hosts,
-					StepResults: []v1alpha1.StepResult{
+					StepResults: []StepResult{
 						// Filter step: removed host c (activations don't include all OrderedHosts... wait, they do include a and b).
 						// Actually a filter that removed c would have activations for a and b only.
 						// Since OrderedHosts = [a, b], this LOOKS like a weigher.
@@ -224,11 +222,11 @@ func TestExplainWeighing(t *testing.T) {
 		},
 		{
 			name: "under-determined system falls back to gap-only explanation",
-			result: &v1alpha1.DecisionResult{
+			result: &PipelineResult{
 				NormalizedInWeights:  map[string]float64{"a": 0.0, "b": 0.0},
 				AggregatedOutWeights: map[string]float64{"a": 1.0, "b": 0.5},
 				OrderedHosts:         []string{"a", "b"},
-				StepResults: []v1alpha1.StepResult{
+				StepResults: []StepResult{
 					{StepName: "w1", Activations: map[string]float64{"a": 1.0, "b": 0.5}},
 					{StepName: "w2", Activations: map[string]float64{"a": 0.8, "b": 0.3}},
 					{StepName: "w3", Activations: map[string]float64{"a": 0.6, "b": 0.1}},
@@ -239,7 +237,7 @@ func TestExplainWeighing(t *testing.T) {
 		},
 		{
 			name: "multiplier recovery accuracy",
-			result: func() *v1alpha1.DecisionResult {
+			result: func() *PipelineResult {
 				// Known multipliers: [2.5, -1.0, 0.7]
 				mults := []float64{2.5, -1.0, 0.7}
 				acts := []map[string]float64{
@@ -257,11 +255,11 @@ func TestExplainWeighing(t *testing.T) {
 					}
 				}
 				sortByWeight(hosts, out)
-				return &v1alpha1.DecisionResult{
+				return &PipelineResult{
 					NormalizedInWeights:  in,
 					AggregatedOutWeights: out,
 					OrderedHosts:         hosts,
-					StepResults: []v1alpha1.StepResult{
+					StepResults: []StepResult{
 						{StepName: "w_big", Activations: acts[0]},
 						{StepName: "w_neg", Activations: acts[1]},
 						{StepName: "w_small", Activations: acts[2]},
@@ -272,7 +270,7 @@ func TestExplainWeighing(t *testing.T) {
 		},
 		{
 			name: "counterfactual not reported when removal does not change #1",
-			result: func() *v1alpha1.DecisionResult {
+			result: func() *PipelineResult {
 				// Two weighers both favor host-a. Removing either still leaves a as #1.
 				mult1, mult2 := 2.0, 2.0
 				act1 := map[string]float64{"a": 1.0, "b": -1.0}
@@ -282,11 +280,11 @@ func TestExplainWeighing(t *testing.T) {
 				for _, h := range []string{"a", "b"} {
 					out[h] = in[h] + mult1*math.Tanh(act1[h]) + mult2*math.Tanh(act2[h])
 				}
-				return &v1alpha1.DecisionResult{
+				return &PipelineResult{
 					NormalizedInWeights:  in,
 					AggregatedOutWeights: out,
 					OrderedHosts:         []string{"a", "b"},
-					StepResults: []v1alpha1.StepResult{
+					StepResults: []StepResult{
 						{StepName: "w1", Activations: act1},
 						{StepName: "w2", Activations: act2},
 					},
@@ -340,7 +338,7 @@ func TestRecoverMultipliers(t *testing.T) {
 		}
 	}
 
-	steps := []v1alpha1.StepResult{
+	steps := []StepResult{
 		{StepName: "w1", Activations: acts[0]},
 		{StepName: "w2", Activations: acts[1]},
 		{StepName: "w3", Activations: acts[2]},
@@ -382,9 +380,9 @@ func TestSolveLinearSystem(t *testing.T) {
 }
 
 func TestIdentifyWeigherSteps(t *testing.T) {
-	result := &v1alpha1.DecisionResult{
+	result := &PipelineResult{
 		OrderedHosts: []string{"a", "b", "c"},
-		StepResults: []v1alpha1.StepResult{
+		StepResults: []StepResult{
 			// Filter: missing host c
 			{StepName: "filter_x", Activations: map[string]float64{"a": 1.0, "b": 1.0}},
 			// Weigher: has all ordered hosts
@@ -482,12 +480,12 @@ func TestExplainWeighingDemo(t *testing.T) {
 	// Sort hosts by aggregated weight to get OrderedHosts.
 	sortByWeight(hosts, aggregatedOut)
 
-	result := &v1alpha1.DecisionResult{
+	result := &PipelineResult{
 		NormalizedInWeights:  normalizedIn,
 		AggregatedOutWeights: aggregatedOut,
 		OrderedHosts:         hosts,
 		TargetHost:           &hosts[0],
-		StepResults: []v1alpha1.StepResult{
+		StepResults: []StepResult{
 			{StepName: "kvm_binpack", Activations: actBinpack},
 			{StepName: "kvm_failover_evacuation", Activations: actFailover},
 			{StepName: "kvm_prefer_smaller_hosts", Activations: actSmaller},

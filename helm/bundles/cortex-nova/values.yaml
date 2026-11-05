@@ -109,6 +109,12 @@ kvm:
     # Domain names that are explicitly treated as non-external-customer domains and
     # skipped by the filter, even if they match one of the prefixes above.
     ignoredDomainNames: []
+  # CommittedResource states that count toward the CR portion of project quota.
+  # Shared by the quota controller (PaygUsage derivation) and the
+  # filter_quota_enforcement pipeline step (CR deduction) — the two MUST agree,
+  # so this single value feeds both. Empty means no CR states count.
+  crStateFilter: &crStateFilter
+    - confirmed
 
 cortex: &cortex
   crd: {enable: false}
@@ -118,11 +124,12 @@ cortex: &cortex
   prometheus: {enable: false}
   conf: &cortexConf
     schedulingDomain: nova
+    # Consumed by the quota controller; mirrors the filter_quota_enforcement
+    # step's crStateFilter. See kvm.crStateFilter for the shared source.
+    crStateFilter: *crStateFilter
     apiservers:
       home:
         gvks:
-          - cortex.cloud/v1alpha1/Decision
-          - cortex.cloud/v1alpha1/DecisionList
           - cortex.cloud/v1alpha1/Descheduling
           - cortex.cloud/v1alpha1/DeschedulingList
           - cortex.cloud/v1alpha1/Pipeline
@@ -230,14 +237,9 @@ cortex-scheduling-controllers:
         "*": "kvm-general-purpose-load-balancing"
       pipelineDefault: "kvm-general-purpose-load-balancing"
       # How often to re-verify active Reservation CRDs (healthy state)
-      requeueIntervalActive: "5m"
+      requeueIntervalActive: "30m"
       # Back-off interval when knowledge is unavailable
       requeueIntervalRetry: "1m"
-      # Back-off interval while a VM allocation is still within allocationGracePeriod
-      requeueIntervalGracePeriod: "1m"
-      # How long after a VM is allocated to a reservation before it is expected to appear
-      # on the target host; allocations not confirmed within this window are removed
-      allocationGracePeriod: "15m"
       # How long to wait after detecting host over-subscription before evicting reservation slots.
       # Gives other controllers (e.g. failover) time to self-heal.
       oversubscriptionGracePeriod: "3m"
@@ -392,10 +394,6 @@ cortex-scheduling-controllers:
         # How often the failover partitions are recalculated and the reservations
         # updated to match. Must be at least 1m.
         generationInterval: 5m
-        # URL of the nova external scheduler API, used to discover which hosts a
-        # given host's workload could be evacuated onto. Typically the same
-        # scheduler endpoint the flavor-based failover controller uses.
-        externalSchedulerURL: "http://localhost:8080/scheduler/nova/external"
 
 cortex-knowledge-controllers:
   <<: *cortex

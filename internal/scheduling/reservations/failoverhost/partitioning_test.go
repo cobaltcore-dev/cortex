@@ -315,10 +315,10 @@ func TestDescribePartition(t *testing.T) {
 		{"flavors only", "", []string{"a", "b"}, "flavors: a, b"},
 		{"neither", "", nil, ""},
 		{
-			name:    "flavor list is capped",
+			name:    "flavor list is not truncated",
 			label:   "",
 			flavors: []string{"f1", "f2", "f3", "f4", "f5", "f6", "f7"},
-			want:    "flavors: f1, f2, f3, f4, f5 (+2 more)",
+			want:    "flavors: f1, f2, f3, f4, f5, f6, f7",
 		},
 	}
 	for _, tt := range tests {
