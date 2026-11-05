@@ -60,7 +60,10 @@ func currentState(rr *v1alpha1.Rescheduling) v1alpha1.ReschedulingState {
 
 // reconcilable reports whether a request in the given state still needs
 // reconciliation. Succeeded and Rejected are fully done; Failed stays
-// reconcilable so its cleanup can run and be retried.
+// reconcilable so its cleanup can run and be retried. Note: Rejected is a clean
+// decline that leaves no state behind, so it needs no cleanup; if a future
+// transition into Rejected ever leaves partial state, this and dispatch must be
+// updated to handle it.
 func reconcilable(state v1alpha1.ReschedulingState) bool {
 	switch state {
 	case v1alpha1.ReschedulingStateSucceeded, v1alpha1.ReschedulingStateRejected:
@@ -131,10 +134,15 @@ func (s *Scheduler) handleAcknowledged(_ context.Context, rr *v1alpha1.Reschedul
 	return ctrl.Result{}, nil
 }
 
-// handleProcessing is a stub. The Processing -> Accepted transition is owned by
-// the scheduler loop (scheduleOne).
+// handleProcessing re-enqueues the request so the scheduler loop picks it up
+// again. A request should only be observed in Processing by the reconciler if
+// the worker's Processing -> Accepted write failed after the item was already
+// popped from the queue (so the loop will not retry it on its own). Re-enqueuing
+// lets the worker re-pop it; on re-pop scheduleOne sees the dirty Processing
+// state and fails it for cleanup.
 func (s *Scheduler) handleProcessing(ctx context.Context, rr *v1alpha1.Rescheduling) (ctrl.Result, error) {
-	logf.FromContext(ctx).Info("processing handled by scheduler loop (stub)", "request", rr.Name)
+	logf.FromContext(ctx).Info("re-enqueuing processing request for the scheduler loop", "request", rr.Name)
+	s.enqueue(rr)
 	return ctrl.Result{}, nil
 }
 
@@ -174,8 +182,16 @@ func (s *Scheduler) Run(ctx context.Context) {
 	log.Info("scheduler loop stopped")
 }
 
-// scheduleOne pops a single request from the queue and runs the (stubbed)
-// scheduling pass, moving it Acknowledged -> Processing -> Accepted.
+// scheduleOne pops a single request from the queue and acts on its current
+// state:
+//   - Acknowledged: run the (stubbed) scheduling pass, Acknowledged ->
+//     Processing -> Accepted;
+//   - Processing: a previous pass claimed the request but did not finish (its
+//     Processing -> Accepted write failed after the item was popped), so the
+//     request is in a dirty state; transition it to Failed so handleFailed can
+//     release any partial state;
+//   - anything else: a stale or duplicate queue entry for an already advanced
+//     request; nothing to do.
 func (s *Scheduler) scheduleOne(ctx context.Context) {
 	log := logf.FromContext(ctx)
 	key, ok := s.Queue.Pop()
@@ -187,12 +203,28 @@ func (s *Scheduler) scheduleOne(ctx context.Context) {
 		log.Error(err, "dropping queued request, failed to get it", "key", key.String())
 		return
 	}
-	// The request may have moved on since it was queued (e.g. a stale entry).
-	if currentState(rr) != v1alpha1.ReschedulingStateAcknowledged {
-		return
+	switch currentState(rr) {
+	case v1alpha1.ReschedulingStateAcknowledged:
+		s.scheduleAcknowledged(ctx, rr)
+	case v1alpha1.ReschedulingStateProcessing:
+		log.Info("failing dirty processing request", "request", rr.Name)
+		if err := s.updateStatus(ctx, rr, func() {
+			rr.Status.State = v1alpha1.ReschedulingStateFailed
+		}); err != nil {
+			log.Error(err, "failed to fail dirty processing request", "request", rr.Name)
+		}
+	default:
+		// Stale or duplicate entry for an already advanced request.
 	}
+}
+
+// scheduleAcknowledged runs the (stubbed) scheduling pass for an Acknowledged
+// request, moving it Acknowledged -> Processing -> Accepted. Real placement is
+// stubbed for the walking skeleton.
+func (s *Scheduler) scheduleAcknowledged(ctx context.Context, rr *v1alpha1.Rescheduling) {
+	log := logf.FromContext(ctx)
 	log.Info("scheduling rescheduling request (stub)", "request", rr.Name)
-	// Claim, then place. Real placement is stubbed for the walking skeleton.
+	// Claim, then place.
 	if err := s.updateStatus(ctx, rr, func() {
 		rr.Status.State = v1alpha1.ReschedulingStateProcessing
 	}); err != nil {

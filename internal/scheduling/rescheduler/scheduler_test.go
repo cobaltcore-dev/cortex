@@ -256,3 +256,32 @@ func TestScheduleOne_SkipsStaleEntry(t *testing.T) {
 		t.Errorf("expected stale entry untouched (Pending), got %s", got)
 	}
 }
+
+func TestScheduleOne_FailsDirtyProcessing(t *testing.T) {
+	// A re-popped request still in Processing is a dirty state (a prior pass
+	// claimed it but did not finish), so scheduleOne must fail it for cleanup.
+	rr := request("req-proc", v1alpha1.ReschedulingStateProcessing)
+	s := newScheduler(t, rr)
+	s.Queue.Add(client.ObjectKeyFromObject(rr))
+
+	s.scheduleOne(context.Background())
+
+	if got := stateOf(t, s, "req-proc"); got != v1alpha1.ReschedulingStateFailed {
+		t.Errorf("expected dirty Processing to be Failed, got %s", got)
+	}
+}
+
+func TestHandleProcessing_ReEnqueues(t *testing.T) {
+	// A request left in Processing (e.g. its accept write failed after it was
+	// popped) must be re-enqueued so the worker can re-pop and recover it.
+	rr := request("req-proc", v1alpha1.ReschedulingStateProcessing)
+	s := newScheduler(t, rr)
+
+	if _, err := s.handleProcessing(context.Background(), rr); err != nil {
+		t.Fatalf("handleProcessing failed: %v", err)
+	}
+
+	if got, ok := s.Queue.Pop(); !ok || got != client.ObjectKeyFromObject(rr) {
+		t.Errorf("expected request re-enqueued, got key %v ok %v", got, ok)
+	}
+}
