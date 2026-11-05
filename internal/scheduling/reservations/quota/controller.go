@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	knowledge "github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -74,8 +74,7 @@ func (c *QuotaController) ReconcilePeriodic(ctx context.Context) error {
 	logger.Info("starting full quota reconcile")
 
 	// Fetch flavor groups from Knowledge CRD
-	flavorGroupClient := &reservations.FlavorGroupKnowledgeClient{Client: c.Client}
-	flavorGroups, err := flavorGroupClient.GetAllFlavorGroups(ctx, nil)
+	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, c.Client, nil)
 	if err != nil {
 		logger.Error(err, "failed to get flavor groups")
 		c.Metrics.RecordReconcileResult(false)
@@ -228,8 +227,7 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	// Fetch flavor groups for CRUsage computation
-	flavorGroupClient := &reservations.FlavorGroupKnowledgeClient{Client: c.Client}
-	flavorGroups, err := flavorGroupClient.GetAllFlavorGroups(ctx, nil)
+	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, c.Client, nil)
 	if err != nil {
 		logger.Error(err, "failed to get flavor groups")
 		return ctrl.Result{}, err
@@ -267,8 +265,7 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 // a ProjectQuota is first created and has no persisted TotalUsage yet.
 func (c *QuotaController) computeTotalUsageForProject(ctx context.Context, projectID string) (map[string]map[string]int64, error) {
 	// Fetch flavor groups from Knowledge CRD
-	flavorGroupClient := &reservations.FlavorGroupKnowledgeClient{Client: c.Client}
-	flavorGroups, err := flavorGroupClient.GetAllFlavorGroups(ctx, nil)
+	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, c.Client, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get flavor groups: %w", err)
 	}
@@ -362,8 +359,7 @@ func (c *QuotaController) ReconcileHVDiff(ctx context.Context, oldHV, newHV *hv1
 	logger.V(1).Info("HV instance diff detected", "added", len(added), "removed", len(removed))
 
 	// Get flavor groups for mapping
-	flavorGroupClient := &reservations.FlavorGroupKnowledgeClient{Client: c.Client}
-	flavorGroups, err := flavorGroupClient.GetAllFlavorGroups(ctx, nil)
+	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, c.Client, nil)
 	if err != nil {
 		logger.Error(err, "failed to get flavor groups for incremental update")
 		return err
@@ -408,7 +404,7 @@ func (c *QuotaController) accumulateAddedVM(
 	ctx context.Context,
 	vmUUID string,
 	flavorToGroup map[string]string,
-	flavorGroups map[string]compute.FlavorGroupFeature,
+	flavorGroups map[string]knowledge.FlavorGroupFeature,
 	projectDeltas map[string]*usageDelta,
 ) {
 
@@ -502,7 +498,7 @@ func (c *QuotaController) accumulateRemovedVM(
 	ctx context.Context,
 	vmUUID string,
 	flavorToGroup map[string]string,
-	flavorGroups map[string]compute.FlavorGroupFeature,
+	flavorGroups map[string]knowledge.FlavorGroupFeature,
 	projectDeltas map[string]*usageDelta,
 ) {
 
@@ -562,7 +558,7 @@ func (c *QuotaController) applyDeltaAndUpdateStatus(
 	projectID string,
 	delta *usageDelta,
 	projectCRs []v1alpha1.CommittedResource,
-	flavorGroups map[string]compute.FlavorGroupFeature,
+	flavorGroups map[string]knowledge.FlavorGroupFeature,
 ) error {
 
 	// Collect all AZs affected by this delta
@@ -741,7 +737,7 @@ func (c *QuotaController) Start(ctx context.Context) error {
 func (c *QuotaController) computeTotalUsage(
 	vms []reservations.VM,
 	flavorToGroup map[string]string,
-	flavorGroups map[string]compute.FlavorGroupFeature,
+	flavorGroups map[string]knowledge.FlavorGroupFeature,
 ) map[string]map[string]map[string]int64 {
 	// result[projectID][resourceName] = ResourceQuotaUsage{PerAZ: {az: amount}}
 	result := make(map[string]map[string]map[string]int64)
@@ -805,7 +801,7 @@ func groupCRsByProject(crs []v1alpha1.CommittedResource) map[string][]v1alpha1.C
 
 // computeCRUsage computes the committed resource usage from a pre-filtered slice of CRs for one project.
 // It reads UsedResources from each CR's status and converts to commitment units (multiples for RAM, raw for cores).
-func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavorGroups map[string]compute.FlavorGroupFeature) map[string]map[string]int64 {
+func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavorGroups map[string]knowledge.FlavorGroupFeature) map[string]map[string]int64 {
 	result := make(map[string]map[string]int64)
 
 	for i := range crs {
@@ -948,7 +944,7 @@ func (c *QuotaController) updateProjectQuotaStatusWithRetry(
 	totalUsage map[string]map[string]int64,
 	paygUsage map[string]map[string]int64,
 	fullReconcile bool,
-	flavorGroups map[string]compute.FlavorGroupFeature,
+	flavorGroups map[string]knowledge.FlavorGroupFeature,
 ) error {
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -1070,7 +1066,7 @@ func buildUsageSummary(usage map[string]int64) string {
 // For RAM resources in variable-ratio groups: value is already in GiB = declared units (1:1).
 // For cores and instances: value is 1:1 (no conversion).
 // Uses FlavorGroupFeature from the Knowledge CRD for RAM unit conversion (consistent with the usage API).
-func buildLimesSummary(values map[string]int64, flavorGroups map[string]compute.FlavorGroupFeature) string {
+func buildLimesSummary(values map[string]int64, flavorGroups map[string]knowledge.FlavorGroupFeature) string {
 	if len(values) == 0 {
 		return ""
 	}
@@ -1103,7 +1099,7 @@ func vmResourceUnits(resources map[string]resource.Quantity) (ramGiB, cores int6
 }
 
 // buildFlavorToGroupMap builds a flavorName → flavorGroupName lookup from flavor groups.
-func buildFlavorToGroupMap(flavorGroups map[string]compute.FlavorGroupFeature) map[string]string {
+func buildFlavorToGroupMap(flavorGroups map[string]knowledge.FlavorGroupFeature) map[string]string {
 	result := make(map[string]string)
 	for groupName, group := range flavorGroups {
 		for _, flavor := range group.Flavors {

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	knowledge "github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
@@ -99,14 +99,13 @@ func (c *UsageCalculator) CalculateUsage(
 	allAZs []liquid.AvailabilityZone,
 ) (liquid.ServiceUsageReport, error) {
 
-	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
-	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
+	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, c.client, nil)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to get flavor groups: %w", err)
 	}
 
 	var infoVersion int64 = -1
-	if knowledgeCRD, err := knowledge.Get(ctx); err == nil && knowledgeCRD != nil && !knowledgeCRD.Status.LastContentChange.IsZero() {
+	if knowledgeCRD, err := knowledge.GetFlavorGroupsKnowledge(ctx, c.client); err == nil && knowledgeCRD != nil && !knowledgeCRD.Status.LastContentChange.IsZero() {
 		infoVersion = knowledgeCRD.Status.LastContentChange.Unix()
 	}
 
@@ -244,7 +243,7 @@ func getProjectVMs(
 	vmSource reservations.VMSource,
 	log logr.Logger,
 	projectID string,
-	flavorGroups map[string]compute.FlavorGroupFeature,
+	flavorGroups map[string]knowledge.FlavorGroupFeature,
 	allAZs []liquid.AvailabilityZone,
 ) ([]VMUsageInfo, error) {
 
@@ -433,7 +432,7 @@ func buildCombinedQuotaMap(pqs []v1alpha1.ProjectQuota) map[string]map[string]in
 func (c *UsageCalculator) buildUsageResponse(
 	vms []VMUsageInfo,
 	vmAssignments map[string]string,
-	flavorGroups map[string]compute.FlavorGroupFeature,
+	flavorGroups map[string]knowledge.FlavorGroupFeature,
 	allAZs []liquid.AvailabilityZone,
 	infoVersion int64,
 	quotaByResourceAZ map[string]map[string]int64,
