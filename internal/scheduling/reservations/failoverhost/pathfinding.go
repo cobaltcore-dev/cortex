@@ -15,8 +15,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -253,7 +251,7 @@ func (f *evacuationPathFinder) fetchSeedCandidates(ctx context.Context, seed See
 	// considers compatible hosts (filter_has_requested_traits/filter_capabilities
 	// would otherwise see empty slices and become no-ops). The seeder only emits
 	// seeds whose flavor names a supported hypervisor type, so no default is needed.
-	requiredTraits, forbiddenTraits := nova.SplitTraits(seed.Flavor.ExtraSpecs)
+	requiredTraits, forbiddenTraits := api.SplitTraits(seed.Flavor.ExtraSpecs)
 	// Same HANA vs general-purpose split as regular failover placement, but with the
 	// load-balancing variant of the HANA pipeline used for pathfinding probes.
 	flavorType, err := api.FlavorTypeFromExtraSpecs(seed.Flavor.ExtraSpecs)
@@ -269,10 +267,10 @@ func (f *evacuationPathFinder) fetchSeedCandidates(ctx context.Context, seed See
 		// We offer the host set ourselves; the scheduler must not gather the
 		// cluster itself and overwrite our candidates.
 		GatherAllCandidates: false,
-		HypervisorFamily:    compute.HypervisorFamilyKVM,
+		HypervisorFamily:    api.HypervisorFamilyKVM,
 		// We only handle KVM virtual machines, so the flavor/image compatibility
 		// filter must see a KVM image hypervisor type.
-		ImageHypervisorType: compute.ImageHypervisorTypeKVM,
+		ImageHypervisorType: api.ImageHypervisorTypeKVM,
 		Hosts:               hosts,
 		Weights:             weights,
 		// Probe with evacuation intent. A failover cold-migrates (evacuates) the
@@ -289,9 +287,9 @@ func (f *evacuationPathFinder) fetchSeedCandidates(ctx context.Context, seed See
 		// Match the flavor's hypervisor type (QEMU vs CH). The seeder only emits
 		// seeds whose flavor names a supported hypervisor type, so this is always
 		// set (no default needed).
-		RequestedCapabilities: reservations.HypervisorTypeCapability(seed.Flavor.ExtraSpecs, false),
-		AcceleratorsRequested: nova.RequestsAccelerators(seed.Flavor.ExtraSpecs),
-		Flavor: compute.FlavorSpec{
+		RequestedCapabilities: api.HypervisorTypeCapability(seed.Flavor.ExtraSpecs, false),
+		AcceleratorsRequested: api.RequestsAccelerators(seed.Flavor.ExtraSpecs),
+		Flavor: api.FlavorSpec{
 			VCPUs:    seed.Flavor.VCPUs,
 			MemoryMB: seed.Flavor.MemoryMB,
 		},

@@ -123,8 +123,8 @@ func newNovaRequest(instanceUUID string, evacuation bool, hosts []string) comput
 		ProjectID:        "project-A",
 		InstanceUUID:     instanceUUID,
 		NumInstances:     1,
-		HypervisorFamily: compute.HypervisorFamilyKVM,
-		Flavor: compute.FlavorSpec{
+		HypervisorFamily: api.HypervisorFamilyKVM,
+		Flavor: api.FlavorSpec{
 			VCPUs:    4,
 			MemoryMB: parseMemoryToMB("8Gi"),
 		},

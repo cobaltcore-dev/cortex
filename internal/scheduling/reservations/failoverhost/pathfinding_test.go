@@ -70,10 +70,10 @@ func (s *stubPipeline) Run(req compute.PlacementRequest) (compute.PlacementResul
 	if len(req.Hosts) == 0 {
 		s.t.Errorf("request for flavor %q has no candidate hosts", flavor)
 	}
-	if req.ImageHypervisorType != compute.ImageHypervisorTypeKVM {
+	if req.ImageHypervisorType != api.ImageHypervisorTypeKVM {
 		// The hypervisor-type filter needs the image hypervisor type to judge
 		// flavor/image compatibility; dropping it would make that filter misbehave.
-		s.t.Errorf("request for flavor %q must set ImageHypervisorType=%q, got %q", flavor, compute.ImageHypervisorTypeKVM, req.ImageHypervisorType)
+		s.t.Errorf("request for flavor %q must set ImageHypervisorType=%q, got %q", flavor, api.ImageHypervisorTypeKVM, req.ImageHypervisorType)
 	}
 	// The probe uses evacuation intent (cold migration) and sets no source host:
 	// a failover evacuates rather than live-migrates, so the live-migratability

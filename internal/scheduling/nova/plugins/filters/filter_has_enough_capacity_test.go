@@ -265,8 +265,8 @@ func newNovaRequestWithIntent(instanceUUID, projectID, flavorGroup string, vcpus
 		NumInstances:     1,
 		Intent:           intent,
 		HardwareVersion:  flavorGroup,
-		HypervisorFamily: compute.HypervisorFamilyKVM,
-		Flavor: compute.FlavorSpec{
+		HypervisorFamily: api.HypervisorFamilyKVM,
+		Flavor: api.FlavorSpec{
 			VCPUs:    uint64(vcpus), //nolint:gosec // test code
 			MemoryMB: memoryMB,
 		},

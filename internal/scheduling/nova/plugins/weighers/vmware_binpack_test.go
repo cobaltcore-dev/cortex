@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	"testing"
 
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
@@ -164,7 +165,7 @@ func TestVMwareBinpackStep_Run(t *testing.T) {
 			name: "binpack prefers hosts with higher utilization",
 			request: sched.PlacementRequest{
 				NumInstances: 1,
-				Flavor: sched.FlavorSpec{
+				Flavor: api.FlavorSpec{
 					MemoryMB: 1000, // 1GB
 					VCPUs:    1,
 				},
@@ -183,7 +184,7 @@ func TestVMwareBinpackStep_Run(t *testing.T) {
 			name: "handles missing host data gracefully",
 			request: sched.PlacementRequest{
 				NumInstances: 1,
-				Flavor: sched.FlavorSpec{
+				Flavor: api.FlavorSpec{
 					MemoryMB: 1000,
 					VCPUs:    1,
 				},
@@ -288,7 +289,7 @@ func TestVMwareBinpackStep_CalcVMResources(t *testing.T) {
 			name: "single instance",
 			request: sched.PlacementRequest{
 				NumInstances: 1,
-				Flavor: sched.FlavorSpec{
+				Flavor: api.FlavorSpec{
 					MemoryMB: 2048,
 					VCPUs:    4,
 				},
@@ -300,7 +301,7 @@ func TestVMwareBinpackStep_CalcVMResources(t *testing.T) {
 			name: "multiple instances",
 			request: sched.PlacementRequest{
 				NumInstances: 3,
-				Flavor: sched.FlavorSpec{
+				Flavor: api.FlavorSpec{
 					MemoryMB: 1024,
 					VCPUs:    2,
 				},

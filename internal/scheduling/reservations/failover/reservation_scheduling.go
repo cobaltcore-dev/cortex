@@ -13,7 +13,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
@@ -108,11 +107,11 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		hosts = append(hosts, compute.Host{ComputeHost: h.ComputeHost, HypervisorHostname: h.HypervisorHostname})
 		weights[h.ComputeHost] = 0.0
 	}
-	requiredTraits, forbiddenTraits := nova.SplitTraits(vm.FlavorExtraSpecs)
+	requiredTraits, forbiddenTraits := api.SplitTraits(vm.FlavorExtraSpecs)
 	schedReq := compute.PlacementRequest{
 		Pipeline:              pipeline,
 		GatherAllCandidates:   true,
-		HypervisorFamily:      compute.HypervisorFamilyKVM,
+		HypervisorFamily:      api.HypervisorFamilyKVM,
 		Hosts:                 hosts,
 		Weights:               weights,
 		Options:               opts,
@@ -125,9 +124,9 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		ResourceGroup:         resSpec.ResourceGroup(vm.FlavorName),
 		RequiredTraits:        requiredTraits,
 		ForbiddenTraits:       forbiddenTraits,
-		RequestedCapabilities: reservations.HypervisorTypeCapability(vm.FlavorExtraSpecs, true),
-		AcceleratorsRequested: nova.RequestsAccelerators(vm.FlavorExtraSpecs),
-		Flavor: compute.FlavorSpec{
+		RequestedCapabilities: api.HypervisorTypeCapability(vm.FlavorExtraSpecs, true),
+		AcceleratorsRequested: api.RequestsAccelerators(vm.FlavorExtraSpecs),
+		Flavor: api.FlavorSpec{
 			VCPUs:    resSpec.VCPUs,
 			MemoryMB: resSpec.MemoryMB,
 		},
@@ -263,14 +262,14 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 	// match it in the reservation's allocations. KVM gathers all candidates; the
 	// reservation host must come back ranked for the VM to be compatible.
 	pipeline := InferFailoverPipeline(flavorExtraSpecs)
-	requiredTraits, forbiddenTraits := nova.SplitTraits(flavorExtraSpecs)
+	requiredTraits, forbiddenTraits := api.SplitTraits(flavorExtraSpecs)
 	evacuateOpts := DefaultFailoverOptions
 	evacuateOpts.ReadOnly = true
 	evacuateOpts.LockReservations = true
 	schedReq := compute.PlacementRequest{
 		Pipeline:              pipeline,
 		GatherAllCandidates:   true,
-		HypervisorFamily:      compute.HypervisorFamilyKVM,
+		HypervisorFamily:      api.HypervisorFamilyKVM,
 		Hosts:                 []compute.Host{{ComputeHost: reservationHost, HypervisorHostname: reservationHost}},
 		Weights:               map[string]float64{reservationHost: 0.0},
 		Options:               evacuateOpts,
@@ -282,9 +281,9 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		IgnoreHosts:           []string{vm.CurrentHypervisor},
 		RequiredTraits:        requiredTraits,
 		ForbiddenTraits:       forbiddenTraits,
-		RequestedCapabilities: reservations.HypervisorTypeCapability(flavorExtraSpecs, true),
-		AcceleratorsRequested: nova.RequestsAccelerators(flavorExtraSpecs),
-		Flavor: compute.FlavorSpec{
+		RequestedCapabilities: api.HypervisorTypeCapability(flavorExtraSpecs, true),
+		AcceleratorsRequested: api.RequestsAccelerators(flavorExtraSpecs),
+		Flavor: api.FlavorSpec{
 			VCPUs:    vcpus,
 			MemoryMB: memoryMB,
 		},

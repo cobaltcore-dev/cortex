@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -45,7 +46,7 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 			name:        "unsupported hypervisor family vmware",
 			hypervisors: []client.Object{},
 			request: compute.PlacementRequest{
-				HypervisorFamily: compute.HypervisorFamilyVMware,
+				HypervisorFamily: api.HypervisorFamilyVMware,
 			},
 			expectError:   true,
 			errorContains: "cannot gather all placement candidates for hypervisor family",
@@ -79,7 +80,7 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 				},
 			},
 			request: compute.PlacementRequest{
-				HypervisorFamily: compute.HypervisorFamilyKVM,
+				HypervisorFamily: api.HypervisorFamilyKVM,
 			},
 			expectError:    false,
 			expectedHosts:  []string{"host1", "host2", "host3"},
@@ -95,7 +96,7 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 				},
 			},
 			request: compute.PlacementRequest{
-				HypervisorFamily: compute.HypervisorFamilyKVM,
+				HypervisorFamily: api.HypervisorFamilyKVM,
 			},
 			expectError:    false,
 			expectedHosts:  []string{"host1"},
@@ -116,7 +117,7 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 				},
 			},
 			request: compute.PlacementRequest{
-				HypervisorFamily: compute.HypervisorFamilyKVM,
+				HypervisorFamily: api.HypervisorFamilyKVM,
 			},
 			expectError:    false,
 			expectedHosts:  []string{"ch-host1", "ch-host2"},
@@ -132,7 +133,7 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 				},
 			},
 			request: compute.PlacementRequest{
-				HypervisorFamily: compute.HypervisorFamilyKVM,
+				HypervisorFamily: api.HypervisorFamilyKVM,
 			},
 			expectError:    false,
 			expectedHosts:  []string{"ch-host1"},
@@ -142,7 +143,7 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 			name:        "empty hypervisor list",
 			hypervisors: []client.Object{},
 			request: compute.PlacementRequest{
-				HypervisorFamily: compute.HypervisorFamilyKVM,
+				HypervisorFamily: api.HypervisorFamilyKVM,
 			},
 			expectError:    false,
 			expectedHosts:  []string{},
@@ -158,7 +159,7 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 				},
 			},
 			request: compute.PlacementRequest{
-				HypervisorFamily: compute.HypervisorFamilyKVM,
+				HypervisorFamily: api.HypervisorFamilyKVM,
 				Hosts: []compute.Host{
 					{ComputeHost: "old-host", HypervisorHostname: "old-hv"},
 				},

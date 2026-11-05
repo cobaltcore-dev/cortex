@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -45,8 +46,8 @@ func newPreferSmallerHostsRequest(hosts []string) compute.PlacementRequest {
 		ProjectID:        "project-A",
 		InstanceUUID:     "instance-123",
 		NumInstances:     1,
-		HypervisorFamily: compute.HypervisorFamilyKVM,
-		Flavor: compute.FlavorSpec{
+		HypervisorFamily: api.HypervisorFamilyKVM,
+		Flavor: api.FlavorSpec{
 			VCPUs:    4,
 			MemoryMB: 8192,
 		},

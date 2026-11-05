@@ -8,6 +8,7 @@ import (
 	"slices"
 	"testing"
 
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
@@ -626,7 +627,7 @@ func TestFailoverSchedulerFlavorConstraints(t *testing.T) {
 			c := buildMinimalController(t, scheduler)
 			_, _ = c.scheduleAndBuildNewFailoverReservation(context.Background(), vm, []string{"host-1", "host-2"}, nil, nil, resolved) //nolint:errcheck
 
-			wantCap := []sched.Capability{{Name: "hypervisor_type", Value: tt.wantHVType}}
+			wantCap := []api.Capability{{Name: "hypervisor_type", Value: tt.wantHVType}}
 			if len(capturedReq.RequestedCapabilities) != 1 || capturedReq.RequestedCapabilities[0] != wantCap[0] {
 				t.Errorf("RequestedCapabilities = %v, want %v", capturedReq.RequestedCapabilities, wantCap)
 			}
