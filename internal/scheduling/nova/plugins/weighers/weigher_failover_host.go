@@ -10,6 +10,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failoverhost"
 )
@@ -42,21 +43,16 @@ func (WeigherFailoverHostOpts) Validate() error { return nil }
 // selected target among the reserved hosts; this weigher then ensures that target
 // outranks the retained ordinary candidates.
 type WeigherFailoverHost struct {
-	lib.BaseWeigher[api.ExternalSchedulerRequest, WeigherFailoverHostOpts]
+	lib.BaseWeigher[compute.PlacementRequest, WeigherFailoverHostOpts]
 }
 
-func (s *WeigherFailoverHost) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *WeigherFailoverHost) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	if !s.Options.Enabled {
 		return result, nil
 	}
-	intent, err := request.GetIntent()
-	if err != nil || intent != api.EvacuateIntent {
-		return result, nil //nolint:nilerr // non-evacuation requests are not weighted
-	}
-	sourceHost, err := request.Spec.Data.GetSchedulerHintStr("source_host")
-	if err != nil || sourceHost == "" {
-		return result, nil //nolint:nilerr // without a source host there is nothing to weigh
+	if request.Intent != api.EvacuateIntent || request.SourceHost == "" {
+		return result, nil
 	}
 
 	var reservations v1alpha1.ReservationList
@@ -68,7 +64,7 @@ func (s *WeigherFailoverHost) Run(traceLog logr.Logger, request api.ExternalSche
 	// same deterministic rule the filter_failover_host filter used over the same
 	// snapshot (failoverhost.SelectFailoverHost), so the filter and weigher agree
 	// without coordinating.
-	selected := failoverhost.SelectFailoverHost(reservations.Items, sourceHost)
+	selected := failoverhost.SelectFailoverHost(reservations.Items, request.SourceHost)
 	if selected == nil {
 		return result, nil
 	}
@@ -77,7 +73,7 @@ func (s *WeigherFailoverHost) Run(traceLog logr.Logger, request api.ExternalSche
 		// The selected target conflicts with other scheduling constraints and was
 		// filtered out, so there is nothing to lift.
 		traceLog.V(1).Info("selected failover host not among candidates, not weighing",
-			"sourceHost", sourceHost, "targetHost", target)
+			"sourceHost", request.SourceHost, "targetHost", target)
 		return result, nil
 	}
 	result.Activations[target] = failoverTargetWeight
@@ -85,7 +81,7 @@ func (s *WeigherFailoverHost) Run(traceLog logr.Logger, request api.ExternalSche
 	stats.Hosts[target] = 1
 	result.Statistics["failover host target"] = stats
 	traceLog.V(1).Info("weighting failover host target to the front",
-		"sourceHost", sourceHost, "targetHost", target)
+		"sourceHost", request.SourceHost, "targetHost", target)
 	return result, nil
 }
 

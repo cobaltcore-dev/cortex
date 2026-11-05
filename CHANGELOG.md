@@ -1,5 +1,71 @@
 # Changelog
 
+## Release PR [#1458](https://github.com/cobaltcore-dev/cortex/pull/1458) — 2026-11-02
+
+### Bumped Versions
+
+| Package | Previous | New |
+|---|---|---|
+| cortex | 0.7.2 | 0.7.3 |
+| cortex-postgres | 0.6.29 | 0.6.30 |
+| cortex-shim | 0.1.34 | 0.1.35 |
+| bundles | 0.0.109 | 0.0.110 |
+| cortex-placement-shim | 0.1.34 | 0.1.35 |
+
+### ⚠️ Deprecation
+
+- **Slot-based failover reservations deprecated:** The older slot-based failover reservation controller is now deprecated in favor of the new whole-host failover reservation controller (see Features below). The slot-based controller is retained only for migration. New deployments should enable the failover host reservations controller.
+
+### Features
+
+- **Failover host controller** ([#1417](https://github.com/cobaltcore-dev/cortex/pull/1417)) — A brand-new failover host controller replaces the slot-based failover system with whole-host reservations. Instead of reserving scattered capacity slots, Cortex now keeps a fraction of entire hosts empty so that when a host dies its full workload can be gang-evacuated onto a single reserved host in one move. Hosts are automatically grouped into **failover partitions** — sets of interchangeable hosts discovered from the scheduler's own placement decisions (per flavor), so partitions always reflect live filters, weights, and constraints without manual configuration. Includes a new `failover_partition_graph` KPI plugin with full test coverage, and extensive documentation (`docs/03-reservations-and-inventory/04-failover-host-reservations.md`). Six new alerts added: `CortexNovaFailoverHostCalculationStalled`, `CortexNovaFailoverHostCalculationAborting`, `CortexNovaFailoverHostReconcileErrors`, `CortexNovaFailoverHostSchedulerErrors`, and supporting metrics (`cortex_failover_host_calculation_runs_total`, `cortex_failover_host_calculation_aborts_total`, `cortex_failover_host_reservations_errors_total`, `cortex_failover_host_scheduler_requests_total`).
+
+- **`CommittedResourceChange` CRD & reconciler** ([#1432](https://github.com/cobaltcore-dev/cortex/pull/1432), [#1446](https://github.com/cobaltcore-dev/cortex/pull/1446)) — Introduces the `CommittedResourceChange` (CRC) custom resource definition and a reconciler happy path, enabling a transactional architecture for committed-resource lifecycle management. The API handler or Limes syncer creates a CRC; the CRC reconciler drives its FSM, writes `CommittedResource` specs, and rolls back on failure — no controller writes its own spec (spec flows down, status flows up). Includes new CRD types (`committed_resource_change_types.go`), a Helm CRD manifest (`cortex.cloud_committedresourcechanges.yaml`), RBAC cluster-role updates for `committedresourcechanges`, and architecture documentation (`03-b-committed-resource-transaction-architecture.md`).
+
+- **`index_zz` self-registration pattern** ([#1450](https://github.com/cobaltcore-dev/cortex/pull/1450)) — Replaces hand-maintained plugin registration maps with a self-registering `zz_index.go` pattern across all cortex plugin families (datasources, extractors, KPIs). The old `supported_syncers.go`, `supported_extractors.go`, and `supported_kpis.go` files have been removed. Adding a new plugin no longer requires editing a central index file.
+
+- **Reservations monitoring moved to KPI layer** ([#1445](https://github.com/cobaltcore-dev/cortex/pull/1445)) — Reservation state monitoring has been lifted out of the quota-enforcement scheduling filter and into the KPI subsystem (`reservation_state.go`), decoupling observability from the scheduling hot path. The old `filter_quota_enforcement_metrics.go` (111 lines) was removed.
+
+- **Pipeline monitor refactor** — Replaced the singleton pipeline monitor with an event-based reporting mechanism, improving observability and reducing coupling.
+
+### Bug Fixes
+
+- **Log metrics now include info level** ([#1433](https://github.com/cobaltcore-dev/cortex/pull/1433)) — Ensures informational log entries are captured in metrics; previously only warn/error levels were counted.
+
+- **Avoid race conditions between agent workflows** ([#1449](https://github.com/cobaltcore-dev/cortex/pull/1449)) — Serialized the review workflow to prevent concurrent agent runs from colliding.
+
+### Chores & Refactoring
+
+- **Enhanced `make` command-line output** ([#1447](https://github.com/cobaltcore-dev/cortex/pull/1447)) — Cleaner, more readable build output.
+- **Removed redundant lint phase from `make` target** ([#1451](https://github.com/cobaltcore-dev/cortex/pull/1451)) — Streamlines the build by eliminating a duplicate lint step.
+- **Enforce safe context in Tiltfile** ([#1448](https://github.com/cobaltcore-dev/cortex/pull/1448)) — Guards local development against accidentally running against the wrong cluster. Configure allowed contexts via the `TILT_SAFE_CONTEXTS` environment variable.
+
+### Documentation
+
+- Updated documentation for make targets, phase runner, tool versions ([#1453](https://github.com/cobaltcore-dev/cortex/pull/1453)), Tiltfile safe-context guard, and the new plugin self-registration pattern.
+
+### Dependency Updates
+
+| Dependency | Old | New | Notes |
+|---|---|---|---|
+| `kube-prometheus-stack` | v92.14.0 | **v92.17.0** | via v92.14.1, v92.16.0, v92.16.1 |
+| `golang.org/x/net` | — | **v0.62.0** | 🔒 **Security patch** |
+| `debian:trixie-slim` | — | Latest digest | 2 digest updates |
+| `github.com/sapcc/go-bits` | — | Latest digest | 2 digest updates |
+| External dependencies | — | **v0.37.2** | |
+
+### ⚠️ Operational Notes
+
+1. **CRD installation ordering:** The new `CommittedResourceChange` CRD must be installed before the manager is upgraded. Helm handles this via the `crds/` folder, but verify ordering in CI/CD pipelines.
+2. **RBAC changes:** The manager's cluster role now includes `committedresourcechanges`. Ensure RBAC manifests are applied before the new controller starts.
+3. **Security dependency — prioritize rollout:** `golang.org/x/net v0.62.0` patches a security vulnerability. This release should be prioritized accordingly.
+4. **Metrics relocation — update dashboards/alerts:** Reservation state metrics have moved from the scheduling filter (`filter_quota_enforcement_metrics`) to the KPI subsystem (`reservation_state`). Dashboards or alerts referencing the old metric names must be updated. New alert rules have been added in `helm/bundles/cortex-nova/templates/alerts.yaml`.
+5. **Failover host alerts:** Six new Prometheus alert rules have been added for the failover host controller. Review thresholds and routing before rollout.
+
+**Contributors:** @umswmayj, @PhilippMatthes, @SoWieMarkus, @mblos, @renovate[bot], @cortex-ai-agents[bot]
+
+**PR:** [#1458](https://github.com/cobaltcore-dev/cortex/pull/1458) | **Commits:** 27 | **Files changed:** 100 | **+2,827 / −464**
+
 ## Release PR [#1427](https://github.com/cobaltcore-dev/cortex/pull/1427) — 2026-10-26
 
 ### Bumped Versions

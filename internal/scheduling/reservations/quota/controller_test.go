@@ -18,8 +18,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+// testQuotaConfig returns a controller config mirroring the production
+// deployment, where Helm supplies the CR state filter (confirmed).
+func testQuotaConfig() QuotaControllerConfig {
+	c := DefaultQuotaControllerConfig()
+	c.CRStateFilter = []v1alpha1.CommitmentStatus{v1alpha1.CommitmentStatusConfirmed}
+	return c
+}
+
 func TestComputeTotalUsage(t *testing.T) {
-	ctrl := &QuotaController{Config: DefaultQuotaControllerConfig()}
+	ctrl := &QuotaController{Config: testQuotaConfig()}
 
 	flavorGroups := map[string]compute.FlavorGroupFeature{
 		"hana_v2": {
@@ -45,8 +53,8 @@ func TestComputeTotalUsage(t *testing.T) {
 			ProjectID:        "project-a",
 			AvailabilityZone: "az-1",
 			Resources: map[string]resource.Quantity{
-				"memory": resource.MustParse("34359738368"), // 32768 MiB in bytes
-				"vcpus":  resource.MustParse("8"),
+				string(hv1.ResourceMemory): resource.MustParse("34359738368"), // 32768 MiB in bytes
+				string(hv1.ResourceCPU):    resource.MustParse("8"),
 			},
 		},
 		{
@@ -55,8 +63,8 @@ func TestComputeTotalUsage(t *testing.T) {
 			ProjectID:        "project-a",
 			AvailabilityZone: "az-1",
 			Resources: map[string]resource.Quantity{
-				"memory": resource.MustParse("68719476736"), // 65536 MiB in bytes
-				"vcpus":  resource.MustParse("16"),
+				string(hv1.ResourceMemory): resource.MustParse("68719476736"), // 65536 MiB in bytes
+				string(hv1.ResourceCPU):    resource.MustParse("16"),
 			},
 		},
 		{
@@ -65,8 +73,8 @@ func TestComputeTotalUsage(t *testing.T) {
 			ProjectID:        "project-a",
 			AvailabilityZone: "az-2",
 			Resources: map[string]resource.Quantity{
-				"memory": resource.MustParse("34359738368"),
-				"vcpus":  resource.MustParse("8"),
+				string(hv1.ResourceMemory): resource.MustParse("34359738368"),
+				string(hv1.ResourceCPU):    resource.MustParse("8"),
 			},
 		},
 		{
@@ -75,8 +83,8 @@ func TestComputeTotalUsage(t *testing.T) {
 			ProjectID:        "project-b",
 			AvailabilityZone: "az-1",
 			Resources: map[string]resource.Quantity{
-				"memory": resource.MustParse("4294967296"), // 4096 MiB in bytes
-				"vcpus":  resource.MustParse("2"),
+				string(hv1.ResourceMemory): resource.MustParse("4294967296"), // 4096 MiB in bytes
+				string(hv1.ResourceCPU):    resource.MustParse("2"),
 			},
 		},
 		{
@@ -85,8 +93,8 @@ func TestComputeTotalUsage(t *testing.T) {
 			ProjectID:        "project-c",
 			AvailabilityZone: "az-1",
 			Resources: map[string]resource.Quantity{
-				"memory": resource.MustParse("4294967296"),
-				"vcpus":  resource.MustParse("2"),
+				string(hv1.ResourceMemory): resource.MustParse("4294967296"),
+				string(hv1.ResourceCPU):    resource.MustParse("2"),
 			},
 		},
 	}
@@ -146,7 +154,7 @@ func TestComputeTotalUsage(t *testing.T) {
 }
 
 func TestComputeCRUsage(t *testing.T) {
-	ctrl := &QuotaController{Config: DefaultQuotaControllerConfig()}
+	ctrl := &QuotaController{Config: testQuotaConfig()}
 
 	// Flavor groups — MemoryMB value is no longer used for unit conversion (now fixed at 1 GiB).
 	testFlavorGroups := map[string]compute.FlavorGroupFeature{
@@ -166,7 +174,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusConfirmed,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("5Gi")},
+				Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{string(hv1.ResourceMemory): resource.MustParse("5Gi")}},
 			},
 		},
 		{
@@ -175,10 +183,10 @@ func TestComputeCRUsage(t *testing.T) {
 				FlavorGroupName:  "hana_v2",
 				AvailabilityZone: "az-1",
 				ResourceType:     v1alpha1.CommittedResourceTypeMemory,
-				State:            v1alpha1.CommitmentStatusGuaranteed,
+				State:            v1alpha1.CommitmentStatusConfirmed,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("3Gi")},
+				Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{string(hv1.ResourceMemory): resource.MustParse("3Gi")}},
 			},
 		},
 		{
@@ -190,7 +198,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusConfirmed,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				UsedResources: map[string]resource.Quantity{"cpu": resource.MustParse("2")},
+				Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{string(hv1.ResourceCPU): resource.MustParse("2")}},
 			},
 		},
 		// Different project — should be excluded by groupCRsByProject
@@ -203,7 +211,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusConfirmed,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("5Gi")},
+				Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{string(hv1.ResourceMemory): resource.MustParse("5Gi")}},
 			},
 		},
 		// Pending state — should be excluded by state filter
@@ -216,7 +224,7 @@ func TestComputeCRUsage(t *testing.T) {
 				State:            v1alpha1.CommitmentStatusPending,
 			},
 			Status: v1alpha1.CommittedResourceStatus{
-				UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("2Gi")},
+				Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{string(hv1.ResourceMemory): resource.MustParse("2Gi")}},
 			},
 		},
 	}
@@ -225,7 +233,7 @@ func TestComputeCRUsage(t *testing.T) {
 	crsByProject := groupCRsByProject(allCRs)
 	result := ctrl.computeCRUsage(crsByProject["project-a"], testFlavorGroups)
 
-	// Should include confirmed + guaranteed for project-a only
+	// Should include confirmed CRs for project-a only
 	ramUsage := result["hw_version_hana_v2_ram"]
 	if ramUsage["az-1"] != 8 { // 5 + 3
 		t.Errorf("expected cr ram usage az-1 = 8, got %d", ramUsage["az-1"])
@@ -390,13 +398,13 @@ func TestIncrementDecrementUsage(t *testing.T) {
 }
 
 func TestIsCRStateIncluded(t *testing.T) {
-	ctrl := &QuotaController{Config: DefaultQuotaControllerConfig()}
+	ctrl := &QuotaController{Config: testQuotaConfig()}
 
 	if !ctrl.isCRStateIncluded(v1alpha1.CommitmentStatusConfirmed) {
 		t.Error("expected confirmed to be included")
 	}
-	if !ctrl.isCRStateIncluded(v1alpha1.CommitmentStatusGuaranteed) {
-		t.Error("expected guaranteed to be included")
+	if ctrl.isCRStateIncluded(v1alpha1.CommitmentStatusGuaranteed) {
+		t.Error("expected guaranteed to NOT be included")
 	}
 	if ctrl.isCRStateIncluded(v1alpha1.CommitmentStatusPending) {
 		t.Error("expected pending to NOT be included")
@@ -449,7 +457,7 @@ func TestUsageDelta(t *testing.T) {
 func TestReconcile_NilTotalUsage(t *testing.T) {
 	// When TotalUsage is nil, Reconcile should skip and return no error.
 	// This validates the early-return branch logic used in Reconcile().
-	ctrl := &QuotaController{Config: DefaultQuotaControllerConfig()}
+	ctrl := &QuotaController{Config: testQuotaConfig()}
 
 	// computeCRUsage on nil slice should return empty map (no panic)
 	result := ctrl.computeCRUsage(nil, nil)
@@ -466,7 +474,7 @@ func TestReconcile_NilTotalUsage(t *testing.T) {
 
 func TestAccumulateAddedVM_UnknownFlavor(t *testing.T) {
 	// Verifies that accumulateAddedVM gracefully handles a VM with an unknown flavor
-	ctrl := &QuotaController{Config: DefaultQuotaControllerConfig()}
+	ctrl := &QuotaController{Config: testQuotaConfig()}
 
 	flavorGroups := map[string]compute.FlavorGroupFeature{
 		"hana_v2": {
@@ -486,8 +494,8 @@ func TestAccumulateAddedVM_UnknownFlavor(t *testing.T) {
 				ProjectID:        "project-a",
 				AvailabilityZone: "az-1",
 				Resources: map[string]resource.Quantity{
-					"memory": resource.MustParse("4294967296"),
-					"vcpus":  resource.MustParse("2"),
+					string(hv1.ResourceMemory): resource.MustParse("4294967296"),
+					string(hv1.ResourceCPU):    resource.MustParse("2"),
 				},
 			}, nil
 		},
@@ -529,7 +537,7 @@ func TestAccumulateAddedVM_KnownFlavor(t *testing.T) {
 
 	qc := &QuotaController{
 		Client: k8sClient,
-		Config: DefaultQuotaControllerConfig(),
+		Config: testQuotaConfig(),
 	}
 
 	flavorGroups := map[string]compute.FlavorGroupFeature{
@@ -550,8 +558,8 @@ func TestAccumulateAddedVM_KnownFlavor(t *testing.T) {
 				AvailabilityZone: "az-1",
 				CreatedAt:        vmCreatedAt,
 				Resources: map[string]resource.Quantity{
-					"memory": resource.MustParse("34359738368"), // 32768 MiB
-					"vcpus":  resource.MustParse("8"),
+					string(hv1.ResourceMemory): resource.MustParse("34359738368"), // 32768 MiB
+					string(hv1.ResourceCPU):    resource.MustParse("8"),
 				},
 			}, nil
 		},

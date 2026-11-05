@@ -14,7 +14,9 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/google/uuid"
@@ -40,21 +42,21 @@ var log = ctrl.Log.WithName("failover-reservation-controller").WithValues("modul
 // 2. Watch-based per-reservation reconciliation (Reconcile) - handles acknowledgment and validation of individual reservations
 type FailoverReservationController struct {
 	client.Client
-	VMSource        reservations.VMSource
-	Config          FailoverConfig
-	SchedulerClient *reservations.SchedulerClient
-	Recorder        events.EventRecorder // Event recorder for emitting Kubernetes events
-	Monitor         *FailoverMonitor
-	reconcileCount  int64 // Track reconciliation count for rotating VM selection
+	VMSource       reservations.VMSource
+	Config         FailoverConfig
+	Scheduler      *sched.Placement
+	Recorder       events.EventRecorder // Event recorder for emitting Kubernetes events
+	Monitor        *FailoverMonitor
+	reconcileCount int64 // Track reconciliation count for rotating VM selection
 }
 
-func NewFailoverReservationController(c client.Client, vmSource reservations.VMSource, config FailoverConfig, schedulerClient *reservations.SchedulerClient, monitor *FailoverMonitor) *FailoverReservationController {
+func NewFailoverReservationController(c client.Client, vmSource reservations.VMSource, config FailoverConfig, scheduler *sched.Placement, monitor *FailoverMonitor) *FailoverReservationController {
 	return &FailoverReservationController{
-		Client:          c,
-		VMSource:        vmSource,
-		Config:          config,
-		SchedulerClient: schedulerClient,
-		Monitor:         monitor,
+		Client:    c,
+		VMSource:  vmSource,
+		Config:    config,
+		Scheduler: scheduler,
+		Monitor:   monitor,
 	}
 }
 
@@ -346,7 +348,7 @@ func (c *FailoverReservationController) ReconcilePeriodic(ctx context.Context) (
 	// 6. Fetch flavor groups for reservation sizing (if configured)
 	var flavorGroups map[string]compute.FlavorGroupFeature
 	if c.Config.UseFlavorGroupResources {
-		knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.Client}
+		knowledge := &accounting.FlavorGroupKnowledgeClient{Client: c.Client}
 		fg, err := knowledge.GetAllFlavorGroups(ctx, nil)
 		if err != nil {
 			logger.Info("flavor group knowledge not available, will fall back to VM resources for sizing",
@@ -614,10 +616,10 @@ func (c *FailoverReservationController) selectVMsToProcess(
 func sortVMsByMemory(vms []vmFailoverNeed) {
 	sort.Slice(vms, func(i, j int) bool {
 		var memI, memJ int64
-		if mem, ok := vms[i].VM.Resources["memory"]; ok {
+		if mem, ok := vms[i].VM.Resources[string(hv1.ResourceMemory)]; ok {
 			memI = mem.Value()
 		}
-		if mem, ok := vms[j].VM.Resources["memory"]; ok {
+		if mem, ok := vms[j].VM.Resources[string(hv1.ResourceMemory)]; ok {
 			memJ = mem.Value()
 		}
 		return memI > memJ
@@ -881,7 +883,6 @@ func (c *FailoverReservationController) Start(ctx context.Context) error {
 		"maxFailuresForShortInterval", c.Config.MaxFailuresForShortInterval,
 		"creator", c.Config.Creator,
 		"datasourceName", c.Config.DatasourceName,
-		"schedulerURL", c.Config.SchedulerURL,
 		"flavorFailoverRequirements", c.Config.FlavorFailoverRequirements,
 		"maxVMsToProcess", c.Config.MaxVMsToProcess,
 		"trustHypervisorLocation", c.Config.TrustHypervisorLocation,

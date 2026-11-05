@@ -5,20 +5,11 @@ package nova
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"slices"
-	"sync"
-	"time"
 
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/weighers"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
@@ -30,48 +21,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-// The decision pipeline controller takes decision resources containing a
-// placement request spec and runs the scheduling pipeline to make a decision.
-// This decision is then written back to the decision resource status.
-//
-// Additionally, the controller watches for pipeline and step changes to
-// reconfigure the pipelines as needed.
+// FilterWeigherPipelineController owns the Nova filter-weigher pipelines: it
+// watches Pipeline and Knowledge resources to (re)configure the pipelines, and
+// exposes them via GetPipeline for the compute.Placement to run. Placement
+// requests no longer flow through this controller — the compute.Placement,
+// driven by the external-scheduler HTTP API and the reservation controllers, is
+// the entrypoint.
 type FilterWeigherPipelineController struct {
 	// Toolbox shared between all pipeline controllers.
-	lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]
+	lib.BasePipelineController[lib.FilterWeigherPipeline[compute.PlacementRequest]]
 
-	// Mutex to only allow one process at a time.
-	// Read-only runs (opts.ReadOnly == true) acquire a read lock; write runs acquire the full lock.
-	processMu sync.RWMutex
-
-	// FeatureGates holds feature flags for this controller.
-	FeatureGates FeatureGates
 	// Monitor to pass down to all pipelines.
 	Monitor lib.FilterWeigherPipelineMonitor
-	// Candidate gatherer to get all placement candidates if needed.
-	gatherer CandidateGatherer
-
-	// vmHandler maps processed decisions into vm-operator VirtualMachine resources.
-	vmHandler *VirtualMachineHandler
-
-	// CRRecorder receives scheduling events and updates CR reservations and metrics.
-	CRRecorder crs.Recorder
-
-	// FailoverMatcher pins an evacuation's gang target to a failover host
-	// reservation after the pipeline runs, inside the exclusive lock. Optional;
-	// when nil, no failover host pinning is applied.
-	FailoverMatcher FailoverHostMatcher
-}
-
-// FailoverHostMatcher confirms an evacuation's failover host target and marks the
-// reservation InUse. Implemented by reservations/failoverhost.Matcher; declared
-// here as an interface so the nova package does not import failoverhost (which
-// would form an import cycle via that package's integration tests).
-type FailoverHostMatcher interface {
-	// ConfirmAndMarkInUse marks the failover host reservation selected for the
-	// request's source host InUse, but only when it is the pipeline's top
-	// candidate. It does not change the candidate list.
-	ConfirmAndMarkInUse(ctx context.Context, request api.ExternalSchedulerRequest, orderedHosts []string) error
 }
 
 // The type of pipeline this controller manages.
@@ -79,197 +40,10 @@ func (c *FilterWeigherPipelineController) PipelineType() v1alpha1.PipelineType {
 	return v1alpha1.PipelineTypeFilterWeigher
 }
 
-// Callback executed when kubernetes asks to reconcile a decision resource.
-func (c *FilterWeigherPipelineController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// Peek at the decision before acquiring the lock so we can choose the right lock type.
-	// Read-only runs can proceed concurrently; write runs need the exclusive lock.
-	decision := &v1alpha1.Decision{}
-	if err := c.Get(ctx, req.NamespacedName, decision); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-	if c.peekReadOnly(decision) {
-		c.processMu.RLock()
-		defer c.processMu.RUnlock()
-	} else {
-		c.processMu.Lock()
-		defer c.processMu.Unlock()
-		// Re-fetch after acquiring the exclusive lock to see consistent state.
-		if err := c.Get(ctx, req.NamespacedName, decision); err != nil {
-			return ctrl.Result{}, client.IgnoreNotFound(err)
-		}
-	}
-	old := decision.DeepCopy()
-	if _, err := c.process(ctx, decision); err != nil {
-		return ctrl.Result{}, err
-	}
-	patch := client.MergeFrom(old)
-	if err := c.Status().Patch(ctx, decision, patch); err != nil {
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{}, nil
-}
-
-// Process the decision from the API. Should create and return the updated decision.
-func (c *FilterWeigherPipelineController) ProcessNewDecisionFromAPI(ctx context.Context, decision *v1alpha1.Decision) error {
-	// Read-only runs share the cached decision state; no re-fetch needed because they
-	// don't observe writes from concurrent exclusive-lock runs.
-	if c.peekReadOnly(decision) {
-		c.processMu.RLock()
-		defer c.processMu.RUnlock()
-	} else {
-		c.processMu.Lock()
-		defer c.processMu.Unlock()
-	}
-
-	request, err := c.process(ctx, decision)
-	if err != nil {
-		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DecisionConditionReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "PipelineRunFailed",
-			Message: "pipeline run failed: " + err.Error(),
-		})
-	} else {
-		meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.DecisionConditionReady,
-			Status:  metav1.ConditionTrue,
-			Reason:  "PipelineRunSucceeded",
-			Message: "pipeline run succeeded",
-		})
-	}
-	if err == nil && decision.Status.Result != nil && request != nil && c.FeatureGates.CommittedResourceTracking {
-		if decision.Status.Result.TargetHost != nil {
-			if request.Options.SkipCommittedResourceTracking {
-				ctrl.LoggerFrom(ctx).V(1).Info("CR allocation tracking skipped (SkipCommittedResourceTracking=true)",
-					"instanceUUID", request.Spec.Data.InstanceUUID,
-					"targetHost", *decision.Status.Result.TargetHost,
-					"intent", decision.Spec.Intent,
-				)
-			} else {
-				c.CRRecorder.RecordPlacement(ctx, decision, *request)
-			}
-		}
-		if decision.Status.Result.TargetHost == nil {
-			c.CRRecorder.RecordNoHostFound(ctx, decision, *request)
-		}
-	}
-	return err
-}
-
-func (c *FilterWeigherPipelineController) process(ctx context.Context, decision *v1alpha1.Decision) (*api.ExternalSchedulerRequest, error) {
-	log := ctrl.LoggerFrom(ctx)
-	startedAt := time.Now() // So we can measure sync duration.
-
-	pipeline, ok := c.GetPipeline(decision.Spec.PipelineRef.Name)
-	if !ok {
-		log.Error(nil, "pipeline not found or not ready", "pipelineName", decision.Spec.PipelineRef.Name)
-		return nil, fmt.Errorf("pipeline not found or not ready: %q", decision.Spec.PipelineRef.Name)
-	}
-	if decision.Spec.NovaRaw == nil {
-		log.Error(nil, "skipping decision, no novaRaw spec defined")
-		return nil, errors.New("no novaRaw spec defined")
-	}
-	var request api.ExternalSchedulerRequest
-	if err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &request); err != nil {
-		log.Error(err, "failed to unmarshal novaRaw spec")
-		return nil, err
-	}
-
-	// If necessary gather all placement candidates before filtering.
-	// This will override the hosts and weights in the nova request.
-	pipelineConf, ok := c.GetPipelineConfig(decision.Spec.PipelineRef.Name)
-	if !ok {
-		log.Error(nil, "pipeline config not found", "pipelineName", decision.Spec.PipelineRef.Name)
-		return &request, fmt.Errorf("pipeline config not found: %q", decision.Spec.PipelineRef.Name)
-	}
-	if pipelineConf.Spec.IgnorePreselection {
-		log.V(1).Info("gathering all placement candidates before filtering")
-		if err := c.gatherer.MutateWithAllCandidates(ctx, &request); err != nil {
-			log.Error(err, "failed to gather all placement candidates")
-			return &request, err
-		}
-		log.V(1).Info("gathered all placement candidates", "numHosts", len(request.Hosts))
-	}
-
-	result, err := pipeline.Run(request)
-	if err == nil {
-		// Mark the failover host reservation selected for an evacuation InUse,
-		// pinning the source->target relationship for gang-evacuation. The
-		// candidate shaping (removing other reserved hosts, lifting the selected
-		// target to the front) is already done inside the pipeline by the
-		// filter_failover_host filter and weigher_failover_host weigher; this only
-		// performs the serialized InUse write. It runs inside the exclusive lock
-		// (write runs only) so the write is visible to subsequent evacuations from
-		// the same source. Read-only runs (probes, capacity checks) never pin.
-		if c.FailoverMatcher != nil && !request.Options.ReadOnly {
-			if mErr := c.FailoverMatcher.ConfirmAndMarkInUse(ctx, request, result.OrderedHosts); mErr != nil {
-				log.Error(mErr, "failover host matcher failed")
-				return &request, mErr
-			}
-		}
-		decision.Status.Result = &result
-	}
-	// Record a human-readable explanation of the decision so it propagates to
-	// the VM CortexSpec.Explanation. On error the result is nil and the
-	// explanation carries the failure reason.
-	decision.Status.Explanation = lib.GenerateExplanation(decision.Status.Result, err)
-	// We create a virtual machine resource based on the scheduling decision,
-	// logging the specific reason whenever we skip creation so it can be traced.
-	instanceUUID := request.Spec.Data.InstanceUUID
-	switch {
-	case err != nil:
-		log.V(1).Info("skipping virtual machine creation, pipeline run failed", "instanceUUID", instanceUUID)
-	case request.Options.ReadOnly:
-		log.V(1).Info("skipping virtual machine creation, request is read-only", "instanceUUID", instanceUUID)
-	case !c.FeatureGates.VirtualMachineCreation:
-		log.V(1).Info("skipping virtual machine creation, feature gate disabled", "instanceUUID", instanceUUID)
-	case !slices.Contains(api.NovaIntents, decision.Spec.Intent):
-		log.V(1).Info("skipping virtual machine creation, intent not triggered by Nova", "instanceUUID", instanceUUID, "intent", decision.Spec.Intent)
-	case !request.IsKVMRequest():
-		log.V(1).Info("skipping virtual machine creation, unsupported hypervisor type", "instanceUUID", instanceUUID)
-	default:
-		vmUpsertErr := c.vmHandler.Upsert(ctx, decision, request)
-		if c.FeatureGates.VirtualMachineCreationMandatory && vmUpsertErr != nil {
-			log.Error(vmUpsertErr, "failed to upsert virtual machine resource and it is mandatory", "instanceUUID", instanceUUID)
-			return &request, vmUpsertErr
-		}
-		if vmUpsertErr != nil {
-			// Non-fatal: the placement decision itself succeeded.
-			log.Error(vmUpsertErr, "failed to upsert virtual machine resource", "instanceUUID", instanceUUID)
-		}
-	}
-
-	if err != nil {
-		log.Error(err, "failed to run pipeline")
-		return &request, err
-	}
-	meta.SetStatusCondition(&decision.Status.Conditions, metav1.Condition{
-		Type:    v1alpha1.DecisionConditionReady,
-		Status:  metav1.ConditionTrue,
-		Reason:  "PipelineRunSucceeded",
-		Message: "pipeline run succeeded",
-	})
-	log.Info("decision processed successfully", "duration", time.Since(startedAt))
-	return &request, nil
-}
-
-// peekReadOnly determines whether a decision should use a read lock instead of
-// the exclusive write lock. Defaults to false (exclusive) on any parse error.
-func (c *FilterWeigherPipelineController) peekReadOnly(decision *v1alpha1.Decision) bool {
-	if decision.Spec.NovaRaw == nil {
-		return false
-	}
-	var request api.ExternalSchedulerRequest
-	if err := json.Unmarshal(decision.Spec.NovaRaw.Raw, &request); err != nil {
-		return false
-	}
-	return request.Options.ReadOnly
-}
-
 func (c *FilterWeigherPipelineController) InitPipeline(
 	ctx context.Context,
 	p v1alpha1.Pipeline,
-) lib.PipelineInitResult[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]] {
+) lib.PipelineInitResult[lib.FilterWeigherPipeline[compute.PlacementRequest]] {
 
 	return lib.InitNewFilterWeigherPipeline(
 		ctx, c.Client, p.Name,
@@ -282,8 +56,6 @@ func (c *FilterWeigherPipelineController) InitPipeline(
 func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {
 	c.Initializer = c
 	c.SchedulingDomain = v1alpha1.SchedulingDomainNova
-	c.gatherer = &candidateGatherer{Client: mcl}
-	c.vmHandler = &VirtualMachineHandler{Client: mcl}
 	if err := mgr.Add(manager.RunnableFunc(c.InitAllPipelines)); err != nil {
 		return err
 	}
@@ -340,25 +112,14 @@ func (c *FilterWeigherPipelineController) SetupWithManager(mgr manager.Manager, 
 	if err != nil {
 		return err
 	}
-	// Watch decision changes across all clusters.
-	bldr, err = bldr.WatchesMulticluster(
-		&v1alpha1.Decision{},
-		&handler.EnqueueRequestForObject{},
-		predicate.NewPredicateFuncs(func(obj client.Object) bool {
-			decision := obj.(*v1alpha1.Decision)
-			if decision.Spec.SchedulingDomain != v1alpha1.SchedulingDomainNova {
-				return false
-			}
-			// Ignore already decided schedulings.
-			if decision.Status.Result != nil {
-				return false
-			}
-			return true
-		}),
-	)
-	if err != nil {
-		return err
-	}
-	return bldr.Named("cortex-nova-decisions").
+	return bldr.Named("cortex-nova-pipelines").
 		Complete(c)
+}
+
+// Reconcile is a no-op: this controller reconfigures pipelines through its
+// Pipeline/Knowledge watch handlers, and placement runs through the
+// compute.Placement, not through object reconciliation. A Reconcile method is
+// required to satisfy the controller builder.
+func (c *FilterWeigherPipelineController) Reconcile(context.Context, ctrl.Request) (ctrl.Result, error) {
+	return ctrl.Result{}, nil
 }

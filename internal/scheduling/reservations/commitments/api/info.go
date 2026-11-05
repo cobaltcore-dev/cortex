@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
@@ -35,7 +36,7 @@ func (api *HTTPAPI) HandleInfo(w http.ResponseWriter, r *http.Request) {
 	// Set request ID in response header for client correlation
 	w.Header().Set("X-Request-ID", requestID)
 
-	ctx := reservations.WithGlobalRequestID(r.Context(), "committed-resource-"+requestID)
+	ctx := reservations.WithGlobalRequestID(r.Context(), requestID)
 	logger := commitments.LoggerFromContext(ctx).WithValues("endpoint", "/commitments/v1/info")
 
 	// Only accept GET method
@@ -105,7 +106,7 @@ func mibToGiB(v *uint64) *uint64 {
 // All flavor groups report usage; only those with fixed RAM/core ratio accept commitments.
 func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (liquid.ServiceInfo, error) {
 	// Get all flavor groups from Knowledge CRDs
-	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: api.client}
+	knowledge := &accounting.FlavorGroupKnowledgeClient{Client: api.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		// Return -1 as version when knowledge is not ready

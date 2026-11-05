@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,28 +31,10 @@ func newHypervisorWithCapacity(name, capacityCPU, capacityMem string) *hv1.Hyper
 	}
 }
 
-func newPreferSmallerHostsRequest(hosts []string) api.ExternalSchedulerRequest {
-	hostList := make([]api.ExternalSchedulerHost, len(hosts))
+func newPreferSmallerHostsRequest(hosts []string) compute.PlacementRequest {
+	hostList := make([]compute.Host, len(hosts))
 	for i, h := range hosts {
-		hostList[i] = api.ExternalSchedulerHost{ComputeHost: h}
-	}
-
-	extraSpecs := map[string]string{
-		"capabilities:hypervisor_type": "qemu",
-	}
-
-	spec := api.NovaSpec{
-		ProjectID:    "project-A",
-		InstanceUUID: "instance-123",
-		NumInstances: 1,
-		Flavor: api.NovaObject[api.NovaFlavor]{
-			Data: api.NovaFlavor{
-				Name:       "m1.large",
-				VCPUs:      4,
-				MemoryMB:   8192,
-				ExtraSpecs: extraSpecs,
-			},
-		},
+		hostList[i] = compute.Host{ComputeHost: h}
 	}
 
 	weights := make(map[string]float64)
@@ -59,8 +42,15 @@ func newPreferSmallerHostsRequest(hosts []string) api.ExternalSchedulerRequest {
 		weights[h] = 1.0
 	}
 
-	return api.ExternalSchedulerRequest{
-		Spec:    api.NovaObject[api.NovaSpec]{Data: spec},
+	return compute.PlacementRequest{
+		ProjectID:        "project-A",
+		InstanceUUID:     "instance-123",
+		NumInstances:     1,
+		HypervisorFamily: api.HypervisorFamilyKVM,
+		Flavor: api.FlavorSpec{
+			VCPUs:    4,
+			MemoryMB: 8192,
+		},
 		Hosts:   hostList,
 		Weights: weights,
 	}
@@ -181,7 +171,7 @@ func TestKVMPreferSmallerHostsStep_Run(t *testing.T) {
 	tests := []struct {
 		name            string
 		hypervisors     []*hv1.Hypervisor
-		request         api.ExternalSchedulerRequest
+		request         compute.PlacementRequest
 		opts            KVMPreferSmallerHostsStepOpts
 		expectedWeights map[string]float64
 		wantErr         bool

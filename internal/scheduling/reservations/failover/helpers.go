@@ -12,6 +12,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -85,7 +86,7 @@ func resolveVMSpecForScheduling(
 	logger := LoggerFromContext(ctx)
 
 	if useFlavorGroupResources && flavorGroups != nil {
-		groupName, _, err := reservations.FindFlavorInGroups(vm.FlavorName, flavorGroups)
+		groupName, _, err := accounting.FindFlavorInGroups(vm.FlavorName, flavorGroups)
 		if err == nil {
 			fg := flavorGroups[groupName]
 			largest := fg.LargestFlavor
@@ -109,10 +110,10 @@ func resolveVMSpecForScheduling(
 
 	// Fallback: use VM's own resources
 	var memoryMB, vcpus uint64
-	if memory, ok := vm.Resources["memory"]; ok {
+	if memory, ok := vm.Resources[string(hv1.ResourceMemory)]; ok {
 		memoryMB = uint64(memory.Value() / (1024 * 1024)) //nolint:gosec // memory values won't overflow; binary MiB matches commitments/state.go and vm_source.go
 	}
-	if v, ok := vm.Resources["vcpus"]; ok {
+	if v, ok := vm.Resources[string(hv1.ResourceCPU)]; ok {
 		vcpus = uint64(v.Value()) //nolint:gosec // vcpus values won't overflow
 	}
 	return resolvedReservationSpec{
@@ -187,7 +188,7 @@ func ValidateFailoverReservationResources(res *v1alpha1.Reservation) error {
 		return nil // No resources is valid (will be caught elsewhere if needed)
 	}
 
-	allowedKeys := map[hv1.ResourceName]bool{"cpu": true, "memory": true}
+	allowedKeys := map[hv1.ResourceName]bool{hv1.ResourceCPU: true, hv1.ResourceMemory: true}
 	for key := range res.Spec.Resources {
 		if !allowedKeys[key] {
 			return fmt.Errorf("invalid resource key %q: only 'cpu' and 'memory' are allowed", key)

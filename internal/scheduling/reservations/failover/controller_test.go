@@ -739,8 +739,8 @@ func newTestVMWithResources(uuid, currentHypervisor string) reservations.VM {
 		FlavorName:        "m1.large",
 		ProjectID:         "test-project",
 		Resources: map[string]resource.Quantity{
-			"memory": *resource.NewQuantity(8192*1024*1024, resource.BinarySI),
-			"vcpus":  *resource.NewQuantity(4, resource.DecimalSI),
+			string(hv1.ResourceMemory): *resource.NewQuantity(8192*1024*1024, resource.BinarySI),
+			string(hv1.ResourceCPU):    *resource.NewQuantity(4, resource.DecimalSI),
 		},
 	}
 }
@@ -771,8 +771,8 @@ func newTestReservationWithResources(name, host string, allocations map[string]s
 			Type:       v1alpha1.ReservationTypeFailover,
 			TargetHost: host,
 			Resources: map[hv1.ResourceName]resource.Quantity{
-				"memory": *resource.NewQuantity(8192*1024*1024, resource.BinarySI),
-				"cpu":    *resource.NewQuantity(4, resource.DecimalSI),
+				hv1.ResourceMemory: *resource.NewQuantity(8192*1024*1024, resource.BinarySI),
+				hv1.ResourceCPU:    *resource.NewQuantity(4, resource.DecimalSI),
 			},
 		},
 		Status: v1alpha1.ReservationStatus{
@@ -805,7 +805,7 @@ func TestSelectVMsToProcess(t *testing.T) {
 					UUID:              "vm-" + string(rune('a'+i)),
 					CurrentHypervisor: "host" + string(rune('1'+i)),
 					Resources: map[string]resource.Quantity{
-						"memory": *resource.NewQuantity(int64((count-i)*1024*1024*1024), resource.BinarySI), // Descending memory
+						string(hv1.ResourceMemory): *resource.NewQuantity(int64((count-i)*1024*1024*1024), resource.BinarySI), // Descending memory
 					},
 				},
 				Count: 1,

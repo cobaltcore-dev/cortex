@@ -165,9 +165,19 @@ const (
 	FlavorTypeHANA FlavorType = "hana"
 )
 
-// GetFlavorType determines the flavor type based on the requested flavor's extra specs.
-func (r ExternalSchedulerRequest) GetFlavorType() (FlavorType, error) {
-	extraSpecs := r.Spec.Data.Flavor.Data.ExtraSpecs
+// FlavorTypeFromExtraSpecs determines the flavor type from a flavor's extra specs.
+//
+// The trait:CUSTOM_HANA_EXCLUSIVE_HOST extra spec is the canonical signal that a
+// flavor targets HANA workloads: when set to "required" the VM must land on a
+// HANA-exclusive host, so the flavor is a HANA flavor; when set to "forbidden" (or
+// absent) it is a general-purpose flavor. The value is compared case-insensitively.
+// Any other explicit value is rejected as an error, since it indicates a malformed
+// flavor rather than a type we can safely default.
+//
+// Callers that only hold the raw extra specs map (e.g. failover reservation
+// scheduling) should use this helper instead of re-implementing the trait check, so
+// the HANA-detection logic stays in one place.
+func FlavorTypeFromExtraSpecs(extraSpecs map[string]string) (FlavorType, error) {
 	val, ok := extraSpecs["trait:CUSTOM_HANA_EXCLUSIVE_HOST"]
 	if !ok {
 		return FlavorTypeGeneralPurpose, nil
@@ -181,6 +191,11 @@ func (r ExternalSchedulerRequest) GetFlavorType() (FlavorType, error) {
 	default:
 		return "", fmt.Errorf("unsupported value for trait:CUSTOM_HANA_EXCLUSIVE_HOST in flavor extra specs: %s", val)
 	}
+}
+
+// GetFlavorType determines the flavor type based on the requested flavor's extra specs.
+func (r ExternalSchedulerRequest) GetFlavorType() (FlavorType, error) {
+	return FlavorTypeFromExtraSpecs(r.Spec.Data.Flavor.Data.ExtraSpecs)
 }
 
 type HypervisorType string

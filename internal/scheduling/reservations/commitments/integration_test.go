@@ -19,10 +19,7 @@ package commitments
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -30,8 +27,12 @@ import (
 
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -298,8 +299,8 @@ func TestCRIntegration(t *testing.T) {
 				if res.Spec.CommittedResourceReservation == nil {
 					t.Fatal("CommittedResourceReservation is nil")
 				}
-				if _, ok := res.Spec.CommittedResourceReservation.Allocations["vm-payg-1"]; !ok {
-					t.Error("expected vm-payg-1 in Spec.Allocations")
+				if res.Annotations[v1alpha1.AnnotationCandidateAllocation] != "vm-payg-1" {
+					t.Errorf("expected annotation %s=vm-payg-1, got %q", v1alpha1.AnnotationCandidateAllocation, res.Annotations[v1alpha1.AnnotationCandidateAllocation])
 				}
 			},
 		},
@@ -323,8 +324,8 @@ func TestCRIntegration(t *testing.T) {
 				if slots[0].Spec.TargetHost == "" {
 					t.Error("expected TargetHost set by scheduler (Phase 5 path)")
 				}
-				if len(slots[0].Spec.CommittedResourceReservation.Allocations) != 0 {
-					t.Error("expected no pre-allocations on scheduler-placed slot")
+				if slots[0].Annotations[v1alpha1.AnnotationCandidateAllocation] != "" {
+					t.Error("expected no candidate VM annotation on scheduler-placed slot")
 				}
 			},
 		},
@@ -405,10 +406,30 @@ type intgEnv struct {
 	crController  *CommittedResourceController
 	resController *CommitmentReservationController
 	hvController  *HostOversubscriptionController
-	schedulerSrv  *httptest.Server
 }
 
-func newIntgEnv(t *testing.T, initialObjects []client.Object, schedulerFn http.HandlerFunc, vmSource reservations.VMSource) *intgEnv {
+// intgSchedulerFn models a scheduler run: given the request it returns the ordered
+// hosts (an empty list models NoHostsFound). It replaces the former httptest mock
+// Nova scheduler handler.
+type intgSchedulerFn func(sched.PlacementRequest) sched.PlacementResult
+
+type intgPipeline struct{ fn intgSchedulerFn }
+
+func (p intgPipeline) Run(req sched.PlacementRequest) (sched.PlacementResult, error) {
+	return p.fn(req), nil
+}
+
+type intgPipelineProvider struct{ fn intgSchedulerFn }
+
+func (p intgPipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.PlacementRequest], bool) {
+	return intgPipeline(p), true
+}
+
+func newIntgScheduler(fn intgSchedulerFn) *sched.Placement {
+	return sched.NewPlacement(intgPipelineProvider{fn: fn}, fakeGatherer{})
+}
+
+func newIntgEnv(t *testing.T, initialObjects []client.Object, schedulerFn intgSchedulerFn, vmSource reservations.VMSource) *intgEnv {
 	t.Helper()
 	scheme := newCRTestScheme(t)
 
@@ -436,11 +457,11 @@ func newIntgEnv(t *testing.T, initialObjects []client.Object, schedulerFn http.H
 		}).
 		WithIndex(&v1alpha1.Reservation{}, idxReservationByAllocationVMUUID, func(obj client.Object) []string {
 			res, ok := obj.(*v1alpha1.Reservation)
-			if !ok || res.Spec.CommittedResourceReservation == nil {
+			if !ok || res.Status.CommittedResourceReservation == nil {
 				return nil
 			}
-			uuids := make([]string, 0, len(res.Spec.CommittedResourceReservation.Allocations))
-			for vmUUID := range res.Spec.CommittedResourceReservation.Allocations {
+			uuids := make([]string, 0, len(res.Status.CommittedResourceReservation.Allocation))
+			for vmUUID := range res.Status.CommittedResourceReservation.Allocation {
 				uuids = append(uuids, vmUUID)
 			}
 			return uuids
@@ -465,8 +486,6 @@ func newIntgEnv(t *testing.T, initialObjects []client.Object, schedulerFn http.H
 		}).
 		Build()
 
-	schedulerSrv := httptest.NewServer(schedulerFn)
-
 	crCtrl := &CommittedResourceController{
 		Client: k8sClient,
 		Scheme: scheme,
@@ -478,11 +497,11 @@ func newIntgEnv(t *testing.T, initialObjects []client.Object, schedulerFn http.H
 	}
 	monitor := NewReservationControllerMonitor()
 	resCtrl := &CommitmentReservationController{
-		Client: k8sClient,
-		Scheme: scheme,
+		Client:    k8sClient,
+		Scheme:    scheme,
+		Scheduler: newIntgScheduler(schedulerFn),
+		VMSource:  vmSource,
 		Conf: ReservationControllerConfig{
-			SchedulerURL:                              schedulerSrv.URL,
-			AllocationGracePeriod:                     metav1.Duration{Duration: 15 * time.Minute},
 			RequeueIntervalActive:                     metav1.Duration{Duration: 5 * time.Minute},
 			EnableOversubscriptionCheck:               true,
 			EnableOversubscriptionReservationEviction: true,
@@ -496,10 +515,10 @@ func newIntgEnv(t *testing.T, initialObjects []client.Object, schedulerFn http.H
 		Monitor: &monitor,
 		Conf:    resCtrl.Conf,
 	}
-	return &intgEnv{k8sClient: k8sClient, crController: crCtrl, resController: resCtrl, hvController: hvCtrl, schedulerSrv: schedulerSrv}
+	return &intgEnv{k8sClient: k8sClient, crController: crCtrl, resController: resCtrl, hvController: hvCtrl}
 }
 
-func (e *intgEnv) close() { e.schedulerSrv.Close() }
+func (e *intgEnv) close() {}
 
 func newDefaultIntgEnv(t *testing.T) *intgEnv {
 	t.Helper()
@@ -698,42 +717,38 @@ func intgAssertCRCondition(t *testing.T, k8sClient client.Client, crNames []stri
 }
 
 // ============================================================================
-// Scheduler handlers
+// Scheduler functions
 // ============================================================================
 
-func intgAcceptScheduler(w http.ResponseWriter, r *http.Request) {
-	resp := &schedulerdelegationapi.ExternalSchedulerResponse{Hosts: []string{"host-1"}}
-	json.NewEncoder(w).Encode(resp) //nolint:errcheck
+func intgAcceptScheduler(sched.PlacementRequest) sched.PlacementResult {
+	return sched.PlacementResult{OrderedHosts: []string{"host-1"}}
 }
 
-func intgRejectScheduler(w http.ResponseWriter, r *http.Request) {
-	resp := &schedulerdelegationapi.ExternalSchedulerResponse{Hosts: []string{}}
-	json.NewEncoder(w).Encode(resp) //nolint:errcheck
+func intgRejectScheduler(sched.PlacementRequest) sched.PlacementResult {
+	return sched.PlacementResult{OrderedHosts: []string{}}
 }
 
-// intgAcceptFirstScheduler returns a handler that accepts the first count placement calls
+// intgAcceptFirstScheduler returns a scheduler fn that accepts the first count placement calls
 // and rejects all subsequent ones. Uses an atomic counter so concurrent calls are safe.
-func intgAcceptFirstScheduler(count int) http.HandlerFunc {
+func intgAcceptFirstScheduler(count int) intgSchedulerFn {
 	var calls atomic.Int32
-	return func(w http.ResponseWriter, r *http.Request) {
+	return func(req sched.PlacementRequest) sched.PlacementResult {
 		if int(calls.Add(1)) <= count {
-			intgAcceptScheduler(w, r)
-		} else {
-			intgRejectScheduler(w, r)
+			return intgAcceptScheduler(req)
 		}
+		return intgRejectScheduler(req)
 	}
 }
 
-// intgRejectFirstScheduler returns a handler that rejects the first count placement calls
+// intgRejectFirstScheduler returns a scheduler fn that rejects the first count placement calls
 // and accepts all subsequent ones. Used to test AllowRejection=false retry-until-success paths.
-func intgRejectFirstScheduler(count int) http.HandlerFunc {
+func intgRejectFirstScheduler(count int) intgSchedulerFn {
 	var calls atomic.Int32
-	return func(w http.ResponseWriter, r *http.Request) {
+	return func(req sched.PlacementRequest) sched.PlacementResult {
 		if int(calls.Add(1)) <= count {
-			intgRejectScheduler(w, r)
-		} else {
-			intgAcceptScheduler(w, r)
+			return intgRejectScheduler(req)
 		}
+		return intgAcceptScheduler(req)
 	}
 }
 
@@ -1237,17 +1252,13 @@ func TestCRScheduling_SetsReserveForCommittedResourceIntent(t *testing.T) {
 	// CR slot scheduling has a real project ID and must run tenant-context filters
 	// (filter_allowed_projects, filter_aggregate_metadata, etc.). Verify the intent is
 	// reserve_for_committed_resource so filters can identify the call type correctly.
-	var capturedReq schedulerdelegationapi.ExternalSchedulerRequest
+	var capturedReq sched.PlacementRequest
 	var schedulerCalled bool
-	captureScheduler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	captureScheduler := func(req sched.PlacementRequest) sched.PlacementResult {
 		schedulerCalled = true
-		if err := json.NewDecoder(r.Body).Decode(&capturedReq); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		resp := &schedulerdelegationapi.ExternalSchedulerResponse{Hosts: []string{"host-1"}}
-		json.NewEncoder(w).Encode(resp) //nolint:errcheck
-	})
+		capturedReq = req
+		return sched.PlacementResult{OrderedHosts: []string{"host-1"}}
+	}
 
 	env := newIntgEnv(t, []client.Object{newTestFlavorKnowledge(), intgHypervisor("host-1")}, captureScheduler, nil)
 	defer env.close()
@@ -1262,12 +1273,8 @@ func TestCRScheduling_SetsReserveForCommittedResourceIntent(t *testing.T) {
 	if !schedulerCalled {
 		t.Fatal("scheduler was never called — test did not exercise the scheduling path")
 	}
-	hint, err := capturedReq.Spec.Data.GetSchedulerHintStr("_nova_check_type")
-	if err != nil {
-		t.Fatalf("failed to get _nova_check_type hint: %v", err)
-	}
-	if hint != string(schedulerdelegationapi.ReserveForCommittedResourceIntent) {
-		t.Errorf("CR slot scheduling must set _nova_check_type=%q, got %q", schedulerdelegationapi.ReserveForCommittedResourceIntent, hint)
+	if capturedReq.Intent != schedulerdelegationapi.ReserveForCommittedResourceIntent {
+		t.Errorf("CR slot scheduling must set Intent=%q, got %q", schedulerdelegationapi.ReserveForCommittedResourceIntent, capturedReq.Intent)
 	}
 }
 
@@ -1325,23 +1332,25 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 		if i < 10 {
 			// slots 0-9: allocated — have a confirmed VM
 			vmID := fmt.Sprintf("vm-%02d", i)
-			slot.Spec.CommittedResourceReservation.Allocations = map[string]v1alpha1.CommittedResourceAllocation{
-				vmID: {Resources: map[hv1.ResourceName]resource.Quantity{
-					hv1.ResourceMemory: gib(memGiB),
-					hv1.ResourceCPU:    cpu(cores),
-				}},
-			}
 			slot.Status.CommittedResourceReservation = &v1alpha1.CommittedResourceReservationStatus{
-				Allocations: map[string]string{vmID: "host-1"},
+				Allocation: map[string]v1alpha1.CommittedResourceAllocation{
+					vmID: {
+						ObjectRef: corev1.ObjectReference{Name: vmID},
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceMemory: gib(memGiB),
+							hv1.ResourceCPU:    cpu(cores),
+						},
+					},
+				},
 			}
 		}
 		objects = append(objects, slot)
 	}
 
 	var schedulerCalls atomic.Int32
-	schedulerFn := func(w http.ResponseWriter, r *http.Request) {
+	schedulerFn := func(req sched.PlacementRequest) sched.PlacementResult {
 		schedulerCalls.Add(1)
-		intgRejectScheduler(w, r) // reject so evicted slots don't land back on host-1
+		return intgRejectScheduler(req) // reject so evicted slots don't land back on host-1
 	}
 	env := newIntgEnv(t, append(objects, newTestFlavorKnowledge()), schedulerFn, nil)
 	defer env.close()
@@ -1379,7 +1388,7 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 			placedSlots = append(placedSlots, r)
 		}
 	}
-	free := reservations.HostFreeCapacity(placedSlots, *hv)
+	free := accounting.HostFreeCapacity(placedSlots, *hv)
 	zero := resource.MustParse("0")
 	for rn, f := range free {
 		if f.Cmp(zero) < 0 {
@@ -1389,9 +1398,9 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 
 	for _, r := range resList.Items {
 		if r.Spec.TargetHost == "" &&
-			r.Spec.CommittedResourceReservation != nil &&
-			len(r.Spec.CommittedResourceReservation.Allocations) > 0 {
-			t.Errorf("slot %s has allocations but was evicted", r.Name)
+			r.Status.CommittedResourceReservation != nil &&
+			len(r.Status.CommittedResourceReservation.Allocation) > 0 {
+			t.Errorf("slot %s has confirmed allocations but was evicted", r.Name)
 		}
 	}
 

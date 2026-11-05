@@ -4,11 +4,11 @@
 package filters
 
 import (
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
-type NovaFilter = lib.Filter[api.ExternalSchedulerRequest]
+type NovaFilter = lib.Filter[compute.PlacementRequest]
 
 // Configuration of filters supported by the nova scheduler.
 var Index = map[string]func() NovaFilter{}

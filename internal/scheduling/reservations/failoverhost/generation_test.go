@@ -5,15 +5,13 @@ package failoverhost
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"slices"
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -45,10 +43,9 @@ func TestGenerateProducesReservations(t *testing.T) {
 	hvA := buildHV("hvA", 64, 32)
 	hvB := buildHV("hvB", 64, 32)
 
-	finder, server := stubScheduler(t, map[string][]string{
+	finder := stubScheduler(t, map[string][]string{
 		"flavor": {"hvA", "hvB"},
 	}, nil)
-	defer server.Close()
 
 	g := &pipelineGenerator{
 		Client:             newTestClient(t, hvA, hvB),
@@ -91,10 +88,9 @@ func TestGenerateDeduplicatesSharedHost(t *testing.T) {
 	// The path finder's edges are irrelevant here: the fake builder ignores them
 	// and hands Generate the overlapping cliques directly. The stub still needs an
 	// answer so FindPaths succeeds; one seed accepted on all three suffices.
-	finder, server := stubScheduler(t, map[string][]string{
+	finder := stubScheduler(t, map[string][]string{
 		"flavor": {"hvA", "hvB", "hvC"},
 	}, nil)
-	defer server.Close()
 
 	g := &pipelineGenerator{
 		Client:     newTestClient(t, hvA, hvB, hvC),
@@ -138,10 +134,9 @@ func TestGenerateSharedHostKeptInSmallestPartition(t *testing.T) {
 	hvC := buildHV("hvC", 64, 32)
 	hvD := buildHV("hvD", 64, 32)
 
-	finder, server := stubScheduler(t, map[string][]string{
+	finder := stubScheduler(t, map[string][]string{
 		"flavor": {"hvA", "hvB", "hvC", "hvD"},
 	}, nil)
-	defer server.Close()
 
 	g := &pipelineGenerator{
 		Client:     newTestClient(t, hvA, hvB, hvC, hvD),
@@ -222,14 +217,15 @@ func TestWholeHostGuarantee(t *testing.T) {
 		name        string
 		hypervisors []*hv1.Hypervisor
 		flavors     []compute.FlavorInGroup
-		// acceptsByFlavorAZ[flavor][az] is the set of hosts the stub scheduler
-		// returns for a seed of that flavor in that availability zone — the
-		// compatibility the real pipeline would compute. Capacity fit is NOT
-		// modeled here; the path finder applies the real whole-host size check on
-		// top, so an undersized host can still be dropped despite accepting.
-		acceptsByFlavorAZ map[string]map[string][]string
-		ratio             float64
-		minimum           int
+		// acceptsByTraitAZ[trait][az] is the set of hosts the stub scheduler
+		// returns for a seed of the flavor with that required trait ("" for the
+		// no-trait flavor) in that availability zone — the compatibility the real
+		// pipeline would compute. Capacity fit is NOT modeled here; the path
+		// finder applies the real whole-host size check on top, so an undersized
+		// host can still be dropped despite accepting.
+		acceptsByTraitAZ map[string]map[string][]string
+		ratio            float64
+		minimum          int
 		// wantReservations, when non-zero, asserts the exact reservation count.
 		wantReservations int
 		expectAny        bool
@@ -249,9 +245,9 @@ func TestWholeHostGuarantee(t *testing.T) {
 				hvTraits("special-1", traitX), hvTraits("special-2", traitX),
 			},
 			flavors: []compute.FlavorInGroup{traitFlavor("general", ""), traitFlavor("traitx", traitX)},
-			acceptsByFlavorAZ: map[string]map[string][]string{
-				"general": {"az1": {"basic-1", "basic-2", "special-1", "special-2"}},
-				"traitx":  {"az1": {"special-1", "special-2"}},
+			acceptsByTraitAZ: map[string]map[string][]string{
+				"":     {"az1": {"basic-1", "basic-2", "special-1", "special-2"}},
+				traitX: {"az1": {"special-1", "special-2"}},
 			},
 			ratio: 0.1, minimum: 1, expectAny: true,
 		},
@@ -262,8 +258,8 @@ func TestWholeHostGuarantee(t *testing.T) {
 			name:        "homogeneous partition reserves a compatible target",
 			hypervisors: []*hv1.Hypervisor{hvTraits("hv-1"), hvTraits("hv-2"), hvTraits("hv-3")},
 			flavors:     []compute.FlavorInGroup{traitFlavor("general", "")},
-			acceptsByFlavorAZ: map[string]map[string][]string{
-				"general": {"az1": {"hv-1", "hv-2", "hv-3"}},
+			acceptsByTraitAZ: map[string]map[string][]string{
+				"": {"az1": {"hv-1", "hv-2", "hv-3"}},
 			},
 			expectAny: true,
 		},
@@ -278,8 +274,8 @@ func TestWholeHostGuarantee(t *testing.T) {
 				buildHV("large-1", 128, 64), buildHV("large-2", 128, 64), buildHV("small-1", 16, 8),
 			},
 			flavors: []compute.FlavorInGroup{traitFlavor("general", "")},
-			acceptsByFlavorAZ: map[string]map[string][]string{
-				"general": {"az1": {"large-1", "large-2", "small-1"}},
+			acceptsByTraitAZ: map[string]map[string][]string{
+				"": {"az1": {"large-1", "large-2", "small-1"}},
 			},
 			expectAny: true, forbiddenTargets: []string{"small-1"},
 		},
@@ -294,8 +290,8 @@ func TestWholeHostGuarantee(t *testing.T) {
 				hvInZone("az2-1", "az2"), hvInZone("az2-2", "az2"),
 			},
 			flavors: []compute.FlavorInGroup{traitFlavor("general", "")},
-			acceptsByFlavorAZ: map[string]map[string][]string{
-				"general": {
+			acceptsByTraitAZ: map[string]map[string][]string{
+				"": {
 					"az1": {"az1-1", "az1-2"},
 					"az2": {"az2-1", "az2-2"},
 				},
@@ -310,8 +306,8 @@ func TestWholeHostGuarantee(t *testing.T) {
 			name:        "multi-target partition records sibling reserved hosts as sources",
 			hypervisors: []*hv1.Hypervisor{hvTraits("hv-1"), hvTraits("hv-2"), hvTraits("hv-3")},
 			flavors:     []compute.FlavorInGroup{traitFlavor("general", "")},
-			acceptsByFlavorAZ: map[string]map[string][]string{
-				"general": {"az1": {"hv-1", "hv-2", "hv-3"}},
+			acceptsByTraitAZ: map[string]map[string][]string{
+				"": {"az1": {"hv-1", "hv-2", "hv-3"}},
 			},
 			ratio: 1.0, minimum: 1, expectAny: true, wantReservations: 2, expectSiblings: true,
 		},
@@ -327,8 +323,7 @@ func TestWholeHostGuarantee(t *testing.T) {
 			}
 			objs = append(objs, flavorGroupsKnowledge(t, true, tt.flavors...))
 
-			finder, server := azAwareStubScheduler(t, tt.acceptsByFlavorAZ)
-			defer server.Close()
+			finder := azAwareStubScheduler(t, tt.acceptsByTraitAZ)
 
 			ratio, minimum := tt.ratio, tt.minimum
 			if ratio == 0 {
@@ -359,7 +354,7 @@ func TestWholeHostGuarantee(t *testing.T) {
 					t.Errorf("host %q was reserved as a failover target but must never be", res.Spec.TargetHost)
 				}
 			}
-			verifyWholeHostEvacuable(t, desired, tt.acceptsByFlavorAZ)
+			verifyWholeHostEvacuable(t, desired, tt.acceptsByTraitAZ)
 			if tt.expectSiblings {
 				verifySiblingSources(t, desired)
 			}
@@ -369,11 +364,11 @@ func TestWholeHostGuarantee(t *testing.T) {
 
 // verifyWholeHostEvacuable asserts the ADR 0011 invariant: for every reservation,
 // the target host accepts every flavor each of its recorded source hosts accepts.
-func verifyWholeHostEvacuable(t *testing.T, desired map[corev1.ObjectReference]v1alpha1.Reservation, acceptsByFlavorAZ map[string]map[string][]string) {
+func verifyWholeHostEvacuable(t *testing.T, desired map[corev1.ObjectReference]v1alpha1.Reservation, acceptsByTraitAZ map[string]map[string][]string) {
 	t.Helper()
 	// Invert the accept-sets into per-host flavor sets, across all AZs.
 	acceptsByHost := map[string]map[string]bool{}
-	for flavor, byAZ := range acceptsByFlavorAZ {
+	for flavor, byAZ := range acceptsByTraitAZ {
 		for _, hosts := range byAZ {
 			for _, h := range hosts {
 				if acceptsByHost[h] == nil {
@@ -421,31 +416,47 @@ func verifySiblingSources(t *testing.T, desired map[corev1.ObjectReference]v1alp
 	}
 }
 
-// azAwareStubScheduler serves a scheduler that answers each probe with the
-// accept-set for the request's flavor *and* availability zone, so a scenario can
-// model the AZ filter (a seed in az1 only ever accepts az1 hosts). It performs
-// the same request-shape assertions as the simpler stubScheduler.
-func azAwareStubScheduler(t *testing.T, acceptsByFlavorAZ map[string]map[string][]string) (*evacuationPathFinder, *httptest.Server) {
+// azAwareStubScheduler returns a path finder wired to an in-process scheduler
+// that answers each probe with the accept-set for the request's flavor *and*
+// availability zone, so a scenario can model the AZ filter (a seed in az1 only
+// ever accepts az1 hosts). It performs the same request-shape assertions as the
+// simpler stubScheduler in pathfinding_test.go.
+//
+// Flavors are identified by their single required trait (the typed placement
+// request carries no flavor name); the empty string keys a flavor with no
+// required trait. See traitFlavor, which sets that trait.
+func azAwareStubScheduler(t *testing.T, acceptsByTraitAZ map[string]map[string][]string) *evacuationPathFinder {
 	t.Helper()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req api.ExternalSchedulerRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Errorf("decode request: %v", err)
-		}
-		if !req.Options.AssumeEmptyHosts {
-			t.Errorf("request for flavor %q must set AssumeEmptyHosts", req.Spec.Data.Flavor.Data.Name)
-		}
-		if intent, err := req.GetIntent(); err != nil || intent != api.EvacuateIntent {
-			t.Errorf("request for flavor %q must use evacuate intent, got %v (err=%v)", req.Spec.Data.Flavor.Data.Name, intent, err)
-		}
-		flavor := req.Spec.Data.Flavor.Data.Name
-		az := req.Spec.Data.AvailabilityZone
-		if err := json.NewEncoder(w).Encode(api.ExternalSchedulerResponse{Hosts: acceptsByFlavorAZ[flavor][az]}); err != nil {
-			t.Errorf("encode response: %v", err)
-		}
-	}))
-	finder := &evacuationPathFinder{httpClient: server.Client(), schedulerURL: server.URL}
-	return finder, server
+	provider := &stubPipelineProvider{pipeline: &azAwareStubPipeline{t: t, acceptsByTraitAZ: acceptsByTraitAZ}}
+	scheduler := sched.NewPlacement(provider, passthroughGatherer{})
+	return &evacuationPathFinder{scheduler: scheduler}
+}
+
+// azAwareStubPipeline is a fake pipeline that, like stubPipeline, validates the
+// probe's request shape, but keys its candidate answers on both the flavor's
+// required trait (empty when none) and the availability zone.
+type azAwareStubPipeline struct {
+	t                *testing.T
+	acceptsByTraitAZ map[string]map[string][]string
+}
+
+func (s *azAwareStubPipeline) Run(req sched.PlacementRequest) (sched.PlacementResult, error) {
+	// A test flavor carries at most one required trait (see traitFlavor); use it
+	// to identify the flavor, falling back to "" for the no-trait flavor.
+	trait := ""
+	if len(req.RequiredTraits) > 0 {
+		trait = req.RequiredTraits[0]
+	}
+	if err := req.Options.Validate(); err != nil {
+		s.t.Errorf("invalid scheduling options: %v", err)
+	}
+	if !req.Options.AssumeEmptyHosts {
+		s.t.Errorf("request for trait %q must set AssumeEmptyHosts", trait)
+	}
+	if req.Intent != api.EvacuateIntent {
+		s.t.Errorf("request for trait %q must use evacuate intent, got %v", trait, req.Intent)
+	}
+	return sched.PlacementResult{OrderedHosts: s.acceptsByTraitAZ[trait][req.AvailabilityZone]}, nil
 }
 
 // hvTraits builds a fixed-size (64Gi/32cpu) hypervisor in az1 with the given

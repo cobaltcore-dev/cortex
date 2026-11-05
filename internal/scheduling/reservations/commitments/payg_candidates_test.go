@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -36,7 +37,12 @@ func (f *fakeVMSource) ListVMsByProject(_ context.Context, _ string) ([]reservat
 func (f *fakeVMSource) ListVMsOnHypervisors(_ context.Context, _ *hv1.HypervisorList, _ bool) ([]reservations.VM, error) {
 	return f.vms, f.err
 }
-func (f *fakeVMSource) GetVM(_ context.Context, _ string) (*reservations.VM, error) {
+func (f *fakeVMSource) GetVM(_ context.Context, uuid string) (*reservations.VM, error) {
+	for i := range f.vms {
+		if f.vms[i].UUID == uuid {
+			return &f.vms[i], nil
+		}
+	}
 	return nil, nil
 }
 func (f *fakeVMSource) IsServerActive(_ context.Context, _ string) (bool, error) {
@@ -86,7 +92,7 @@ func vmOnHV(uuid, hvName, flavorName string, memMB uint64) reservations.VM { //n
 		FlavorName:        flavorName,
 		CurrentHypervisor: hvName,
 		Resources: map[string]resource.Quantity{
-			"memory": *resource.NewQuantity(int64(memMB)*1024*1024, resource.BinarySI), //nolint:gosec
+			string(hv1.ResourceMemory): *resource.NewQuantity(int64(memMB)*1024*1024, resource.BinarySI), //nolint:gosec
 		},
 	}
 }
@@ -95,11 +101,13 @@ func reservationWithAlloc(name, vmUUID string) *v1alpha1.Reservation {
 	return &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Spec: v1alpha1.ReservationSpec{
-			Type: v1alpha1.ReservationTypeCommittedResource,
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				CommitmentUUID: "other-cr",
-				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
-					vmUUID: {CreationTimestamp: metav1.Now()},
+			Type:                         v1alpha1.ReservationTypeCommittedResource,
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{CommitmentUUID: "other-cr"},
+		},
+		Status: v1alpha1.ReservationStatus{
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
+				Allocation: map[string]v1alpha1.CommittedResourceAllocation{
+					vmUUID: {ObjectRef: corev1.ObjectReference{Name: vmUUID}},
 				},
 			},
 		},
@@ -113,11 +121,11 @@ func buildPaygClient(t *testing.T, objs ...client.Object) client.Client {
 		WithObjects(objs...).
 		WithIndex(&v1alpha1.Reservation{}, idxReservationByAllocationVMUUID, func(obj client.Object) []string {
 			res, ok := obj.(*v1alpha1.Reservation)
-			if !ok || res.Spec.CommittedResourceReservation == nil {
+			if !ok || res.Status.CommittedResourceReservation == nil {
 				return nil
 			}
 			var uuids []string
-			for vmUUID := range res.Spec.CommittedResourceReservation.Allocations {
+			for vmUUID := range res.Status.CommittedResourceReservation.Allocation {
 				uuids = append(uuids, vmUUID)
 			}
 			return uuids
@@ -147,7 +155,7 @@ func TestFilterPaygCandidates(t *testing.T) {
 			wantVMIDs: []string{"vm-a"},
 		},
 		{
-			name:      "VM already in Reservation.Spec.Allocations — excluded",
+			name:      "VM already in Reservation.Status.allocation — excluded",
 			hv:        hvWithInstances("host-1", "az-1", activeInstance("vm-a")),
 			vms:       []reservations.VM{vmOnHV("vm-a", "host-1", "small", 8192)},
 			extraObjs: []*v1alpha1.Reservation{reservationWithAlloc("res-1", "vm-a")},
@@ -200,8 +208,10 @@ func TestFilterPaygCandidates(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			allocatedVMIDs := make(map[string]struct{})
 			for _, res := range tc.extraObjs {
-				for vmUUID := range res.Spec.CommittedResourceReservation.Allocations {
-					allocatedVMIDs[vmUUID] = struct{}{}
+				if res.Status.CommittedResourceReservation != nil {
+					for vmUUID := range res.Status.CommittedResourceReservation.Allocation {
+						allocatedVMIDs[vmUUID] = struct{}{}
+					}
 				}
 			}
 

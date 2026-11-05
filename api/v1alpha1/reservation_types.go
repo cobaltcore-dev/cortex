@@ -5,6 +5,7 @@ package v1alpha1
 
 import (
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -81,18 +82,27 @@ const (
 	// AnnotationCreatorRequestID tracks the request ID that created this reservation.
 	// Used for end-to-end traceability across API calls, controller reconciles, and scheduler invocations.
 	AnnotationCreatorRequestID = "reservations.cortex.cloud/creator-request-id"
+
+	// AnnotationCandidateAllocation signals that this PAYG pre-allocated reservation slot is intended
+	// for a specific workload object (e.g. VM UUID). Set by the commitment reconciler on creation.
+	// The reservation controller reads this annotation to discover and confirm the assignment.
+	AnnotationCandidateAllocation = "reservations.cortex.cloud/candidate-allocation"
 )
 
 // CommittedResourceAllocation represents a workload's assignment to a committed resource reservation slot.
 // The workload could be a VM (Nova/IronCore), Pod (Kubernetes), or other resource.
 type CommittedResourceAllocation struct {
-	// Timestamp when this workload was assigned to the reservation.
-	// +kubebuilder:validation:Required
-	CreationTimestamp metav1.Time `json:"creationTimestamp"`
+	// ObjectRef is a reference to the workload object (e.g. VM CRD).
+	// +kubebuilder:validation:Optional
+	ObjectRef corev1.ObjectReference `json:"objectRef,omitempty"`
 
-	// Resources consumed by this instance.
+	// Resources consumed by this workload.
 	// +kubebuilder:validation:Required
 	Resources map[hv1.ResourceName]resource.Quantity `json:"resources"`
+
+	// Deprecated: CreationTimestamp is no longer populated. Will be removed once old pods are fully rolled out.
+	// +kubebuilder:validation:Optional
+	CreationTimestamp metav1.Time `json:"creationTimestamp,omitempty"`
 }
 
 // CommittedResourceReservationSpec defines the spec fields specific to committed resource reservations.
@@ -126,12 +136,22 @@ type CommittedResourceReservationSpec struct {
 	// once it has processed the reservation, allowing the CR controller to wait until
 	// all child reservations are up-to-date before accepting.
 	// Zero means the field is not set (syncer-created reservations, no parent CR).
+	//
+	// Deprecated: replaced by conditions[Ready].ObservedGeneration signaling. Will be removed once old pods are fully rolled out.
 	// +kubebuilder:validation:Optional
 	ParentGeneration int64 `json:"parentGeneration,omitempty"`
+
+	// PrimaryResource is the resource dimension that drives allocation tracking
+	// (e.g. hv1.ResourceMemory for memory commitments). Other dimensions in
+	// alloc.Resources are recorded for bookkeeping but do not gate allocation decisions.
+	// +kubebuilder:validation:Optional
+	PrimaryResource hv1.ResourceName `json:"primaryResource,omitempty"`
 
 	// Allocations maps workload identifiers to their allocation details.
 	// Key: Workload UUID (VM UUID for Nova, Pod UID for Pods, Machine UID for IronCore, etc.)
 	// Value: allocation state and metadata
+	//
+	// Deprecated: use status.committedResourceReservation.allocation instead. Will be removed once old pods are fully rolled out.
 	// +kubebuilder:validation:Optional
 	Allocations map[string]CommittedResourceAllocation `json:"allocations,omitempty"`
 }
@@ -259,13 +279,16 @@ type CommittedResourceReservationStatus struct {
 	// ObservedParentGeneration is the Spec.CommittedResourceReservation.ParentGeneration value
 	// that this Reservation controller last processed. When it matches ParentGeneration in spec,
 	// the CR controller knows this reservation is up-to-date for the current CR spec version.
+	//
+	// Deprecated: replaced by conditions[Ready].ObservedGeneration signaling. Will be removed once old pods are fully rolled out.
 	// +kubebuilder:validation:Optional
 	ObservedParentGeneration int64 `json:"observedParentGeneration,omitempty"`
 
-	// Allocations maps VM/instance UUIDs to the host they are currently running on.
-	// Key: VM/instance UUID, Value: Host name where the VM is currently running.
+	// Allocation maps workload identifiers to their allocation details.
+	// Key: workload UUID (vmUUID for virtual machines)
+	// Value: allocation details including resource consumption and object reference.
 	// +kubebuilder:validation:Optional
-	Allocations map[string]string `json:"allocations,omitempty"`
+	Allocation map[string]CommittedResourceAllocation `json:"allocation,omitempty"`
 }
 
 // FailoverReservationStatus defines the status fields specific to failover reservations.
@@ -383,17 +406,22 @@ type ReservationStatus struct {
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".metadata.labels['reservations\\.cortex\\.cloud/type']"
 // +kubebuilder:printcolumn:name="Host",type="string",JSONPath=".status.host"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
-// +kubebuilder:printcolumn:name="ResourceGroup",type="string",JSONPath=".spec.committedResourceReservation.resourceGroup",priority=1
-// +kubebuilder:printcolumn:name="HA ResourceGroup",type="string",JSONPath=".spec.failoverReservation.resourceGroup",priority=1
-// +kubebuilder:printcolumn:name="Project",type="string",JSONPath=".spec.committedResourceReservation.projectID",priority=1
-// +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone",priority=1
+// +kubebuilder:printcolumn:name="ObservedGen",type="integer",JSONPath=".status.conditions[?(@.type=='Ready')].observedGeneration",priority=1
+// +kubebuilder:printcolumn:name="Gen",type="integer",JSONPath=".metadata.generation",priority=1
+// +kubebuilder:printcolumn:name="ResourceGroup",type="string",JSONPath=".spec.*.resourceGroup"
+// +kubebuilder:printcolumn:name="ResourceName",type="string",JSONPath=".spec.*.resourceName"
+// +kubebuilder:printcolumn:name="Project",type="string",JSONPath=".spec.*.projectID",priority=1
+// +kubebuilder:printcolumn:name="CommitmentID",type="string",JSONPath=".spec.committedResourceReservation.commitmentUUID",priority=1
+// +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone"
 // +kubebuilder:printcolumn:name="StartTime",type="string",JSONPath=".spec.startTime",priority=1
 // +kubebuilder:printcolumn:name="EndTime",type="string",JSONPath=".spec.endTime",priority=1
-// +kubebuilder:printcolumn:name="Resources",type="string",JSONPath=".spec.resources",priority=1
+// +kubebuilder:printcolumn:name="Resources",type="string",JSONPath=".spec.resources"
 // +kubebuilder:printcolumn:name="LastChanged",type="date",JSONPath=".status.failoverReservation.lastChanged",priority=1
 // +kubebuilder:printcolumn:name="AcknowledgedAt",type="date",JSONPath=".status.failoverReservation.acknowledgedAt",priority=1
-// +kubebuilder:printcolumn:name="CR Allocations",type="string",JSONPath=".status.committedResourceReservation.allocations",priority=1
+// +kubebuilder:printcolumn:name="CR alloc VMs",type="string",JSONPath=".status.committedResourceReservation.allocation.*.objectRef.name",priority=1
+// +kubebuilder:printcolumn:name="CR alloc resources",type="string",JSONPath=".status.committedResourceReservation.allocation.*.resources",priority=1
 // +kubebuilder:printcolumn:name="HA Allocations",type="string",JSONPath=".status.failoverReservation.allocations",priority=1
+// +kubebuilder:printcolumn:name="CR CandidateVM",type="string",JSONPath=".metadata.annotations['reservations\\.cortex\\.cloud/candidate-allocation']",priority=1
 
 // Reservation is the Schema for the reservations API
 type Reservation struct {

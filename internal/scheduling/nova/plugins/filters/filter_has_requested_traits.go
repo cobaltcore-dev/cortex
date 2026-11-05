@@ -7,43 +7,23 @@ import (
 	"context"
 	"github.com/go-logr/logr"
 	"slices"
-	"strings"
 
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 type FilterHasRequestedTraits struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
-// Filter hosts that do not have the requested traits given by the extra spec:
-// - "trait:<trait>": "forbidden" means the host must not have the specified trait.
-// - "trait:<trait>": "required" means the host must have the specified trait.
-func (s *FilterHasRequestedTraits) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+// Filter hosts based on the traits requested in the flavor:
+// - a forbidden trait means the host must not have the specified trait.
+// - a required trait means the host must have the specified trait.
+func (s *FilterHasRequestedTraits) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
-	var requiredTraits, forbiddenTraits []string
-	for key, value := range request.Spec.Data.Flavor.Data.ExtraSpecs {
-		if !strings.HasPrefix(key, "trait:") {
-			traceLog.V(1).Info("ignoring extra spec that does not start with trait:", "key", key)
-			continue
-		}
-		traitName := strings.TrimPrefix(key, "trait:")
-		switch value {
-		case "forbidden":
-			forbiddenTraits = append(forbiddenTraits, traitName)
-			traceLog.V(1).Info("trait marked forbidden, will filter out hosts with this trait",
-				"trait", traitName)
-		case "required":
-			requiredTraits = append(requiredTraits, traitName)
-			traceLog.V(1).Info("trait marked required, will filter out hosts without this trait",
-				"trait", traitName)
-		default:
-			traceLog.V(1).Info("ignoring trait with unsupported value",
-				"trait", traitName, "value", value)
-		}
-	}
+	requiredTraits := request.RequiredTraits
+	forbiddenTraits := request.ForbiddenTraits
 	if len(requiredTraits) == 0 && len(forbiddenTraits) == 0 {
 		traceLog.V(1).Info("no traits requested, skipping filter")
 		return result, nil

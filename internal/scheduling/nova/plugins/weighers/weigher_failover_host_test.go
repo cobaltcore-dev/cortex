@@ -10,6 +10,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -58,23 +59,18 @@ func failoverInUseBy(res *v1alpha1.Reservation, sourceHost string) *v1alpha1.Res
 	return res
 }
 
-func weigherRequest(hints map[string]any, hosts ...string) api.ExternalSchedulerRequest {
-	hvHosts := make([]api.ExternalSchedulerHost, len(hosts))
+// weigherRequest builds a typed placement request over the named candidate
+// hosts, with the given intent and source host (empty for non-evacuations).
+func weigherRequest(intent v1alpha1.SchedulingIntent, sourceHost string, hosts ...string) compute.PlacementRequest {
+	hvHosts := make([]compute.Host, len(hosts))
 	for i, h := range hosts {
-		hvHosts[i] = api.ExternalSchedulerHost{ComputeHost: h}
+		hvHosts[i] = compute.Host{ComputeHost: h}
 	}
-	return api.ExternalSchedulerRequest{
-		Hosts: hvHosts,
-		Spec:  api.NovaObject[api.NovaSpec]{Data: api.NovaSpec{SchedulerHints: hints}},
+	return compute.PlacementRequest{
+		Hosts:      hvHosts,
+		Intent:     intent,
+		SourceHost: sourceHost,
 	}
-}
-
-func evacHints(sourceHost string) map[string]any {
-	hints := map[string]any{"_nova_check_type": "evacuate"}
-	if sourceHost != "" {
-		hints["source_host"] = sourceHost
-	}
-	return hints
 }
 
 func TestWeigherFailoverHost_Run(t *testing.T) {
@@ -84,7 +80,7 @@ func TestWeigherFailoverHost_Run(t *testing.T) {
 		name         string
 		opts         WeigherFailoverHostOpts
 		reservations []client.Object
-		request      api.ExternalSchedulerRequest
+		request      compute.PlacementRequest
 		// wantTarget is the host expected to receive the dominating weight, or ""
 		// when no host should be lifted.
 		wantTarget string
@@ -93,28 +89,28 @@ func TestWeigherFailoverHost_Run(t *testing.T) {
 			name:         "disabled - no effect",
 			opts:         WeigherFailoverHostOpts{Enabled: false},
 			reservations: []client.Object{failoverHostReservation("h1", "source1")},
-			request:      weigherRequest(evacHints("source1"), "h1", "h2"),
+			request:      weigherRequest(api.EvacuateIntent, "source1", "h1", "h2"),
 			wantTarget:   "",
 		},
 		{
 			name:         "non-evacuation - no effect",
 			opts:         WeigherFailoverHostOpts{Enabled: true},
 			reservations: []client.Object{failoverHostReservation("h1", "source1")},
-			request:      weigherRequest(map[string]any{"_nova_check_type": "live_migrate", "source_host": "source1"}, "h1", "h2"),
+			request:      weigherRequest(api.LiveMigrationIntent, "source1", "h1", "h2"),
 			wantTarget:   "",
 		},
 		{
 			name:         "evacuation without source hint - no effect",
 			opts:         WeigherFailoverHostOpts{Enabled: true},
 			reservations: []client.Object{failoverHostReservation("h1", "source1")},
-			request:      weigherRequest(evacHints(""), "h1", "h2"),
+			request:      weigherRequest(api.EvacuateIntent, "", "h1", "h2"),
 			wantTarget:   "",
 		},
 		{
 			name:         "evacuation - lifts the name-first matching target",
 			opts:         WeigherFailoverHostOpts{Enabled: true},
 			reservations: []client.Object{failoverHostReservation("h1", "source1"), failoverHostReservation("h2", "source1")},
-			request:      weigherRequest(evacHints("source1"), "h1", "h2", "h3"),
+			request:      weigherRequest(api.EvacuateIntent, "source1", "h1", "h2", "h3"),
 			wantTarget:   "h1",
 		},
 		{
@@ -124,21 +120,21 @@ func TestWeigherFailoverHost_Run(t *testing.T) {
 				failoverHostReservation("h1", "source1"),
 				failoverInUseBy(failoverHostReservation("h2", "source1"), "source1"),
 			},
-			request:    weigherRequest(evacHints("source1"), "h1", "h2", "h3"),
+			request:    weigherRequest(api.EvacuateIntent, "source1", "h1", "h2", "h3"),
 			wantTarget: "h2",
 		},
 		{
 			name:         "evacuation - no matching reservation - no effect",
 			opts:         WeigherFailoverHostOpts{Enabled: true},
 			reservations: []client.Object{failoverHostReservation("h1", "otherSource")},
-			request:      weigherRequest(evacHints("source1"), "h1", "h2"),
+			request:      weigherRequest(api.EvacuateIntent, "source1", "h1", "h2"),
 			wantTarget:   "",
 		},
 		{
 			name:         "evacuation - not-yet-active target is not lifted",
 			opts:         WeigherFailoverHostOpts{Enabled: true},
 			reservations: []client.Object{notActive(failoverHostReservation("h1", "source1"))},
-			request:      weigherRequest(evacHints("source1"), "h1", "h2"),
+			request:      weigherRequest(api.EvacuateIntent, "source1", "h1", "h2"),
 			wantTarget:   "",
 		},
 		{
@@ -148,14 +144,14 @@ func TestWeigherFailoverHost_Run(t *testing.T) {
 				notActive(failoverHostReservation("h1", "source1")),
 				failoverHostReservation("h2", "source1"),
 			},
-			request:    weigherRequest(evacHints("source1"), "h1", "h2", "h3"),
+			request:    weigherRequest(api.EvacuateIntent, "source1", "h1", "h2", "h3"),
 			wantTarget: "h2",
 		},
 		{
 			name:         "evacuation - selected target not among candidates - no effect",
 			opts:         WeigherFailoverHostOpts{Enabled: true},
 			reservations: []client.Object{failoverHostReservation("h1", "source1")},
-			request:      weigherRequest(evacHints("source1"), "h2", "h3"),
+			request:      weigherRequest(api.EvacuateIntent, "source1", "h2", "h3"),
 			wantTarget:   "",
 		},
 	}

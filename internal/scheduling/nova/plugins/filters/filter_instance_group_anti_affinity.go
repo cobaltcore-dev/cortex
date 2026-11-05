@@ -10,55 +10,52 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 type FilterInstanceGroupAntiAffinityStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Select hosts not in spec_obj.instance_group but only until
 // max_server_per_host is reached (by default = 1).
 func (s *FilterInstanceGroupAntiAffinityStep) Run(
 	traceLog logr.Logger,
-	request api.ExternalSchedulerRequest,
+	request compute.PlacementRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 
 	result := s.IncludeAllHostsFromRequest(request)
 	// Instance group hints are only present in user-initiated VM placement requests;
-	if intent, err := request.GetIntent(); err == nil && slices.Contains([]v1alpha1.SchedulingIntent{
+	if slices.Contains([]v1alpha1.SchedulingIntent{
 		api.ReserveForFailoverIntent,
 		api.ReuseFailoverReservationIntent,
 		api.ReserveForCommittedResourceIntent,
 		api.CapacityProbeIntent,
-	}, intent) {
+	}, request.Intent) {
 		return result, nil
 	}
 
-	ig := request.Spec.Data.InstanceGroup
+	ig := request.InstanceGroup
 	if ig == nil {
 		traceLog.V(1).Info("no instance group in request, skipping filter")
 		return result, nil
 	}
-	policy := ig.Data.Policy
+	policy := ig.Policy
 	if policy != "anti-affinity" {
 		traceLog.V(1).Info("instance group policy is not 'anti-affinity', skipping filter")
 		return result, nil
 	}
-	memberVMs := ig.Data.Members
+	memberVMs := ig.Members
 	if len(memberVMs) == 0 {
 		// Nothing to do.
 		traceLog.V(1).Info("instance group has no members, skipping filter")
 		return result, nil
 	}
-	maxServersPerHost := 1
-	if ig.Data.Rules != nil {
-		if maxServersPerHostAny, ok := ig.Data.Rules["max_server_per_host"]; ok {
-			if maxServersPerHostInt, ok := maxServersPerHostAny.(int); ok {
-				maxServersPerHost = maxServersPerHostInt
-			}
-		}
+	maxServersPerHost := ig.MaxServerPerHost
+	if maxServersPerHost == 0 {
+		maxServersPerHost = 1
 	}
 
 	hvs := &hv1.HypervisorList{}
@@ -84,7 +81,7 @@ func (s *FilterInstanceGroupAntiAffinityStep) Run(
 		// Check if this host is already running the same vm (resizes).
 		// In this case we should not filter it out.
 		if slices.ContainsFunc(hv.Status.Instances, func(inst hv1.Instance) bool {
-			return inst.ID == request.Spec.Data.InstanceUUID
+			return inst.ID == request.InstanceUUID
 		}) {
 			traceLog.V(1).Info("host is running the same VM, not filtering out", "host", host)
 			continue

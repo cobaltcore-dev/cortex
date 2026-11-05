@@ -10,23 +10,24 @@ import (
 	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 type FilterAggregateMetadata struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // Restrict hosts to specific projects if they are in an aggregate that has
 // the "filter_tenant_id" metadata key set.
-func (s *FilterAggregateMetadata) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterAggregateMetadata) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	// Capacity probe calls are synthetic and not placed on behalf of a tenant
 	// project, so they must ignore tenant pinning. Failover reservations DO respect
 	// tenant pinning: a reservation on a host the VM's project cannot use is dead
 	// weight and would be deleted at validation time.
-	if intent, err := request.GetIntent(); err == nil && intent == api.CapacityProbeIntent {
+	if request.Intent == api.CapacityProbeIntent {
 		return result, nil
 	}
 
@@ -71,20 +72,20 @@ func (s *FilterAggregateMetadata) Run(traceLog logr.Logger, request api.External
 	}
 
 	for host, restrictedProjects := range restrictedProjectsByHost {
-		if !slices.Contains(restrictedProjects, request.Spec.Data.ProjectID) {
+		if !slices.Contains(restrictedProjects, request.ProjectID) {
 			// Project is not allowed on this hypervisor, filter it out.
 			delete(result.Activations, host)
 			traceLog.V(1).Info(
 				"filtering host not allowing project based on aggregate metadata",
 				"host", host,
-				"project", request.Spec.Data.ProjectID,
+				"project", request.ProjectID,
 				"restricted_projects", restrictedProjects,
 			)
 		} else {
 			traceLog.V(1).Info(
 				"host allows project based on aggregate metadata, keeping",
 				"host", host,
-				"project", request.Spec.Data.ProjectID,
+				"project", request.ProjectID,
 				"restricted_projects", restrictedProjects,
 			)
 		}

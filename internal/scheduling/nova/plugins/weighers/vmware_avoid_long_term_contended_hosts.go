@@ -9,9 +9,9 @@ import (
 
 	"github.com/go-logr/logr"
 
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,7 +47,7 @@ func (o VMwareAvoidLongTermContendedHostsStepOpts) Validate() error {
 // Step to avoid long term contended hosts by downvoting them.
 type VMwareAvoidLongTermContendedHostsStep struct {
 	// BaseStep is a helper struct that provides common functionality for all steps.
-	lib.BaseWeigher[api.ExternalSchedulerRequest, VMwareAvoidLongTermContendedHostsStepOpts]
+	lib.BaseWeigher[sched.PlacementRequest, VMwareAvoidLongTermContendedHostsStepOpts]
 }
 
 // Initialize the step and validate that all required knowledges are ready.
@@ -62,7 +62,7 @@ func (s *VMwareAvoidLongTermContendedHostsStep) Init(ctx context.Context, client
 }
 
 // Downvote hosts that are highly contended.
-func (s *VMwareAvoidLongTermContendedHostsStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *VMwareAvoidLongTermContendedHostsStep) Run(traceLog logr.Logger, request sched.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
 	result.Statistics["avg cpu contention"] = s.PrepareStats(request, "%")
@@ -110,7 +110,7 @@ func (s *VMwareAvoidLongTermContendedHostsStep) Run(traceLog logr.Logger, reques
 }
 
 func init() {
-	Index["vmware_avoid_long_term_contended_hosts"] = func() lib.Weigher[api.ExternalSchedulerRequest] {
+	Index["vmware_avoid_long_term_contended_hosts"] = func() lib.Weigher[sched.PlacementRequest] {
 		return &VMwareAvoidLongTermContendedHostsStep{}
 	}
 }

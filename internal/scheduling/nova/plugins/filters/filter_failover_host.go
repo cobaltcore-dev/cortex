@@ -11,6 +11,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failoverhost"
 )
@@ -44,10 +45,10 @@ func (FilterFailoverHostOpts) Validate() error { return nil }
 // The filter is purely subtractive, so its position in the pipeline does not
 // matter: other filters and weighers still run around it.
 type FilterFailoverHost struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, FilterFailoverHostOpts]
+	lib.BaseFilter[compute.PlacementRequest, FilterFailoverHostOpts]
 }
 
-func (s *FilterFailoverHost) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterFailoverHost) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 	if !s.Options.Enabled {
 		return result, nil
@@ -76,11 +77,9 @@ func (s *FilterFailoverHost) Run(traceLog logr.Logger, request api.ExternalSched
 	// — but note it is still blocked below, keeping ordinary VMs off it while it
 	// drains.
 	var keep string
-	if intent, err := request.GetIntent(); err == nil && intent == api.EvacuateIntent {
-		if sourceHost, err := request.Spec.Data.GetSchedulerHintStr("source_host"); err == nil && sourceHost != "" {
-			if selected := failoverhost.SelectFailoverHost(reservations.Items, sourceHost); selected != nil {
-				keep = selected.Spec.TargetHost
-			}
+	if request.Intent == api.EvacuateIntent && request.SourceHost != "" {
+		if selected := failoverhost.SelectFailoverHost(reservations.Items, request.SourceHost); selected != nil {
+			keep = selected.Spec.TargetHost
 		}
 	}
 

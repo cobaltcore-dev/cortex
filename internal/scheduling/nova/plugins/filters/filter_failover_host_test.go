@@ -11,6 +11,7 @@ import (
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -74,23 +75,18 @@ func committedResourceReservationOn(targetHost string) *v1alpha1.Reservation {
 	}
 }
 
-func requestWithHosts(hints map[string]any, hosts ...string) api.ExternalSchedulerRequest {
-	hvHosts := make([]api.ExternalSchedulerHost, len(hosts))
+// requestWithHosts builds a typed placement request over the named candidate
+// hosts, with the given intent and source host (empty for non-evacuations).
+func requestWithHosts(intent v1alpha1.SchedulingIntent, sourceHost string, hosts ...string) compute.PlacementRequest {
+	hvHosts := make([]compute.Host, len(hosts))
 	for i, h := range hosts {
-		hvHosts[i] = api.ExternalSchedulerHost{ComputeHost: h}
+		hvHosts[i] = compute.Host{ComputeHost: h}
 	}
-	return api.ExternalSchedulerRequest{
-		Hosts: hvHosts,
-		Spec:  api.NovaObject[api.NovaSpec]{Data: api.NovaSpec{SchedulerHints: hints}},
+	return compute.PlacementRequest{
+		Hosts:      hvHosts,
+		Intent:     intent,
+		SourceHost: sourceHost,
 	}
-}
-
-func evacuationHints(sourceHost string) map[string]any {
-	hints := map[string]any{"_nova_check_type": "evacuate"}
-	if sourceHost != "" {
-		hints["source_host"] = sourceHost
-	}
-	return hints
 }
 
 func TestFilterFailoverHost_Run(t *testing.T) {
@@ -100,35 +96,35 @@ func TestFilterFailoverHost_Run(t *testing.T) {
 		name          string
 		opts          FilterFailoverHostOpts
 		reservations  []client.Object
-		request       api.ExternalSchedulerRequest
+		request       compute.PlacementRequest
 		expectedHosts []string
 	}{
 		{
 			name:          "disabled - all hosts pass even with reservations",
 			opts:          FilterFailoverHostOpts{Enabled: false},
 			reservations:  []client.Object{failoverHostReservation("host2", "")},
-			request:       requestWithHosts(nil, "host1", "host2", "host3"),
+			request:       requestWithHosts("", "", "host1", "host2", "host3"),
 			expectedHosts: []string{"host1", "host2", "host3"},
 		},
 		{
 			name:          "non-evacuation - blocks reserved target host",
 			opts:          FilterFailoverHostOpts{Enabled: true},
 			reservations:  []client.Object{failoverHostReservation("host2", "")},
-			request:       requestWithHosts(nil, "host1", "host2", "host3"),
+			request:       requestWithHosts("", "", "host1", "host2", "host3"),
 			expectedHosts: []string{"host1", "host3"},
 		},
 		{
 			name:          "non-evacuation - blocks both target and status host",
 			opts:          FilterFailoverHostOpts{Enabled: true},
 			reservations:  []client.Object{failoverHostReservation("host3", "host4")},
-			request:       requestWithHosts(nil, "host1", "host2", "host3", "host4"),
+			request:       requestWithHosts("", "", "host1", "host2", "host3", "host4"),
 			expectedHosts: []string{"host1", "host2"},
 		},
 		{
 			name:          "non-evacuation - ignores non-failover-host reservations",
 			opts:          FilterFailoverHostOpts{Enabled: true},
 			reservations:  []client.Object{committedResourceReservationOn("host2")},
-			request:       requestWithHosts(nil, "host1", "host2", "host3"),
+			request:       requestWithHosts("", "", "host1", "host2", "host3"),
 			expectedHosts: []string{"host1", "host2", "host3"},
 		},
 		{
@@ -140,7 +136,7 @@ func TestFilterFailoverHost_Run(t *testing.T) {
 				failoverHostReservation("h1", "", "source1"),
 				failoverHostReservation("h2", "", "source1"),
 			},
-			request:       requestWithHosts(evacuationHints("source1"), "h1", "h2", "h3", "h4"),
+			request:       requestWithHosts(api.EvacuateIntent, "source1", "h1", "h2", "h3", "h4"),
 			expectedHosts: []string{"h1", "h3", "h4"},
 		},
 		{
@@ -152,7 +148,7 @@ func TestFilterFailoverHost_Run(t *testing.T) {
 				failoverHostReservation("h1", "", "source1"),
 				inUseBy(failoverHostReservation("h2", "", "source1"), "source1"),
 			},
-			request:       requestWithHosts(evacuationHints("source1"), "h1", "h2", "h3"),
+			request:       requestWithHosts(api.EvacuateIntent, "source1", "h1", "h2", "h3"),
 			expectedHosts: []string{"h2", "h3"},
 		},
 		{
@@ -164,7 +160,7 @@ func TestFilterFailoverHost_Run(t *testing.T) {
 				inUseBy(failoverHostReservation("h1", "", "source1", "source2"), "source2"),
 				failoverHostReservation("h2", "", "source1", "source2"),
 			},
-			request:       requestWithHosts(evacuationHints("source1"), "h1", "h2", "h3"),
+			request:       requestWithHosts(api.EvacuateIntent, "source1", "h1", "h2", "h3"),
 			expectedHosts: []string{"h2", "h3"},
 		},
 		{
@@ -173,14 +169,14 @@ func TestFilterFailoverHost_Run(t *testing.T) {
 			reservations: []client.Object{
 				failoverHostReservation("h1", "", "otherSource"),
 			},
-			request:       requestWithHosts(evacuationHints("source1"), "h1", "h2", "h3"),
+			request:       requestWithHosts(api.EvacuateIntent, "source1", "h1", "h2", "h3"),
 			expectedHosts: []string{"h2", "h3"},
 		},
 		{
 			name:          "evacuation - no source hint removes all failover hosts",
 			opts:          FilterFailoverHostOpts{Enabled: true},
 			reservations:  []client.Object{failoverHostReservation("h1", "", "source1")},
-			request:       requestWithHosts(evacuationHints(""), "h1", "h2", "h3"),
+			request:       requestWithHosts(api.EvacuateIntent, "", "h1", "h2", "h3"),
 			expectedHosts: []string{"h2", "h3"},
 		},
 		{
@@ -190,7 +186,7 @@ func TestFilterFailoverHost_Run(t *testing.T) {
 			// zone and is removed like any other reserved host, even though the
 			// source could otherwise evacuate onto it.
 			reservations:  []client.Object{notActive(failoverHostReservation("h1", "", "source1"))},
-			request:       requestWithHosts(evacuationHints("source1"), "h1", "h2", "h3"),
+			request:       requestWithHosts(api.EvacuateIntent, "source1", "h1", "h2", "h3"),
 			expectedHosts: []string{"h2", "h3"},
 		},
 		{
@@ -202,7 +198,7 @@ func TestFilterFailoverHost_Run(t *testing.T) {
 				notActive(failoverHostReservation("h1", "", "source1")),
 				failoverHostReservation("h2", "", "source1"),
 			},
-			request:       requestWithHosts(evacuationHints("source1"), "h1", "h2", "h3"),
+			request:       requestWithHosts(api.EvacuateIntent, "source1", "h1", "h2", "h3"),
 			expectedHosts: []string{"h2", "h3"},
 		},
 	}
@@ -236,7 +232,7 @@ func TestFilterFailoverHost_CallTimeIgnoredReservationTypes(t *testing.T) {
 	step.Client = fake.NewClientBuilder().WithScheme(scheme).
 		WithObjects(failoverHostReservation("host2", "")).Build()
 
-	request := requestWithHosts(nil, "host1", "host2", "host3")
+	request := requestWithHosts("", "", "host1", "host2", "host3")
 	request.Options = scheduling.Options{
 		IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailoverHost},
 	}

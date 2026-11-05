@@ -4,15 +4,8 @@
 package cinder
 
 import (
-	"context"
-	"encoding/json"
 	"testing"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/cinder"
@@ -21,25 +14,16 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
+func TestFilterWeigherPipelineController_Schedule(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
 	}
 
-	cinderRequest := api.ExternalSchedulerRequest{
-		Spec: map[string]any{
-			"volume_id": "test-volume-id",
-			"size":      10,
-		},
-		Context: api.CinderRequestContext{
-			ProjectID:       "test-project",
-			UserID:          "test-user",
-			RequestID:       "req-123",
-			GlobalRequestID: "global-req-123",
-		},
+	request := api.ExternalSchedulerRequest{
 		Hosts: []api.ExternalSchedulerHost{
 			{VolumeHost: "cinder-volume-1"},
 			{VolumeHost: "cinder-volume-2"},
@@ -49,127 +33,41 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 		Options:  scheduling.Options{},
 	}
 
-	cinderRaw, err := json.Marshal(cinderRequest)
-	if err != nil {
-		t.Fatalf("Failed to marshal cinder request: %v", err)
-	}
-
 	tests := []struct {
 		name         string
-		decision     *v1alpha1.Decision
-		pipeline     *v1alpha1.Pipeline
+		pipelineName string
+		configured   bool
 		expectError  bool
-		expectResult bool
 	}{
 		{
-			name: "successful cinder decision processing",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					PipelineRef: corev1.ObjectReference{
-						Name: "test-pipeline",
-					},
-					CinderRaw: &runtime.RawExtension{
-						Raw: cinderRaw,
-					},
-				},
-			},
-			pipeline: &v1alpha1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-pipeline",
-				},
-				Spec: v1alpha1.PipelineSpec{
-					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					Filters:          []v1alpha1.FilterSpec{},
-					Weighers:         []v1alpha1.WeigherSpec{},
-				},
-			},
+			name:         "successful scheduling run",
+			pipelineName: "test-pipeline",
+			configured:   true,
 			expectError:  false,
-			expectResult: true,
 		},
 		{
-			name: "decision without cinderRaw spec",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision-no-raw",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					PipelineRef: corev1.ObjectReference{
-						Name: "test-pipeline",
-					},
-					CinderRaw: nil,
-				},
-			},
-			pipeline: &v1alpha1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-pipeline",
-				},
-				Spec: v1alpha1.PipelineSpec{
-					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					Filters:          []v1alpha1.FilterSpec{},
-					Weighers:         []v1alpha1.WeigherSpec{},
-				},
-			},
+			name:         "pipeline not found",
+			pipelineName: "nonexistent-pipeline",
+			configured:   false,
 			expectError:  true,
-			expectResult: false,
-		},
-		{
-			name: "pipeline not found",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision-no-pipeline",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					PipelineRef: corev1.ObjectReference{
-						Name: "nonexistent-pipeline",
-					},
-					CinderRaw: &runtime.RawExtension{
-						Raw: cinderRaw,
-					},
-				},
-			},
-			pipeline:     nil,
-			expectError:  true,
-			expectResult: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			objects := []client.Object{tt.decision}
-			if tt.pipeline != nil {
-				objects = append(objects, tt.pipeline)
-			}
-
-			client := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(objects...).
-				WithStatusSubresource(&v1alpha1.Decision{}).
-				Build()
+			cl := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 			controller := &FilterWeigherPipelineController{
 				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
-					Client:    client,
+					Client:    cl,
 					Pipelines: make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
 				},
 				Monitor: lib.FilterWeigherPipelineMonitor{},
 			}
 
-			if tt.pipeline != nil {
+			if tt.configured {
 				initResult := controller.InitPipeline(t.Context(), v1alpha1.Pipeline{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test-pipeline",
-					},
+					ObjectMeta: metav1.ObjectMeta{Name: "test-pipeline"},
 					Spec: v1alpha1.PipelineSpec{
 						Type:             v1alpha1.PipelineTypeFilterWeigher,
 						SchedulingDomain: v1alpha1.SchedulingDomainCinder,
@@ -180,17 +78,10 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 				if len(initResult.FilterErrors) > 0 || len(initResult.WeigherErrors) > 0 {
 					t.Fatalf("Failed to init pipeline: %v", initResult)
 				}
-				controller.Pipelines[tt.pipeline.Name] = initResult.Pipeline
+				controller.Pipelines["test-pipeline"] = initResult.Pipeline
 			}
 
-			req := ctrl.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      tt.decision.Name,
-					Namespace: tt.decision.Namespace,
-				},
-			}
-
-			result, err := controller.Reconcile(context.Background(), req)
+			result, err := controller.Schedule(t.Context(), tt.pipelineName, request)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -198,231 +89,9 @@ func TestFilterWeigherPipelineController_Reconcile(t *testing.T) {
 			if !tt.expectError && err != nil {
 				t.Errorf("Expected no error but got: %v", err)
 			}
-
-			if result.RequeueAfter > 0 {
-				t.Error("Expected no requeue")
-			}
-
-			var updatedDecision v1alpha1.Decision
-			if err := client.Get(context.Background(), req.NamespacedName, &updatedDecision); err != nil {
-				t.Fatalf("Failed to get updated decision: %v", err)
-			}
-
-			if tt.expectResult && updatedDecision.Status.Result == nil {
-				t.Error("Expected result to be set but was nil")
-			}
-			if !tt.expectResult && updatedDecision.Status.Result != nil {
-				t.Error("Expected result to be nil but was set")
-			}
-		})
-	}
-}
-
-func TestFilterWeigherPipelineController_ProcessNewDecisionFromAPI(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := v1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
-	}
-
-	cinderRequest := api.ExternalSchedulerRequest{
-		Spec: map[string]any{
-			"volume_id": "test-volume-id",
-			"size":      10,
-		},
-		Context: api.CinderRequestContext{
-			ProjectID:       "test-project",
-			UserID:          "test-user",
-			RequestID:       "req-123",
-			GlobalRequestID: "global-req-123",
-		},
-		Hosts: []api.ExternalSchedulerHost{
-			{VolumeHost: "cinder-volume-1"},
-			{VolumeHost: "cinder-volume-2"},
-		},
-		Weights:  map[string]float64{"cinder-volume-1": 1.0, "cinder-volume-2": 0.5},
-		Pipeline: "test-pipeline",
-	}
-
-	cinderRaw, err := json.Marshal(cinderRequest)
-	if err != nil {
-		t.Fatalf("Failed to marshal cinder request: %v", err)
-	}
-
-	tests := []struct {
-		name           string
-		decision       *v1alpha1.Decision
-		pipelineConfig *v1alpha1.Pipeline
-		expectError    bool
-		expectResult   bool
-	}{
-		{
-			name: "successful decision processing with creation",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "test-decision-",
-					Namespace:    "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					ResourceID:       "test-uuid-1",
-					PipelineRef: corev1.ObjectReference{
-						Name: "test-pipeline",
-					},
-					CinderRaw: &runtime.RawExtension{
-						Raw: cinderRaw,
-					},
-				},
-			},
-			pipelineConfig: &v1alpha1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-pipeline",
-				},
-				Spec: v1alpha1.PipelineSpec{
-					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					Filters:          []v1alpha1.FilterSpec{},
-					Weighers:         []v1alpha1.WeigherSpec{},
-				},
-			},
-			expectError:  false,
-			expectResult: true,
-		},
-		{
-			name: "successful decision processing without creation",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision-no-create",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					PipelineRef: corev1.ObjectReference{
-						Name: "test-pipeline",
-					},
-					CinderRaw: &runtime.RawExtension{
-						Raw: cinderRaw,
-					},
-				},
-			},
-			pipelineConfig: &v1alpha1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-pipeline",
-				},
-				Spec: v1alpha1.PipelineSpec{
-					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					Filters:          []v1alpha1.FilterSpec{},
-					Weighers:         []v1alpha1.WeigherSpec{},
-				},
-			},
-			expectError:  false,
-			expectResult: true,
-		},
-		{
-			name: "pipeline not configured",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision-no-pipeline",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					PipelineRef: corev1.ObjectReference{
-						Name: "nonexistent-pipeline",
-					},
-					CinderRaw: &runtime.RawExtension{
-						Raw: cinderRaw,
-					},
-				},
-			},
-			pipelineConfig: nil,
-			expectError:    true,
-			expectResult:   false,
-		},
-		{
-			name: "decision without cinderRaw spec",
-			decision: &v1alpha1.Decision{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-decision-no-raw",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.DecisionSpec{
-					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					PipelineRef: corev1.ObjectReference{
-						Name: "test-pipeline",
-					},
-					CinderRaw: nil,
-				},
-			},
-			pipelineConfig: &v1alpha1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-pipeline",
-				},
-				Spec: v1alpha1.PipelineSpec{
-					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					SchedulingDomain: v1alpha1.SchedulingDomainCinder,
-					Filters:          []v1alpha1.FilterSpec{},
-					Weighers:         []v1alpha1.WeigherSpec{},
-				},
-			},
-			expectError:  true,
-			expectResult: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			objects := []client.Object{}
-			if tt.pipelineConfig != nil {
-				objects = append(objects, tt.pipelineConfig)
-			}
-
-			client := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(objects...).
-				WithStatusSubresource(&v1alpha1.Decision{}).
-				Build()
-
-			controller := &FilterWeigherPipelineController{
-				BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]]{
-					Client:          client,
-					Pipelines:       make(map[string]lib.FilterWeigherPipeline[api.ExternalSchedulerRequest]),
-					PipelineConfigs: make(map[string]v1alpha1.Pipeline),
-				},
-				Monitor: lib.FilterWeigherPipelineMonitor{},
-			}
-
-			if tt.pipelineConfig != nil {
-				controller.PipelineConfigs[tt.pipelineConfig.Name] = *tt.pipelineConfig
-				initResult := controller.InitPipeline(t.Context(), *tt.pipelineConfig)
-				if len(initResult.FilterErrors) > 0 || len(initResult.WeigherErrors) > 0 {
-					t.Fatalf("Failed to init pipeline: %v", initResult)
-				}
-				controller.Pipelines[tt.pipelineConfig.Name] = initResult.Pipeline
-			}
-
-			if tt.decision.Spec.CinderRaw != nil {
-				req := cinderRequest
-				req.Options = scheduling.Options{}
-				raw, marshalErr := json.Marshal(req)
-				if marshalErr != nil {
-					t.Fatalf("Failed to marshal request with options: %v", marshalErr)
-				}
-				tt.decision.Spec.CinderRaw = &runtime.RawExtension{Raw: raw}
-			}
-
-			err := controller.ProcessNewDecisionFromAPI(context.Background(), tt.decision)
-
-			if tt.expectError && err == nil {
-				t.Error("Expected error but got none")
-			}
-			if !tt.expectError && err != nil {
-				t.Errorf("Expected no error but got: %v", err)
-			}
-
 			if !tt.expectError {
-				if tt.expectResult && tt.decision.Status.Result == nil {
-					t.Error("expected decision result to be set in original decision object")
+				if len(result.OrderedHosts) == 0 {
+					t.Error("Expected ordered hosts but got none")
 				}
 			}
 		})

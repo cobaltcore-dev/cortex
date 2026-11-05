@@ -13,6 +13,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -74,7 +75,7 @@ func (c *QuotaController) ReconcilePeriodic(ctx context.Context) error {
 	logger.Info("starting full quota reconcile")
 
 	// Fetch flavor groups from Knowledge CRD
-	flavorGroupClient := &reservations.FlavorGroupKnowledgeClient{Client: c.Client}
+	flavorGroupClient := &accounting.FlavorGroupKnowledgeClient{Client: c.Client}
 	flavorGroups, err := flavorGroupClient.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		logger.Error(err, "failed to get flavor groups")
@@ -228,7 +229,7 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	// Fetch flavor groups for CRUsage computation
-	flavorGroupClient := &reservations.FlavorGroupKnowledgeClient{Client: c.Client}
+	flavorGroupClient := &accounting.FlavorGroupKnowledgeClient{Client: c.Client}
 	flavorGroups, err := flavorGroupClient.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		logger.Error(err, "failed to get flavor groups")
@@ -267,7 +268,7 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 // a ProjectQuota is first created and has no persisted TotalUsage yet.
 func (c *QuotaController) computeTotalUsageForProject(ctx context.Context, projectID string) (map[string]map[string]int64, error) {
 	// Fetch flavor groups from Knowledge CRD
-	flavorGroupClient := &reservations.FlavorGroupKnowledgeClient{Client: c.Client}
+	flavorGroupClient := &accounting.FlavorGroupKnowledgeClient{Client: c.Client}
 	flavorGroups, err := flavorGroupClient.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get flavor groups: %w", err)
@@ -362,7 +363,7 @@ func (c *QuotaController) ReconcileHVDiff(ctx context.Context, oldHV, newHV *hv1
 	logger.V(1).Info("HV instance diff detected", "added", len(added), "removed", len(removed))
 
 	// Get flavor groups for mapping
-	flavorGroupClient := &reservations.FlavorGroupKnowledgeClient{Client: c.Client}
+	flavorGroupClient := &accounting.FlavorGroupKnowledgeClient{Client: c.Client}
 	flavorGroups, err := flavorGroupClient.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		logger.Error(err, "failed to get flavor groups for incremental update")
@@ -823,8 +824,8 @@ func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavo
 			continue
 		}
 
-		// Get used amount from UsedResources map
-		if len(cr.Status.UsedResources) == 0 {
+		// Get used amount from Billing.UsedResources map
+		if cr.Status.Billing == nil || len(cr.Status.Billing.UsedResources) == 0 {
 			continue
 		}
 
@@ -834,7 +835,7 @@ func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavo
 		switch spec.ResourceType {
 		case v1alpha1.CommittedResourceTypeMemory:
 			resourceName = commitments.ResourceNameRAM(spec.FlavorGroupName)
-			memQty, ok := cr.Status.UsedResources["memory"]
+			memQty, ok := cr.Status.Billing.UsedResources[string(hv1.ResourceMemory)]
 			if !ok {
 				continue
 			}
@@ -850,7 +851,7 @@ func (c *QuotaController) computeCRUsage(crs []v1alpha1.CommittedResource, flavo
 			usedAmount = usedBytes / (1024 * 1024 * 1024)
 		case v1alpha1.CommittedResourceTypeCores:
 			resourceName = commitments.ResourceNameCores(spec.FlavorGroupName)
-			cpuQty, ok := cr.Status.UsedResources["cpu"]
+			cpuQty, ok := cr.Status.Billing.UsedResources[string(hv1.ResourceCPU)]
 			if !ok {
 				continue
 			}
@@ -1094,10 +1095,10 @@ func buildLimesSummary(values map[string]int64, flavorGroups map[string]compute.
 
 // vmResourceUnits computes RAM commitment units (GiB) and cores from a VM's resources.
 func vmResourceUnits(resources map[string]resource.Quantity) (ramGiB, cores int64) {
-	memQty := resources["memory"]
+	memQty := resources[string(hv1.ResourceMemory)]
 	serverRAMMiB := memQty.Value() / (1024 * 1024) // bytes to MiB
 	ramGiB = serverRAMMiB / 1024                   // MiB to GiB (1 GiB per unit)
-	vcpuQty := resources["vcpus"]
+	vcpuQty := resources[string(hv1.ResourceCPU)]
 	cores = vcpuQty.Value()
 	return ramGiB, cores
 }
@@ -1186,12 +1187,20 @@ func crUsedAmountChangePredicate() predicate.Predicate {
 			if !ok1 || !ok2 {
 				return false
 			}
-			// Trigger if UsedResources changed
-			if len(oldCR.Status.UsedResources) != len(newCR.Status.UsedResources) {
+			// Trigger if Billing.UsedResources changed
+			oldUsed := map[string]resource.Quantity{}
+			newUsed := map[string]resource.Quantity{}
+			if oldCR.Status.Billing != nil {
+				oldUsed = oldCR.Status.Billing.UsedResources
+			}
+			if newCR.Status.Billing != nil {
+				newUsed = newCR.Status.Billing.UsedResources
+			}
+			if len(oldUsed) != len(newUsed) {
 				return true
 			}
-			for key, oldQty := range oldCR.Status.UsedResources {
-				newQty, ok := newCR.Status.UsedResources[key]
+			for key, oldQty := range oldUsed {
+				newQty, ok := newUsed[key]
 				if !ok || oldQty.Cmp(newQty) != 0 {
 					return true
 				}

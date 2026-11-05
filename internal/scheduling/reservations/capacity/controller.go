@@ -29,7 +29,9 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/go-logr/logr"
 )
@@ -102,20 +104,20 @@ func capacityMapsEqual(a, b map[hv1.ResourceName]resource.Quantity) bool {
 // periodic floor timer. All watch events are coalesced into a single reconcile key so
 // rapid changes produce at most one queued reconcile.
 type Reconciler struct {
-	client          client.Client
-	vmSource        reservations.VMSource
-	schedulerClient *reservations.SchedulerClient
-	config          Config
+	client    client.Client
+	vmSource  reservations.VMSource
+	scheduler *sched.Placement
+	config    Config
 
 	lastReconcileAt time.Time
 }
 
-func NewController(c client.Client, config Config, vmSource reservations.VMSource) *Reconciler {
+func NewController(c client.Client, config Config, vmSource reservations.VMSource, scheduler *sched.Placement) *Reconciler {
 	return &Reconciler{
-		client:          c,
-		vmSource:        vmSource,
-		schedulerClient: reservations.NewSchedulerClient(config.SchedulerURL),
-		config:          config,
+		client:    c,
+		vmSource:  vmSource,
+		scheduler: scheduler,
+		config:    config,
 	}
 }
 
@@ -223,7 +225,7 @@ func (c *Reconciler) reconcileAll(ctx context.Context) error {
 	logger := LoggerFromContext(ctx)
 	startTime := time.Now()
 
-	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
+	knowledge := &accounting.FlavorGroupKnowledgeClient{Client: c.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get flavor groups: %w", err)
@@ -814,29 +816,50 @@ func (c *Reconciler) probeScheduler(
 		}
 	}
 
-	resp, err := c.schedulerClient.ScheduleReservation(ctx, reservations.ScheduleReservationRequest{
-		InstanceUUID:     "capacity-" + flavor.Name,
-		ProjectID:        "cortex-capacity-probe",
-		FlavorName:       flavor.Name,
-		MemoryMB:         flavor.MemoryMB,
-		VCPUs:            flavor.VCPUs,
-		FlavorExtraSpecs: flavor.ExtraSpecs,
-		AvailabilityZone: az,
-		Pipeline:         pipeline,
-		EligibleHosts:    eligibleHosts,
-		SchedulerHints:   map[string]any{"_nova_check_type": string(schedulerapi.CapacityProbeIntent)},
-	}, scheduling.Options{
-		ReadOnly:                      true,
-		AssumeEmptyHosts:              ignoreAllocations,
-		IgnoredReservationTypes:       ignoredReservationTypes,
-		SkipInflight:                  true,
-		SkipCommittedResourceTracking: true,
-	})
+	probeHosts := make([]sched.Host, 0, len(eligibleHosts))
+	probeWeights := make(map[string]float64, len(eligibleHosts))
+	for _, h := range eligibleHosts {
+		probeHosts = append(probeHosts, sched.Host{ComputeHost: h.ComputeHost, HypervisorHostname: h.HypervisorHostname})
+		probeWeights[h.ComputeHost] = 0.0
+	}
+	// Honor the flavor's trait and hypervisor-type constraints so the probe only
+	// counts compatible hosts (the typed request is built directly, so
+	// filter_has_requested_traits/filter_capabilities would otherwise see empty
+	// slices and become no-ops). No hypervisor-type default — only match when the
+	// flavor names one.
+	requiredTraits, forbiddenTraits := schedulerapi.SplitTraits(flavor.ExtraSpecs)
+	out, err := c.scheduler.RunWithoutLock(ctx, sched.PlacementRequest{
+		Pipeline:              pipeline,
+		GatherAllCandidates:   true,
+		HypervisorFamily:      schedulerapi.HypervisorFamilyKVM,
+		Hosts:                 probeHosts,
+		Weights:               probeWeights,
+		Intent:                schedulerapi.CapacityProbeIntent,
+		InstanceUUID:          "capacity-" + flavor.Name,
+		NumInstances:          1, // probe a single flavor slot; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
+		ProjectID:             "cortex-capacity-probe",
+		AvailabilityZone:      az,
+		RequiredTraits:        requiredTraits,
+		ForbiddenTraits:       forbiddenTraits,
+		RequestedCapabilities: schedulerapi.HypervisorTypeCapability(flavor.ExtraSpecs, false),
+		AcceleratorsRequested: schedulerapi.RequestsAccelerators(flavor.ExtraSpecs),
+		Flavor: schedulerapi.FlavorSpec{
+			VCPUs:    flavor.VCPUs,
+			MemoryMB: flavor.MemoryMB,
+		},
+		Options: scheduling.Options{
+			ReadOnly:                      true,
+			AssumeEmptyHosts:              ignoreAllocations,
+			IgnoredReservationTypes:       ignoredReservationTypes,
+			SkipInflight:                  true,
+			SkipCommittedResourceTracking: true,
+		},
+	}, nil, nil)
 	if err != nil {
 		return 0, 0, nil, fmt.Errorf("scheduler call failed (pipeline=%s): %w", pipeline, err)
 	}
 
-	for _, hostName := range resp.Hosts {
+	for _, hostName := range out.OrderedHosts {
 		hv, ok := hvByName[hostName]
 		if !ok {
 			continue
@@ -897,7 +920,7 @@ func (c *Reconciler) blockedResourcesByHost(ctx context.Context) (map[string]map
 			continue
 		}
 
-		resourcesToBlock := reservations.UnusedReservationCapacity(res, false)
+		resourcesToBlock := accounting.UnusedReservationCapacity(res, false)
 		for host := range hostsToBlock {
 			if blocked[host] == nil {
 				blocked[host] = make(map[string]int64)
@@ -968,7 +991,7 @@ func (c *Reconciler) reservedResourcesByGroupAZ(
 				"reservation", res.Name, "type", res.Spec.Type, "az", az)
 			continue
 		}
-		blockedRes := reservations.UnusedReservationCapacity(res, false)
+		blockedRes := accounting.UnusedReservationCapacity(res, false)
 		// Route each reservation to exactly one bucket by type; the two are disjoint.
 		bucket := committed
 		if res.Spec.Type == v1alpha1.ReservationTypeFailover {
