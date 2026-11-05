@@ -10,7 +10,6 @@ import (
 
 	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	vmv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -103,17 +102,11 @@ func TestVMHandler_KindAndWatchObjects(t *testing.T) {
 		t.Error("Kind() must be VirtualMachine")
 	}
 	specs := h.WatchObjects()
-	if len(specs) != 2 {
-		t.Fatalf("expected 2 watch specs, got %d", len(specs))
+	if len(specs) != 1 {
+		t.Fatalf("expected 1 watch spec, got %d", len(specs))
 	}
-	if _, ok := specs[0].Object.(*hv1.Hypervisor); !ok {
-		t.Error("first watch should be Hypervisor")
-	}
-	if specs[0].Predicate == nil {
-		t.Error("Hypervisor watch should carry a predicate")
-	}
-	if _, ok := specs[1].Object.(*vmv1alpha1.VirtualMachine); !ok {
-		t.Error("second watch should be VirtualMachine")
+	if _, ok := specs[0].Object.(*vmv1alpha1.VirtualMachine); !ok {
+		t.Error("watch should be VirtualMachine")
 	}
 }
 
@@ -125,13 +118,12 @@ func TestVMHandler_TerminalState(t *testing.T) {
 		return vmWithCond("vm-1", condType, reason, ltt)
 	}
 	type tc struct {
-		name        string
-		intent      v1alpha1.SchedulingIntent
-		created     *metav1.Time
-		vm          *vmv1alpha1.VirtualMachine // nil: no VM CRD -> hypervisor fallback
-		hypervisors []client.Object
-		labels      map[string]string
-		wantDone    bool
+		name     string
+		intent   v1alpha1.SchedulingIntent
+		created  *metav1.Time
+		vm       *vmv1alpha1.VirtualMachine // nil: no VM CRD -> wait (no terminal signal)
+		labels   map[string]string
+		wantDone bool
 	}
 	tests := []tc{
 		// UC1 initial placement.
@@ -149,15 +141,12 @@ func TestVMHandler_TerminalState(t *testing.T) {
 			vm: newVM("vm-1", "host-1", cond(vmv1alpha1.ConditionTypeResizing, metav1.ConditionTrue, vmv1alpha1.ConditionReasonResizingOngoing))},
 		{name: "live migration: ongoing -> wait", intent: novaapi.LiveMigrationIntent,
 			vm: newVM("vm-1", "host-1", cond(vmv1alpha1.ConditionTypeMigrating, metav1.ConditionTrue, vmv1alpha1.ConditionReasonMigratingOngoing))},
-		// No VM CRD -> hypervisor landing fallback.
-		{name: "fallback: not landed -> wait", intent: novaapi.CreateIntent, hypervisors: []client.Object{newHypervisor("host-1", "other")}},
-		{name: "fallback: create landed -> done", intent: novaapi.CreateIntent, wantDone: true, hypervisors: []client.Object{newHypervisor("host-2", "vm-1")}},
-		// Non-create intents are not terminal on landing: a resize keeps the VM on
-		// its host and a live migration holds source+target while the VM sits on
-		// the source, so the fallback must wait for the TTL backstop instead.
-		{name: "fallback: resize landed -> wait", intent: novaapi.ResizeIntent, hypervisors: []client.Object{newHypervisor("host-1", "vm-1")}},
-		{name: "fallback: live migration landed -> wait", intent: novaapi.LiveMigrationIntent, hypervisors: []client.Object{newHypervisor("host-1", "vm-1")}},
-		{name: "fallback: empty intent landed -> wait", hypervisors: []client.Object{newHypervisor("host-1", "vm-1")}},
+		// No VM CRD -> no terminal signal, keep waiting for the VM CRD or TTL
+		// (regardless of intent).
+		{name: "no VM CRD: create -> wait", intent: novaapi.CreateIntent},
+		{name: "no VM CRD: resize -> wait", intent: novaapi.ResizeIntent},
+		{name: "no VM CRD: live migration -> wait", intent: novaapi.LiveMigrationIntent},
+		{name: "no VM CRD: empty intent -> wait"},
 	}
 	// Unmanaged-source resize (VMware → KVM): no KVM source hold, so there is no
 	// Resizing condition. Release on landing plus alive; never on failure.
@@ -203,7 +192,7 @@ func TestVMHandler_TerminalState(t *testing.T) {
 			if tt.created != nil {
 				res.CreationTimestamp = *tt.created
 			}
-			objs := tt.hypervisors
+			var objs []client.Object
 			if tt.vm != nil {
 				objs = append(objs, tt.vm)
 			}

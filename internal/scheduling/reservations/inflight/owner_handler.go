@@ -10,7 +10,6 @@ import (
 
 	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	vmv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -97,12 +96,10 @@ type OwnerHandler interface {
 // VirtualMachineHandler ties an in-flight reservation's lifecycle to a Nova
 // VM placement operation.
 //
-// Terminal detection currently reads the Hypervisor CRD's Status.Instances to
-// learn where the VM landed (the behaviour the controller had before owner
-// handlers were introduced). The exact terminal signal for initial placement
-// (Hypervisor landing vs. VirtualMachine conditions vs. a hybrid) is still
-// under discussion; keeping it behind this interface lets us swap the signal
-// without touching the generic reconciler.
+// Terminal detection reads the VirtualMachine CRD: the reservation is required
+// to have a VM CRD, whose per-intent conditions (and Nova status) decide when
+// the owning operation is complete. Keeping it behind this interface lets us
+// evolve the terminal signal without touching the generic reconciler.
 type VirtualMachineHandler struct {
 	client.Client
 }
@@ -110,32 +107,16 @@ type VirtualMachineHandler struct {
 // Kind implements OwnerHandler.
 func (h *VirtualMachineHandler) Kind() string { return "VirtualMachine" }
 
-// WatchObjects implements OwnerHandler. The handler watches the Hypervisor CRD
-// (to observe where a VM landed) and the VirtualMachine CRD (so condition/spec
-// changes re-trigger reconciliation, per the ADR 8 secondary-watch design).
+// WatchObjects implements OwnerHandler. The handler watches the VirtualMachine
+// CRD so condition/spec changes re-trigger reconciliation, per the ADR 8
+// secondary-watch design.
 func (h *VirtualMachineHandler) WatchObjects() []WatchSpec {
 	return []WatchSpec{
-		{
-			Object:    &hv1.Hypervisor{},
-			Predicate: hypervisorInstancesChangedPredicate(),
-			MapFn:     h.mapHypervisorToReservations,
-		},
 		{
 			Object: &vmv1alpha1.VirtualMachine{},
 			MapFn:  h.mapVMToReservations,
 		},
 	}
-}
-
-// mapHypervisorToReservations enqueues every in-flight reservation targeting the
-// changed hypervisor, since its instance list changing may mean a VM we are
-// waiting for has now landed.
-func (h *VirtualMachineHandler) mapHypervisorToReservations(ctx context.Context, obj client.Object) []reconcile.Request {
-	hv, ok := obj.(*hv1.Hypervisor)
-	if !ok {
-		return nil
-	}
-	return h.reservationsForTargetHost(ctx, hv.Name)
 }
 
 // mapVMToReservations enqueues in-flight reservations for the VM that changed.
@@ -147,22 +128,6 @@ func (h *VirtualMachineHandler) mapVMToReservations(ctx context.Context, obj cli
 		return nil
 	}
 	return h.reservationsForVMID(ctx, vm.Name)
-}
-
-// reservationsForTargetHost lists in-flight reservations targeting the given
-// host via the targetHost index and returns one request per reservation.
-func (h *VirtualMachineHandler) reservationsForTargetHost(ctx context.Context, host string) []reconcile.Request {
-	log := ctrl.LoggerFrom(ctx)
-	reservations := &v1alpha1.ReservationList{}
-	if err := h.List(ctx, reservations, client.MatchingFields{idxReservationByTargetHost: host}); err != nil {
-		log.Error(err, "Failed to list reservations for hypervisor", "hypervisor", host)
-		return nil
-	}
-	requests := make([]reconcile.Request, 0, len(reservations.Items))
-	for _, res := range reservations.Items {
-		requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKey{Name: res.Name}})
-	}
-	return requests
 }
 
 // reservationsForVMID lists in-flight reservations whose subject is the given
@@ -222,8 +187,9 @@ const (
 //
 //  2. Per-intent terminal condition on the VirtualMachine CRD: the reservation
 //     is released once the operation reaches a terminal state for its intent
-//     (see terminalForIntent). While the VM CRD or its condition is not yet
-//     available, the handler falls back to the hypervisor landing signal.
+//     (see terminalForIntent). The VM CRD is required; while it is absent or
+//     does not yet carry a decisive condition, the hold is kept and only the
+//     TTL backstop in the reconcile loop releases it.
 //
 // Nova serializes its own operations per VM (see the controller docs): when
 // Cortex receives a Nova scheduling request for a VM, no other Nova operation on
@@ -251,25 +217,28 @@ func (h *VirtualMachineHandler) TerminalState(ctx context.Context, res *v1alpha1
 	}
 
 	// Read the VM CRD (named after the Nova instance uuid) to evaluate the
-	// per-intent terminal condition.
+	// per-intent terminal condition. The VM CRD is required: without it there is
+	// no trustworthy terminal signal, so we keep the hold and let the TTL
+	// backstop release it if the operation is abandoned.
 	vm := &vmv1alpha1.VirtualMachine{}
 	err = h.Get(ctx, client.ObjectKey{Name: spec.VMID}, vm)
 	switch {
 	case apierrors.IsNotFound(err):
-		vm = nil // Fall back to the hypervisor landing signal below.
+		log.V(1).Info("VM CRD not found for in-flight reservation, awaiting it or TTL", "vmID", spec.VMID)
+		return TerminalResult{RequeueAfter: requeueInterval, Reason: reasonAwaitingPlacement,
+			Message: "VM CRD not yet observed; awaiting terminal condition or TTL"}, nil
 	case err != nil:
 		return TerminalResult{}, err
 	}
 
-	if vm != nil {
-		if res, ok := h.terminalForIntent(res, vm); ok {
-			return res, nil
-		}
-		// No decision from the VM CRD yet (condition absent). Fall through to
-		// the hypervisor landing fallback.
+	if result, ok := h.terminalForIntent(res, vm); ok {
+		return result, nil
 	}
-
-	return h.terminalByHypervisorLanding(ctx, res)
+	// The VM CRD exists but does not yet carry a decisive condition for this
+	// intent. Keep waiting; the TTL backstop guards against a signal that never
+	// comes.
+	return TerminalResult{RequeueAfter: requeueInterval, Reason: reasonAwaitingPlacement,
+		Message: "VM CRD does not yet carry a terminal condition"}, nil
 }
 
 // terminalForIntent evaluates the VM-CRD terminal condition for the
@@ -298,7 +267,7 @@ func (h *VirtualMachineHandler) terminalForIntent(res *v1alpha1.Reservation, vm 
 			return TerminalResult{Done: true}, true
 		}
 		// We have at least some VM-CRD signal but it is not yet decisive; keep
-		// waiting rather than falling back to the host-landing heuristic.
+		// waiting for a confirmed running/ACTIVE (or ERROR) signal.
 		if placed || meta.FindStatusCondition(vm.Status.Conditions, vmv1alpha1.ConditionTypeScheduled) != nil || vm.Status.Nova != nil {
 			return TerminalResult{RequeueAfter: requeueInterval, Reason: reasonAwaitingPlacement,
 				Message: "VM not yet confirmed running on a host"}, true
@@ -340,13 +309,13 @@ func (h *VirtualMachineHandler) terminalForIntent(res *v1alpha1.Reservation, vm 
 
 	default:
 		// Other intents (rebuild, evacuate, ...) have no dedicated condition
-		// yet; use the hypervisor landing fallback.
+		// yet; keep the hold and let the TTL backstop release it.
 		return TerminalResult{}, false
 	}
 }
 
 // terminalByReason returns (result, ok) for a condition whose terminal reasons
-// are listed. ok=false when the condition is absent (caller should fall back).
+// are listed. ok=false when the condition is absent (caller keeps waiting).
 //
 // A terminal reason is only trusted when it is *fresh*: the condition's
 // LastTransitionTime must be at or after createdAt (the reservation's creation
@@ -381,44 +350,6 @@ func conditionIsStale(cond *metav1.Condition, createdAt metav1.Time) bool {
 		return true
 	}
 	return cond.LastTransitionTime.Before(&createdAt)
-}
-
-// terminalByHypervisorLanding is the fallback terminal signal used when the VM
-// CRD is absent or does not yet carry a per-intent condition. It concludes the
-// operation is terminal ONLY for initial placement (CreateIntent): a VM observed
-// on any hypervisor means the create landed, so the whole operation group is
-// released, cleaning up all (including stale, non-winning) candidates.
-//
-// For every other intent (resize, live migration, rebuild, evacuate, or an
-// empty/unknown intent) hypervisor observation is not a completion signal: the
-// VM already occupies a host throughout a resize, and a live migration holds the
-// source and target while the VM still sits on the source. Without a decisive
-// VM-CRD condition there is no trustworthy terminal signal for these, so the
-// handler keeps waiting and relies on the TTL backstop in the reconcile loop.
-func (h *VirtualMachineHandler) terminalByHypervisorLanding(ctx context.Context, res *v1alpha1.Reservation) (TerminalResult, error) {
-	log := ctrl.LoggerFrom(ctx)
-	spec := res.Spec.InFlightReservation
-
-	_, found, err := h.findVMHost(ctx, spec.VMID)
-	if err != nil {
-		return TerminalResult{}, err
-	}
-	if !found {
-		log.V(1).Info("Instance has not spawned on any hypervisor yet, requeuing", "vmID", spec.VMID)
-		return TerminalResult{RequeueAfter: requeueInterval, Reason: reasonAwaitingPlacement,
-			Message: "instance not yet observed on any hypervisor"}, nil
-	}
-
-	// Only initial placement is terminal on hypervisor landing. Any other intent
-	// waits for its VM-CRD condition or the TTL backstop, never for landing.
-	if spec.Intent != novaapi.CreateIntent {
-		log.V(1).Info("Instance observed on a hypervisor but intent is not initial placement, waiting for terminal signal or TTL",
-			"vmID", spec.VMID, "intent", spec.Intent)
-		return TerminalResult{RequeueAfter: requeueInterval, Reason: reasonAwaitingPlacement,
-			Message: "instance observed on a hypervisor; awaiting terminal condition or TTL"}, nil
-	}
-
-	return TerminalResult{Done: true}, nil
 }
 
 // isSuperseded reports whether this reservation belongs to an operation older
@@ -460,21 +391,4 @@ func operationLess(a, b *v1alpha1.Reservation) bool {
 		return at.Before(bt)
 	}
 	return a.Spec.InFlightReservation.OperationID < b.Spec.InFlightReservation.OperationID
-}
-
-// findVMHost returns the name of the hypervisor the VM currently runs on, if
-// any, by scanning the Hypervisor CRDs' instance lists.
-func (h *VirtualMachineHandler) findVMHost(ctx context.Context, vmID string) (host string, found bool, err error) {
-	hvs := &hv1.HypervisorList{}
-	if err := h.List(ctx, hvs); err != nil {
-		return "", false, err
-	}
-	for _, hv := range hvs.Items {
-		for _, instance := range hv.Status.Instances {
-			if instance.ID == vmID {
-				return hv.Name, true, nil
-			}
-		}
-	}
-	return "", false, nil
 }

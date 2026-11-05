@@ -47,7 +47,6 @@ func newTestClient(scheme *runtime.Scheme, objects ...client.Object) client.Clie
 		WithScheme(scheme).
 		WithObjects(objects...).
 		WithStatusSubresource(&v1alpha1.Reservation{}, &vmv1alpha1.VirtualMachine{}).
-		WithIndex(&v1alpha1.Reservation{}, idxReservationByTargetHost, indexReservationByTargetHost).
 		WithIndex(&v1alpha1.Reservation{}, idxReservationByOperationID, indexReservationByOperationID).
 		WithIndex(&v1alpha1.Reservation{}, idxReservationByVMID, indexReservationByVMID).
 		Build()
@@ -58,9 +57,8 @@ func newTestClient(scheme *runtime.Scheme, objects ...client.Object) client.Clie
 func newTestController(k8sClient client.Client) *Controller {
 	vmHandler := &VirtualMachineHandler{Client: k8sClient}
 	return &Controller{
-		Client:           k8sClient,
-		DefaultOwnerKind: "VirtualMachine",
-		handlers:         map[string]OwnerHandler{vmHandler.Kind(): vmHandler},
+		Client:   k8sClient,
+		handlers: map[string]OwnerHandler{vmHandler.Kind(): vmHandler},
 	}
 }
 
@@ -72,13 +70,20 @@ type inFlightOpts struct {
 	endTime     *metav1.Time
 	createdAt   *metav1.Time // reservation creationTimestamp, for condition-freshness checks
 	labels      map[string]string
+	ownerRefs   []metav1.OwnerReference // defaults to a VirtualMachine owner when nil
 }
 
 // newInFlightReservation builds an in-flight reservation with the given name, VM
-// ID and target host plus optional extras.
+// ID and target host plus optional extras. Unless overridden via opts.ownerRefs,
+// the reservation carries a VirtualMachine owner reference so it dispatches to
+// the VM owner handler (in-flight reservations require a VM CRD owner).
 func newInFlightReservation(name, vmID, targetHost string, opts inFlightOpts) *v1alpha1.Reservation {
+	ownerRefs := opts.ownerRefs
+	if ownerRefs == nil {
+		ownerRefs = []metav1.OwnerReference{{Kind: "VirtualMachine"}}
+	}
 	res := &v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Labels: opts.labels},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Labels: opts.labels, OwnerReferences: ownerRefs},
 		Spec: v1alpha1.ReservationSpec{
 			Type:             v1alpha1.ReservationTypeInFlight,
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
@@ -96,15 +101,6 @@ func newInFlightReservation(name, vmID, targetHost string, opts inFlightOpts) *v
 		res.CreationTimestamp = *opts.createdAt
 	}
 	return res
-}
-
-// newHypervisor builds a Hypervisor with the given name and instance IDs.
-func newHypervisor(name string, instanceIDs ...string) *hv1.Hypervisor {
-	hv := &hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: name}}
-	for _, id := range instanceIDs {
-		hv.Status.Instances = append(hv.Status.Instances, hv1.Instance{ID: id})
-	}
-	return hv
 }
 
 func exists(t *testing.T, k8sClient client.Client, name string) bool {
@@ -183,56 +179,37 @@ func TestReconcile(t *testing.T) {
 			wantAnomaly: AnomalyNoOwnerHandler,
 		},
 		{
-			name:            "instance not spawned requeues",
-			objects:         []client.Object{newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{}), newHypervisor("host-1", "other-vm-uuid")},
+			// No VM CRD yet: there is no terminal signal, so the hold is kept and
+			// the controller waits (TTL is the only release for an abandoned op).
+			name:            "no VM CRD requeues",
+			objects:         []client.Object{newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.CreateIntent})},
 			wantRequeue:     requeueInterval,
 			wantKept:        []string{"res-1"},
 			wantReadyStatus: metav1.ConditionUnknown, wantReadyReason: "AwaitingPlacement",
 		},
 		{
-			// HV fallback, no VM CRD, initial placement: landing elsewhere is
-			// terminal, so the stale candidate is released.
-			name:        "create: instance on different host releases stale candidate",
-			objects:     []client.Object{newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.CreateIntent}), newHypervisor("host-1"), newHypervisor("host-2", "vm-uuid-1")},
+			// UC1: VM landed and running on a different host than this candidate
+			// targeted; the placement is confirmed so the stale candidate is
+			// released.
+			name: "create: VM placed and running on different host releases stale candidate",
+			objects: []client.Object{
+				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.CreateIntent}),
+				newVM("vm-uuid-1", "host-2", cond(vmv1alpha1.ConditionTypeRunning, metav1.ConditionTrue, "Running")),
+			},
 			wantDeleted: []string{"res-1"},
 		},
 		{
-			// HV fallback, no VM CRD, non-create intent: landing is NOT a
-			// completion signal, so the hold is kept and only the TTL releases it.
-			name:            "non-create: instance on different host is kept until TTL",
-			objects:         []client.Object{newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{}), newHypervisor("host-1"), newHypervisor("host-2", "vm-uuid-1")},
-			wantRequeue:     requeueInterval,
-			wantKept:        []string{"res-1"},
-			wantReadyStatus: metav1.ConditionUnknown, wantReadyReason: "AwaitingPlacement",
-		},
-		{
-			// UC1: reconciling the losing candidate releases the whole group.
+			// UC1: reconciling the losing candidate releases the whole group once
+			// the VM is confirmed placed and running.
 			name: "multi-candidate group released on landing",
 			objects: []client.Object{
 				newInFlightReservation("a", "vm-uuid-1", "host-1", createA),
 				newInFlightReservation("b", "vm-uuid-1", "host-2", createA),
 				newInFlightReservation("c", "vm-uuid-1", "host-3", createA),
-				newHypervisor("host-2", "vm-uuid-1"),
+				newVM("vm-uuid-1", "host-2", cond(vmv1alpha1.ConditionTypeRunning, metav1.ConditionTrue, "Running")),
 			},
 			reconcile:   "a",
 			wantDeleted: []string{"a", "b", "c"},
-		},
-		{
-			// HV fallback, no VM CRD, initial placement: landing on the target host
-			// is terminal.
-			name:        "create: instance on target host deletes reservation",
-			objects:     []client.Object{newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.CreateIntent}), newHypervisor("host-1", "vm-uuid-1")},
-			wantDeleted: []string{"res-1"},
-		},
-		{
-			// HV fallback, no VM CRD, non-create intent (resize keeps the VM on its
-			// host throughout): observing the VM on the target is not completion, so
-			// the hold is kept until the TTL backstop.
-			name:            "non-create: instance on target host is kept until TTL",
-			objects:         []client.Object{newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.ResizeIntent}), newHypervisor("host-1", "vm-uuid-1")},
-			wantRequeue:     requeueInterval,
-			wantKept:        []string{"res-1"},
-			wantReadyStatus: metav1.ConditionUnknown, wantReadyReason: "AwaitingPlacement",
 		},
 		{
 			// Completing op-a must leave a concurrent op-b on the same VM untouched.
@@ -241,14 +218,14 @@ func TestReconcile(t *testing.T) {
 				newInFlightReservation("a1", "vm-uuid-1", "host-1", inFlightOpts{operationID: "op-a", intent: novaapi.CreateIntent}),
 				newInFlightReservation("a2", "vm-uuid-1", "host-2", inFlightOpts{operationID: "op-a", intent: novaapi.CreateIntent}),
 				newInFlightReservation("b1", "vm-uuid-1", "host-1", inFlightOpts{operationID: "op-b", intent: novaapi.CreateIntent}),
-				newHypervisor("host-1", "vm-uuid-1"),
+				newVM("vm-uuid-1", "host-1", cond(vmv1alpha1.ConditionTypeRunning, metav1.ConditionTrue, "Running")),
 			},
 			reconcile:   "a1",
 			wantDeleted: []string{"a1", "a2"},
 			wantKept:    []string{"b1"},
 		},
 		{
-			// No hypervisor hosts the VM -> without TTL this would just requeue.
+			// No VM CRD hosts the VM -> without TTL this would just requeue.
 			name: "TTL expiry releases operation group",
 			objects: []client.Object{
 				newInFlightReservation("res-1", "vm-uuid-1", "host-1", expiredA),
@@ -258,27 +235,26 @@ func TestReconcile(t *testing.T) {
 		},
 		{
 			name:        "TTL not yet exceeded requeues",
-			objects:     []client.Object{newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{endTime: &future}), newHypervisor("host-1", "other")},
+			objects:     []client.Object{newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{endTime: &future})},
 			wantRequeue: requeueInterval,
 			wantKept:    []string{"res-1"},
 		},
 		{
-			// Live migration without a VM CRD: the VM is observed on the source host
-			// throughout, which is not a completion signal, so the holds are kept
-			// until the TTL backstop rather than released on landing.
-			name: "non-create: live migration is kept until TTL",
+			// Live migration with a VM CRD that reports an ongoing migration: the
+			// holds are kept until the migration settles or the TTL backstop fires.
+			name: "non-create: live migration ongoing is kept",
 			objects: []client.Object{
 				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.LiveMigrationIntent, resources: cpu4}),
-				newHypervisor("host-1", "vm-uuid-1"),
+				newVM("vm-uuid-1", "host-1", cond(vmv1alpha1.ConditionTypeMigrating, metav1.ConditionTrue, vmv1alpha1.ConditionReasonMigratingOngoing)),
 			},
 			wantRequeue:     requeueInterval,
 			wantKept:        []string{"res-1"},
-			wantReadyStatus: metav1.ConditionUnknown, wantReadyReason: "AwaitingPlacement",
+			wantReadyStatus: metav1.ConditionUnknown, wantReadyReason: "Migrating",
 		},
 		// --- VM-CRD driven cases (primary release path through Reconcile) ---
 		{
 			// UC1: VM CRD reports placed and Running; the whole create group is
-			// released through Reconcile, not via the hypervisor fallback.
+			// released through Reconcile.
 			name: "create: VM placed and running releases group",
 			objects: []client.Object{
 				newInFlightReservation("a", "vm-uuid-1", "host-1", createA),
@@ -298,8 +274,7 @@ func TestReconcile(t *testing.T) {
 			wantDeleted: []string{"res-1"},
 		},
 		{
-			// UC1: placed but not yet live (Nova BUILD) must keep blocking and must
-			// not fall through to the hypervisor landing heuristic.
+			// UC1: placed but not yet live (Nova BUILD) must keep blocking.
 			name: "create: VM building requeues",
 			objects: []client.Object{
 				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.CreateIntent}),
@@ -336,19 +311,6 @@ func TestReconcile(t *testing.T) {
 			objects: []client.Object{
 				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.ResizeIntent, createdAt: &resCreated}),
 				vmWithCond("vm-uuid-1", vmv1alpha1.ConditionTypeResizing, vmv1alpha1.ConditionReasonResizingCompleted, stalePast),
-			},
-			wantRequeue:     requeueInterval,
-			wantKept:        []string{"res-1"},
-			wantReadyStatus: metav1.ConditionUnknown, wantReadyReason: "Resizing",
-		},
-		{
-			// VM-CRD precedence: an ongoing resize keeps the hold even though the VM
-			// is observed on a hypervisor (which alone would look "landed").
-			name: "resize: VM-CRD ongoing wins over hypervisor landing",
-			objects: []client.Object{
-				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.ResizeIntent}),
-				newVM("vm-uuid-1", "host-1", cond(vmv1alpha1.ConditionTypeResizing, metav1.ConditionTrue, vmv1alpha1.ConditionReasonResizingOngoing)),
-				newHypervisor("host-1", "vm-uuid-1"),
 			},
 			wantRequeue:     requeueInterval,
 			wantKept:        []string{"res-1"},
@@ -487,19 +449,16 @@ func TestHandlerFor(t *testing.T) {
 		wantAnomaly string
 	}{
 		{name: "owner reference kind", res: &v1alpha1.Reservation{ObjectMeta: vmOwned, Spec: emptySpec}, wantKind: "VirtualMachine"},
-		{name: "vmID fallback", res: &v1alpha1.Reservation{Spec: novaVM}, wantKind: "VirtualMachine"},
-		{name: "fallback requires nova domain", res: &v1alpha1.Reservation{Spec: v1alpha1.ReservationSpec{
-			SchedulingDomain:    v1alpha1.SchedulingDomainPods,
-			InFlightReservation: &v1alpha1.InFlightReservationSpec{VMID: "vm-1"},
-		}}},
+		// A VM subject without any owner reference is no longer handled: in-flight
+		// reservations must carry a VirtualMachine owner reference.
+		{name: "vmID without owner ref is not handled", res: &v1alpha1.Reservation{Spec: novaVM}},
 		{name: "unknown owner, no vmID", res: &v1alpha1.Reservation{ObjectMeta: reschedOwned, Spec: emptySpec}},
 		// An unregistered owner carrying a vmID must not fall back to the VM handler.
 		{name: "unregistered owner with vmID does not fall back to VM", res: &v1alpha1.Reservation{ObjectMeta: reschedOwned, Spec: novaVM}},
 		{name: "registered non-VM owner wins over vmID", extra: []string{"Rescheduling"}, res: &v1alpha1.Reservation{ObjectMeta: reschedOwned, Spec: novaVM}, wantKind: "Rescheduling"},
 		{
 			// An owner reference is present and other handlers are registered, but
-			// none matches this owner's kind: no handler, no fallback (owner refs
-			// exist), no ambiguity.
+			// none matches this owner's kind: no handler, no ambiguity.
 			name:  "owner present but no handler matches",
 			extra: []string{"Rescheduling", "Backup"},
 			res: &v1alpha1.Reservation{
@@ -509,7 +468,7 @@ func TestHandlerFor(t *testing.T) {
 		},
 		{
 			// With more than two handlers registered, the one matching the owner's
-			// kind is selected (not the first registered, not the default).
+			// kind is selected (not the first registered).
 			name:     "selects correct handler among several",
 			extra:    []string{"Rescheduling", "Backup", "Snapshot"},
 			res:      &v1alpha1.Reservation{ObjectMeta: metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{{Kind: "Backup"}}}, Spec: emptySpec},
@@ -620,36 +579,6 @@ func TestPredicateReservations(t *testing.T) {
 				t.Errorf("Create = %v, want %v", got, tt.want)
 			}
 		})
-	}
-}
-
-func TestHypervisorInstancesChangedPredicate(t *testing.T) {
-	pred := hypervisorInstancesChangedPredicate()
-
-	if !pred.Create(event.CreateEvent{Object: &hv1.Hypervisor{}}) {
-		t.Error("Create(Hypervisor) = false, want true")
-	}
-	same := newHypervisor("host-1", "vm-1")
-	if pred.Update(event.UpdateEvent{ObjectOld: same, ObjectNew: same.DeepCopy()}) {
-		t.Error("Update(no instance change) = true, want false")
-	}
-	changed := same.DeepCopy()
-	changed.Status.Instances = append(changed.Status.Instances, hv1.Instance{ID: "vm-2"})
-	if !pred.Update(event.UpdateEvent{ObjectOld: same, ObjectNew: changed}) {
-		t.Error("Update(instance added) = false, want true")
-	}
-}
-
-func TestVMHandlerMapHypervisorToReservations(t *testing.T) {
-	scheme := newTestScheme(t)
-	matching := newInFlightReservation("res-1", "vm-1", "host-1", inFlightOpts{})
-	other := newInFlightReservation("res-2", "vm-2", "host-2", inFlightOpts{})
-	k8sClient := newTestClient(scheme, matching, other)
-	h := &VirtualMachineHandler{Client: k8sClient}
-
-	reqs := h.mapHypervisorToReservations(context.Background(), &hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "host-1"}})
-	if len(reqs) != 1 || reqs[0].Name != "res-1" {
-		t.Errorf("requests = %+v, want only res-1", reqs)
 	}
 }
 

@@ -495,7 +495,7 @@ func main() {
 		setupLog.Info("enabling controller",
 			"controller", "inflight-reservation-controller")
 		monitor := inflight.NewMonitor(metrics.Registry)
-		controller := &inflight.Controller{Client: multiclusterClient, Monitor: monitor, DefaultOwnerKind: "VirtualMachine"}
+		controller := &inflight.Controller{Client: multiclusterClient, Monitor: monitor}
 		if err := controller.SetupWithManager(ctx, mgr); err != nil {
 			setupLog.Error(err, "unable to create controller",
 				"controller", "inflight-reservation-controller")

@@ -6,39 +6,25 @@ package inflight
 import (
 	"context"
 	"errors"
-	"reflect"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
-	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 // Field index keys used by the controller and the owner handlers.
 const (
-	idxReservationByTargetHost  = "spec.targetHost"
 	idxReservationByOperationID = "spec.inFlightReservation.operationID"
 	idxReservationByVMID        = "spec.inFlightReservation.vmID"
 )
-
-// indexReservationByTargetHost indexes in-flight reservations by their target
-// host so handlers can requeue reservations affected by a hypervisor change.
-func indexReservationByTargetHost(obj client.Object) []string {
-	res, ok := obj.(*v1alpha1.Reservation)
-	if !ok || res.Spec.Type != v1alpha1.ReservationTypeInFlight || res.Spec.TargetHost == "" {
-		return nil
-	}
-	return []string{res.Spec.TargetHost}
-}
 
 // indexReservationByOperationID indexes in-flight reservations by their
 // operation id so the whole group can be released together.
@@ -77,12 +63,6 @@ type Controller struct {
 
 	// Monitor records controller metrics (e.g. TTL expiries). May be nil.
 	Monitor *Monitor
-
-	// DefaultOwnerKind is the owner handler Kind applied to in-flight
-	// reservations that carry no recognised owner reference (fallback during
-	// the transition before producers set owner references). Only applied to
-	// Nova reservations that carry a VM subject. Typically "VirtualMachine".
-	DefaultOwnerKind string
 
 	// handlers maps an owner-reference Kind to its OwnerHandler. Built in
 	// SetupWithManager from the registered handlers.
@@ -196,12 +176,11 @@ func (c *Controller) handlerFor(ctx context.Context, res *v1alpha1.Reservation) 
 // registered handler wins, and ambiguous is true when more than one distinct
 // handler matched (a misconfigured ownership).
 //
-// The DefaultOwnerKind fallback applies only to a Nova VM-subject reservation
-// that carries NO owner references at all (the transition period before
-// producers set them). A reservation that does carry an owner reference but no
-// registered handler matches is deliberately left without a handler (surfacing
-// as NoOwnerHandler), so e.g. a Rescheduling-owned reservation is never handled
-// by the VirtualMachine handler just because it also carries a vmID.
+// An in-flight reservation must carry an owner reference that maps to a
+// registered handler. A reservation with no owner references, or whose owner
+// references map to no registered handler, is left without a handler (surfacing
+// as NoOwnerHandler): e.g. a Rescheduling-owned reservation is never handled by
+// the VirtualMachine handler just because it also carries a vmID.
 func (c *Controller) resolveHandler(res *v1alpha1.Reservation) (handler OwnerHandler, ambiguous bool) {
 	var chosen OwnerHandler
 	matched := map[string]bool{}
@@ -217,15 +196,6 @@ func (c *Controller) resolveHandler(res *v1alpha1.Reservation) (handler OwnerHan
 	}
 	if chosen != nil {
 		return chosen, len(matched) > 1
-	}
-	// Fallback: a Nova VM-subject reservation with no owner references at all is
-	// handled by the configured default owner handler. A reservation that has
-	// owner references but none recognised is intentionally not handled here.
-	if len(res.OwnerReferences) == 0 &&
-		c.DefaultOwnerKind != "" &&
-		res.Spec.SchedulingDomain == v1alpha1.SchedulingDomainNova &&
-		res.Spec.InFlightReservation != nil && res.Spec.InFlightReservation.VMID != "" {
-		return c.handlers[c.DefaultOwnerKind], false
 	}
 	return nil, false
 }
@@ -337,39 +307,6 @@ func (c *Controller) predicateReservations() predicate.Predicate {
 	})
 }
 
-// hypervisorInstancesChangedPredicate filters Hypervisor events to only those
-// that change Status.Instances, since that is the only field the VM owner
-// handler consumes. Without it, unrelated status updates from the hypervisor
-// operator would cause a list + enqueue of every reservation targeting the
-// host.
-func hypervisorInstancesChangedPredicate() predicate.Predicate {
-	return predicate.Funcs{
-		CreateFunc: func(evt event.CreateEvent) bool {
-			_, ok := evt.Object.(*hv1.Hypervisor)
-			return ok
-		},
-		DeleteFunc: func(evt event.DeleteEvent) bool {
-			_, ok := evt.Object.(*hv1.Hypervisor)
-			return ok
-		},
-		GenericFunc: func(evt event.GenericEvent) bool {
-			_, ok := evt.Object.(*hv1.Hypervisor)
-			return ok
-		},
-		UpdateFunc: func(evt event.UpdateEvent) bool {
-			oldHV, ok := evt.ObjectOld.(*hv1.Hypervisor)
-			if !ok {
-				return false
-			}
-			newHV, ok := evt.ObjectNew.(*hv1.Hypervisor)
-			if !ok {
-				return false
-			}
-			return !reflect.DeepEqual(oldHV.Status.Instances, newHV.Status.Instances)
-		},
-	}
-}
-
 // SetupWithManager sets up the controller with the Manager and a multicluster
 // client. The multicluster client is used to watch for changes in the
 // Reservation CRD across all clusters and trigger reconciliations accordingly.
@@ -388,13 +325,9 @@ func (c *Controller) SetupWithManager(ctx context.Context, mgr ctrl.Manager) (er
 	vmHandler := &VirtualMachineHandler{Client: c.Client}
 	c.handlers = map[string]OwnerHandler{vmHandler.Kind(): vmHandler}
 
-	// Index reservations by their target host, operation id and VM uuid so
-	// handlers can requeue by host, release a whole operation group, and find
-	// all operations for one VM (supersession).
-	if err := mcl.IndexField(ctx, &v1alpha1.Reservation{}, &v1alpha1.ReservationList{},
-		idxReservationByTargetHost, indexReservationByTargetHost); err != nil {
-		return err
-	}
+	// Index reservations by their operation id and VM uuid so handlers can
+	// release a whole operation group and find all operations for one VM
+	// (supersession).
 	if err := mcl.IndexField(ctx, &v1alpha1.Reservation{}, &v1alpha1.ReservationList{},
 		idxReservationByOperationID, indexReservationByOperationID); err != nil {
 		return err
