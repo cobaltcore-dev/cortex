@@ -23,11 +23,73 @@ const (
 type DrainEntityKind string
 
 const (
-	// DrainEntityKindVM targets a virtual machine.
+	// DrainEntityKindVM targets a virtual machine. The entity moved is the VM
+	// itself: its Nova server is live-migrated to another host. The ref name is
+	// the Nova server uuid, which is also the name of the (cluster-scoped)
+	// vm-operator VirtualMachine resource. During the Nova->CRD migration a
+	// VirtualMachine resource may not exist yet for a given uuid; such a ref is
+	// still valid and simply does not resolve to a CRD until one is created
+	// (this transitional case is expected to go away).
 	DrainEntityKindVM DrainEntityKind = "vm"
-	// DrainEntityKindReservation targets a reservation.
+	// DrainEntityKindReservation targets a reservation. The entity moved is the
+	// reservation object itself (a movable failover or committed-resource
+	// Reservation), not any workload that may be associated with it. The ref
+	// name is the Reservation resource name.
 	DrainEntityKindReservation DrainEntityKind = "reservation"
 )
+
+// HostRef references a host to act on: a (cluster-scoped) Hypervisor resource
+// identified by name. It is a purpose-built reference rather than a generic
+// corev1.ObjectReference, whose own documentation discourages new embedded uses
+// (ignored fields, no per-use validation) and recommends a locally focused type.
+//
+// Name is the host id and is carried in the ref so routine handling does not
+// need to fetch the Hypervisor. AvailabilityZone is the routing key the
+// multicluster client uses to reach the right cluster; it defaults to the
+// request's spec.availabilityZone (a drain request is AZ-scoped). Hypervisor
+// resources currently live in a compute cluster and are not AZ-unique once an
+// AZ spans several compute clusters; resolving a host to its cluster is left to
+// the multicluster client so the ref survives that topology change (and a
+// possible future move of the Hypervisor CRD into the lighthouse cluster).
+type HostRef struct {
+	// Name is the name of the Hypervisor (the host name).
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MaxLength=253
+	Name string `json:"name"`
+
+	// AvailabilityZone is the availability zone the host belongs to. Defaults to
+	// the request's availability zone when unset.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=253
+	AvailabilityZone string `json:"availabilityZone,omitempty"`
+}
+
+// EntityRef references a movable entity: a vm-operator VirtualMachine or a
+// Reservation, discriminated by Kind. Like HostRef it is a purpose-built
+// reference (see HostRef) carrying the entity id in Name so routine handling
+// does not need to fetch the referenced resource.
+//
+// Both VirtualMachine and Reservation are cluster-scoped (so no namespace) and
+// live in the lighthouse cluster routed by AvailabilityZone, which defaults to
+// the request's spec.availabilityZone.
+type EntityRef struct {
+	// Kind is the kind of the referenced entity.
+	// +kubebuilder:validation:Enum=vm;reservation
+	// +kubebuilder:validation:Required
+	Kind DrainEntityKind `json:"kind"`
+
+	// Name is the name of the referenced entity: the Nova server uuid for a vm
+	// (the VirtualMachine resource name) or the Reservation resource name.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MaxLength=253
+	Name string `json:"name"`
+
+	// AvailabilityZone is the availability zone the entity belongs to. Defaults
+	// to the request's availability zone when unset.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=253
+	AvailabilityZone string `json:"availabilityZone,omitempty"`
+}
 
 // DrainConstraintMode defines how strictly the drain constraints are enforced.
 type DrainConstraintMode string
@@ -43,27 +105,21 @@ const (
 
 // DrainTargetEntity identifies a single entity that should be moved off a host.
 type DrainTargetEntity struct {
-	// Kind is the kind of the targeted entity.
-	// +kubebuilder:validation:Enum=vm;reservation
+	// Entity references the entity to move.
 	// +kubebuilder:validation:Required
-	Kind DrainEntityKind `json:"kind"`
-
-	// Ref references the entity to move (e.g. the Nova server uuid for a vm).
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MaxLength=253
-	Ref string `json:"ref"`
+	Entity EntityRef `json:"entity"`
 }
 
 // DrainTargetHost names a host and the entities on it that should be moved.
 type DrainTargetHost struct {
-	// Host is the name of the host to drain entities from.
+	// Host references the host to drain entities from.
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MaxLength=253
-	Host string `json:"host"`
+	Host HostRef `json:"host"`
 
-	// Entities are the entities on the host that should be moved.
+	// Entities are the entities on the host that should be moved. If empty, all
+	// movable entities on the host are drained.
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:MaxItems=100
+	// +kubebuilder:validation:MaxItems=1000
 	Entities []DrainTargetEntity `json:"entities,omitempty"`
 }
 
@@ -159,24 +215,17 @@ const (
 // ReschedulingMove records a single entity relocation decided by the scheduling
 // pass: an entity is moved off its source host onto the chosen target host.
 type ReschedulingMove struct {
-	// EntityKind is the kind of the moved entity.
+	// Entity references the moved entity.
 	// +kubebuilder:validation:Required
-	EntityKind DrainEntityKind `json:"entityKind"`
-
-	// EntityRef references the moved entity (e.g. the Nova server uuid for a vm).
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MaxLength=253
-	EntityRef string `json:"entityRef"`
+	Entity EntityRef `json:"entity"`
 
 	// SourceHost is the host the entity is moved away from.
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MaxLength=253
-	SourceHost string `json:"sourceHost"`
+	SourceHost HostRef `json:"sourceHost"`
 
 	// TargetHost is the host the entity is moved onto.
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MaxLength=253
-	TargetHost string `json:"targetHost"`
+	TargetHost HostRef `json:"targetHost"`
 }
 
 // ReschedulingStatus defines the observed state of Rescheduling.

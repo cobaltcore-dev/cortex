@@ -96,35 +96,62 @@ spec:
                             on it that should be moved.
                           properties:
                             entities:
-                              description: Entities are the entities on the host that
-                                should be moved.
+                              description: |-
+                                Entities are the entities on the host that should be moved. If empty, all
+                                movable entities on the host are drained.
                               items:
                                 description: DrainTargetEntity identifies a single
                                   entity that should be moved off a host.
                                 properties:
-                                  kind:
-                                    description: Kind is the kind of the targeted
-                                      entity.
-                                    enum:
-                                    - vm
-                                    - reservation
-                                    type: string
-                                  ref:
-                                    description: Ref references the entity to move
-                                      (e.g. the Nova server uuid for a vm).
-                                    maxLength: 253
-                                    type: string
+                                  entity:
+                                    description: Entity references the entity to move.
+                                    properties:
+                                      availabilityZone:
+                                        description: |-
+                                          AvailabilityZone is the availability zone the entity belongs to. Defaults
+                                          to the request's availability zone when unset.
+                                        maxLength: 253
+                                        type: string
+                                      kind:
+                                        description: Kind is the kind of the referenced
+                                          entity.
+                                        enum:
+                                        - vm
+                                        - reservation
+                                        type: string
+                                      name:
+                                        description: |-
+                                          Name is the name of the referenced entity: the Nova server uuid for a vm
+                                          (the VirtualMachine resource name) or the Reservation resource name.
+                                        maxLength: 253
+                                        type: string
+                                    required:
+                                    - kind
+                                    - name
+                                    type: object
                                 required:
-                                - kind
-                                - ref
+                                - entity
                                 type: object
-                              maxItems: 100
+                              maxItems: 1000
                               type: array
                             host:
-                              description: Host is the name of the host to drain entities
+                              description: Host references the host to drain entities
                                 from.
-                              maxLength: 253
-                              type: string
+                              properties:
+                                availabilityZone:
+                                  description: |-
+                                    AvailabilityZone is the availability zone the host belongs to. Defaults to
+                                    the request's availability zone when unset.
+                                  maxLength: 253
+                                  type: string
+                                name:
+                                  description: Name is the name of the Hypervisor
+                                    (the host name).
+                                  maxLength: 253
+                                  type: string
+                              required:
+                              - name
+                              type: object
                           required:
                           - host
                           type: object
@@ -228,26 +255,68 @@ spec:
                     ReschedulingMove records a single entity relocation decided by the scheduling
                     pass: an entity is moved off its source host onto the chosen target host.
                   properties:
-                    entityKind:
-                      description: EntityKind is the kind of the moved entity.
-                      type: string
-                    entityRef:
-                      description: EntityRef references the moved entity (e.g. the
-                        Nova server uuid for a vm).
-                      maxLength: 253
-                      type: string
+                    entity:
+                      description: Entity references the moved entity.
+                      properties:
+                        availabilityZone:
+                          description: |-
+                            AvailabilityZone is the availability zone the entity belongs to. Defaults
+                            to the request's availability zone when unset.
+                          maxLength: 253
+                          type: string
+                        kind:
+                          description: Kind is the kind of the referenced entity.
+                          enum:
+                          - vm
+                          - reservation
+                          type: string
+                        name:
+                          description: |-
+                            Name is the name of the referenced entity: the Nova server uuid for a vm
+                            (the VirtualMachine resource name) or the Reservation resource name.
+                          maxLength: 253
+                          type: string
+                      required:
+                      - kind
+                      - name
+                      type: object
                     sourceHost:
                       description: SourceHost is the host the entity is moved away
                         from.
-                      maxLength: 253
-                      type: string
+                      properties:
+                        availabilityZone:
+                          description: |-
+                            AvailabilityZone is the availability zone the host belongs to. Defaults to
+                            the request's availability zone when unset.
+                          maxLength: 253
+                          type: string
+                        name:
+                          description: Name is the name of the Hypervisor (the host
+                            name).
+                          maxLength: 253
+                          type: string
+                      required:
+                      - name
+                      type: object
                     targetHost:
                       description: TargetHost is the host the entity is moved onto.
-                      maxLength: 253
-                      type: string
+                      properties:
+                        availabilityZone:
+                          description: |-
+                            AvailabilityZone is the availability zone the host belongs to. Defaults to
+                            the request's availability zone when unset.
+                          maxLength: 253
+                          type: string
+                        name:
+                          description: Name is the name of the Hypervisor (the host
+                            name).
+                          maxLength: 253
+                          type: string
+                      required:
+                      - name
+                      type: object
                   required:
-                  - entityKind
-                  - entityRef
+                  - entity
                   - sourceHost
                   - targetHost
                   type: object
