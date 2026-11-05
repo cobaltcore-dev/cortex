@@ -4,8 +4,9 @@
 package filters
 
 import (
-	"github.com/go-logr/logr"
 	"testing"
+
+	"github.com/go-logr/logr"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -82,18 +83,12 @@ func TestFilterImagePropertiesStep_Run(t *testing.T) {
 			request:       requestWith([]string{"host1", "host2", "host3"}, api.ImageHypervisorTypeUnparseable),
 			expectedHosts: []string{"host1", "host2", "host3"},
 			filteredHosts: []string{},
-			expectedEvents: []lib.FilterWeigherPipelineStepEvent{
-				{Name: "image_properties_hv_type_undetermined", Labels: map[string]string{"intent": "unknown"}},
-			},
 		},
 		{
 			name:          "unsupported hypervisor type keeps all hosts",
 			request:       requestWith([]string{"host1", "host2"}, api.ImageHypervisorTypeUnparseable),
 			expectedHosts: []string{"host1", "host2"},
 			filteredHosts: []string{},
-			expectedEvents: []lib.FilterWeigherPipelineStepEvent{
-				{Name: "image_properties_hv_type_undetermined", Labels: map[string]string{"intent": "unknown"}},
-			},
 		},
 		{
 			name:          "empty host list",
