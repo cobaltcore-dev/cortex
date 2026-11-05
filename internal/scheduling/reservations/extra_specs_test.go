@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 )
 
 func TestHypervisorTypeCapability(t *testing.T) {
@@ -16,17 +16,17 @@ func TestHypervisorTypeCapability(t *testing.T) {
 		name        string
 		extraSpecs  map[string]string
 		defaultQEMU bool
-		want        []compute.Capability
+		want        []api.Capability
 	}{
 		{
 			name:       "value passed through",
 			extraSpecs: map[string]string{"capabilities:hypervisor_type": "CH"},
-			want:       []compute.Capability{{Name: "hypervisor_type", Value: "CH"}},
+			want:       []api.Capability{{Name: "hypervisor_type", Value: "CH"}},
 		},
 		{
 			name:       "lowercase value canonicalized to match hosts",
 			extraSpecs: map[string]string{"capabilities:hypervisor_type": "qemu"},
-			want:       []compute.Capability{{Name: "hypervisor_type", Value: "QEMU"}},
+			want:       []api.Capability{{Name: "hypervisor_type", Value: "QEMU"}},
 		},
 		{
 			name:       "missing without default -> nil",
@@ -37,13 +37,13 @@ func TestHypervisorTypeCapability(t *testing.T) {
 			name:        "missing with default -> canonical QEMU",
 			extraSpecs:  map[string]string{},
 			defaultQEMU: true,
-			want:        []compute.Capability{{Name: "hypervisor_type", Value: "QEMU"}},
+			want:        []api.Capability{{Name: "hypervisor_type", Value: "QEMU"}},
 		},
 		{
 			name:        "explicit value wins over default",
 			extraSpecs:  map[string]string{"capabilities:hypervisor_type": "CH"},
 			defaultQEMU: true,
-			want:        []compute.Capability{{Name: "hypervisor_type", Value: "CH"}},
+			want:        []api.Capability{{Name: "hypervisor_type", Value: "CH"}},
 		},
 		{
 			name: "non-hypervisor_type capabilities preserved",
@@ -51,7 +51,7 @@ func TestHypervisorTypeCapability(t *testing.T) {
 				"capabilities:hypervisor_type": "qemu",
 				"capabilities:cpu_arch":        "aarch64",
 			},
-			want: []compute.Capability{
+			want: []api.Capability{
 				{Name: "cpu_arch", Value: "aarch64"},
 				{Name: "hypervisor_type", Value: "QEMU"},
 			},
@@ -60,7 +60,7 @@ func TestHypervisorTypeCapability(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := HypervisorTypeCapability(tt.extraSpecs, tt.defaultQEMU)
-			slices.SortFunc(got, func(a, b compute.Capability) int { return strings.Compare(a.Name, b.Name) })
+			slices.SortFunc(got, func(a, b api.Capability) int { return strings.Compare(a.Name, b.Name) })
 			if !slices.Equal(got, tt.want) {
 				t.Errorf("got %v, want %v", got, tt.want)
 			}

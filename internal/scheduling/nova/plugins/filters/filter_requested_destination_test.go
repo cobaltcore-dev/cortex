@@ -60,7 +60,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		{
 			name: "Empty requested_destination - all hosts pass",
 			request: compute.PlacementRequest{
-				RequestedDestination: &compute.RequestedDestination{
+				RequestedDestination: &api.RequestedDestination{
 					Aggregates: []string{},
 					Host:       "",
 				},
@@ -86,7 +86,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		{
 			name: "Filter by specific host",
 			request: compute.PlacementRequest{
-				RequestedDestination: &compute.RequestedDestination{
+				RequestedDestination: &api.RequestedDestination{
 					Host: "host2",
 				},
 				Hosts: []compute.Host{
@@ -116,7 +116,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		{
 			name: "Filter by single aggregate - hosts in spec aggregates",
 			request: compute.PlacementRequest{
-				RequestedDestination: &compute.RequestedDestination{
+				RequestedDestination: &api.RequestedDestination{
 					Aggregates: []string{"aggregate1"},
 				},
 				Hosts: []compute.Host{
@@ -146,7 +146,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		{
 			name: "Filter by single aggregate - hosts in status aggregates",
 			request: compute.PlacementRequest{
-				RequestedDestination: &compute.RequestedDestination{
+				RequestedDestination: &api.RequestedDestination{
 					Aggregates: []string{"aggregate1"},
 				},
 				Hosts: []compute.Host{
@@ -176,7 +176,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		{
 			name: "Filter by multiple aggregates with OR syntax (comma-separated)",
 			request: compute.PlacementRequest{
-				RequestedDestination: &compute.RequestedDestination{
+				RequestedDestination: &api.RequestedDestination{
 					// "aggregate1,aggregate3" means host must be in aggregate1 OR aggregate3
 					Aggregates: []string{"aggregate1,aggregate3"},
 				},
@@ -212,7 +212,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		{
 			name: "Filter by multiple aggregates with AND logic",
 			request: compute.PlacementRequest{
-				RequestedDestination: &compute.RequestedDestination{
+				RequestedDestination: &api.RequestedDestination{
 					// ["aggregate1", "aggregate2"] means host must be in aggregate1 AND aggregate2
 					Aggregates: []string{"aggregate1", "aggregate2"},
 				},
@@ -243,7 +243,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		{
 			name: "Filter by mixed AND/OR aggregates",
 			request: compute.PlacementRequest{
-				RequestedDestination: &compute.RequestedDestination{
+				RequestedDestination: &api.RequestedDestination{
 					// Host must be in (aggregate1 OR aggregate2) AND aggregate3
 					Aggregates: []string{"aggregate1,aggregate2", "aggregate3"},
 				},
@@ -279,7 +279,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		{
 			name: "Filter by aggregates with OR syntax - hosts in both spec and status",
 			request: compute.PlacementRequest{
-				RequestedDestination: &compute.RequestedDestination{
+				RequestedDestination: &api.RequestedDestination{
 					// "aggregate1,aggregate2" means host must be in aggregate1 OR aggregate2
 					Aggregates: []string{"aggregate1,aggregate2"},
 				},
@@ -310,7 +310,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		{
 			name: "Filter by both host and aggregates - host takes precedence",
 			request: compute.PlacementRequest{
-				RequestedDestination: &compute.RequestedDestination{
+				RequestedDestination: &api.RequestedDestination{
 					Aggregates: []string{"aggregate1"},
 					Host:       "host2",
 				},
@@ -341,7 +341,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		{
 			name: "Host not found in hypervisors - filtered out",
 			request: compute.PlacementRequest{
-				RequestedDestination: &compute.RequestedDestination{
+				RequestedDestination: &api.RequestedDestination{
 					Aggregates: []string{"aggregate1"},
 				},
 				Hosts: []compute.Host{
@@ -367,7 +367,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		{
 			name: "Host with no aggregates - filtered out when aggregates requested",
 			request: compute.PlacementRequest{
-				RequestedDestination: &compute.RequestedDestination{
+				RequestedDestination: &api.RequestedDestination{
 					Aggregates: []string{"aggregate1"},
 				},
 				Hosts: []compute.Host{
@@ -397,7 +397,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		{
 			name: "All hosts filtered by aggregate",
 			request: compute.PlacementRequest{
-				RequestedDestination: &compute.RequestedDestination{
+				RequestedDestination: &api.RequestedDestination{
 					Aggregates: []string{"nonexistent-aggregate"},
 				},
 				Hosts: []compute.Host{
@@ -422,7 +422,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		{
 			name: "Requested host not in candidates",
 			request: compute.PlacementRequest{
-				RequestedDestination: &compute.RequestedDestination{
+				RequestedDestination: &api.RequestedDestination{
 					Host: "host-not-in-list",
 				},
 				Hosts: []compute.Host{
@@ -451,7 +451,7 @@ func TestFilterRequestedDestinationStep_Run(t *testing.T) {
 		{
 			name: "Empty host list",
 			request: compute.PlacementRequest{
-				RequestedDestination: &compute.RequestedDestination{
+				RequestedDestination: &api.RequestedDestination{
 					Aggregates: []string{"aggregate1"},
 				},
 				Hosts: []compute.Host{},
@@ -655,7 +655,7 @@ func TestFilterRequestedDestinationStep_processRequestedHost(t *testing.T) {
 
 func TestFilterRequestedDestinationStep_Run_ClientError(t *testing.T) {
 	request := compute.PlacementRequest{
-		RequestedDestination: &compute.RequestedDestination{
+		RequestedDestination: &api.RequestedDestination{
 			Aggregates: []string{"aggregate1"},
 		},
 		Hosts: []compute.Host{
@@ -712,7 +712,7 @@ func TestFilterRequestedDestinationStep_SkipsForNonPlacementIntent(t *testing.T)
 	} {
 		t.Run(string(intent), func(t *testing.T) {
 			request := compute.PlacementRequest{
-				RequestedDestination: &compute.RequestedDestination{Host: "host1"},
+				RequestedDestination: &api.RequestedDestination{Host: "host1"},
 				Intent:               intent,
 				Hosts:                []compute.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
 			}

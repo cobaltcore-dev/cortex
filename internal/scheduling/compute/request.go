@@ -14,44 +14,17 @@
 // conventions (flavor extra-spec keys, scheduler-hint keys, image property
 // keys). A Nova spec adapter is responsible for translating Nova's over-the-wire
 // shape into these typed fields; the pipeline only ever sees well-specced
-// values.
+// values. The Nova vocabulary types those fields use (capabilities, flavor
+// sizing, hypervisor family, …) live in the api/external/nova package.
 package compute
 
 import (
 	"strings"
 
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-)
-
-// HypervisorFamily is the coarse hypervisor family a request targets. It is the
-// distinction the pipeline and request routing care about. The adapter resolves
-// the family from Nova's "capabilities:hypervisor_type" flavor extra spec.
-type HypervisorFamily string
-
-const (
-	// HypervisorFamilyKVM covers KVM-based hypervisors (QEMU and CH).
-	HypervisorFamilyKVM HypervisorFamily = "kvm"
-	// HypervisorFamilyVMware covers VMware hypervisors.
-	HypervisorFamilyVMware HypervisorFamily = "vmware"
-)
-
-// ImageHypervisorType is the hypervisor type declared by the image. The adapter
-// resolves it from Nova's image properties ("img_hv_type"/"hypervisor_type").
-type ImageHypervisorType string
-
-const (
-	// ImageHypervisorTypeVMware indicates a VMware image.
-	ImageHypervisorTypeVMware ImageHypervisorType = "vmware"
-	// ImageHypervisorTypeBaremetal indicates a baremetal image.
-	ImageHypervisorTypeBaremetal ImageHypervisorType = "baremetal"
-	// ImageHypervisorTypeKVM indicates a KVM image.
-	ImageHypervisorTypeKVM ImageHypervisorType = "kvm"
-	// ImageHypervisorTypeUnset indicates no image hypervisor type was declared.
-	ImageHypervisorTypeUnset ImageHypervisorType = ""
-	// ImageHypervisorTypeUnparseable indicates an image hypervisor type was declared but could not be parsed.
-	ImageHypervisorTypeUnparseable ImageHypervisorType = "unparseable"
 )
 
 // Host is a placement candidate. For KVM hosts the compute host name and the
@@ -61,61 +34,6 @@ type Host struct {
 	ComputeHost string
 	// HypervisorHostname is the hypervisor hostname, e.g. domain-c123.<uuid>.
 	HypervisorHostname string
-}
-
-// Capability is a single required hypervisor capability as a typed key/value
-// equality, e.g. {Name: "cpu_arch", Value: "x86_64"}. The adapter resolves these
-// from Nova's "capabilities:<key>" flavor extra specs and rejects any entry that
-// uses an unsupported comparison operator before it reaches the pipeline.
-type Capability struct {
-	// Name is the capability key without the "capabilities:" prefix.
-	Name string
-	// Value is the required exact value.
-	Value string
-}
-
-// FlavorSpec is the typed, Nova-agnostic description of the requested flavor.
-// It carries no extra-spec map: the adapter resolves every extra spec the
-// pipeline needs into the typed fields on this struct and on PlacementRequest.
-type FlavorSpec struct {
-	// MemoryMB is the requested memory per instance. 0 means a zero-memory
-	// instance to capacity/bin-pack steps (fits anywhere), so the adapter sets it.
-	MemoryMB uint64
-	// VCPUs is the requested vCPUs per instance. 0 means a zero-CPU instance to
-	// capacity/bin-pack steps (fits anywhere), so the adapter sets it.
-	VCPUs uint64
-}
-
-// RequestedDestination mirrors the subset of Nova's requested_destination that
-// the pipeline reads. A nil *RequestedDestination on the request means no
-// destination constraint was requested.
-type RequestedDestination struct {
-	// Host is the requested target host. Empty means no host was pinned (only an
-	// aggregate constraint applies).
-	Host string
-	// Aggregates are the host-aggregate names the destination must belong to.
-	// Empty/nil means no aggregate constraint.
-	Aggregates []string
-}
-
-// InstanceGroupSpec is the typed subset of a Nova server group the pipeline
-// reads. A nil *InstanceGroupSpec on the request means the instance is not part
-// of a server group, so group affinity/anti-affinity filters are skipped.
-type InstanceGroupSpec struct {
-	// UUID identifies the server group. Empty if unknown.
-	UUID string
-	// Policy is the group policy (e.g. "anti-affinity", "soft-affinity"). Empty
-	// means no policy-specific filter/weigher applies.
-	Policy string
-	// Hosts are the hosts already occupied by members of this group. Empty/nil
-	// means the group currently occupies no hosts.
-	Hosts []string
-	// Members are the instance UUIDs already in the group. Empty/nil means the
-	// group has no members yet, so anti-affinity has nothing to exclude.
-	Members []string
-	// MaxServerPerHost caps how many group members may share a host. 0 means
-	// unset, which the anti-affinity filter treats as the Nova default of 1.
-	MaxServerPerHost int
 }
 
 // PlacementRequest is the well-typed, Nova-agnostic input to the scheduling
@@ -192,13 +110,13 @@ type PlacementRequest struct {
 	// HypervisorFamily is the coarse family (kvm/vmware) used by the pipeline and
 	// routing. Empty means unresolved: KVM-only gates (e.g. VM creation) treat it
 	// as not-KVM and skip.
-	HypervisorFamily HypervisorFamily
+	HypervisorFamily api.HypervisorFamily
 	// ImageHypervisorType is the hypervisor type declared by the image. The empty
 	// value (ImageHypervisorTypeUnset) means the image declared none ("no image
 	// constraint"); ImageHypervisorTypeUnparseable means it declared one that
 	// could not be parsed, which the image-properties filter surfaces as a
 	// diagnostic.
-	ImageHypervisorType ImageHypervisorType
+	ImageHypervisorType api.ImageHypervisorType
 	// HardwareVersion is resolved from the "quota:hw_version" extra spec. Empty
 	// means no hardware-version constraint.
 	HardwareVersion string
@@ -206,7 +124,7 @@ type PlacementRequest struct {
 	// Flavor is the requested flavor sizing. A zero FlavorSpec means capacity and
 	// bin-pack steps see a zero-sized instance (fits anywhere) — the adapter
 	// always populates it for real placements.
-	Flavor FlavorSpec
+	Flavor api.FlavorSpec
 
 	// RequiredTraits are trait names the host must have (adapter stripped the
 	// "trait:" prefix and kept the "required" ones). Empty/nil means no required
@@ -218,7 +136,7 @@ type PlacementRequest struct {
 	// RequestedCapabilities are required (key=value) hypervisor capabilities
 	// (adapter stripped the "capabilities:" prefix and rejected unsupported
 	// operators). Empty/nil means the capabilities filter is a no-op.
-	RequestedCapabilities []Capability
+	RequestedCapabilities []api.Capability
 	// AcceleratorsRequested reports whether the flavor requests a hardware
 	// accelerator (adapter resolves it from the presence of the
 	// "accel:device_profile" extra spec). When true, the accelerators filter keeps
@@ -239,11 +157,11 @@ type PlacementRequest struct {
 
 	// RequestedDestination is the requested target host/aggregate. Nil means no
 	// destination constraint (see the type doc).
-	RequestedDestination *RequestedDestination
+	RequestedDestination *api.RequestedDestination
 	// InstanceGroup is the server group the instance belongs to. Nil means the
 	// instance is not grouped, so affinity/anti-affinity steps are skipped (see
 	// the type doc).
-	InstanceGroup *InstanceGroupSpec
+	InstanceGroup *api.InstanceGroupSpec
 
 	// RequestID identifies this scheduling request for tracing. Empty only
 	// affects log correlation.

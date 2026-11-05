@@ -20,7 +20,7 @@ import (
 
 // requestWith builds a SchedulerRequest with the given hosts and image
 // hypervisor type.
-func requestWith(hosts []string, hvType compute.ImageHypervisorType) compute.PlacementRequest {
+func requestWith(hosts []string, hvType api.ImageHypervisorType) compute.PlacementRequest {
 	schedHosts := make([]compute.Host, 0, len(hosts))
 	for _, h := range hosts {
 		schedHosts = append(schedHosts, compute.Host{ComputeHost: h})
@@ -35,7 +35,7 @@ func requestWith(hosts []string, hvType compute.ImageHypervisorType) compute.Pla
 // hypervisor type is irrelevant to the intent-skip paths these callers exercise,
 // so it is fixed to VMware.
 func requestWithIntent(hosts []string, intent v1alpha1.SchedulingIntent) compute.PlacementRequest {
-	request := requestWith(hosts, compute.ImageHypervisorTypeVMware)
+	request := requestWith(hosts, api.ImageHypervisorTypeVMware)
 	request.Intent = intent
 	return request
 }
@@ -61,25 +61,25 @@ func TestFilterImagePropertiesStep_Run(t *testing.T) {
 	}{
 		{
 			name:          "kvm image keeps all hosts",
-			request:       requestWith([]string{"host1", "host2", "host3"}, compute.ImageHypervisorTypeKVM),
+			request:       requestWith([]string{"host1", "host2", "host3"}, api.ImageHypervisorTypeKVM),
 			expectedHosts: []string{"host1", "host2", "host3"},
 			filteredHosts: []string{},
 		},
 		{
 			name:          "vmware image filters out known kvm hypervisors",
-			request:       requestWith([]string{"host1", "host2", "host3"}, compute.ImageHypervisorTypeVMware),
+			request:       requestWith([]string{"host1", "host2", "host3"}, api.ImageHypervisorTypeVMware),
 			expectedHosts: []string{"host3"},
 			filteredHosts: []string{"host1", "host2"},
 		},
 		{
 			name:          "baremetal image filters out known kvm hypervisors",
-			request:       requestWith([]string{"host1", "host3"}, compute.ImageHypervisorTypeBaremetal),
+			request:       requestWith([]string{"host1", "host3"}, api.ImageHypervisorTypeBaremetal),
 			expectedHosts: []string{"host3"},
 			filteredHosts: []string{"host1"},
 		},
 		{
 			name:          "undeterminable hypervisor type keeps all hosts",
-			request:       requestWith([]string{"host1", "host2", "host3"}, compute.ImageHypervisorTypeUnparseable),
+			request:       requestWith([]string{"host1", "host2", "host3"}, api.ImageHypervisorTypeUnparseable),
 			expectedHosts: []string{"host1", "host2", "host3"},
 			filteredHosts: []string{},
 			expectedEvents: []lib.FilterWeigherPipelineStepEvent{
@@ -88,7 +88,7 @@ func TestFilterImagePropertiesStep_Run(t *testing.T) {
 		},
 		{
 			name:          "unsupported hypervisor type keeps all hosts",
-			request:       requestWith([]string{"host1", "host2"}, compute.ImageHypervisorTypeUnparseable),
+			request:       requestWith([]string{"host1", "host2"}, api.ImageHypervisorTypeUnparseable),
 			expectedHosts: []string{"host1", "host2"},
 			filteredHosts: []string{},
 			expectedEvents: []lib.FilterWeigherPipelineStepEvent{
@@ -97,7 +97,7 @@ func TestFilterImagePropertiesStep_Run(t *testing.T) {
 		},
 		{
 			name:          "empty host list",
-			request:       requestWith([]string{}, compute.ImageHypervisorTypeVMware),
+			request:       requestWith([]string{}, api.ImageHypervisorTypeVMware),
 			expectedHosts: []string{},
 			filteredHosts: []string{},
 		},

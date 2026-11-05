@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	"testing"
 
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -102,7 +103,7 @@ func TestFilterInstanceGroupAntiAffinityStep_Run(t *testing.T) {
 			name: "Instance group with affinity policy - all hosts pass",
 			request: compute.PlacementRequest{
 				InstanceUUID:  "vm-uuid-new",
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Members: []string{"vm-uuid-1", "vm-uuid-2"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "affinity", Members: []string{"vm-uuid-1", "vm-uuid-2"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -116,7 +117,7 @@ func TestFilterInstanceGroupAntiAffinityStep_Run(t *testing.T) {
 			name: "Instance group with soft-anti-affinity policy - all hosts pass",
 			request: compute.PlacementRequest{
 				InstanceUUID:  "vm-uuid-new",
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "soft-anti-affinity", Members: []string{"vm-uuid-1"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "soft-anti-affinity", Members: []string{"vm-uuid-1"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -129,7 +130,7 @@ func TestFilterInstanceGroupAntiAffinityStep_Run(t *testing.T) {
 			name: "Anti-affinity policy with empty members list - all hosts pass",
 			request: compute.PlacementRequest{
 				InstanceUUID:  "vm-uuid-new",
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -143,7 +144,7 @@ func TestFilterInstanceGroupAntiAffinityStep_Run(t *testing.T) {
 			name: "Anti-affinity policy - default max_server_per_host=1",
 			request: compute.PlacementRequest{
 				InstanceUUID:  "vm-uuid-new",
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1", "vm-uuid-2"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1", "vm-uuid-2"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -158,7 +159,7 @@ func TestFilterInstanceGroupAntiAffinityStep_Run(t *testing.T) {
 			name: "Anti-affinity policy - max_server_per_host=2",
 			request: compute.PlacementRequest{
 				InstanceUUID:  "vm-uuid-new",
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1", "vm-uuid-2", "vm-uuid-3"}, MaxServerPerHost: 2},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1", "vm-uuid-2", "vm-uuid-3"}, MaxServerPerHost: 2},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -173,7 +174,7 @@ func TestFilterInstanceGroupAntiAffinityStep_Run(t *testing.T) {
 			name: "Anti-affinity policy - max_server_per_host=3",
 			request: compute.PlacementRequest{
 				InstanceUUID:  "vm-uuid-new",
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-4", "vm-uuid-5", "vm-uuid-6"}, MaxServerPerHost: 3},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-4", "vm-uuid-5", "vm-uuid-6"}, MaxServerPerHost: 3},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host5"},
@@ -186,7 +187,7 @@ func TestFilterInstanceGroupAntiAffinityStep_Run(t *testing.T) {
 			name: "Anti-affinity policy - host running same VM (resize scenario)",
 			request: compute.PlacementRequest{
 				InstanceUUID:  "vm-uuid-1",
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1", "vm-uuid-2"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1", "vm-uuid-2"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -200,7 +201,7 @@ func TestFilterInstanceGroupAntiAffinityStep_Run(t *testing.T) {
 			name: "Anti-affinity policy - all hosts filtered out",
 			request: compute.PlacementRequest{
 				InstanceUUID:  "vm-uuid-new",
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1", "vm-uuid-2", "vm-uuid-3"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1", "vm-uuid-2", "vm-uuid-3"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -214,7 +215,7 @@ func TestFilterInstanceGroupAntiAffinityStep_Run(t *testing.T) {
 			name: "Anti-affinity policy - mixed hosts",
 			request: compute.PlacementRequest{
 				InstanceUUID:  "vm-uuid-new",
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1", "vm-uuid-2", "vm-uuid-3", "vm-uuid-4", "vm-uuid-5"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1", "vm-uuid-2", "vm-uuid-3", "vm-uuid-4", "vm-uuid-5"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -230,7 +231,7 @@ func TestFilterInstanceGroupAntiAffinityStep_Run(t *testing.T) {
 			name: "Anti-affinity policy - empty request hosts",
 			request: compute.PlacementRequest{
 				InstanceUUID:  "vm-uuid-new",
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1"}},
 				Hosts:         []compute.Host{},
 			},
 			expectedHosts: []string{},
@@ -240,7 +241,7 @@ func TestFilterInstanceGroupAntiAffinityStep_Run(t *testing.T) {
 			name: "Anti-affinity policy - host with non-member instances",
 			request: compute.PlacementRequest{
 				InstanceUUID:  "vm-uuid-new",
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-100", "vm-uuid-101"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-100", "vm-uuid-101"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -256,7 +257,7 @@ func TestFilterInstanceGroupAntiAffinityStep_Run(t *testing.T) {
 			name: "Anti-affinity policy - max_server_per_host=2 with mixed instances",
 			request: compute.PlacementRequest{
 				InstanceUUID:  "vm-uuid-new",
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1", "vm-uuid-2"}, MaxServerPerHost: 2},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1", "vm-uuid-2"}, MaxServerPerHost: 2},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -273,7 +274,7 @@ func TestFilterInstanceGroupAntiAffinityStep_Run(t *testing.T) {
 			request: compute.PlacementRequest{
 				InstanceUUID:  "vm-uuid-new",
 				ProjectID:     "project-abc",
-				InstanceGroup: &compute.InstanceGroupSpec{UUID: "ig-uuid-456", Policy: "anti-affinity", Members: []string{"vm-uuid-1"}},
+				InstanceGroup: &api.InstanceGroupSpec{UUID: "ig-uuid-456", Policy: "anti-affinity", Members: []string{"vm-uuid-1"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -287,7 +288,7 @@ func TestFilterInstanceGroupAntiAffinityStep_Run(t *testing.T) {
 			name: "Anti-affinity policy - multiple members on same host with max=2",
 			request: compute.PlacementRequest{
 				InstanceUUID:  "vm-uuid-new",
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1", "vm-uuid-2", "vm-uuid-3"}, MaxServerPerHost: 2},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1", "vm-uuid-2", "vm-uuid-3"}, MaxServerPerHost: 2},
 				Hosts: []compute.Host{
 					{ComputeHost: "host3"},
 					{ComputeHost: "host4"},
@@ -300,7 +301,7 @@ func TestFilterInstanceGroupAntiAffinityStep_Run(t *testing.T) {
 			name: "Anti-affinity policy - resize with VM on multiple hosts",
 			request: compute.PlacementRequest{
 				InstanceUUID:  "vm-uuid-2",
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1", "vm-uuid-2", "vm-uuid-3"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1", "vm-uuid-2", "vm-uuid-3"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -315,7 +316,7 @@ func TestFilterInstanceGroupAntiAffinityStep_Run(t *testing.T) {
 			name: "Anti-affinity policy - single host scenario",
 			request: compute.PlacementRequest{
 				InstanceUUID:  "vm-uuid-new",
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host2"},
 				},
@@ -327,7 +328,7 @@ func TestFilterInstanceGroupAntiAffinityStep_Run(t *testing.T) {
 			name: "Anti-affinity policy - high max_server_per_host value",
 			request: compute.PlacementRequest{
 				InstanceUUID:  "vm-uuid-new",
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1", "vm-uuid-2", "vm-uuid-3"}, MaxServerPerHost: 10},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "anti-affinity", Members: []string{"vm-uuid-1", "vm-uuid-2", "vm-uuid-3"}, MaxServerPerHost: 10},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -394,7 +395,7 @@ func TestFilterInstanceGroupAntiAffinityStep_SkipsForNonPlacementIntent(t *testi
 	for _, intent := range []string{"reserve_for_failover", "reuse_failover_reservation", "reserve_for_committed_resource", "capacity_probe"} {
 		t.Run(intent, func(t *testing.T) {
 			request := newNovaRequest("vm-new", "proj", "gp", 1, "1Gi", false, []string{"host1", "host2"})
-			request.InstanceGroup = &compute.InstanceGroupSpec{
+			request.InstanceGroup = &api.InstanceGroupSpec{
 				Policy:           "anti-affinity",
 				Members:          []string{"vm-existing"},
 				MaxServerPerHost: 1,

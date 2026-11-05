@@ -289,7 +289,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 			logger.V(1).Info("skipping virtual machine creation, feature gate disabled", "instanceUUID", requestData.Spec.Data.InstanceUUID)
 		case !slices.Contains(api.NovaIntents, intent):
 			logger.V(1).Info("skipping virtual machine creation, intent not triggered by Nova", "instanceUUID", requestData.Spec.Data.InstanceUUID, "intent", intent)
-		case schedReq.HypervisorFamily != compute.HypervisorFamilyKVM:
+		case schedReq.HypervisorFamily != api.HypervisorFamilyKVM:
 			logger.V(1).Info("skipping virtual machine creation, unsupported hypervisor type", "instanceUUID", requestData.Spec.Data.InstanceUUID)
 		default:
 			if upsertErr := httpAPI.vmHandler.Upsert(ctx, result, requestData, intent); upsertErr != nil {

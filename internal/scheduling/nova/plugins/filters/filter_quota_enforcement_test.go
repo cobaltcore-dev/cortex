@@ -52,7 +52,7 @@ func makeQuotaEnforcementRequest(projectID, az, hwVersion string, memoryMB, numI
 		NumInstances:     numInstances,
 		Intent:           intentFromHint(hints),
 		HardwareVersion:  hwVersion,
-		Flavor: compute.FlavorSpec{
+		Flavor: api.FlavorSpec{
 			VCPUs:    4,
 			MemoryMB: memoryMB,
 		},

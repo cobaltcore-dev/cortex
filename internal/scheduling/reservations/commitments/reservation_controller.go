@@ -33,7 +33,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
@@ -316,11 +315,11 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	// request is built directly, so filter_has_requested_traits/filter_capabilities
 	// would otherwise see empty slices and become no-ops). No hypervisor-type
 	// default here — only match when the flavor names one.
-	requiredTraits, forbiddenTraits := nova.SplitTraits(flavorDetails.ExtraSpecs)
+	requiredTraits, forbiddenTraits := schedulerdelegationapi.SplitTraits(flavorDetails.ExtraSpecs)
 	schedReq := compute.PlacementRequest{
 		Pipeline:              pipelineName,
 		GatherAllCandidates:   true,
-		HypervisorFamily:      compute.HypervisorFamilyKVM,
+		HypervisorFamily:      schedulerdelegationapi.HypervisorFamilyKVM,
 		Hosts:                 hosts,
 		Weights:               weights,
 		Intent:                schedulerdelegationapi.ReserveForCommittedResourceIntent,
@@ -332,8 +331,8 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		RequiredTraits:        requiredTraits,
 		ForbiddenTraits:       forbiddenTraits,
 		RequestedCapabilities: reservations.HypervisorTypeCapability(flavorDetails.ExtraSpecs, false),
-		AcceleratorsRequested: nova.RequestsAccelerators(flavorDetails.ExtraSpecs),
-		Flavor: compute.FlavorSpec{
+		AcceleratorsRequested: schedulerdelegationapi.RequestsAccelerators(flavorDetails.ExtraSpecs),
+		Flavor: schedulerdelegationapi.FlavorSpec{
 			VCPUs:    flavorDetails.VCPUs,
 			MemoryMB: flavorDetails.MemoryMB,
 		},
