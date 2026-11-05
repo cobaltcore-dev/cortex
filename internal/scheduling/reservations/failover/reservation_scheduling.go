@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"slices"
 	"sort"
-	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
@@ -34,8 +33,10 @@ var DefaultFailoverOptions = scheduling.Options{
 
 // InferFailoverPipeline returns the standard pipeline for a failover scheduling call based on
 // the VM's flavor extra specs — the same HANA vs general-purpose split used by Nova placement.
+// An unparseable flavor type falls back to the general-purpose pipeline.
 func InferFailoverPipeline(extraSpecs map[string]string) string {
-	if strings.ToLower(extraSpecs["trait:CUSTOM_HANA_EXCLUSIVE_HOST"]) == "required" {
+	flavorType, err := api.FlavorTypeFromExtraSpecs(extraSpecs)
+	if err == nil && flavorType == api.FlavorTypeHANA {
 		return "kvm-hana-bin-packing"
 	}
 	return "kvm-general-purpose-load-balancing"

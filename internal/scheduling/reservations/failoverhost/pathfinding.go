@@ -16,7 +16,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -254,9 +253,18 @@ func (f *evacuationPathFinder) fetchSeedCandidates(ctx context.Context, seed See
 	// would otherwise see empty slices and become no-ops). The seeder only emits
 	// seeds whose flavor names a supported hypervisor type, so no default is needed.
 	requiredTraits, forbiddenTraits := api.SplitTraits(seed.Flavor.ExtraSpecs)
+	// Same HANA vs general-purpose split as regular failover placement, but with the
+	// load-balancing variant of the HANA pipeline used for pathfinding probes.
+	flavorType, err := api.FlavorTypeFromExtraSpecs(seed.Flavor.ExtraSpecs)
+	if err != nil {
+		return nil, err
+	}
+	pipeline := "kvm-general-purpose-load-balancing"
+	if flavorType == api.FlavorTypeHANA {
+		pipeline = "kvm-hana-load-balancing"
+	}
 	req := compute.PlacementRequest{
-		// Same HANA vs general-purpose split as regular failover placement.
-		Pipeline: failover.InferFailoverPipeline(seed.Flavor.ExtraSpecs),
+		Pipeline: pipeline,
 		// We offer the host set ourselves; the scheduler must not gather the
 		// cluster itself and overwrite our candidates.
 		GatherAllCandidates: false,
