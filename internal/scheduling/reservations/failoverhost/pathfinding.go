@@ -109,7 +109,23 @@ func (f *evacuationPathFinder) FindPaths(ctx context.Context, topo topology, see
 	// edge, deduplicating across seeds. We materialize it into the []Path slice at
 	// the end, carrying each edge's supporting flavors.
 	edges := map[string]map[string]map[string]bool{}
-	for _, seed := range seeds {
+	// Log progress every ~10% of seeds probed: a large fleet crossed with its
+	// flavor catalogue yields thousands of seeds, each a scheduler round-trip, so a
+	// pass can take minutes. Without this the loop looks wedged. nextProgress is the
+	// next seed index at which to log; step is a tenth of the seed count (at least
+	// one, so tiny seed sets still report).
+	step := len(seeds) / 10
+	if step == 0 {
+		step = 1
+	}
+	nextProgress := step
+	for i, seed := range seeds {
+		if i+1 >= nextProgress {
+			log.Info("probing failover seeds",
+				"probed", i+1, "total", len(seeds),
+				"percent", (i+1)*100/len(seeds), "edgesSoFar", len(edges))
+			nextProgress += step
+		}
 		accepting, err := f.fetchSeedCandidates(ctx, seed, topo.hypervisors)
 		if err != nil {
 			// A lookup error is an infrastructure failure (the scheduler is
@@ -214,10 +230,12 @@ func hvCapacity(hv hv1.Hypervisor) map[hv1.ResourceName]resource.Quantity {
 //     set (scheduling.Options.Validate rejects a ReadOnly run otherwise, and the
 //     scheduler calls Validate) so this probe neither creates in-flight
 //     reservations nor writes CR allocations.
-//   - IgnoredReservationTypes = FailoverHost, so existing failover host
-//     reservations don't block the very hosts we are reasoning about — otherwise
-//     a reserved host would be hidden from its own partition and the clustering
-//     would fragment.
+//   - IgnoredReservationTypes = every reservation type, so no existing
+//     reservation blocks the hosts we are reasoning about. Failover host
+//     reservations would otherwise hide a reserved host from its own partition
+//     and fragment the clustering; committed-resource, failover and in-flight
+//     reservations would understate capacity, which is wrong under the
+//     empty-host reasoning below.
 //   - AssumeEmptyHosts, so candidates are judged by their total capacity rather
 //     than their current free capacity. A failover target is reserved *empty*, so
 //     what matters for partitioning is whether a host could hold the workload once
@@ -305,11 +323,19 @@ func (f *evacuationPathFinder) fetchSeedCandidates(ctx context.Context, seed See
 			// workload once cleared must still be a valid candidate. Without this,
 			// occupied hosts never accept anyone and stay orphaned.
 			AssumeEmptyHosts: true,
-			// Ignore existing failover host reservations, otherwise they would
-			// block these hosts, separate them from their failover partition and
-			// break the clustering.
+			// Ignore every existing reservation while probing. We reason about
+			// whether a host *could* hold the evacuated workload once it is cleared
+			// (AssumeEmptyHosts), not about its current free space, so any reservation
+			// — failover host, committed resource, failover or in-flight — that would
+			// otherwise block these hosts must be ignored. Failover host reservations
+			// in particular would hide the very hosts we are reasoning about and
+			// fragment the clustering; the others would understate capacity for the
+			// same empty-host reasoning.
 			IgnoredReservationTypes: []v1alpha1.ReservationType{
 				v1alpha1.ReservationTypeFailoverHost,
+				v1alpha1.ReservationTypeCommittedResource,
+				v1alpha1.ReservationTypeFailover,
+				v1alpha1.ReservationTypeInFlight,
 			},
 		},
 	}

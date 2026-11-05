@@ -997,10 +997,12 @@ spec:
       # completes — in all cases the failover host reservations are no longer
       # being maintained and will silently drift from the cluster. A pod that is
       # down is covered by CortexNovaSchedulingDown, so require the series to
-      # still be exported (the metric is present but flat).
+      # still be exported (the metric is present but flat). The window is 60m so
+      # a slow pass (e.g. partitioning over a large, flavor-rich fleet) does not
+      # trip the alert.
       expr: |
-        increase(cortex_failover_host_calculation_runs_total{service="cortex-nova-metrics"}[30m]) == 0
-      for: 30m
+        increase(cortex_failover_host_calculation_runs_total{service="cortex-nova-metrics"}[60m]) == 0
+      for: 60m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
         persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
@@ -1014,7 +1016,7 @@ spec:
         summary: "Failover host calculation loop is not completing passes"
         description: >
           The failover host controller has not completed a calculation-loop pass in
-          the last 30 minutes. Its failover host reservations are no longer being
+          the last 60 minutes. Its failover host reservations are no longer being
           recomputed and will drift from the actual cluster state. Check the
           failover-host-controller logs for a stuck loop or repeated aborts.
     - alert: CortexNovaFailoverHostCalculationAborting
