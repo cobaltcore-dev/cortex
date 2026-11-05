@@ -24,9 +24,6 @@ spec:
     - jsonPath: .status.state
       name: State
       type: string
-    - jsonPath: .status.conditions[?(@.type=='Ready')].status
-      name: Ready
-      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Created
       type: date
@@ -190,7 +187,11 @@ spec:
                 maxItems: 10
                 type: array
               conditions:
-                description: The current status conditions of the rescheduling request.
+                description: |-
+                  Conditions carries generic, human-readable detail about the rescheduling
+                  request (e.g. messages explaining the current situation). It is not the
+                  authoritative lifecycle representation: status.state is the single source
+                  of truth for the request's lifecycle and drives reconcile control flow.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.

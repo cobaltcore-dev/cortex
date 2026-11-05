@@ -4,7 +4,6 @@
 package v1alpha1
 
 import (
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -203,15 +202,6 @@ const (
 	ReschedulingStateFailed ReschedulingState = "Failed"
 )
 
-const (
-	// ReschedulingConditionReady indicates the request has been
-	// successfully processed.
-	ReschedulingConditionReady = "Ready"
-	// ReschedulingConditionInProgress indicates the request is currently
-	// being processed.
-	ReschedulingConditionInProgress = "InProgress"
-)
-
 // ReschedulingMove records a single entity relocation decided by the scheduling
 // pass: an entity is moved off its source host onto the chosen target host.
 type ReschedulingMove struct {
@@ -262,7 +252,10 @@ type ReschedulingStatus struct {
 	// +kubebuilder:validation:Optional
 	BlockExpiresAt *metav1.Time `json:"blockExpiresAt,omitempty"`
 
-	// The current status conditions of the rescheduling request.
+	// Conditions carries generic, human-readable detail about the rescheduling
+	// request (e.g. messages explaining the current situation). It is not the
+	// authoritative lifecycle representation: status.state is the single source
+	// of truth for the request's lifecycle and drives reconcile control flow.
 	// +kubebuilder:validation:Optional
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
@@ -273,7 +266,6 @@ type ReschedulingStatus struct {
 // +kubebuilder:printcolumn:name="Action",type="string",JSONPath=".spec.action"
 // +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone"
 // +kubebuilder:printcolumn:name="State",type="string",JSONPath=".status.state"
-// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:printcolumn:name="Created",type="date",JSONPath=".metadata.creationTimestamp"
 
 // Rescheduling is the Schema for the reschedulings API
@@ -300,11 +292,6 @@ type ReschedulingList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Rescheduling `json:"items"`
-}
-
-// IsReady returns true if the request has the Ready condition set to True.
-func (r *Rescheduling) IsReady() bool {
-	return meta.IsStatusConditionTrue(r.Status.Conditions, ReschedulingConditionReady)
 }
 
 func init() {
