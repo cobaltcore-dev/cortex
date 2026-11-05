@@ -115,6 +115,8 @@ type crSnapshot struct {
 // HandleChangeCommitments implements POST /commitments/v1/change-commitments from the Limes LIQUID API.
 // It writes CommittedResource CRDs (one per commitment) and polls their status conditions until
 // the controller confirms or rejects each one. On any failure the whole batch is rolled back.
+// TODO (#786): replace direct CR writes + changeMutex with a CommittedResourceChange (source=api);
+// poll CRC terminal phase and map Accepted/Rejected/Superseded to HTTP response. Flag-gated switchover.
 //
 // See: https://github.com/sapcc/go-api-declarations/blob/main/liquid/commitment.go
 // See: https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid
@@ -228,6 +230,8 @@ func (api *HTTPAPI) HandleChangeCommitments(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+// TODO (#788): once #786 switchover is stable, remove: changeMutex, crSnapshot type, reverse-order
+// rollbackCR, performDryRun probe CRs, and this direct-write path entirely.
 func (api *HTTPAPI) processCommitmentChanges(ctx context.Context, w http.ResponseWriter, logger logr.Logger, req liquid.CommitmentChangeRequest, resp *liquid.CommitmentChangeResponse) error {
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, api.client, nil)
 	if err != nil {

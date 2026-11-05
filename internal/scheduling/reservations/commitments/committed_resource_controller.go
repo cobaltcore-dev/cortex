@@ -189,6 +189,8 @@ func (r *CommittedResourceController) reconcilePending(ctx context.Context, logg
 	return ctrl.Result{}, nil
 }
 
+// TODO (#790): after reservation allocation changes (#787/#790), react here with a global view:
+// resize/merge/recreate reservation slots and remap PAYG VMs onto available capacity.
 func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, logger logr.Logger, cr *v1alpha1.CommittedResource) (ctrl.Result, error) {
 	logger.V(1).Info("reconciling committed resource",
 		"generation", cr.Generation,
@@ -203,46 +205,7 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 	// Without this guard the controller oscillates: apply bad spec → rollback →
 	// Reservation watch re-enqueues → apply bad spec again → loop.
 	if isRejectedForGeneration(cr) {
-		// Recovery: if the current spec matches the accepted spec, the rejection was
-		// spurious (e.g. transient host failure). Check if slots have since recovered.
-		// Only safe when specs match — if they differ, the rejection was genuine (bad new spec)
-		// and calling setAccepted would re-expose the current bad spec on the next reconcile.
-		if cr.Status.AcceptedSpec != nil && equality.Semantic.DeepEqual(cr.Spec, *cr.Status.AcceptedSpec) {
-			result, applyErr := r.applyReservationState(ctx, logger, cr)
-			if applyErr != nil {
-				logger.V(1).Info("spurious-rejection recovery: apply failed, will retry", "err", applyErr)
-			} else {
-				allReady, anyFailed, _, _, _, _, checkErr := r.checkChildReservationStatus(ctx, cr, result.TotalSlots, false)
-				if checkErr == nil && allReady && !anyFailed {
-					logger.Info("recovered from spurious rejection: all slots ready", "generation", cr.Generation)
-					initialGen := cr.Generation
-					if err := r.setAccepted(ctx, cr); err != nil {
-						return ctrl.Result{}, err
-					}
-					var latest v1alpha1.CommittedResource
-					if err := r.Get(ctx, client.ObjectKeyFromObject(cr), &latest); err != nil {
-						logger.V(1).Info("re-Get after accept failed, requeueing", "err", err)
-						return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
-					}
-					if latest.Generation > initialGen {
-						logger.V(1).Info("generation advanced during reconcile, requeueing",
-							"processedGen", initialGen,
-							"latestGen", latest.Generation,
-						)
-						return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
-					}
-					return ctrl.Result{}, nil
-				}
-				if checkErr != nil {
-					logger.V(1).Info("spurious-rejection recovery: slot check failed, will retry", "err", checkErr)
-				}
-			}
-			// Slots exist but are not all ready yet. No need to re-apply the same accepted spec;
-			// requeue and wait for the reservation controller to complete placement.
-			return ctrl.Result{RequeueAfter: r.retryDelay(cr)}, nil
-		}
-		logger.V(1).Info("spec already rejected for current generation, maintaining rollback state", "generation", cr.Generation)
-		return ctrl.Result{}, r.rollbackToAccepted(ctx, logger, cr)
+		return r.handleRejectedGeneration(ctx, logger, cr)
 	}
 	// Spec errors are permanent regardless of AllowRejection — a bad spec won't fix itself.
 	if _, err := FromCommittedResource(*cr); err != nil {
@@ -326,10 +289,58 @@ func (r *CommittedResourceController) reconcileCommitted(ctx context.Context, lo
 	return ctrl.Result{}, nil
 }
 
+// handleRejectedGeneration handles the case where isRejectedForGeneration(cr) is true.
+// If the current spec matches AcceptedSpec, attempts spurious-rejection recovery: applies the
+// spec and checks child slots. On success, calls setAccepted. On failure or if slots are
+// not yet ready, requeues. If specs differ, the rejection is genuine: maintains rollback state.
+func (r *CommittedResourceController) handleRejectedGeneration(ctx context.Context, logger logr.Logger, cr *v1alpha1.CommittedResource) (ctrl.Result, error) {
+	// Recovery: if the current spec matches the accepted spec, the rejection was
+	// spurious (e.g. transient host failure). Check if slots have since recovered.
+	// Only safe when specs match — if they differ, the rejection was genuine (bad new spec)
+	// and calling setAccepted would re-expose the current bad spec on the next reconcile.
+	if cr.Status.AcceptedSpec != nil && equality.Semantic.DeepEqual(cr.Spec, *cr.Status.AcceptedSpec) {
+		result, applyErr := r.applyReservationState(ctx, logger, cr)
+		if applyErr != nil {
+			logger.V(1).Info("spurious-rejection recovery: apply failed, will retry", "err", applyErr)
+		} else {
+			allReady, anyFailed, _, _, _, _, checkErr := r.checkChildReservationStatus(ctx, cr, result.TotalSlots, false)
+			if checkErr == nil && allReady && !anyFailed {
+				logger.Info("recovered from spurious rejection: all slots ready", "generation", cr.Generation)
+				initialGen := cr.Generation
+				if err := r.setAccepted(ctx, cr); err != nil {
+					return ctrl.Result{}, err
+				}
+				var latest v1alpha1.CommittedResource
+				if err := r.Get(ctx, client.ObjectKeyFromObject(cr), &latest); err != nil {
+					logger.V(1).Info("re-Get after accept failed, requeueing", "err", err)
+					return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+				}
+				if latest.Generation > initialGen {
+					logger.V(1).Info("generation advanced during reconcile, requeueing",
+						"processedGen", initialGen,
+						"latestGen", latest.Generation,
+					)
+					return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+				}
+				return ctrl.Result{}, nil
+			}
+			if checkErr != nil {
+				logger.V(1).Info("spurious-rejection recovery: slot check failed, will retry", "err", checkErr)
+			}
+		}
+		// Slots exist but are not all ready yet. No need to re-apply the same accepted spec;
+		// requeue and wait for the reservation controller to complete placement.
+		return ctrl.Result{RequeueAfter: r.retryDelay(cr)}, nil
+	}
+	logger.V(1).Info("spec already rejected for current generation, maintaining rollback state", "generation", cr.Generation)
+	return ctrl.Result{}, r.rollbackToAccepted(ctx, logger, cr)
+}
+
 // reconcileCoresHeadroom handles acceptance of CPU core commitments.
 // No Reservation CRDs are created; instead it reads the flavor group's total CPU capacity
 // from the FlavorGroupCapacity CRD and sums already-accepted CPU CRs for the same
 // (flavorGroup, AZ) to check whether sufficient headroom exists.
+// TODO (#789) unify with main reservation path once resource type abstraction is in place
 func (r *CommittedResourceController) reconcileCoresHeadroom(ctx context.Context, logger logr.Logger, cr *v1alpha1.CommittedResource) (ctrl.Result, error) {
 	if isRejectedForGeneration(cr) {
 		logger.V(1).Info("spec already rejected for current generation", "generation", cr.Generation)
@@ -482,6 +493,8 @@ func (r *CommittedResourceController) applyReservationState(ctx context.Context,
 // Returns allReady=false, anyFailed=false when some children have no condition yet (placement pending).
 // failReason includes a slot count when more than one slot failed.
 // failedSlots lists the names of all failing reservation slots for log context.
+// TODO (#789) the CRC reconciler (#779) gates AwaitingScheduling→Accepted on
+// cond.ObservedGeneration == res.Generation; ensure this check stays consistent with that gate.
 func (r *CommittedResourceController) checkChildReservationStatus(ctx context.Context, cr *v1alpha1.CommittedResource, expectedSlots int, shouldNudge bool) (allReady, anyFailed bool, readySlots int, failReason, firstFailMessage string, failedSlots []string, err error) {
 	var list v1alpha1.ReservationList
 	if err := r.List(ctx, &list,
@@ -635,6 +648,7 @@ func DeleteChildReservations(ctx context.Context, k8sClient client.Client, cr *v
 // AcceptedSpec is a full snapshot of the spec at the last successful reconcile, so rollback always
 // targets the correct AZ, amount, project, domain — even when the current spec has been mutated.
 // If AcceptedSpec is nil (CR was never accepted), all child Reservations are deleted.
+// TODO (#789) remove once status.acceptedSpec is dropped (after #785+#786 land; spec written only by committed CRCs)
 func (r *CommittedResourceController) rollbackToAccepted(ctx context.Context, logger logr.Logger, cr *v1alpha1.CommittedResource) error {
 	if cr.Status.AcceptedSpec == nil {
 		return r.deleteChildReservations(ctx, cr)

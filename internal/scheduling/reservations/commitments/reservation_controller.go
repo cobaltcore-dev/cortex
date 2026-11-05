@@ -66,10 +66,8 @@ type CommitmentReservationController struct {
 // move the current state of the cluster closer to the desired state.
 // Note: This controller only handles commitment reservations, as filtered by the predicate.
 func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// Fetch the reservation object first to check for creator request ID.
 	var res v1alpha1.Reservation
 	if err := r.Get(ctx, req.NamespacedName, &res); err != nil {
-		// Ignore not-found errors, since they can't be fixed by an immediate requeue
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -94,95 +92,28 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		})
 		patch := client.MergeFrom(old)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
-			// Ignore not-found errors during background deletion
 			if client.IgnoreNotFound(err) != nil {
 				logger.Error(err, "failed to patch reservation status")
 				return ctrl.Result{}, err
 			}
-			// Object was deleted, no need to continue
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, nil // Don't need to requeue.
+		return ctrl.Result{}, nil
 	}
 
 	// Spec.TargetHost was cleared (e.g. oversubscription eviction) while the slot was confirmed —
 	// revoke status so the slot re-enters the placement flow on the next reconcile.
 	if res.Status.Host != "" && res.Spec.TargetHost == "" {
-		old := res.DeepCopy()
-		res.Status.Host = ""
-		if res.Status.CommittedResourceReservation != nil {
-			res.Status.CommittedResourceReservation.Allocation = nil
-		}
-		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
-			Type:               v1alpha1.ReservationConditionReady,
-			Status:             metav1.ConditionFalse,
-			Reason:             "PlacementRevoked",
-			Message:            "target host was cleared; pending re-placement",
-			ObservedGeneration: res.Generation,
-		})
-		if err := r.Status().Patch(ctx, &res, client.MergeFrom(old)); client.IgnoreNotFound(err) != nil {
-			return ctrl.Result{}, err
-		}
-		logger.Info("revoked ready status after placement eviction, slot re-enters placement flow",
-			"component", "oversubscription-check")
-		return ctrl.Result{}, nil
+		return r.reconcileEvicted(ctx, logger, &res)
 	}
 
 	// Slot is placed and confirmed — verify allocations and keep ObservedGeneration current.
 	if res.Spec.TargetHost != "" && res.Status.Host == res.Spec.TargetHost {
-		// Deprecated: remove when Spec.CommittedResourceReservation.Allocations is removed from the schema.
-		// One-time upgrade migration: blind-scheduler slots populated Spec.Allocations on the old schema.
-		// Seed AnnotationCandidateAllocation from the lexically-first Spec entry so the existing
-		// annotation recovery path re-confirms the VM on the next pass.
-		if res.Spec.CommittedResourceReservation != nil &&
-			res.Annotations[v1alpha1.AnnotationCandidateAllocation] == "" &&
-			len(res.Spec.CommittedResourceReservation.Allocations) > 0 { //nolint:staticcheck
-			keys := make([]string, 0, len(res.Spec.CommittedResourceReservation.Allocations)) //nolint:staticcheck
-			for k := range res.Spec.CommittedResourceReservation.Allocations {                //nolint:staticcheck
-				keys = append(keys, k)
-			}
-			sort.Strings(keys)
-			vmUUID := keys[0]
-			logger.Info("migrating first Spec allocation to annotation (one-time upgrade path)",
-				"vm", vmUUID, "reservation", res.Name)
-			old := res.DeepCopy()
-			if res.Annotations == nil {
-				res.Annotations = make(map[string]string)
-			}
-			res.Annotations[v1alpha1.AnnotationCandidateAllocation] = vmUUID
-			if err := r.Patch(ctx, &res, client.MergeFrom(old)); client.IgnoreNotFound(err) != nil {
-				return ctrl.Result{}, err
-			}
-		}
-
-		logger.V(1).Info("reservation is active, verifying allocations")
-		if err := r.reconcileAllocations(ctx, &res); err != nil {
-			logger.Error(err, "failed to reconcile allocations")
-			return ctrl.Result{}, err
-		}
-		// Refresh ObservedGeneration if the spec changed since the last reconcile
-		// (e.g. endTime extension or metadata update via syncReservationMetadata).
-		cond := meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ReservationConditionReady)
-		if cond == nil || cond.ObservedGeneration < res.Generation {
-			old := res.DeepCopy()
-			meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
-				Type:               v1alpha1.ReservationConditionReady,
-				Status:             metav1.ConditionTrue,
-				Reason:             "ReservationActive",
-				Message:            "reservation is successfully scheduled",
-				ObservedGeneration: res.Generation,
-			})
-			if err := r.Status().Patch(ctx, &res, client.MergeFrom(old)); client.IgnoreNotFound(err) != nil {
-				return ctrl.Result{}, err
-			}
-		}
-		return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalActive.Duration}, nil
+		return r.reconcilePlaced(ctx, logger, &res)
 	}
 
-	// Sync Spec values to Status fields for non-pre-allocated reservations
-	// This ensures the observed state reflects the desired state from Spec
-	// When TargetHost is set in Spec but not synced to Status, this means
-	// the scheduler found a host and we need to mark the reservation as ready.
+	// Spec.TargetHost was written by the scheduler but not yet reflected in Status.
+	// Sync Status.Host once and mark ready; the next reconcile runs allocation verification.
 	if res.Spec.TargetHost != "" && res.Status.Host != res.Spec.TargetHost {
 		old := res.DeepCopy()
 		res.Status.Host = res.Spec.TargetHost
@@ -195,17 +126,110 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		})
 		patch := client.MergeFrom(old)
 		if err := r.Status().Patch(ctx, &res, patch); err != nil {
-			// Ignore not-found errors during background deletion
 			if client.IgnoreNotFound(err) != nil {
 				logger.Error(err, "failed to sync spec to status")
 				return ctrl.Result{}, err
 			}
-			// Object was deleted, no need to continue
 			return ctrl.Result{}, nil
 		}
 		logger.V(1).Info("synced spec to status and marked ready", "host", res.Status.Host)
-		// Return and let next reconcile handle allocation verification
 		return ctrl.Result{}, nil
+	}
+
+	// No target host yet — run the scheduler to find a placement.
+	return r.reconcileUnplaced(ctx, logger, &res)
+}
+
+// reconcileEvicted handles the case where Spec.TargetHost was cleared (e.g. oversubscription eviction)
+// while the slot was already placed. Clears Status.Host and allocations so the slot re-enters
+// the normal placement flow on the next reconcile.
+func (r *CommitmentReservationController) reconcileEvicted(ctx context.Context, logger logr.Logger, res *v1alpha1.Reservation) (ctrl.Result, error) {
+	old := res.DeepCopy()
+	res.Status.Host = ""
+	if res.Status.CommittedResourceReservation != nil {
+		res.Status.CommittedResourceReservation.Allocation = nil
+	}
+	meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+		Type:               v1alpha1.ReservationConditionReady,
+		Status:             metav1.ConditionFalse,
+		Reason:             "PlacementRevoked",
+		Message:            "target host was cleared; pending re-placement",
+		ObservedGeneration: res.Generation,
+	})
+	if err := r.Status().Patch(ctx, res, client.MergeFrom(old)); client.IgnoreNotFound(err) != nil {
+		return ctrl.Result{}, err
+	}
+	logger.Info("revoked ready status after placement eviction, slot re-enters placement flow",
+		"component", "oversubscription-check")
+	return ctrl.Result{}, nil
+}
+
+// reconcilePlaced handles an active reservation: verifies that allocated VMs are still on the
+// expected host and keeps ObservedGeneration current after benign spec updates (e.g. endTime extension).
+// TODO (#787) watch VM CRD for allocation changes once VM CRD is ready — today this relies on
+// the periodic HV-CRD watch + RequeueIntervalActive instead.
+func (r *CommitmentReservationController) reconcilePlaced(ctx context.Context, logger logr.Logger, res *v1alpha1.Reservation) (ctrl.Result, error) {
+	// Deprecated: remove when Spec.CommittedResourceReservation.Allocations is removed from the schema.
+	// One-time upgrade migration: blind-scheduler slots populated Spec.Allocations on the old schema.
+	// Seed AnnotationCandidateAllocation from the lexically-first Spec entry so the existing
+	// annotation recovery path re-confirms the VM on the next pass.
+	if res.Spec.CommittedResourceReservation != nil &&
+		res.Annotations[v1alpha1.AnnotationCandidateAllocation] == "" &&
+		len(res.Spec.CommittedResourceReservation.Allocations) > 0 { //nolint:staticcheck
+		keys := make([]string, 0, len(res.Spec.CommittedResourceReservation.Allocations)) //nolint:staticcheck
+		for k := range res.Spec.CommittedResourceReservation.Allocations {                //nolint:staticcheck
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		vmUUID := keys[0]
+		logger.Info("migrating first Spec allocation to annotation (one-time upgrade path)",
+			"vm", vmUUID, "reservation", res.Name)
+		old := res.DeepCopy()
+		if res.Annotations == nil {
+			res.Annotations = make(map[string]string)
+		}
+		res.Annotations[v1alpha1.AnnotationCandidateAllocation] = vmUUID
+		if err := r.Patch(ctx, res, client.MergeFrom(old)); client.IgnoreNotFound(err) != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	logger.V(1).Info("reservation is active, verifying allocations")
+	if err := r.reconcileAllocations(ctx, res); err != nil {
+		logger.Error(err, "failed to reconcile allocations")
+		return ctrl.Result{}, err
+	}
+
+	// Refresh ObservedGeneration if the spec changed since the last reconcile
+	// (e.g. endTime extension or metadata update via syncReservationMetadata).
+	// TODO (#784) IsReady short-circuit: when cond.ObservedGeneration < res.Generation and the spec
+	// change is significant (resource or flavor group change), skip this path and fall through to
+	// full re-placement rather than just refreshing ObservedGeneration.
+	cond := meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ReservationConditionReady)
+	if cond == nil || cond.ObservedGeneration < res.Generation {
+		old := res.DeepCopy()
+		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+			Type:               v1alpha1.ReservationConditionReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             "ReservationActive",
+			Message:            "reservation is successfully scheduled",
+			ObservedGeneration: res.Generation,
+		})
+		if err := r.Status().Patch(ctx, res, client.MergeFrom(old)); client.IgnoreNotFound(err) != nil {
+			return ctrl.Result{}, err
+		}
+	}
+	return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalActive.Duration}, nil
+}
+
+// reconcileUnplaced runs the in-process scheduler to find a host for an unplaced reservation slot,
+// then writes the selected host to Spec.TargetHost. The next reconcile cycle detects
+// Spec.TargetHost != Status.Host and syncs Status in the Reconcile dispatcher.
+// TODO (#778) replace HV-CRD host scoring with VM CRD data when ready
+func (r *CommitmentReservationController) reconcileUnplaced(ctx context.Context, logger logr.Logger, res *v1alpha1.Reservation) (ctrl.Result, error) {
+	resourceName := ""
+	if res.Spec.CommittedResourceReservation != nil {
+		resourceName = res.Spec.CommittedResourceReservation.ResourceName
 	}
 
 	// Get project ID from CommittedResourceReservation spec if available.
@@ -280,7 +304,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			ObservedGeneration: res.Generation,
 		})
 		patch := client.MergeFrom(old)
-		if err := r.Status().Patch(ctx, &res, patch); err != nil {
+		if err := r.Status().Patch(ctx, res, patch); err != nil {
 			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
 		return ctrl.Result{RequeueAfter: r.Conf.RequeueIntervalRetry.Duration}, nil
@@ -360,13 +384,11 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 			ObservedGeneration: res.Generation,
 		})
 		patch := client.MergeFrom(old)
-		if err := r.Status().Patch(ctx, &res, patch); err != nil {
-			// Ignore not-found errors during background deletion
+		if err := r.Status().Patch(ctx, res, patch); err != nil {
 			if client.IgnoreNotFound(err) != nil {
 				logger.Error(err, "failed to patch reservation status")
 				return ctrl.Result{}, err
 			}
-			// Object was deleted, no need to continue
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("no hosts found for reservation %s (flavor %s)", res.Name, resourceName)
@@ -380,18 +402,14 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 
 	old := res.DeepCopy()
 	res.Spec.TargetHost = host
-	if err := r.Patch(ctx, &res, client.MergeFrom(old)); err != nil {
-		// Ignore not-found errors during background deletion
+	if err := r.Patch(ctx, res, client.MergeFrom(old)); err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			logger.Error(err, "failed to patch reservation spec")
 			return ctrl.Result{}, err
 		}
-		// Object was deleted, no need to continue
 		return ctrl.Result{}, nil
 	}
 
-	// The Spec patch will trigger a re-reconcile, which will sync Status in the
-	// "Sync Spec values to Status" section above
 	return ctrl.Result{}, nil
 }
 
@@ -400,6 +418,9 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 //     host have their partial allocation recomputed; VMs that have disappeared are removed.
 //  2. Promote a PAYG candidate VM (AnnotationCandidateAllocation) into
 //     status.allocation when it is confirmed active on the expected host.
+//
+// TODO (#778) replace HV-CRD VMSource with VM CRD once available
+// TODO (#784) implement multi-VM partial allocation model (see parking lot in ticket drafts)
 func (r *CommitmentReservationController) reconcileAllocations(ctx context.Context, res *v1alpha1.Reservation) error {
 	logger := LoggerFromContext(ctx)
 
@@ -497,7 +518,7 @@ func (r *CommitmentReservationController) reconcileAllocations(ctx context.Conte
 			continue
 		}
 		newStatusAllocations[vmUUID] = v1alpha1.CommittedResourceAllocation{
-			// TODO replace with VM CRD ref once the VM CRD is strictly considered as being the mandatory gate
+			// TODO (#778) replace with VM CRD ref once VM CRD is the mandatory source of truth
 			ObjectRef: corev1.ObjectReference{Name: vmUUID},
 			Resources: newAlloc,
 		}
@@ -810,6 +831,7 @@ func (r *CommitmentReservationController) SetupWithManager(mgr ctrl.Manager, mcl
 	// assigned to that host. This replaces periodic polling for the established-VM
 	// verification path — changes are detected in seconds rather than up to
 	// RequeueIntervalActive. RequeueIntervalActive remains as a safety-net fallback.
+	// TODO (#787) add VM CRD watch for allocation changes once VM CRD is ready
 	bldr, err = bldr.WatchesMulticluster(
 		&hv1.Hypervisor{},
 		handler.EnqueueRequestsFromMapFunc(r.hypervisorToReservations),

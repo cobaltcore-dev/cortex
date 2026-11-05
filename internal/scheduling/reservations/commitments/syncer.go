@@ -230,9 +230,10 @@ func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavo
 }
 
 // SyncReservations fetches commitments from Limes and synchronizes Reservation CRDs.
+// TODO (#785): route writes through CommittedResourceChange (source=syncer) instead of writing
+// CR.spec directly. The per-project recency check (skip projects touched in the last ~10 min by
+// an API CRC) moves to the CRC reconciler (#782).
 func (s *Syncer) SyncReservations(ctx context.Context) error {
-	// TODO handle concurrency with change API: consider creation time of reservations and status ready
-
 	// Create context with request ID for this sync execution
 	runID := fmt.Sprintf("sync-%d", time.Now().Unix())
 	ctx = reservations.WithGlobalRequestID(ctx, runID)
@@ -488,6 +489,10 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 // time and can settle on hosts whose labels no longer match; pruning them lets the reconciler
 // re-create fresh slots. A zero max age or per-run cap disables pruning. Returns the number of
 // Reservation CRDs deleted.
+// TODO (#790): this only deletes stale slots one by one. The target behaviour (#790) is for the
+// CR controller to take a global view across all slots of a CR: collect unused/empty capacity,
+// compute an optimal new slot layout, and recreate at the best size. That logic belongs in the
+// CR controller (committed_resource_controller.go), not the syncer.
 func (s *Syncer) pruneAgedReservations(ctx context.Context, logger logr.Logger) (int, error) {
 	maxAge := s.resourceConfig.StaleReservationMaxAge.Duration
 	maxDeletes := s.resourceConfig.MaxReservationDeletesPerRun
