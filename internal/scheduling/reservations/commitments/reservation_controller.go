@@ -34,7 +34,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
@@ -238,7 +237,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	}
 
 	// Get flavor details from flavor group knowledge CRD
-	knowledge := &accounting.FlavorGroupKnowledgeClient{Client: r.Client}
+	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: r.Client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		logger.V(1).Info("flavor knowledge not ready, requeueing",
@@ -248,7 +247,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	}
 
 	// Search for the flavor across all flavor groups
-	flavorGroupName, flavorDetails, err := accounting.FindFlavorInGroups(resourceName, flavorGroups)
+	flavorGroupName, flavorDetails, err := reservations.FindFlavorInGroups(resourceName, flavorGroups)
 	if err != nil {
 		logger.Error(err, "flavor not found in any flavor group",
 			"resourceName", resourceName)

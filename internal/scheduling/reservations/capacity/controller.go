@@ -225,7 +225,7 @@ func (c *Reconciler) reconcileAll(ctx context.Context) error {
 	logger := LoggerFromContext(ctx)
 	startTime := time.Now()
 
-	knowledge := &accounting.FlavorGroupKnowledgeClient{Client: c.client}
+	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get flavor groups: %w", err)

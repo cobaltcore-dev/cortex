@@ -14,7 +14,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -100,7 +99,7 @@ func (c *UsageCalculator) CalculateUsage(
 	allAZs []liquid.AvailabilityZone,
 ) (liquid.ServiceUsageReport, error) {
 
-	knowledge := &accounting.FlavorGroupKnowledgeClient{Client: c.client}
+	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to get flavor groups: %w", err)

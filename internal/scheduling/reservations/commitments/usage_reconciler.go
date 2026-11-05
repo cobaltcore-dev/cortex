@@ -25,7 +25,6 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 )
 
@@ -118,7 +117,7 @@ func (r *UsageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	logger := log
 	logger.V(1).Info("usage reconcile starting", "trigger", trigger, "generation", cr.Generation)
 
-	knowledge := &accounting.FlavorGroupKnowledgeClient{Client: r.Client}
+	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: r.Client}
 	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
 	if err != nil {
 		r.Monitor.reconcileDuration.WithLabelValues("error").Observe(time.Since(start).Seconds())

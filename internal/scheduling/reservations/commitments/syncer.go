@@ -13,7 +13,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	"github.com/go-logr/logr"
 	"github.com/sapcc/go-api-declarations/liquid"
 	corev1 "k8s.io/api/core/v1"
@@ -249,7 +248,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	}()
 
 	// Check if flavor group knowledge is ready
-	knowledge := &accounting.FlavorGroupKnowledgeClient{Client: s.Client}
+	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: s.Client}
 	knowledgeCRD, err := knowledge.Get(ctx)
 	if err != nil {
 		logger.Error(err, "failed to check flavor group knowledge readiness")
