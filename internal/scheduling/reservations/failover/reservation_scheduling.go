@@ -124,7 +124,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		ResourceGroup:         resSpec.ResourceGroup(vm.FlavorName),
 		RequiredTraits:        requiredTraits,
 		ForbiddenTraits:       forbiddenTraits,
-		RequestedCapabilities: reservations.HypervisorTypeCapability(vm.FlavorExtraSpecs, true),
+		RequestedCapabilities: api.HypervisorTypeCapability(vm.FlavorExtraSpecs, true),
 		AcceleratorsRequested: api.RequestsAccelerators(vm.FlavorExtraSpecs),
 		Flavor: api.FlavorSpec{
 			VCPUs:    resSpec.VCPUs,
@@ -281,7 +281,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		IgnoreHosts:           []string{vm.CurrentHypervisor},
 		RequiredTraits:        requiredTraits,
 		ForbiddenTraits:       forbiddenTraits,
-		RequestedCapabilities: reservations.HypervisorTypeCapability(flavorExtraSpecs, true),
+		RequestedCapabilities: api.HypervisorTypeCapability(flavorExtraSpecs, true),
 		AcceleratorsRequested: api.RequestsAccelerators(flavorExtraSpecs),
 		Flavor: api.FlavorSpec{
 			VCPUs:    vcpus,

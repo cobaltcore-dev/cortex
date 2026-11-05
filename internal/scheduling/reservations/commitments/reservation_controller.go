@@ -330,7 +330,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		DomainName:            domainName,
 		RequiredTraits:        requiredTraits,
 		ForbiddenTraits:       forbiddenTraits,
-		RequestedCapabilities: reservations.HypervisorTypeCapability(flavorDetails.ExtraSpecs, false),
+		RequestedCapabilities: schedulerdelegationapi.HypervisorTypeCapability(flavorDetails.ExtraSpecs, false),
 		AcceleratorsRequested: schedulerdelegationapi.RequestsAccelerators(flavorDetails.ExtraSpecs),
 		Flavor: schedulerdelegationapi.FlavorSpec{
 			VCPUs:    flavorDetails.VCPUs,

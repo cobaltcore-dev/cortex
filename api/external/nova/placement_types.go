@@ -172,3 +172,24 @@ func RequestsAccelerators(extraSpecs map[string]string) bool {
 	_, ok := extraSpecs["accel:device_profile"]
 	return ok
 }
+
+// HypervisorTypeCapability returns the required (key=value) hypervisor capabilities
+// for a reservation scheduler request, so filter_capabilities keeps a workload off
+// incompatible hosts. The reservation controllers build the typed placement request
+// directly (not via the Nova wire adapter), yet their flavors still carry Nova's
+// extra-spec string conventions, so they reuse SplitCapabilities here and layer the
+// reservation-specific defaultQEMU seeding on top. It extracts ALL of the flavor's
+// "capabilities:<key>" extra specs (canonicalizing the hypervisor_type casing and
+// dropping everything on an unsupported operator) — not just hypervisor_type.
+//
+// When the flavor names no hypervisor type and defaultQEMU is set (the failover
+// controller seeds from running VMs whose flavor may omit it), the canonical "QEMU"
+// hypervisor_type is added. Without defaultQEMU, a missing hypervisor type adds no
+// hypervisor_type constraint.
+func HypervisorTypeCapability(extraSpecs map[string]string, defaultQEMU bool) []Capability {
+	caps := SplitCapabilities(extraSpecs)
+	if extraSpecs["capabilities:hypervisor_type"] == "" && defaultQEMU {
+		caps = append(caps, Capability{Name: "hypervisor_type", Value: "QEMU"})
+	}
+	return caps
+}

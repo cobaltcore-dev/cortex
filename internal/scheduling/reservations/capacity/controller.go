@@ -841,7 +841,7 @@ func (c *Reconciler) probeScheduler(
 		AvailabilityZone:      az,
 		RequiredTraits:        requiredTraits,
 		ForbiddenTraits:       forbiddenTraits,
-		RequestedCapabilities: reservations.HypervisorTypeCapability(flavor.ExtraSpecs, false),
+		RequestedCapabilities: schedulerapi.HypervisorTypeCapability(flavor.ExtraSpecs, false),
 		AcceleratorsRequested: schedulerapi.RequestsAccelerators(flavor.ExtraSpecs),
 		Flavor: schedulerapi.FlavorSpec{
 			VCPUs:    flavor.VCPUs,
