@@ -422,6 +422,39 @@ func TestGetFlavorType(t *testing.T) {
 	}
 }
 
+func TestFlavorTypeFromExtraSpecs(t *testing.T) {
+	tests := []struct {
+		name        string
+		extraSpecs  map[string]string
+		expected    FlavorType
+		expectError bool
+	}{
+		{name: "hana required", extraSpecs: map[string]string{"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "required"}, expected: FlavorTypeHANA},
+		{name: "hana required mixed case", extraSpecs: map[string]string{"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "Required"}, expected: FlavorTypeHANA},
+		{name: "general purpose forbidden", extraSpecs: map[string]string{"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "forbidden"}, expected: FlavorTypeGeneralPurpose},
+		{name: "general purpose trait absent", extraSpecs: map[string]string{}, expected: FlavorTypeGeneralPurpose},
+		{name: "general purpose nil specs", extraSpecs: nil, expected: FlavorTypeGeneralPurpose},
+		{name: "unsupported value", extraSpecs: map[string]string{"trait:CUSTOM_HANA_EXCLUSIVE_HOST": "optional"}, expectError: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := FlavorTypeFromExtraSpecs(tt.extraSpecs)
+			if tt.expectError {
+				if err == nil {
+					t.Fatalf("expected error but got none")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, got)
+			}
+		})
+	}
+}
+
 func TestNovaSpecUnmarshal(t *testing.T) {
 	var jsonData = `{
         "spec": {
