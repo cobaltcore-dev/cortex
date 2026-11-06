@@ -35,6 +35,10 @@ type CommittedResourceChangeReconciler struct {
 	// AwaitingSchedulingTimeout is how long to wait in AwaitingScheduling before rolling back.
 	// Zero (default) means no timeout.
 	AwaitingSchedulingTimeout time.Duration
+	// Conf holds terminal-GC retention windows and the stuck-detection threshold.
+	Conf commitments.ChangeReconcilerConfig
+	// Monitor records GC deletions. Optional; nil disables metric recording.
+	Monitor *ChangeReconcilerMonitor
 }
 
 func (r *CommittedResourceChangeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -65,7 +69,7 @@ func (r *CommittedResourceChangeReconciler) Reconcile(ctx context.Context, req c
 	case v1alpha1.ChangePhaseDryRunCleanup:
 		return r.reconcileDryRunCleanup(ctx, logger, &tx)
 	case v1alpha1.ChangePhaseAccepted, v1alpha1.ChangePhaseRejected, v1alpha1.ChangePhaseSuperseded:
-		return ctrl.Result{}, nil
+		return r.reconcileTerminal(ctx, logger, &tx)
 	default:
 		return ctrl.Result{}, fmt.Errorf("unknown phase %q", tx.Status.Phase)
 	}
@@ -73,6 +77,59 @@ func (r *CommittedResourceChangeReconciler) Reconcile(ctx context.Context, req c
 
 // commitmentName returns the CommittedResource name for a given commitment UUID.
 func commitmentName(uuid string) string { return "commitment-" + uuid }
+
+// reconcileTerminal garbage-collects a terminal change request once its retention window elapses.
+// The window is per-phase (Accepted/Rejected/Superseded); a non-positive window disables GC for
+// that phase. Age is measured from when the change request became terminal. If the window has not
+// yet elapsed, the request is re-queued so deletion fires punctually even without a watch event.
+//
+// Non-terminal change requests never reach this method — their phase handlers own them — so the
+// never-GC-non-terminal invariant holds structurally.
+func (r *CommittedResourceChangeReconciler) reconcileTerminal(ctx context.Context, logger logr.Logger, tx *v1alpha1.CommittedResourceChange) (ctrl.Result, error) {
+	retention := r.retentionFor(tx.Status.Phase)
+	if retention <= 0 {
+		return ctrl.Result{}, nil
+	}
+	age := time.Since(terminalTimestamp(tx))
+	if age < retention {
+		return ctrl.Result{RequeueAfter: retention - age}, nil
+	}
+	if err := r.Delete(ctx, tx); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+	if r.Monitor != nil {
+		r.Monitor.RecordGC(string(tx.Status.Phase))
+	}
+	logger.Info("garbage-collected terminal change request", "phase", tx.Status.Phase, "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "age", age)
+	return ctrl.Result{}, nil
+}
+
+// retentionFor returns the configured retention window for a terminal phase, or 0 if GC is
+// disabled for that phase (or the phase is not terminal).
+func (r *CommittedResourceChangeReconciler) retentionFor(phase v1alpha1.ChangePhase) time.Duration {
+	switch phase {
+	case v1alpha1.ChangePhaseAccepted:
+		return r.Conf.AcceptedRetention.Duration
+	case v1alpha1.ChangePhaseRejected:
+		return r.Conf.RejectedRetention.Duration
+	case v1alpha1.ChangePhaseSuperseded:
+		return r.Conf.SupersededRetention.Duration
+	default:
+		return 0
+	}
+}
+
+// terminalTimestamp returns the time the change request became terminal: the Finished condition's
+// LastTransitionTime, falling back to the Progressing condition's, then the creation timestamp.
+func terminalTimestamp(tx *v1alpha1.CommittedResourceChange) time.Time {
+	if cond := meta.FindStatusCondition(tx.Status.Conditions, v1alpha1.ChangeConditionFinished); cond != nil {
+		return cond.LastTransitionTime.Time
+	}
+	if cond := meta.FindStatusCondition(tx.Status.Conditions, v1alpha1.ChangeConditionProgressing); cond != nil {
+		return cond.LastTransitionTime.Time
+	}
+	return tx.CreationTimestamp.Time
+}
 
 // reconcilePreparing snapshots pre-change CR specs and advances to Allocating.
 // Always snapshots regardless of AllowRejection — syncer-mode CRTs never roll back but the
