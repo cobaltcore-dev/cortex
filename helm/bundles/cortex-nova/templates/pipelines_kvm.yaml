@@ -172,6 +172,11 @@ spec:
         pre-reserved failover capacity. For non-evacuation requests, this
         weigher has no effect.
     - name: weigher_failover_host
+      # Applied outside the tanh squashing, so this dominates every other weigher's
+      # bounded (~[-1, 1]) contribution and guarantees the lifted failover host
+      # sorts to the front. The weigher's raw activation only saturates tanh, it
+      # cannot dominate on its own.
+      multiplier: 1e6
       description: |
         For an evacuation, this weigher lifts the failover host selected for the
         request's source host to the front of the candidate list by giving it a
@@ -367,6 +372,11 @@ spec:
         pre-reserved failover capacity. For non-evacuation requests, this
         weigher has no effect.
     - name: weigher_failover_host
+      # Applied outside the tanh squashing, so this dominates every other weigher's
+      # bounded (~[-1, 1]) contribution and guarantees the lifted failover host
+      # sorts to the front. The weigher's raw activation only saturates tanh, it
+      # cannot dominate on its own.
+      multiplier: 1e6
       description: |
         For an evacuation, this weigher lifts the failover host selected for the
         request's source host to the front of the candidate list by giving it a
@@ -683,6 +693,11 @@ spec:
         pre-reserved failover capacity. For non-evacuation requests, this
         weigher has no effect.
     - name: weigher_failover_host
+      # Applied outside the tanh squashing, so this dominates every other weigher's
+      # bounded (~[-1, 1]) contribution and guarantees the lifted failover host
+      # sorts to the front. The weigher's raw activation only saturates tanh, it
+      # cannot dominate on its own.
+      multiplier: 1e6
       description: |
         For an evacuation, this weigher lifts the failover host selected for the
         request's source host to the front of the candidate list by giving it a

@@ -168,8 +168,8 @@ func TestWeigherFailoverHost_Run(t *testing.T) {
 			}
 			for host, weight := range result.Activations {
 				if host == tt.wantTarget {
-					if weight != failoverTargetWeight {
-						t.Errorf("expected target %s to get weight %v, got %v", host, failoverTargetWeight, weight)
+					if weight != failoverTargetActivation {
+						t.Errorf("expected target %s to get weight %v, got %v", host, failoverTargetActivation, weight)
 					}
 				} else if weight != 0 {
 					t.Errorf("expected host %s to have no effect (0), got %v", host, weight)

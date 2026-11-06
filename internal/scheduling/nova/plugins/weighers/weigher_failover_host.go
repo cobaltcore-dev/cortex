@@ -15,14 +15,18 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failoverhost"
 )
 
-// failoverTargetWeight is the activation assigned to the failover host a source
-// host should gang-evacuate onto. It is deliberately far larger than any other
-// weigher's contribution: the pipeline squashes each step with tanh (bounding it
-// to ~[-1, 1]) before summing, so a value this large saturates to ~+1 and, being
-// the only host lifted at all, is guaranteed to sort to the front of the
-// candidate list. That makes the selected target Nova's first choice while the
-// ordinary candidates keep their relative order behind it as retry fallbacks.
-const failoverTargetWeight = 1e6
+// failoverTargetActivation is the activation assigned to the failover host a
+// source host should gang-evacuate onto. The pipeline squashes each weigher's
+// activation with tanh before scaling it by the weigher's multiplier, so the
+// raw activation value cannot itself dominate the sum: a huge value just
+// saturates tanh to ~+1 and contributes the same as +1 would. What makes this
+// weigher dominate is the large multiplier configured for it in the pipeline
+// (applied outside the tanh); this activation only needs to be a positive value
+// that saturates towards +1. Being the only host lifted at all, the target is
+// then guaranteed to sort to the front of the candidate list, becoming Nova's
+// first choice while the ordinary candidates keep their relative order behind it
+// as retry fallbacks.
+const failoverTargetActivation = 1.0
 
 // WeigherFailoverHostOpts configures the failover-host weigher.
 type WeigherFailoverHostOpts struct {
@@ -76,7 +80,7 @@ func (s *WeigherFailoverHost) Run(traceLog logr.Logger, request compute.Placemen
 			"sourceHost", request.SourceHost, "targetHost", target)
 		return result, nil
 	}
-	result.Activations[target] = failoverTargetWeight
+	result.Activations[target] = failoverTargetActivation
 	stats := s.PrepareStats(request, "failover host target [bool]")
 	stats.Hosts[target] = 1
 	result.Statistics["failover host target"] = stats
