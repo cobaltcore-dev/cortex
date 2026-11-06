@@ -4,6 +4,10 @@ apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
   name: kvm-general-purpose-load-balancing
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   schedulingDomain: nova
   description: |
@@ -179,6 +183,10 @@ apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
   name: kvm-hana-bin-packing
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   schedulingDomain: nova
   description: |
@@ -351,6 +359,10 @@ apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
   name: kvm-new-failover-reservation
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   schedulingDomain: nova
   description: |
@@ -461,6 +473,10 @@ apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
   name: kvm-descheduler
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   schedulingDomain: nova
   description:
@@ -480,6 +496,10 @@ apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
   name: kvm-valid-host-reuse-failover-reservation
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   schedulingDomain: nova
   description: |
@@ -545,6 +565,10 @@ apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
   name: kvm-acknowledge-failover-reservation
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   schedulingDomain: nova
   description: |
@@ -628,6 +652,10 @@ apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
   name: kvm-report-capacity
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   schedulingDomain: nova
   description: |
