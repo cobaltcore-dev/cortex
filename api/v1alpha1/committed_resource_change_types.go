@@ -58,6 +58,8 @@ const (
 	ChangeRequestReasonAccepted   = "Accepted"
 	ChangeRequestReasonRejected   = "Rejected"
 	ChangeRequestReasonSuperseded = "Superseded"
+	// ChangeReasonRollbackFailed is the Finished reason when rollback exhausted its timeout.
+	ChangeReasonRollbackFailed = "RollbackFailed"
 )
 
 // CommittedResourceChangeSpec defines the desired change for a CommittedResourceChange.
@@ -109,6 +111,12 @@ type CommittedResourceChangeStatus struct {
 	// These are plain object references, not owner references.
 	// +kubebuilder:validation:Optional
 	UpsertedCommitments []corev1.ObjectReference `json:"upsertedCommitments,omitempty"`
+
+	// RollbackStartedAt is the time the CRC entered RollingBack or DryRunCleanup.
+	// Used to measure RollbackTimeout from the correct starting point rather than relying on
+	// the Progressing condition's LastTransitionTime, which is only updated on Status changes.
+	// +kubebuilder:validation:Optional
+	RollbackStartedAt *metav1.Time `json:"rollbackStartedAt,omitempty"`
 
 	// Conditions holds Progressing and Finished conditions.
 	// +kubebuilder:validation:Optional
