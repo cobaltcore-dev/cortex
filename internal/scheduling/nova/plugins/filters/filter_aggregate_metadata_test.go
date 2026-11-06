@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -20,20 +22,16 @@ import (
 func TestFilterAggregateMetadata_Run(t *testing.T) {
 	tests := []struct {
 		name          string
-		request       api.ExternalSchedulerRequest
+		request       compute.PlacementRequest
 		hypervisors   []hv1.Hypervisor
 		expectedHosts []string
 		filteredHosts []string
 	}{
 		{
 			name: "No aggregates with filter_tenant_id - all hosts pass",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-a",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				ProjectID: "project-a",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -64,13 +62,9 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Host with filter_tenant_id matching project - host passes",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-a",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				ProjectID: "project-a",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -94,13 +88,9 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Host with filter_tenant_id not matching project - host filtered",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-b",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				ProjectID: "project-b",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -124,13 +114,9 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Host in multiple aggregates with different filter_tenant_id - project matches one",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-b",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				ProjectID: "project-b",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 				},
 			},
@@ -150,13 +136,9 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Host in multiple aggregates - project matches none",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-c",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				ProjectID: "project-c",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 				},
 			},
@@ -176,13 +158,9 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Mixed hosts - some restricted, some open",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-a",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				ProjectID: "project-a",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -220,13 +198,9 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Empty host list",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-a",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{},
+			request: compute.PlacementRequest{
+				ProjectID: "project-a",
+				Hosts:     []compute.Host{},
 			},
 			hypervisors: []hv1.Hypervisor{
 				{
@@ -241,13 +215,9 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "All hosts filtered out",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-nonexistent",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				ProjectID: "project-nonexistent",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -271,13 +241,9 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Host not in hypervisor list - passes (no restrictions found)",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-a",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				ProjectID: "project-a",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host-unknown"},
 				},
@@ -295,13 +261,9 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Aggregate with nil metadata - treated as no restriction",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-a",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				ProjectID: "project-a",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 				},
 			},
@@ -318,13 +280,9 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Comma-separated filter_tenant_id - project matches one of many",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-b",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				ProjectID: "project-b",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 				},
 			},
@@ -341,13 +299,9 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Comma-separated filter_tenant_id - project matches none",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-d",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				ProjectID: "project-d",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 				},
 			},
@@ -364,13 +318,9 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Comma-separated filter_tenant_id with surrounding whitespace - project matches",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-b",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				ProjectID: "project-b",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 				},
 			},
@@ -387,13 +337,9 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Numbered filter_tenant_id keys - project matches one of the numbered keys",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-c",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				ProjectID: "project-c",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 				},
 			},
@@ -414,13 +360,9 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Numbered filter_tenant_id keys with comma-separated values - project matches",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-e",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				ProjectID: "project-e",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 				},
 			},
@@ -441,13 +383,9 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 		},
 		{
 			name: "Numbered filter_tenant_id keys - project matches none",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project-z",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				ProjectID: "project-z",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 				},
 			},
@@ -510,13 +448,9 @@ func TestFilterAggregateMetadata_Run(t *testing.T) {
 }
 
 func TestFilterAggregateMetadata_Run_ClientError(t *testing.T) {
-	request := api.ExternalSchedulerRequest{
-		Spec: api.NovaObject[api.NovaSpec]{
-			Data: api.NovaSpec{
-				ProjectID: "project-a",
-			},
-		},
-		Hosts: []api.ExternalSchedulerHost{
+	request := compute.PlacementRequest{
+		ProjectID: "project-a",
+		Hosts: []compute.Host{
 			{ComputeHost: "host1"},
 		},
 	}
@@ -575,14 +509,10 @@ func TestFilterAggregateMetadata_SkipsForCapacityProbeIntent(t *testing.T) {
 	step := &FilterAggregateMetadata{}
 	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 
-	request := api.ExternalSchedulerRequest{
-		Spec: api.NovaObject[api.NovaSpec]{
-			Data: api.NovaSpec{
-				ProjectID:      "project-y",
-				SchedulerHints: map[string]any{"_nova_check_type": "capacity_probe"},
-			},
-		},
-		Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
+	request := compute.PlacementRequest{
+		ProjectID: "project-y",
+		Intent:    api.CapacityProbeIntent,
+		Hosts:     []compute.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
 	}
 	result, err := step.Run(logr.Discard(), request)
 	if err != nil {
@@ -612,18 +542,14 @@ func TestFilterAggregateMetadata_AppliesForFailoverIntents(t *testing.T) {
 		&hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "host2"}},
 	}
 
-	for _, intent := range []string{"reserve_for_failover", "reuse_failover_reservation"} {
-		t.Run(intent, func(t *testing.T) {
+	for _, intent := range []v1alpha1.SchedulingIntent{api.ReserveForFailoverIntent, api.ReuseFailoverReservationIntent} {
+		t.Run(string(intent), func(t *testing.T) {
 			step := &FilterAggregateMetadata{}
 			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
-			request := api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID:      "project-y",
-						SchedulerHints: map[string]any{"_nova_check_type": intent},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
+			request := compute.PlacementRequest{
+				ProjectID: "project-y",
+				Intent:    intent,
+				Hosts:     []compute.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
 			}
 			result, err := step.Run(logr.Discard(), request)
 			if err != nil {

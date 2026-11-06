@@ -7,7 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	"testing"
 
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -214,14 +214,14 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		request       api.ExternalSchedulerRequest
+		request       compute.PlacementRequest
 		expectedHosts []string
 		filteredHosts []string
 	}{
 		{
 			name: "Filter hosts with all conditions met",
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -233,8 +233,8 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Host not ready should be filtered",
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host2"},
 				},
 			},
@@ -243,8 +243,8 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Terminating host should be filtered",
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host3"},
 				},
 			},
@@ -253,8 +253,8 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Tainted host should not be filtered",
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host4"},
 				},
 			},
@@ -263,8 +263,8 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Disabled hypervisor should be filtered",
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host8"},
 				},
 			},
@@ -273,8 +273,8 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Host with optional conditions in any state should pass",
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host5"},
 				},
 			},
@@ -283,8 +283,8 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Host missing Ready condition should be kept",
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host6"},
 				},
 			},
@@ -293,8 +293,8 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Host with no conditions should be kept",
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host7"},
 				},
 			},
@@ -303,16 +303,16 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Empty host list",
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{},
+			request: compute.PlacementRequest{
+				Hosts: []compute.Host{},
 			},
 			expectedHosts: []string{},
 			filteredHosts: []string{},
 		},
 		{
 			name: "Host not in database",
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host-unknown"},
 				},
@@ -322,8 +322,8 @@ func TestFilterStatusConditionsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Mixed condition states",
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},

@@ -29,9 +29,6 @@ type Config struct {
 	// PlaceablePipeline is the scheduler pipeline used for the current-state probe.
 	// This pipeline considers current VM allocations to determine remaining placement capacity.
 	PlaceablePipeline string `json:"capacityPlaceablePipeline"`
-
-	// SchedulerURL is the endpoint of the nova external scheduler.
-	SchedulerURL string `json:"schedulerURL"`
 }
 
 // ApplyDefaults fills in any unset values with defaults.
@@ -48,9 +45,6 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.PlaceablePipeline == "" {
 		c.PlaceablePipeline = defaults.PlaceablePipeline
-	}
-	if c.SchedulerURL == "" {
-		c.SchedulerURL = defaults.SchedulerURL
 	}
 }
 
@@ -69,6 +63,5 @@ func DefaultConfig() Config {
 		MinReconcileInterval: metav1.Duration{Duration: 30 * time.Second},
 		TotalPipeline:        "kvm-general-purpose-load-balancing",
 		PlaceablePipeline:    "kvm-general-purpose-load-balancing",
-		SchedulerURL:         "http://localhost:8080/scheduler/nova/external",
 	}
 }

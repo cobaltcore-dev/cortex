@@ -11,6 +11,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -58,24 +59,23 @@ func (o KVMCRMigrationSlotOpts) GetDefaultHostWeight() float64 {
 //
 // Only activates for LiveMigrationIntent.
 type KVMCRMigrationSlotStep struct {
-	lib.BaseWeigher[api.ExternalSchedulerRequest, KVMCRMigrationSlotOpts]
+	lib.BaseWeigher[compute.PlacementRequest, KVMCRMigrationSlotOpts]
 }
 
 func (s *KVMCRMigrationSlotStep) Run(
 	traceLog logr.Logger,
-	request api.ExternalSchedulerRequest,
+	request compute.PlacementRequest,
 ) (*lib.FilterWeigherPipelineStepResult, error) {
 
 	result := s.IncludeAllHostsFromRequest(request)
 
-	intent, err := request.GetIntent()
-	if err != nil || intent != api.LiveMigrationIntent {
+	if request.Intent != api.LiveMigrationIntent {
 		traceLog.V(1).Info("not a live migration, skipping CR migration slot weigher")
-		return result, nil //nolint:nilerr
+		return result, nil
 	}
 
-	instanceUUID := request.Spec.Data.InstanceUUID
-	projectID := request.Spec.Data.ProjectID
+	instanceUUID := request.InstanceUUID
+	projectID := request.ProjectID
 
 	var allReservations v1alpha1.ReservationList
 	if err := s.Client.List(context.Background(), &allReservations,
@@ -94,7 +94,7 @@ func (s *KVMCRMigrationSlotStep) Run(
 		if res.Status.CommittedResourceReservation == nil || res.Spec.CommittedResourceReservation == nil {
 			continue
 		}
-		if _, ok := res.Status.CommittedResourceReservation.Allocations[instanceUUID]; ok {
+		if _, ok := res.Status.CommittedResourceReservation.Allocation[instanceUUID]; ok {
 			sourceSlot = res
 			break
 		}

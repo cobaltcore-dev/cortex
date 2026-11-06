@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
@@ -126,11 +127,6 @@ type CommitmentState struct {
 	// When set (e.g. "<cr-name>-"), Reservation CRDs are named "<NamePrefix><slot-index>".
 	// Used by the CommittedResource controller; leave empty for the legacy syncer path.
 	NamePrefix string
-	// ParentGeneration is the Generation of the parent CommittedResource CRD. Written into
-	// Reservation spec so the Reservation controller can echo it back in status, letting
-	// the CR controller detect when all children have been processed for the current spec.
-	// Zero for syncer-created reservations (no parent CR).
-	ParentGeneration int64
 	// State is the lifecycle state from Limes (planned/pending/guaranteed/confirmed/superseded/expired).
 	State v1alpha1.CommitmentStatus
 }
@@ -350,7 +346,7 @@ func FromReservations(reservations []v1alpha1.Reservation) (*CommitmentState, er
 			continue
 		}
 
-		memoryQuantity := res.Spec.Resources["memory"]
+		memoryQuantity := res.Spec.Resources[hv1.ResourceMemory]
 		memoryBytes := memoryQuantity.Value()
 		state.TotalMemoryBytes += memoryBytes
 	}

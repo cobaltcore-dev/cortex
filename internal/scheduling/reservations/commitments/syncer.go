@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	knowledge "github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/go-logr/logr"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -105,7 +105,7 @@ type getCommitmentStatesResult struct {
 	skippedUUIDs map[string]bool
 }
 
-func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavorGroups map[string]compute.FlavorGroupFeature) (*getCommitmentStatesResult, error) {
+func (s *Syncer) getCommitmentStates(ctx context.Context, log logr.Logger, flavorGroups map[string]knowledge.FlavorGroupFeature) (*getCommitmentStatesResult, error) {
 	allProjects, err := s.ListProjects(ctx)
 	if err != nil {
 		return nil, err
@@ -235,8 +235,8 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 
 	// Create context with request ID for this sync execution
 	runID := fmt.Sprintf("sync-%d", time.Now().Unix())
-	ctx = WithNewGlobalRequestID(ctx)
-	logger := LoggerFromContext(ctx).WithValues("runID", runID)
+	ctx = reservations.WithGlobalRequestID(ctx, runID)
+	logger := LoggerFromContext(ctx)
 
 	logger.Info("starting commitment sync")
 
@@ -248,8 +248,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	}()
 
 	// Check if flavor group knowledge is ready
-	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: s.Client}
-	knowledgeCRD, err := knowledge.Get(ctx)
+	knowledgeCRD, err := knowledge.GetFlavorGroupsKnowledge(ctx, s.Client)
 	if err != nil {
 		logger.Error(err, "failed to check flavor group knowledge readiness")
 		if s.monitor != nil {
@@ -263,7 +262,7 @@ func (s *Syncer) SyncReservations(ctx context.Context) error {
 	}
 
 	// Get flavor groups using the CRD we already fetched
-	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, knowledgeCRD)
+	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, s.Client, knowledgeCRD)
 	if err != nil {
 		logger.Error(err, "failed to get flavor groups from knowledge")
 		if s.monitor != nil {

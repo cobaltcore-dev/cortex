@@ -104,6 +104,19 @@ type CommittedResourceSpec struct {
 	AllowRejection bool `json:"allowRejection,omitempty"`
 }
 
+// BillingStatus holds the computed billing assignment for a CommittedResource.
+// Written by the UsageReconciler.
+type BillingStatus struct {
+	// AssignedInstances lists the VM UUIDs assigned to this commitment for billing.
+	AssignedInstances []string `json:"assignedInstances,omitempty"`
+	// UsedResources is the total resource consumption from assigned instances.
+	UsedResources map[string]resource.Quantity `json:"usedResources,omitempty"`
+	// LastReconcileAt is the time of the last successful billing reconcile.
+	LastReconcileAt *metav1.Time `json:"lastReconcileAt,omitempty"`
+	// ObservedGeneration is the CommittedResource generation seen during the last billing reconcile.
+	ObservedGeneration *int64 `json:"observedGeneration,omitempty"`
+}
+
 // CommittedResourceStatus defines the observed state of CommittedResource.
 type CommittedResourceStatus struct {
 	// AcceptedSpec is a snapshot of Spec from the last successful reconcile.
@@ -120,20 +133,29 @@ type CommittedResourceStatus struct {
 	// +kubebuilder:validation:Optional
 	LastReconcileAt *metav1.Time `json:"lastReconcileAt,omitempty"`
 
+	// Billing holds the computed billing assignment for this commitment.
+	// Written by the UsageReconciler. Use this instead of the deprecated flat billing fields.
+	// +kubebuilder:validation:Optional
+	Billing *BillingStatus `json:"billing,omitempty"`
+
+	// Deprecated: use Status.Billing.AssignedInstances
 	// AssignedInstances holds the UUIDs of VM instances deterministically assigned to this committed resource.
 	// Populated by the usage reconciler; used to compute UsedResources and drive the quota controller.
 	// +kubebuilder:validation:Optional
 	AssignedInstances []string `json:"assignedInstances,omitempty"`
 
+	// Deprecated: use Status.Billing.UsedResources
 	// UsedResources is the total resource consumption of assigned VM instances, keyed by resource type
 	// (e.g. "memory" in MiB binary SI, "cpu" as core count). Populated by the usage reconciler.
 	// +kubebuilder:validation:Optional
 	UsedResources map[string]resource.Quantity `json:"usedResources,omitempty"`
 
+	// Deprecated: use Status.Billing.LastReconcileAt
 	// LastUsageReconcileAt is when the usage reconciler last updated AssignedInstances and UsedResources.
 	// +kubebuilder:validation:Optional
 	LastUsageReconcileAt *metav1.Time `json:"lastUsageReconcileAt,omitempty"`
 
+	// Deprecated: use Status.Billing.ObservedGeneration
 	// UsageObservedGeneration is the CR generation that the usage reconciler last processed.
 	// Follows the Kubernetes observedGeneration pattern: when this differs from
 	// metadata.generation the cooldown is bypassed so spec changes (e.g. shrink) are reflected

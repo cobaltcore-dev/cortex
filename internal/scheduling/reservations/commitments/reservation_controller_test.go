@@ -5,16 +5,12 @@ package commitments
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
-	"strconv"
 	"testing"
 	"time"
 
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,8 +21,38 @@ import (
 
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 )
+
+// fakePipeline returns a fixed ordered-host list (modelling a scheduler run).
+type fakePipeline struct{ hosts []string }
+
+func (p fakePipeline) Run(sched.PlacementRequest) (sched.PlacementResult, error) {
+	return sched.PlacementResult{OrderedHosts: p.hosts}, nil
+}
+
+// fakePipelineProvider serves a fakePipeline for every pipeline name, returning
+// the configured host list.
+type fakePipelineProvider struct{ hosts []string }
+
+func (f fakePipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.PlacementRequest], bool) {
+	return fakePipeline(f), true
+}
+
+// fakeGatherer is a no-op gatherer (tests supply their own hosts).
+type fakeGatherer struct{}
+
+func (fakeGatherer) MutateWithAllCandidates(context.Context, *sched.PlacementRequest) error {
+	return nil
+}
+
+// newMockScheduler builds an in-process compute.Placement whose pipeline returns
+// the given host list. Replaces the former httptest mock scheduler server.
+func newMockScheduler(hosts []string) *sched.Placement {
+	return sched.NewPlacement(fakePipelineProvider{hosts: hosts}, fakeGatherer{})
+}
 
 // mockDomainResolver is a test double for DomainResolver.
 type mockDomainResolver struct {
@@ -44,6 +70,32 @@ func (m *mockDomainResolver) ResolveDomainName(_ context.Context, domainID strin
 		return "", m.err
 	}
 	return m.names[domainID], nil
+}
+
+// vmSourceByUUID is a test VMSource that looks up VMs by UUID from a fixed map.
+// Used by reconcileAllocations tests to replace the former HV CRD presence check.
+type vmSourceByUUID struct {
+	vms map[string]*reservations.VM
+}
+
+func (s *vmSourceByUUID) GetVM(_ context.Context, uuid string) (*reservations.VM, error) {
+	if s.vms == nil {
+		return nil, nil
+	}
+	return s.vms[uuid], nil
+}
+func (s *vmSourceByUUID) ListVMs(_ context.Context) ([]reservations.VM, error) { return nil, nil }
+func (s *vmSourceByUUID) ListVMsByProject(_ context.Context, _ string) ([]reservations.VM, error) {
+	return nil, nil
+}
+func (s *vmSourceByUUID) ListVMsOnHypervisors(_ context.Context, _ *hv1.HypervisorList, _ bool) ([]reservations.VM, error) {
+	return nil, nil
+}
+func (s *vmSourceByUUID) IsServerActive(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
+func (s *vmSourceByUUID) GetDeletedVMInfo(_ context.Context, _ string) (*reservations.DeletedVMInfo, error) {
+	return nil, nil
 }
 
 func TestCommitmentReservationController_Reconcile(t *testing.T) {
@@ -153,313 +205,486 @@ func TestCommitmentReservationController_Reconcile(t *testing.T) {
 	}
 }
 
-// ============================================================================
-// Test: reconcileAllocations
-// ============================================================================
-
-func TestReconcileAllocations_HypervisorCRDPath(t *testing.T) {
+// TestMigrateSpecAllocationsToAnnotation verifies that a blind-scheduler slot that has
+// Spec.CommittedResourceReservation.Allocation populated (old schema) but no
+// AnnotationCandidateAllocation annotation gets the annotation seeded from the first
+// Spec allocation entry on reconcile (one-time upgrade migration path).
+func TestMigrateSpecAllocationsToAnnotation(t *testing.T) {
 	scheme := newCRTestScheme(t)
-
-	now := time.Now()
-	recentTime := metav1.NewTime(now.Add(-5 * time.Minute)) // 5 minutes ago (within grace period)
-	oldTime := metav1.NewTime(now.Add(-30 * time.Minute))   // 30 minutes ago (past grace period)
-
-	config := ReservationControllerConfig{AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute}}
-
-	tests := []struct {
-		name                         string
-		reservation                  *v1alpha1.Reservation
-		hypervisor                   *hv1.Hypervisor
-		expectedStatusAllocations    map[string]string
-		expectedSpecAllocations      []string // VM UUIDs expected to remain in spec; nil means no check
-		expectedHasGracePeriodAllocs bool
-	}{
-		{
-			name: "old allocation - VM found on hypervisor CRD",
-			reservation: newTestCRReservation(map[string]metav1.Time{
-				"vm-1": oldTime,
-			}),
-			hypervisor: newTestHypervisorCRD("host-1", []hv1.Instance{
-				{ID: "vm-1", Name: "vm-1", Active: true},
-			}),
-			expectedStatusAllocations:    map[string]string{"vm-1": "host-1"},
-			expectedSpecAllocations:      []string{"vm-1"},
-			expectedHasGracePeriodAllocs: false,
-		},
-		{
-			name: "old allocation - inactive VM still counted (stopped/shelved)",
-			reservation: newTestCRReservation(map[string]metav1.Time{
-				"vm-stopped": oldTime,
-			}),
-			hypervisor: newTestHypervisorCRD("host-1", []hv1.Instance{
-				{ID: "vm-stopped", Name: "vm-stopped", Active: false},
-			}),
-			expectedStatusAllocations:    map[string]string{"vm-stopped": "host-1"},
-			expectedSpecAllocations:      []string{"vm-stopped"},
-			expectedHasGracePeriodAllocs: false,
-		},
-		{
-			name: "old allocation - VM not on hypervisor CRD (stale, removed)",
-			reservation: newTestCRReservation(map[string]metav1.Time{
-				"vm-1": oldTime,
-			}),
-			hypervisor:                   newTestHypervisorCRD("host-1", []hv1.Instance{}),
-			expectedStatusAllocations:    map[string]string{},
-			expectedSpecAllocations:      []string{},
-			expectedHasGracePeriodAllocs: false,
-		},
-		{
-			name: "new allocation within grace period - deferred to requeue",
-			reservation: newTestCRReservation(map[string]metav1.Time{
-				"vm-1": recentTime,
-			}),
-			expectedStatusAllocations:    map[string]string{},
-			expectedSpecAllocations:      []string{"vm-1"},
-			expectedHasGracePeriodAllocs: true,
-		},
-		{
-			name: "mixed allocations - old verified via CRD, new in grace period",
-			reservation: newTestCRReservation(map[string]metav1.Time{
-				"vm-new": recentTime,
-				"vm-old": oldTime,
-			}),
-			hypervisor: newTestHypervisorCRD("host-1", []hv1.Instance{
-				{ID: "vm-old", Name: "vm-old", Active: true},
-			}),
-			expectedStatusAllocations:    map[string]string{"vm-old": "host-1"},
-			expectedSpecAllocations:      []string{"vm-new", "vm-old"},
-			expectedHasGracePeriodAllocs: true,
-		},
-		{
-			name:                         "empty allocations - no work to do",
-			reservation:                  newTestCRReservation(map[string]metav1.Time{}),
-			expectedStatusAllocations:    map[string]string{},
-			expectedHasGracePeriodAllocs: false,
-		},
-		{
-			name: "hypervisor CRD not found - post-grace VM removed",
-			reservation: newTestCRReservation(map[string]metav1.Time{
-				"vm-1": oldTime,
-			}),
-			expectedStatusAllocations:    map[string]string{},
-			expectedSpecAllocations:      []string{},
-			expectedHasGracePeriodAllocs: false,
-		},
-		{
-			name: "hypervisor CRD not found - grace period VM kept",
-			reservation: newTestCRReservation(map[string]metav1.Time{
-				"vm-1": recentTime,
-			}),
-			expectedStatusAllocations:    map[string]string{},
-			expectedSpecAllocations:      []string{"vm-1"},
-			expectedHasGracePeriodAllocs: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			objects := []client.Object{tt.reservation}
-			if tt.hypervisor != nil {
-				objects = append(objects, tt.hypervisor)
-			}
-
-			k8sClient := newCRTestClient(scheme, objects...)
-
-			controller := &CommitmentReservationController{
-				Client: k8sClient,
-				Scheme: scheme,
-				Conf:   config,
-			}
-
-			ctx := WithNewGlobalRequestID(context.Background())
-			result, err := controller.reconcileAllocations(ctx, tt.reservation)
-			if err != nil {
-				t.Fatalf("reconcileAllocations() error = %v", err)
-			}
-
-			// Check grace period result
-			if result.HasAllocationsInGracePeriod != tt.expectedHasGracePeriodAllocs {
-				t.Errorf("expected HasAllocationsInGracePeriod=%v, got %v",
-					tt.expectedHasGracePeriodAllocs, result.HasAllocationsInGracePeriod)
-			}
-
-			// Re-fetch reservation to check updates
-			var updated v1alpha1.Reservation
-			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(tt.reservation), &updated); err != nil {
-				t.Fatalf("failed to get updated reservation: %v", err)
-			}
-
-			// Check status allocations
-			actualStatusAllocs := map[string]string{}
-			if updated.Status.CommittedResourceReservation != nil {
-				actualStatusAllocs = updated.Status.CommittedResourceReservation.Allocations
-			}
-
-			if len(actualStatusAllocs) != len(tt.expectedStatusAllocations) {
-				t.Errorf("expected %d status allocations, got %d: %v",
-					len(tt.expectedStatusAllocations), len(actualStatusAllocs), actualStatusAllocs)
-			}
-
-			for vmUUID, expectedHost := range tt.expectedStatusAllocations {
-				if actualHost, ok := actualStatusAllocs[vmUUID]; !ok {
-					t.Errorf("expected VM %s in status allocations", vmUUID)
-				} else if actualHost != expectedHost {
-					t.Errorf("VM %s: expected host %s, got %s", vmUUID, expectedHost, actualHost)
-				}
-			}
-
-			// Check spec allocations if expected set is specified
-			if tt.expectedSpecAllocations != nil {
-				specAllocs := map[string]bool{}
-				if updated.Spec.CommittedResourceReservation != nil {
-					for vmUUID := range updated.Spec.CommittedResourceReservation.Allocations {
-						specAllocs[vmUUID] = true
-					}
-				}
-				if len(specAllocs) != len(tt.expectedSpecAllocations) {
-					t.Errorf("expected %d spec allocations, got %d: %v",
-						len(tt.expectedSpecAllocations), len(specAllocs), specAllocs)
-				}
-				for _, vmUUID := range tt.expectedSpecAllocations {
-					if !specAllocs[vmUUID] {
-						t.Errorf("expected VM %s in spec allocations", vmUUID)
-					}
-				}
-			}
-		})
-	}
-}
-
-// TestReconcileAllocations_ConfirmedVMDeparture verifies that a VM already confirmed in
-// Status.Allocations is removed immediately when it disappears from the HV CRD, without
-// waiting for the grace period to expire.
-func TestReconcileAllocations_ConfirmedVMDeparture(t *testing.T) {
-	scheme := newCRTestScheme(t)
-	config := ReservationControllerConfig{AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute}}
-	now := time.Now()
-
-	// VM was written to Spec.Allocations very recently (within grace period) but was already
-	// confirmed (present in Status.Allocations). It has since disappeared from the HV CRD.
-	recentTime := metav1.NewTime(now.Add(-2 * time.Minute))
 
 	res := &v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-reservation"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "slot-blind",
+		},
 		Spec: v1alpha1.ReservationSpec{
 			Type:       v1alpha1.ReservationTypeCommittedResource,
 			TargetHost: "host-1",
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceMemory: resource.MustParse("8Gi"),
+			},
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
 				ProjectID:    "test-project",
 				ResourceName: "test-flavor",
-				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
-					"vm-confirmed": {
-						CreationTimestamp: recentTime,
-						Resources: map[hv1.ResourceName]resource.Quantity{
-							"memory": resource.MustParse("4Gi"),
-						},
-					},
+				Allocations: map[string]v1alpha1.CommittedResourceAllocation{ //nolint:staticcheck
+					"vm-legacy-b": {ObjectRef: corev1.ObjectReference{Name: "vm-legacy-b"}},
+					"vm-legacy-a": {ObjectRef: corev1.ObjectReference{Name: "vm-legacy-a"}},
 				},
 			},
 		},
 		Status: v1alpha1.ReservationStatus{
 			Host: "host-1",
 			Conditions: []metav1.Condition{
-				{Type: v1alpha1.ReservationConditionReady, Status: metav1.ConditionTrue, Reason: "ReservationActive"},
+				{
+					Type:               v1alpha1.ReservationConditionReady,
+					Status:             metav1.ConditionTrue,
+					Reason:             "ReservationActive",
+					ObservedGeneration: 1,
+				},
 			},
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-				// VM was previously confirmed — it is in Status.Allocations.
-				Allocations: map[string]string{"vm-confirmed": "host-1"},
-			},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{},
 		},
 	}
 
-	// HV CRD exists but the VM is gone — simulates termination/evacuation.
-	hv := newTestHypervisorCRD("host-1", []hv1.Instance{})
-
-	k8sClient := newCRTestClient(scheme, res, hv)
-	controller := &CommitmentReservationController{Client: k8sClient, Scheme: scheme, Conf: config}
-
-	ctx := WithNewGlobalRequestID(context.Background())
-	result, err := controller.reconcileAllocations(ctx, res)
-	if err != nil {
-		t.Fatalf("reconcileAllocations() error = %v", err)
+	k8sClient := newCRTestClient(scheme, res)
+	reconciler := &CommitmentReservationController{
+		Client: k8sClient,
+		Scheme: scheme,
+		Conf: ReservationControllerConfig{
+			RequeueIntervalActive: metav1.Duration{Duration: 5 * time.Minute},
+		},
+		VMSource: &vmSourceByUUID{},
 	}
 
-	// Must not be treated as grace-period — departure of confirmed VM is immediate.
-	if result.HasAllocationsInGracePeriod {
-		t.Error("confirmed VM departure must not trigger grace period requeue")
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: res.Name}}
+	if _, err := reconciler.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
 	}
 
 	var updated v1alpha1.Reservation
-	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(res), &updated); err != nil {
-		t.Fatalf("get updated reservation: %v", err)
+	if err := k8sClient.Get(context.Background(), req.NamespacedName, &updated); err != nil {
+		t.Fatalf("Get() error = %v", err)
 	}
 
-	// Spec.Allocations must be empty — VM removed.
-	if n := len(updated.Spec.CommittedResourceReservation.Allocations); n != 0 {
-		t.Errorf("expected 0 spec allocations after departure, got %d", n)
-	}
-	// Status.Allocations must also be empty — updated in the same reconcile pass.
-	if updated.Status.CommittedResourceReservation == nil ||
-		len(updated.Status.CommittedResourceReservation.Allocations) != 0 {
-		t.Errorf("expected 0 status allocations after departure, got %#v",
-			updated.Status.CommittedResourceReservation)
+	// Lexically first UUID is "vm-legacy-a".
+	got := updated.Annotations[v1alpha1.AnnotationCandidateAllocation]
+	if got != "vm-legacy-a" {
+		t.Errorf("expected annotation %s=vm-legacy-a, got %q", v1alpha1.AnnotationCandidateAllocation, got)
 	}
 }
 
-// newTestCRReservation creates a test CR reservation with allocations on "host-1".
-func newTestCRReservation(allocations map[string]metav1.Time) *v1alpha1.Reservation {
-	const host = "host-1"
-	specAllocs := make(map[string]v1alpha1.CommittedResourceAllocation)
-	for vmUUID, timestamp := range allocations {
-		specAllocs[vmUUID] = v1alpha1.CommittedResourceAllocation{
-			CreationTimestamp: timestamp,
-			Resources: map[hv1.ResourceName]resource.Quantity{
-				"memory": resource.MustParse("4Gi"),
-				"cpu":    resource.MustParse("2"),
-			},
-		}
+// ============================================================================
+// Test: reconcileAllocations
+// ============================================================================
+
+func TestReconcileAllocations(t *testing.T) {
+	scheme := newCRTestScheme(t)
+
+	type tc struct {
+		name           string
+		res            *v1alpha1.Reservation
+		siblings       []*v1alpha1.Reservation
+		vms            map[string]*reservations.VM
+		vmSrc          reservations.VMSource // overrides vms when set
+		secondResName  string                // if set, fetch fresh + reconcile as second pass
+		wantAllocKeys  []string
+		wantAbsentKeys []string
+		wantAllocGiB   map[string]int64  // vmUUID → GiB for memory resource
+		wantObjectRef  map[string]string // vmUUID → expected ObjectRef.Name
+		extraCheck     func(t *testing.T, k8sClient client.Client)
 	}
 
-	return &v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-reservation",
-		},
-		Spec: v1alpha1.ReservationSpec{
-			Type:       v1alpha1.ReservationTypeCommittedResource,
-			TargetHost: host,
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				ProjectID:    "test-project",
-				ResourceName: "test-flavor",
-				Allocations:  specAllocs,
+	tests := []tc{
+		{
+			name: "confirmed VM present on expected host",
+			res:  withAlloc(crSlot("test-reservation", "host-1", 8, nil), "vm-1", 8),
+			vms: map[string]*reservations.VM{
+				"vm-1": {UUID: "vm-1", CurrentHypervisor: "host-1", Resources: map[string]resource.Quantity{string(hv1.ResourceMemory): testGiB(8)}},
 			},
+			wantAllocKeys: []string{"vm-1"},
+			wantAllocGiB:  map[string]int64{"vm-1": 8},
 		},
-		Status: v1alpha1.ReservationStatus{
-			Host: host,
-			Conditions: []metav1.Condition{
-				{
-					Type:   v1alpha1.ReservationConditionReady,
-					Status: metav1.ConditionTrue,
-					Reason: "ReservationActive",
+		{
+			name: "confirmed inactive VM still counted (stopped/shelved)",
+			res:  withAlloc(crSlot("test-reservation", "host-1", 8, nil), "vm-stopped", 8),
+			vms: map[string]*reservations.VM{
+				"vm-stopped": {UUID: "vm-stopped", CurrentHypervisor: "host-1", Resources: map[string]resource.Quantity{string(hv1.ResourceMemory): testGiB(8)}},
+			},
+			wantAllocKeys: []string{"vm-stopped"},
+		},
+		{
+			name:           "confirmed VM absent from VMSource — removed",
+			res:            withAlloc(crSlot("test-reservation", "host-1", 8, nil), "vm-gone", 8),
+			vms:            map[string]*reservations.VM{},
+			wantAbsentKeys: []string{"vm-gone"},
+		},
+		{
+			name: "empty allocations — no work to do",
+			res:  crSlot("test-reservation", "host-1", 8, nil),
+			vms:  map[string]*reservations.VM{},
+		},
+		{
+			name: "confirmed VM stays confirmed — idempotent re-reconcile",
+			res:  withAlloc(crSlot("res-winning", "host-1", 8, nil), "vm-confirmed-uuid", 8),
+			vms: map[string]*reservations.VM{
+				"vm-confirmed-uuid": {UUID: "vm-confirmed-uuid", CurrentHypervisor: "host-1", Resources: map[string]resource.Quantity{string(hv1.ResourceMemory): testGiB(8)}},
+			},
+			wantAllocKeys: []string{"vm-confirmed-uuid"},
+			wantAllocGiB:  map[string]int64{"vm-confirmed-uuid": 8},
+		},
+		{
+			name: "annotation candidate confirmed — ObjectRef.Name set correctly",
+			res: crSlot("res-candidate", "host-1", 8, map[string]string{
+				v1alpha1.AnnotationCandidateAllocation: "vm-new-candidate",
+			}),
+			vms: map[string]*reservations.VM{
+				"vm-new-candidate": {UUID: "vm-new-candidate", CurrentHypervisor: "host-1", Resources: map[string]resource.Quantity{string(hv1.ResourceMemory): testGiB(8)}},
+			},
+			wantAllocKeys: []string{"vm-new-candidate"},
+			wantObjectRef: map[string]string{"vm-new-candidate": "vm-new-candidate"},
+		},
+		{
+			// S02: min taken per resource dimension; slot caps cpu even though VM has more.
+			name: "S02 multi-dimensional resources — min taken per dimension",
+			res: &v1alpha1.Reservation{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "slot-a",
+					Annotations: map[string]string{v1alpha1.AnnotationCandidateAllocation: "vm-multi"},
+				},
+				Spec: v1alpha1.ReservationSpec{
+					Type:       v1alpha1.ReservationTypeCommittedResource,
+					TargetHost: "host-1",
+					Resources: map[hv1.ResourceName]resource.Quantity{
+						hv1.ResourceMemory: testGiB(8),
+						hv1.ResourceCPU:    resource.MustParse("4"),
+					},
+					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+						ProjectID: "p-1", ResourceName: "test-flavor", PrimaryResource: hv1.ResourceMemory,
+					},
+				},
+				Status: v1alpha1.ReservationStatus{
+					Host:                         "host-1",
+					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{},
 				},
 			},
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-				Allocations: make(map[string]string),
+			vms: map[string]*reservations.VM{
+				"vm-multi": {UUID: "vm-multi", CurrentHypervisor: "host-1", Resources: map[string]resource.Quantity{
+					string(hv1.ResourceMemory): testGiB(8),
+					string(hv1.ResourceCPU):    resource.MustParse("8"),
+				}},
+			},
+			wantAllocKeys: []string{"vm-multi"},
+			wantAllocGiB:  map[string]int64{"vm-multi": 8},
+			extraCheck: func(t *testing.T, k8sClient client.Client) {
+				t.Helper()
+				var updated v1alpha1.Reservation
+				if err := k8sClient.Get(context.Background(), client.ObjectKey{Name: "slot-a"}, &updated); err != nil {
+					t.Fatalf("get slot-a: %v", err)
+				}
+				alloc := updated.Status.CommittedResourceReservation.Allocation["vm-multi"]
+				got := alloc.Resources[hv1.ResourceCPU]
+				if got.Cmp(resource.MustParse("4")) != 0 {
+					t.Errorf("cpu alloc: want 4, got %s", got.String())
+				}
+			},
+		},
+		{
+			// S03: VM is larger than the slot; allocation is capped at slot capacity.
+			name: "S03 VM too large for slot — allocation capped at slot capacity",
+			res: crSlot("slot-a", "host-1", 8, map[string]string{
+				v1alpha1.AnnotationCandidateAllocation: "vm-big",
+			}),
+			vms:           map[string]*reservations.VM{"vm-big": memVM("vm-big", "host-1", 24)},
+			wantAllocKeys: []string{"vm-big"},
+			wantAllocGiB:  map[string]int64{"vm-big": 8},
+		},
+		{
+			// S04: Annotated VM is on a different host — not confirmed.
+			name: "S04 annotation candidate on wrong host — not confirmed",
+			res: crSlot("slot-a", "host-1", 8, map[string]string{
+				v1alpha1.AnnotationCandidateAllocation: "vm-wrong-host",
+			}),
+			vms:            map[string]*reservations.VM{"vm-wrong-host": memVM("vm-wrong-host", "host-2", 8)},
+			wantAbsentKeys: []string{"vm-wrong-host"},
+		},
+		{
+			// S05: Previously confirmed VM disappears from VMSource — removed.
+			name:           "S05 confirmed VM gone — removed from allocations",
+			res:            withAlloc(crSlot("slot-a", "host-1", 8, nil), "vm-gone", 8),
+			vms:            map[string]*reservations.VM{},
+			wantAbsentKeys: []string{"vm-gone"},
+		},
+		{
+			// S06: Two VMs on a 12 GiB slot; lexical order determines spare assignment.
+			// vm-aaa (lexically first) gets 8 GiB; vm-zzz gets the remaining 4 GiB.
+			name: "S06 two VMs on same slot — lexical order determines spare",
+			res: &v1alpha1.Reservation{
+				ObjectMeta: metav1.ObjectMeta{Name: "slot-a"},
+				Spec: v1alpha1.ReservationSpec{
+					Type:       v1alpha1.ReservationTypeCommittedResource,
+					TargetHost: "host-1",
+					Resources:  map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(12)},
+					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+						ProjectID: "p-1", ResourceName: "test-flavor", PrimaryResource: hv1.ResourceMemory,
+					},
+				},
+				Status: v1alpha1.ReservationStatus{
+					Host: "host-1",
+					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
+						Allocation: map[string]v1alpha1.CommittedResourceAllocation{
+							"vm-aaa": {ObjectRef: corev1.ObjectReference{Name: "vm-aaa"}, Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(8)}},
+							"vm-zzz": {ObjectRef: corev1.ObjectReference{Name: "vm-zzz"}, Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(8)}},
+						},
+					},
+				},
+			},
+			vms: map[string]*reservations.VM{
+				"vm-aaa": memVM("vm-aaa", "host-1", 8),
+				"vm-zzz": memVM("vm-zzz", "host-1", 8),
+			},
+			wantAllocGiB: map[string]int64{"vm-aaa": 8, "vm-zzz": 4},
+		},
+		{
+			// S07: VM (16 GiB) spans two slots; slot-a already covers 8 GiB, slot-b gets the rest.
+			name: "S07 VM spans two slots — second slot gets remainder",
+			res: crSlot("slot-b", "host-1", 8, map[string]string{
+				v1alpha1.AnnotationCandidateAllocation: "vm-big",
+			}),
+			siblings:      []*v1alpha1.Reservation{withAlloc(crSlot("slot-a", "host-1", 8, nil), "vm-big", 8)},
+			vms:           map[string]*reservations.VM{"vm-big": memVM("vm-big", "host-1", 16)},
+			wantAllocKeys: []string{"vm-big"},
+			wantAllocGiB:  map[string]int64{"vm-big": 8},
+		},
+		{
+			// S08: Slot is fully occupied; annotation candidate cannot fit.
+			name: "S08 slot at capacity — annotation candidate not confirmed",
+			res: &v1alpha1.Reservation{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "slot-a",
+					Annotations: map[string]string{v1alpha1.AnnotationCandidateAllocation: "vm-new"},
+				},
+				Spec: v1alpha1.ReservationSpec{
+					Type:       v1alpha1.ReservationTypeCommittedResource,
+					TargetHost: "host-1",
+					Resources:  map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(8)},
+					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+						ProjectID: "p-1", ResourceName: "test-flavor", PrimaryResource: hv1.ResourceMemory,
+					},
+				},
+				Status: v1alpha1.ReservationStatus{
+					Host: "host-1",
+					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
+						Allocation: map[string]v1alpha1.CommittedResourceAllocation{
+							"vm-existing": {ObjectRef: corev1.ObjectReference{Name: "vm-existing"}, Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(8)}},
+						},
+					},
+				},
+			},
+			vms: map[string]*reservations.VM{
+				"vm-existing": memVM("vm-existing", "host-1", 8),
+				"vm-new":      memVM("vm-new", "host-1", 8),
+			},
+			wantAllocGiB:   map[string]int64{"vm-existing": 8},
+			wantAbsentKeys: []string{"vm-new"},
+		},
+		{
+			// S09: VMSource returns error for one VM; that VM is dropped, others are unaffected.
+			name: "S09 VMSource error for one VM — dropped, others unaffected",
+			res: &v1alpha1.Reservation{
+				ObjectMeta: metav1.ObjectMeta{Name: "slot-a"},
+				Spec: v1alpha1.ReservationSpec{
+					Type:       v1alpha1.ReservationTypeCommittedResource,
+					TargetHost: "host-1",
+					Resources:  map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(16)},
+					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+						ProjectID: "p-1", ResourceName: "test-flavor", PrimaryResource: hv1.ResourceMemory,
+					},
+				},
+				Status: v1alpha1.ReservationStatus{
+					Host: "host-1",
+					CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
+						Allocation: map[string]v1alpha1.CommittedResourceAllocation{
+							"vm-good":  {ObjectRef: corev1.ObjectReference{Name: "vm-good"}, Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(8)}},
+							"vm-error": {ObjectRef: corev1.ObjectReference{Name: "vm-error"}, Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(8)}},
+						},
+					},
+				},
+			},
+			vmSrc: &errForUUID{
+				errUUID:  "vm-error",
+				err:      errors.New("nova unavailable"),
+				fallback: &vmSourceByUUID{vms: map[string]*reservations.VM{"vm-good": memVM("vm-good", "host-1", 8)}},
+			},
+			wantAllocGiB:   map[string]int64{"vm-good": 8},
+			wantAbsentKeys: []string{"vm-error"},
+		},
+		{
+			// ZeroAllocRemoval: VM fully covered by sibling slot — removed from this slot.
+			name:           "zero alloc removal — VM fully covered by sibling slot removed",
+			res:            withAlloc(crSlot("res-b", "host-1", 8, nil), "vm-race", 8),
+			siblings:       []*v1alpha1.Reservation{withAlloc(crSlot("res-a", "host-1", 8, nil), "vm-race", 8)},
+			vms:            map[string]*reservations.VM{"vm-race": memVM("vm-race", "host-1", 8)},
+			wantAbsentKeys: []string{"vm-race"},
+		},
+		{
+			// MultiSlotPartialAllocation: sibling covers 3 GiB of vm-1 (8 GiB VM); this slot gets the remaining 5 GiB.
+			name: "partial allocation — sibling covers part, this slot gets remainder",
+			res: crSlot("res-b", "host-1", 8, map[string]string{
+				v1alpha1.AnnotationCandidateAllocation: "vm-1",
+			}),
+			siblings:     []*v1alpha1.Reservation{withAlloc(crSlot("res-a", "host-1", 16, nil), "vm-1", 3)},
+			vms:          map[string]*reservations.VM{"vm-1": memVM("vm-1", "host-1", 8)},
+			wantAllocGiB: map[string]int64{"vm-1": 5},
+		},
+		{
+			// S01: PAYG VM annotated on two slots simultaneously.
+			// slot-a reconciles first and claims vm-x; slot-b reconciles second and defers.
+			// Total assigned must equal VM size (8 GiB), exactly one slot wins.
+			name: "S01 PAYG annotated on both slots — total = VM size, exactly one slot wins",
+			res: crSlot("slot-a", "host-1", 8, map[string]string{
+				v1alpha1.AnnotationCandidateAllocation: "vm-x",
+			}),
+			siblings: []*v1alpha1.Reservation{crSlot("slot-b", "host-1", 8, map[string]string{
+				v1alpha1.AnnotationCandidateAllocation: "vm-x",
+			})},
+			vms:           map[string]*reservations.VM{"vm-x": memVM("vm-x", "host-1", 8)},
+			secondResName: "slot-b",
+			wantAllocKeys: []string{"vm-x"},
+			extraCheck: func(t *testing.T, k8sClient client.Client) {
+				t.Helper()
+				ctx := context.Background()
+				var updA, updB v1alpha1.Reservation
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: "slot-a"}, &updA); err != nil {
+					t.Fatalf("get slot-a: %v", err)
+				}
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: "slot-b"}, &updB); err != nil {
+					t.Fatalf("get slot-b: %v", err)
+				}
+				allocA := getAllocGiB(&updA, "vm-x")
+				allocB := getAllocGiB(&updB, "vm-x")
+				total := allocA.DeepCopy()
+				total.Add(allocB)
+				if total.Cmp(testGiB(8)) != 0 {
+					t.Errorf("total assigned to vm-x = %s, want 8 GiB (slot-a=%s, slot-b=%s)", total.String(), allocA.String(), allocB.String())
+				}
+				if (allocA.Cmp(testGiB(0)) > 0) == (allocB.Cmp(testGiB(0)) > 0) {
+					t.Errorf("expected exactly one slot to hold vm-x, got slot-a=%s slot-b=%s", allocA.String(), allocB.String())
+				}
+			},
+		},
+		{
+			// S10: Both slots start with vm-x confirmed (race state).
+			// Step 1: slot-a reconciles, sees slot-b has vm-x → drops it.
+			// Step 2: slot-b reconciles, sees slot-a has nothing → keeps vm-x.
+			// Total = 8 GiB, exactly one slot wins.
+			name:           "S10 convergence from race state — one slot drops, other keeps",
+			res:            withAlloc(crSlot("slot-a", "host-1", 8, nil), "vm-x", 8),
+			siblings:       []*v1alpha1.Reservation{withAlloc(crSlot("slot-b", "host-1", 8, nil), "vm-x", 8)},
+			vms:            map[string]*reservations.VM{"vm-x": memVM("vm-x", "host-1", 8)},
+			secondResName:  "slot-b",
+			wantAbsentKeys: []string{"vm-x"},
+			extraCheck: func(t *testing.T, k8sClient client.Client) {
+				t.Helper()
+				ctx := context.Background()
+				var updA, updB v1alpha1.Reservation
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: "slot-a"}, &updA); err != nil {
+					t.Fatalf("get slot-a: %v", err)
+				}
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: "slot-b"}, &updB); err != nil {
+					t.Fatalf("get slot-b: %v", err)
+				}
+				allocA := getAllocGiB(&updA, "vm-x")
+				allocB := getAllocGiB(&updB, "vm-x")
+				total := allocA.DeepCopy()
+				total.Add(allocB)
+				if total.Cmp(testGiB(8)) != 0 {
+					t.Errorf("total assigned to vm-x = %s, want exactly 8 GiB (slot-a=%s, slot-b=%s)", total.String(), allocA.String(), allocB.String())
+				}
+				if (allocA.Cmp(testGiB(0)) > 0) == (allocB.Cmp(testGiB(0)) > 0) {
+					t.Errorf("expected exactly one slot to hold vm-x after convergence, got slot-a=%s slot-b=%s", allocA.String(), allocB.String())
+				}
 			},
 		},
 	}
-}
 
-// newTestHypervisorCRD creates a test Hypervisor CRD with instances.
-//
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objects := []client.Object{tt.res}
+			for _, s := range tt.siblings {
+				objects = append(objects, s)
+			}
+			k8sClient := newCRTestClient(scheme, objects...)
 
-func newTestHypervisorCRD(name string, instances []hv1.Instance) *hv1.Hypervisor {
-	return &hv1.Hypervisor{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
-		Status: hv1.HypervisorStatus{
-			Instances: instances,
-		},
+			vmSrc := tt.vmSrc
+			if vmSrc == nil {
+				vmSrc = &vmSourceByUUID{vms: tt.vms}
+			}
+			controller := &CommitmentReservationController{
+				Client:   k8sClient,
+				Scheme:   scheme,
+				Conf:     ReservationControllerConfig{},
+				VMSource: vmSrc,
+			}
+			ctx := WithNewReconcileID(context.Background())
+
+			if err := controller.reconcileAllocations(ctx, tt.res); err != nil {
+				t.Fatalf("reconcileAllocations: %v", err)
+			}
+
+			if tt.secondResName != "" {
+				var second v1alpha1.Reservation
+				if err := k8sClient.Get(ctx, client.ObjectKey{Name: tt.secondResName}, &second); err != nil {
+					t.Fatalf("get second %q: %v", tt.secondResName, err)
+				}
+				if err := controller.reconcileAllocations(ctx, &second); err != nil {
+					t.Fatalf("reconcileAllocations second=%q: %v", tt.secondResName, err)
+				}
+			}
+
+			var updated v1alpha1.Reservation
+			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(tt.res), &updated); err != nil {
+				t.Fatalf("get updated: %v", err)
+			}
+			allocs := map[string]v1alpha1.CommittedResourceAllocation{}
+			if updated.Status.CommittedResourceReservation != nil {
+				allocs = updated.Status.CommittedResourceReservation.Allocation
+			}
+
+			for _, key := range tt.wantAllocKeys {
+				if _, ok := allocs[key]; !ok {
+					t.Errorf("want %q in allocations, not found", key)
+				}
+			}
+			for _, key := range tt.wantAbsentKeys {
+				if _, ok := allocs[key]; ok {
+					t.Errorf("want %q absent from allocations, but found", key)
+				}
+			}
+			for vmUUID, wantGiB := range tt.wantAllocGiB {
+				alloc, ok := allocs[vmUUID]
+				if !ok {
+					t.Errorf("wantAllocGiB: %q not in allocations", vmUUID)
+					continue
+				}
+				got := alloc.Resources[hv1.ResourceMemory]
+				if got.Cmp(testGiB(wantGiB)) != 0 {
+					t.Errorf("memory alloc for %q: want %d GiB, got %s", vmUUID, wantGiB, got.String())
+				}
+			}
+			for vmUUID, wantName := range tt.wantObjectRef {
+				alloc, ok := allocs[vmUUID]
+				if !ok {
+					t.Errorf("wantObjectRef: %q not in allocations", vmUUID)
+					continue
+				}
+				if alloc.ObjectRef.Name != wantName {
+					t.Errorf("ObjectRef.Name for %q: want %q, got %q", vmUUID, wantName, alloc.ObjectRef.Name)
+				}
+			}
+
+			if tt.extraCheck != nil {
+				tt.extraCheck(t, k8sClient)
+			}
+		})
 	}
 }
 
@@ -521,240 +746,6 @@ func TestHypervisorToReservations(t *testing.T) {
 	}
 }
 
-// ============================================================================
-// Test: cleanupCandidateReservations
-// ============================================================================
-
-// TestCleanupCandidateReservations_MultiCandidate covers the BLI #409 acceptance
-// criterion: VM UUID in 3 reservations, confirmed on 1, cleaned from 2.
-func TestCleanupCandidateReservations_MultiCandidate(t *testing.T) {
-	scheme := newCRTestScheme(t)
-	now := time.Now()
-	oldTime := metav1.NewTime(now.Add(-30 * time.Minute))
-
-	const vmUUID = "vm-candidate-uuid"
-
-	makeAlloc := func() map[string]v1alpha1.CommittedResourceAllocation {
-		return map[string]v1alpha1.CommittedResourceAllocation{
-			vmUUID: {
-				CreationTimestamp: oldTime,
-				Resources:         map[hv1.ResourceName]resource.Quantity{"memory": resource.MustParse("4Gi")},
-			},
-		}
-	}
-
-	winning := &v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: "res-winning"},
-		Spec: v1alpha1.ReservationSpec{
-			Type:       v1alpha1.ReservationTypeCommittedResource,
-			TargetHost: "host-1",
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				Allocations: makeAlloc(),
-			},
-		},
-		Status: v1alpha1.ReservationStatus{Host: "host-1"},
-	}
-	candidate2 := &v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: "res-candidate-2"},
-		Spec: v1alpha1.ReservationSpec{
-			Type:       v1alpha1.ReservationTypeCommittedResource,
-			TargetHost: "host-2",
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				Allocations: makeAlloc(),
-			},
-		},
-		Status: v1alpha1.ReservationStatus{Host: "host-2"},
-	}
-	candidate3 := &v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: "res-candidate-3"},
-		Spec: v1alpha1.ReservationSpec{
-			Type:       v1alpha1.ReservationTypeCommittedResource,
-			TargetHost: "host-3",
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				Allocations: makeAlloc(),
-			},
-		},
-		Status: v1alpha1.ReservationStatus{Host: "host-3"},
-	}
-
-	k8sClient := newCRTestClient(scheme, winning, candidate2, candidate3)
-	ctrl := &CommitmentReservationController{Client: k8sClient, Scheme: scheme}
-	ctx := WithNewGlobalRequestID(context.Background())
-
-	if err := ctrl.cleanupCandidateReservations(ctx, "res-winning", vmUUID); err != nil {
-		t.Fatalf("cleanupCandidateReservations() error = %v", err)
-	}
-
-	// winning reservation must still carry the VM UUID
-	var updatedWinning v1alpha1.Reservation
-	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(winning), &updatedWinning); err != nil {
-		t.Fatalf("failed to get winning reservation: %v", err)
-	}
-	if _, ok := updatedWinning.Spec.CommittedResourceReservation.Allocations[vmUUID]; !ok {
-		t.Errorf("winning reservation should still carry vm UUID %s", vmUUID)
-	}
-
-	// both candidates must have the VM UUID removed
-	for _, obj := range []*v1alpha1.Reservation{candidate2, candidate3} {
-		var updated v1alpha1.Reservation
-		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), &updated); err != nil {
-			t.Fatalf("failed to get %s: %v", obj.Name, err)
-		}
-		if _, ok := updated.Spec.CommittedResourceReservation.Allocations[vmUUID]; ok {
-			t.Errorf("candidate reservation %s should have vm UUID %s removed", obj.Name, vmUUID)
-		}
-	}
-}
-
-// TestReconcileAllocations_ConfirmTriggersCandidateCleanup verifies the end-to-end flow:
-// when reconcileAllocations confirms a VM on the winning reservation, the same VM UUID
-// is removed from candidate reservations on other hosts.
-func TestReconcileAllocations_ConfirmTriggersCandidateCleanup(t *testing.T) {
-	scheme := newCRTestScheme(t)
-	now := time.Now()
-	oldTime := metav1.NewTime(now.Add(-30 * time.Minute))
-
-	const vmUUID = "vm-confirmed-uuid"
-	config := ReservationControllerConfig{AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute}}
-
-	makeAlloc := func() map[string]v1alpha1.CommittedResourceAllocation {
-		return map[string]v1alpha1.CommittedResourceAllocation{
-			vmUUID: {
-				CreationTimestamp: oldTime,
-				Resources:         map[hv1.ResourceName]resource.Quantity{"memory": resource.MustParse("4Gi")},
-			},
-		}
-	}
-
-	winning := &v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: "res-winning"},
-		Spec: v1alpha1.ReservationSpec{
-			Type:       v1alpha1.ReservationTypeCommittedResource,
-			TargetHost: "host-1",
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				Allocations: makeAlloc(),
-			},
-		},
-		Status: v1alpha1.ReservationStatus{
-			Host: "host-1",
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-				Allocations: map[string]string{}, // not yet confirmed
-			},
-		},
-	}
-	candidate2 := &v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: "res-candidate-2"},
-		Spec: v1alpha1.ReservationSpec{
-			Type:       v1alpha1.ReservationTypeCommittedResource,
-			TargetHost: "host-2",
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				Allocations: makeAlloc(),
-			},
-		},
-		Status: v1alpha1.ReservationStatus{Host: "host-2"},
-	}
-	hypervisor := newTestHypervisorCRD("host-1", []hv1.Instance{
-		{ID: vmUUID, Name: "vm-name", Active: true},
-	})
-
-	k8sClient := newCRTestClient(scheme, winning, candidate2, hypervisor)
-	controller := &CommitmentReservationController{Client: k8sClient, Scheme: scheme, Conf: config}
-	ctx := WithNewGlobalRequestID(context.Background())
-
-	if _, err := controller.reconcileAllocations(ctx, winning); err != nil {
-		t.Fatalf("reconcileAllocations() error = %v", err)
-	}
-
-	// VM must be confirmed on winning reservation
-	var updatedWinning v1alpha1.Reservation
-	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(winning), &updatedWinning); err != nil {
-		t.Fatalf("failed to get winning reservation: %v", err)
-	}
-	if updatedWinning.Status.CommittedResourceReservation == nil ||
-		updatedWinning.Status.CommittedResourceReservation.Allocations[vmUUID] != "host-1" {
-		t.Errorf("expected vm %s confirmed on host-1 in winning reservation status", vmUUID)
-	}
-
-	// VM UUID must be removed from the candidate reservation
-	var updatedCandidate v1alpha1.Reservation
-	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(candidate2), &updatedCandidate); err != nil {
-		t.Fatalf("failed to get candidate reservation: %v", err)
-	}
-	if _, ok := updatedCandidate.Spec.CommittedResourceReservation.Allocations[vmUUID]; ok {
-		t.Errorf("expected vm UUID %s to be removed from candidate reservation", vmUUID)
-	}
-}
-
-// TestCleanupCandidateReservations_NoDoubleCleanup verifies that a VM UUID already
-// confirmed in a previous reconcile cycle (present in existingStatusAllocations) does
-// not trigger a redundant cleanup call.
-func TestReconcileAllocations_NoCleanupForAlreadyConfirmedVM(t *testing.T) {
-	scheme := newCRTestScheme(t)
-	now := time.Now()
-	oldTime := metav1.NewTime(now.Add(-30 * time.Minute))
-
-	const vmUUID = "vm-already-confirmed"
-	config := ReservationControllerConfig{AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute}}
-
-	// Winning reservation already has the VM in Status.Allocations from a prior cycle.
-	winning := &v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: "res-winning"},
-		Spec: v1alpha1.ReservationSpec{
-			Type:       v1alpha1.ReservationTypeCommittedResource,
-			TargetHost: "host-1",
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
-					vmUUID: {
-						CreationTimestamp: oldTime,
-						Resources:         map[hv1.ResourceName]resource.Quantity{"memory": resource.MustParse("4Gi")},
-					},
-				},
-			},
-		},
-		Status: v1alpha1.ReservationStatus{
-			Host: "host-1",
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-				Allocations: map[string]string{vmUUID: "host-1"}, // already confirmed
-			},
-		},
-	}
-	// This candidate still has the VM UUID — it should NOT be touched because the VM
-	// was confirmed in a previous cycle (the cleanup already ran then).
-	staleCandidate := &v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: "res-stale-candidate"},
-		Spec: v1alpha1.ReservationSpec{
-			Type:       v1alpha1.ReservationTypeCommittedResource,
-			TargetHost: "host-2",
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
-					vmUUID: {CreationTimestamp: oldTime},
-				},
-			},
-		},
-		Status: v1alpha1.ReservationStatus{Host: "host-2"},
-	}
-	hypervisor := newTestHypervisorCRD("host-1", []hv1.Instance{
-		{ID: vmUUID, Name: "vm-name", Active: true},
-	})
-
-	k8sClient := newCRTestClient(scheme, winning, staleCandidate, hypervisor)
-	controller := &CommitmentReservationController{Client: k8sClient, Scheme: scheme, Conf: config}
-	ctx := WithNewGlobalRequestID(context.Background())
-
-	if _, err := controller.reconcileAllocations(ctx, winning); err != nil {
-		t.Fatalf("reconcileAllocations() error = %v", err)
-	}
-
-	// Stale candidate should be untouched — cleanup only fires on first confirmation.
-	var updatedCandidate v1alpha1.Reservation
-	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(staleCandidate), &updatedCandidate); err != nil {
-		t.Fatalf("failed to get stale candidate: %v", err)
-	}
-	if _, ok := updatedCandidate.Spec.CommittedResourceReservation.Allocations[vmUUID]; !ok {
-		t.Errorf("stale candidate should not have been touched on a re-reconcile of an already-confirmed VM")
-	}
-}
-
 func TestCommitmentReservationController_reconcileInstanceReservation_Success(t *testing.T) {
 	scheme := newCRTestScheme(t)
 
@@ -780,44 +771,11 @@ func TestCommitmentReservationController_reconcileInstanceReservation_Success(t 
 
 	k8sClient := newCRTestClient(scheme, reservation, newTestFlavorKnowledge(), hypervisor1, hypervisor2)
 
-	// Create a mock server that returns a successful response
-	mockResponse := &schedulerdelegationapi.ExternalSchedulerResponse{
-		Hosts: []string{"test-host-1", "test-host-2"},
-	}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify the request body
-		var req schedulerdelegationapi.ExternalSchedulerRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Errorf("Failed to decode request: %v", err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		// Verify request structure
-		if req.Spec.Data.NumInstances != 1 {
-			t.Errorf("Expected NumInstances to be 1, got %d", req.Spec.Data.NumInstances)
-		}
-
-		if err := json.NewEncoder(w).Encode(mockResponse); err != nil {
-			t.Fatalf("failed to write response: %v", err)
-		}
-	}))
-	defer server.Close()
-
-	config := ReservationControllerConfig{
-		SchedulerURL: server.URL,
-	}
-
 	reconciler := &CommitmentReservationController{
-		Client: k8sClient,
-		Scheme: scheme,
-		Conf:   config,
-	}
-
-	// Initialize the reconciler (this sets up SchedulerClient)
-	if err := reconciler.Init(context.Background(), config); err != nil {
-		t.Fatalf("Failed to initialize reconciler: %v", err)
+		Client:    k8sClient,
+		Scheme:    scheme,
+		Conf:      ReservationControllerConfig{},
+		Scheduler: newMockScheduler([]string{"test-host-1", "test-host-2"}),
 	}
 
 	req := ctrl.Request{
@@ -876,20 +834,19 @@ func TestCommitmentReservationController_reconcileInstanceReservation_Success(t 
 // Test: domain_name scheduler hint
 // ============================================================================
 
-// newTestSchedulerServer captures the decoded request and returns a single host.
-func newTestSchedulerServer(t *testing.T, captured *schedulerdelegationapi.ExternalSchedulerRequest) *httptest.Server {
-	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := json.NewDecoder(r.Body).Decode(captured); err != nil {
-			t.Errorf("failed to decode scheduler request: %v", err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		resp := schedulerdelegationapi.ExternalSchedulerResponse{Hosts: []string{"test-host-1"}}
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			t.Fatalf("failed to write scheduler response: %v", err)
-		}
-	}))
+// capturingPipeline records the SchedulerRequest it was run with and returns a
+// single host, so tests can assert on the request the reconciler built.
+type capturingPipeline struct{ captured *sched.PlacementRequest }
+
+func (p capturingPipeline) Run(req sched.PlacementRequest) (sched.PlacementResult, error) {
+	*p.captured = req
+	return sched.PlacementResult{OrderedHosts: []string{"test-host-1"}}, nil
+}
+
+type capturingPipelineProvider struct{ captured *sched.PlacementRequest }
+
+func (f capturingPipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.PlacementRequest], bool) {
+	return capturingPipeline(f), true
 }
 
 func TestCommitmentReservationController_DomainNameHint(t *testing.T) {
@@ -938,16 +895,13 @@ func TestCommitmentReservationController_DomainNameHint(t *testing.T) {
 			k8sClient := newCRTestClient(scheme, reservation, newTestFlavorKnowledge(),
 				&hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "test-host-1"}})
 
-			var captured schedulerdelegationapi.ExternalSchedulerRequest
-			server := newTestSchedulerServer(t, &captured)
-			defer server.Close()
-
+			var captured sched.PlacementRequest
 			reconciler := &CommitmentReservationController{
-				Client:          k8sClient,
-				Scheme:          scheme,
-				Conf:            ReservationControllerConfig{SchedulerURL: server.URL},
-				SchedulerClient: reservations.NewSchedulerClient(server.URL),
-				DomainResolver:  tt.resolver,
+				Client:         k8sClient,
+				Scheme:         scheme,
+				Conf:           ReservationControllerConfig{},
+				Scheduler:      sched.NewPlacement(capturingPipelineProvider{captured: &captured}, fakeGatherer{}),
+				DomainResolver: tt.resolver,
 			}
 
 			if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
@@ -964,257 +918,14 @@ func TestCommitmentReservationController_DomainNameHint(t *testing.T) {
 				}
 			}
 
-			// Verify domain_name hint.
-			gotDomain, err := captured.Spec.Data.GetSchedulerHintStr("domain_name")
-			if tt.wantDomainName == "" {
-				if err == nil {
-					t.Errorf("expected domain_name hint absent, got %q", gotDomain)
-				}
-			} else {
-				if err != nil {
-					t.Fatalf("expected domain_name hint %q, got error: %v", tt.wantDomainName, err)
-				}
-				if gotDomain != tt.wantDomainName {
-					t.Errorf("expected domain_name hint %q, got %q", tt.wantDomainName, gotDomain)
-				}
+			// Verify domain_name hint (now the typed request field).
+			if captured.DomainName != tt.wantDomainName {
+				t.Errorf("expected domain name %q, got %q", tt.wantDomainName, captured.DomainName)
 			}
 
-			// _nova_check_type must always be present regardless of resolver outcome.
-			gotIntent, err := captured.Spec.Data.GetSchedulerHintStr("_nova_check_type")
-			if err != nil || gotIntent != string(schedulerdelegationapi.ReserveForCommittedResourceIntent) {
-				t.Errorf("expected _nova_check_type=%q, got %q (err=%v)", schedulerdelegationapi.ReserveForCommittedResourceIntent, gotIntent, err)
-			}
-		})
-	}
-}
-
-// ============================================================================
-// Tests: live migration detection in reconcileAllocations
-// ============================================================================
-
-// newHVWithCapacity creates a Hypervisor CRD with the given instances and effective capacity.
-func newHVWithCapacity(name string, memGiB, cpuCores int64, instances []hv1.Instance) *hv1.Hypervisor {
-	return &hv1.Hypervisor{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
-		Status: hv1.HypervisorStatus{
-			EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
-				hv1.ResourceMemory: resource.MustParse(fmt.Sprintf("%dGi", memGiB)),
-				hv1.ResourceCPU:    resource.MustParse(strconv.FormatInt(cpuCores, 10)),
-			},
-			Instances: instances,
-		},
-	}
-}
-
-// newConfirmedCRReservation creates a ready CR reservation with one confirmed VM on host.
-// slotMemGiB/slotCPU define the full reservation slot; vmMemGiB/vmCPU define what the VM
-// actually consumes — these may be smaller, leaving an unfilled remainder in the slot.
-func newConfirmedCRReservation(name, host, vmUUID string, slotMemGiB, slotCPU, vmMemGiB, vmCPU int64) *v1alpha1.Reservation {
-	return &v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
-		Spec: v1alpha1.ReservationSpec{
-			Type:       v1alpha1.ReservationTypeCommittedResource,
-			TargetHost: host,
-			Resources: map[hv1.ResourceName]resource.Quantity{
-				hv1.ResourceMemory: resource.MustParse(fmt.Sprintf("%dGi", slotMemGiB)),
-				hv1.ResourceCPU:    resource.MustParse(strconv.FormatInt(slotCPU, 10)),
-			},
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
-				ProjectID:    "test-project",
-				ResourceName: "test-flavor",
-				Allocations: map[string]v1alpha1.CommittedResourceAllocation{
-					vmUUID: {
-						CreationTimestamp: metav1.NewTime(time.Now().Add(-1 * time.Hour)),
-						Resources: map[hv1.ResourceName]resource.Quantity{
-							hv1.ResourceMemory: resource.MustParse(fmt.Sprintf("%dGi", vmMemGiB)),
-							hv1.ResourceCPU:    resource.MustParse(strconv.FormatInt(vmCPU, 10)),
-						},
-					},
-				},
-			},
-		},
-		Status: v1alpha1.ReservationStatus{
-			Host: host,
-			Conditions: []metav1.Condition{
-				{Type: v1alpha1.ReservationConditionReady, Status: metav1.ConditionTrue, Reason: "ReservationActive"},
-			},
-			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-				Allocations: map[string]string{vmUUID: host},
-			},
-		},
-	}
-}
-
-func TestReconcileAllocations_LiveMigration(t *testing.T) {
-	const (
-		vmUUID  = "vm-uuid"
-		vm2UUID = "vm-uuid-2"
-		oldHost = "host-old"
-		newHost = "host-new"
-	)
-
-	config := ReservationControllerConfig{AllocationGracePeriod: metav1.Duration{Duration: 15 * time.Minute}}
-
-	tests := []struct {
-		name string
-		// reservation to use; nil uses the default single-VM reservation
-		reservation *v1alpha1.Reservation
-		// extra objects beyond the base reservation and old host HV
-		extraObjects []client.Object
-		// expected outcomes after first reconcile pass
-		wantTargetHost string
-		wantStatusHost string // expected in Status.Allocations[vmUUID]; "" means absent
-		wantSpecHasVM  bool
-		// if true, run a second reconcile pass and assert state is stable
-		assertSecondPass bool
-	}{
-		{
-			name: "single VM, new host has capacity: follow the VM",
-			extraObjects: []client.Object{
-				newHVWithCapacity(newHost, 960, 80, []hv1.Instance{{ID: vmUUID, Active: true}}),
-			},
-			wantTargetHost:   newHost,
-			wantStatusHost:   newHost,
-			wantSpecHasVM:    true,
-			assertSecondPass: true,
-		},
-		{
-			name: "single VM, new host at capacity: remove VM, slot stays on old host",
-			extraObjects: []client.Object{
-				// VM (240Gi/20) running on newHost; a full-slot blocker leaves no room for
-				// the 240Gi/20 slot remainder.
-				newHVWithCapacity(newHost, 480, 40, []hv1.Instance{{ID: vmUUID, Active: true}}),
-				&v1alpha1.Reservation{
-					ObjectMeta: metav1.ObjectMeta{Name: "res-blocker"},
-					Spec: v1alpha1.ReservationSpec{
-						Type:       v1alpha1.ReservationTypeCommittedResource,
-						TargetHost: newHost,
-						Resources: map[hv1.ResourceName]resource.Quantity{
-							hv1.ResourceMemory: resource.MustParse("480Gi"),
-							hv1.ResourceCPU:    resource.MustParse("40"),
-						},
-					},
-					Status: v1alpha1.ReservationStatus{Host: newHost},
-				},
-			},
-			wantTargetHost: oldHost,
-			wantStatusHost: "",
-			wantSpecHasVM:  false,
-		},
-		{
-			name: "multiple VMs, one migrated: remove migrated VM, never update TargetHost",
-			reservation: func() *v1alpha1.Reservation {
-				res := newConfirmedCRReservation("res-1", oldHost, vmUUID, 480, 40, 240, 20)
-				// Add a second VM confirmed on oldHost.
-				res.Spec.CommittedResourceReservation.Allocations[vm2UUID] = v1alpha1.CommittedResourceAllocation{
-					CreationTimestamp: metav1.NewTime(time.Now().Add(-1 * time.Hour)),
-					Resources: map[hv1.ResourceName]resource.Quantity{
-						hv1.ResourceMemory: resource.MustParse("240Gi"),
-						hv1.ResourceCPU:    resource.MustParse("20"),
-					},
-				}
-				res.Status.CommittedResourceReservation.Allocations[vm2UUID] = oldHost
-				return res
-			}(),
-			extraObjects: []client.Object{
-				// vmUUID has migrated to newHost with plenty of capacity; vm2UUID stays on oldHost.
-				// Supply oldHost HV explicitly so vm2UUID is present on it.
-				newTestHypervisorCRD(oldHost, []hv1.Instance{{ID: vm2UUID, Active: true}}),
-				newHVWithCapacity(newHost, 960, 80, []hv1.Instance{{ID: vmUUID, Active: true}}),
-			},
-			wantTargetHost: oldHost,
-			wantStatusHost: "",
-			wantSpecHasVM:  false,
-		},
-		{
-			name:           "VM gone from all hosts: remove allocation",
-			extraObjects:   []client.Object{newTestHypervisorCRD("host-other", []hv1.Instance{{ID: "other-vm"}})},
-			wantTargetHost: oldHost,
-			wantStatusHost: "",
-			wantSpecHasVM:  false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			scheme := newCRTestScheme(t)
-
-			res := tt.reservation
-			if res == nil {
-				res = newConfirmedCRReservation("res-1", oldHost, vmUUID, 480, 40, 240, 20)
-			}
-
-			var objects []client.Object
-			objects = append(objects, res)
-
-			// Add an oldHost HV unless the test provides its own via extraObjects.
-			addsOldHostHV := false
-			for _, obj := range tt.extraObjects {
-				if hv, ok := obj.(*hv1.Hypervisor); ok && hv.Name == oldHost {
-					addsOldHostHV = true
-					break
-				}
-			}
-			if !addsOldHostHV {
-				objects = append(objects, newTestHypervisorCRD(oldHost, []hv1.Instance{}))
-			}
-			objects = append(objects, tt.extraObjects...)
-
-			k8sClient := newCRTestClient(scheme, objects...)
-			controller := &CommitmentReservationController{Client: k8sClient, Scheme: scheme, Conf: config}
-			ctx := WithNewGlobalRequestID(context.Background())
-
-			if _, err := controller.reconcileAllocations(ctx, res); err != nil {
-				t.Fatalf("reconcileAllocations() error = %v", err)
-			}
-
-			var updated v1alpha1.Reservation
-			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(res), &updated); err != nil {
-				t.Fatalf("failed to get updated reservation: %v", err)
-			}
-
-			if updated.Spec.TargetHost != tt.wantTargetHost {
-				t.Errorf("Spec.TargetHost = %q, want %q", updated.Spec.TargetHost, tt.wantTargetHost)
-			}
-			_, specHasVM := updated.Spec.CommittedResourceReservation.Allocations[vmUUID]
-			if specHasVM != tt.wantSpecHasVM {
-				t.Errorf("VM in Spec.Allocations = %v, want %v", specHasVM, tt.wantSpecHasVM)
-			}
-			var statusHost string
-			if updated.Status.CommittedResourceReservation != nil {
-				statusHost = updated.Status.CommittedResourceReservation.Allocations[vmUUID]
-			}
-			if statusHost != tt.wantStatusHost {
-				t.Errorf("Status.Allocations[%s] = %q, want %q", vmUUID, statusHost, tt.wantStatusHost)
-			}
-
-			// For the migration-follow case: run a second reconcile to confirm state is
-			// stable and Status.Host was advanced to the new host in the first pass.
-			if tt.assertSecondPass {
-				if _, err := controller.reconcileAllocations(ctx, &updated); err != nil {
-					t.Fatalf("second reconcileAllocations() error = %v", err)
-				}
-				var updated2 v1alpha1.Reservation
-				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(res), &updated2); err != nil {
-					t.Fatalf("failed to get reservation after second pass: %v", err)
-				}
-				if updated2.Spec.TargetHost != tt.wantTargetHost {
-					t.Errorf("second pass: Spec.TargetHost = %q, want %q", updated2.Spec.TargetHost, tt.wantTargetHost)
-				}
-				if updated2.Status.Host != tt.wantTargetHost {
-					t.Errorf("second pass: Status.Host = %q, want %q", updated2.Status.Host, tt.wantTargetHost)
-				}
-				_, specHasVM2 := updated2.Spec.CommittedResourceReservation.Allocations[vmUUID]
-				if !specHasVM2 {
-					t.Errorf("second pass: VM unexpectedly removed from Spec.Allocations")
-				}
-				var statusHost2 string
-				if updated2.Status.CommittedResourceReservation != nil {
-					statusHost2 = updated2.Status.CommittedResourceReservation.Allocations[vmUUID]
-				}
-				if statusHost2 != tt.wantStatusHost {
-					t.Errorf("second pass: Status.Allocations[%s] = %q, want %q", vmUUID, statusHost2, tt.wantStatusHost)
-				}
+			// Intent must always be set regardless of resolver outcome.
+			if captured.Intent != schedulerdelegationapi.ReserveForCommittedResourceIntent {
+				t.Errorf("expected Intent=%q, got %q", schedulerdelegationapi.ReserveForCommittedResourceIntent, captured.Intent)
 			}
 		})
 	}
@@ -1313,7 +1024,9 @@ func TestReconcile_RevokesReadyWhenTargetHostCleared(t *testing.T) {
 				},
 			},
 			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{
-				Allocations: map[string]string{"vm-1": "host-1"},
+				Allocation: map[string]v1alpha1.CommittedResourceAllocation{
+					"vm-1": {ObjectRef: corev1.ObjectReference{Name: "vm-1"}},
+				},
 			},
 		},
 	}
@@ -1336,8 +1049,8 @@ func TestReconcile_RevokesReadyWhenTargetHostCleared(t *testing.T) {
 	if updated.Status.Host != "" {
 		t.Errorf("expected Status.Host cleared, got %q", updated.Status.Host)
 	}
-	if updated.Status.CommittedResourceReservation != nil && len(updated.Status.CommittedResourceReservation.Allocations) != 0 {
-		t.Errorf("expected Status.Allocations cleared, got %v", updated.Status.CommittedResourceReservation.Allocations)
+	if updated.Status.CommittedResourceReservation != nil && len(updated.Status.CommittedResourceReservation.Allocation) != 0 {
+		t.Errorf("expected Status.allocation cleared, got %v", updated.Status.CommittedResourceReservation.Allocation)
 	}
 	cond := meta.FindStatusCondition(updated.Status.Conditions, v1alpha1.ReservationConditionReady)
 	if cond == nil || cond.Status != metav1.ConditionFalse {
@@ -1346,4 +1059,92 @@ func TestReconcile_RevokesReadyWhenTargetHostCleared(t *testing.T) {
 	if cond != nil && cond.Reason != "PlacementRevoked" {
 		t.Errorf("expected reason PlacementRevoked, got %q", cond.Reason)
 	}
+}
+
+// ============================================================================
+// Helpers for reconcileAllocations table test
+// ============================================================================
+
+// errForUUID is a VMSource that returns a simulated error for one specific UUID
+// and delegates all other lookups to a backing vmSourceByUUID map.
+type errForUUID struct {
+	errUUID  string
+	err      error
+	fallback *vmSourceByUUID
+}
+
+func (e *errForUUID) GetVM(_ context.Context, uuid string) (*reservations.VM, error) {
+	if uuid == e.errUUID {
+		return nil, e.err
+	}
+	return e.fallback.GetVM(context.Background(), uuid)
+}
+func (e *errForUUID) ListVMs(_ context.Context) ([]reservations.VM, error) { return nil, nil }
+func (e *errForUUID) ListVMsByProject(_ context.Context, _ string) ([]reservations.VM, error) {
+	return nil, nil
+}
+func (e *errForUUID) ListVMsOnHypervisors(_ context.Context, _ *hv1.HypervisorList, _ bool) ([]reservations.VM, error) {
+	return nil, nil
+}
+func (e *errForUUID) IsServerActive(_ context.Context, _ string) (bool, error) { return false, nil }
+func (e *errForUUID) GetDeletedVMInfo(_ context.Context, _ string) (*reservations.DeletedVMInfo, error) {
+	return nil, nil
+}
+
+// crSlot is a compact builder for CommittedResource reservation test objects.
+func crSlot(name, host string, memGiB int64, annotations map[string]string) *v1alpha1.Reservation { //nolint:unparam
+	return &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Annotations: annotations},
+		Spec: v1alpha1.ReservationSpec{
+			Type:       v1alpha1.ReservationTypeCommittedResource,
+			TargetHost: host,
+			Resources:  map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(memGiB)},
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationSpec{
+				ProjectID:       "p-1",
+				ResourceName:    "test-flavor",
+				PrimaryResource: hv1.ResourceMemory,
+			},
+		},
+		Status: v1alpha1.ReservationStatus{
+			Host:                         host,
+			CommittedResourceReservation: &v1alpha1.CommittedResourceReservationStatus{},
+		},
+	}
+}
+
+// withAlloc adds a confirmed allocation to a slot for the given VM.
+func withAlloc(slot *v1alpha1.Reservation, vmUUID string, memGiB int64) *v1alpha1.Reservation {
+	if slot.Status.CommittedResourceReservation.Allocation == nil {
+		slot.Status.CommittedResourceReservation.Allocation = make(map[string]v1alpha1.CommittedResourceAllocation)
+	}
+	slot.Status.CommittedResourceReservation.Allocation[vmUUID] = v1alpha1.CommittedResourceAllocation{
+		ObjectRef: corev1.ObjectReference{Name: vmUUID},
+		Resources: map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(memGiB)},
+	}
+	return slot
+}
+
+// memVM builds a reservations.VM with the given memory on the given host.
+func memVM(uuid, host string, memGiB int64) *reservations.VM {
+	return &reservations.VM{
+		UUID:              uuid,
+		CurrentHypervisor: host,
+		Resources:         map[string]resource.Quantity{string(hv1.ResourceMemory): testGiB(memGiB)},
+	}
+}
+
+// getAlloc returns the memory allocation for vmUUID in a slot, or 0 if absent.
+func getAllocGiB(slot *v1alpha1.Reservation, vmUUID string) resource.Quantity { //nolint:unparam
+	if slot.Status.CommittedResourceReservation == nil {
+		return testGiB(0)
+	}
+	alloc, ok := slot.Status.CommittedResourceReservation.Allocation[vmUUID]
+	if !ok {
+		return testGiB(0)
+	}
+	q, ok := alloc.Resources[hv1.ResourceMemory]
+	if !ok {
+		return testGiB(0)
+	}
+	return q
 }

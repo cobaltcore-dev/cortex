@@ -22,6 +22,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
@@ -267,7 +268,7 @@ func (r *HostOversubscriptionController) SetupWithManager(mgr ctrl.Manager, mcl 
 // computeViolations returns the per-resource excess (positive quantity) for any resource where
 // the host is over-subscribed. Returns nil if capacity data is unavailable, empty map if no violation.
 func computeViolations(allReservations []v1alpha1.Reservation, hv hv1.Hypervisor) map[hv1.ResourceName]resource.Quantity {
-	free := reservations.HostFreeCapacity(allReservations, hv)
+	free := accounting.HostFreeCapacity(allReservations, hv)
 	if free == nil {
 		return nil
 	}
@@ -304,7 +305,7 @@ func selectEvictionTarget(
 		if res.Spec.TargetHost == "" {
 			continue // already evicted, pending status cleanup
 		}
-		if len(res.Spec.CommittedResourceReservation.Allocations) == 0 {
+		if res.Status.CommittedResourceReservation == nil || len(res.Status.CommittedResourceReservation.Allocation) == 0 {
 			unallocated = append(unallocated, res)
 		} else {
 			allocated = append(allocated, res)
@@ -333,7 +334,7 @@ func selectEvictionTarget(
 		}
 		entries := make([]allocatedEntry, len(allocated))
 		for i, res := range allocated {
-			unusedCap := reservations.UnusedReservationCapacity(res, false)
+			unusedCap := accounting.UnusedReservationCapacity(res, false)
 			buckets := make(map[hv1.ResourceName]int64)
 			for rn, total := range res.Spec.Resources {
 				if t := total.Value(); t != 0 {
@@ -371,8 +372,8 @@ func selectEvictionTarget(
 	return selectedRes
 }
 
-// evictReservation clears Spec.TargetHost and Spec.Allocations, and returns the resources
-// freed (full Spec.Resources — the slot is fully evicted). Status cleanup is left to the reconcile loop
+// evictReservation clears Spec.TargetHost, and returns the resources
+// freed (full Spec.Resources — the slot is fully evicted). Status cleanup is left to the reconcile loop.
 func evictReservation(
 	ctx context.Context,
 	c client.Client,
@@ -381,13 +382,10 @@ func evictReservation(
 
 	logger := LoggerFromContext(ctx).WithValues("component", "host-oversubscription", "reservation", res.Name)
 
-	freed := reservations.UnusedReservationCapacity(res, true)
+	freed := accounting.UnusedReservationCapacity(res, false)
 
 	old := res.DeepCopy()
 	res.Spec.TargetHost = ""
-	if res.Spec.CommittedResourceReservation != nil {
-		res.Spec.CommittedResourceReservation.Allocations = nil
-	}
 	logger.Info("evicting reservation",
 		"freed", freed,
 		"previous host", old.Spec.TargetHost,

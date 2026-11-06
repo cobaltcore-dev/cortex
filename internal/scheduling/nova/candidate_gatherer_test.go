@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -26,69 +27,41 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 	tests := []struct {
 		name           string
 		hypervisors    []client.Object
-		request        api.ExternalSchedulerRequest
+		request        compute.PlacementRequest
 		expectError    bool
 		errorContains  string
 		expectedHosts  []string
 		expectedWeight float64
 	}{
 		{
-			name:        "missing hypervisor_type in flavor extra specs",
+			name:        "unresolved hypervisor family",
 			hypervisors: []client.Object{},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{},
-							},
-						},
-					},
-				},
+			request: compute.PlacementRequest{
+				HypervisorFamily: "",
 			},
 			expectError:   true,
-			errorContains: "missing hypervisor_type in flavor extra specs",
+			errorContains: "cannot gather all placement candidates for hypervisor family",
 		},
 		{
-			name:        "unsupported hypervisor type vmware",
+			name:        "unsupported hypervisor family vmware",
 			hypervisors: []client.Object{},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"capabilities:hypervisor_type": "VMware vCenter Server",
-								},
-							},
-						},
-					},
-				},
+			request: compute.PlacementRequest{
+				HypervisorFamily: api.HypervisorFamilyVMware,
 			},
 			expectError:   true,
-			errorContains: "cannot gather all placement candidates for hypervisor type",
+			errorContains: "cannot gather all placement candidates for hypervisor family",
 		},
 		{
-			name:        "unsupported hypervisor type unknown",
+			name:        "unsupported hypervisor family unknown",
 			hypervisors: []client.Object{},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"capabilities:hypervisor_type": "unknown-type",
-								},
-							},
-						},
-					},
-				},
+			request: compute.PlacementRequest{
+				HypervisorFamily: "unknown-family",
 			},
 			expectError:   true,
-			errorContains: "cannot gather all placement candidates for hypervisor type",
+			errorContains: "cannot gather all placement candidates for hypervisor family",
 		},
 		{
-			name: "successful gathering with qemu hypervisor type",
+			name: "successful gathering with kvm family (qemu)",
 			hypervisors: []client.Object{
 				&hv1.Hypervisor{
 					ObjectMeta: metav1.ObjectMeta{
@@ -106,25 +79,15 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 					},
 				},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"capabilities:hypervisor_type": "qemu",
-								},
-							},
-						},
-					},
-				},
+			request: compute.PlacementRequest{
+				HypervisorFamily: api.HypervisorFamilyKVM,
 			},
 			expectError:    false,
 			expectedHosts:  []string{"host1", "host2", "host3"},
 			expectedWeight: 0.0,
 		},
 		{
-			name: "successful gathering with QEMU uppercase",
+			name: "successful gathering with kvm family single host",
 			hypervisors: []client.Object{
 				&hv1.Hypervisor{
 					ObjectMeta: metav1.ObjectMeta{
@@ -132,25 +95,15 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 					},
 				},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"capabilities:hypervisor_type": "QEMU",
-								},
-							},
-						},
-					},
-				},
+			request: compute.PlacementRequest{
+				HypervisorFamily: api.HypervisorFamilyKVM,
 			},
 			expectError:    false,
 			expectedHosts:  []string{"host1"},
 			expectedWeight: 0.0,
 		},
 		{
-			name: "successful gathering with ch hypervisor type",
+			name: "successful gathering with kvm family (ch)",
 			hypervisors: []client.Object{
 				&hv1.Hypervisor{
 					ObjectMeta: metav1.ObjectMeta{
@@ -163,25 +116,15 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 					},
 				},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"capabilities:hypervisor_type": "ch",
-								},
-							},
-						},
-					},
-				},
+			request: compute.PlacementRequest{
+				HypervisorFamily: api.HypervisorFamilyKVM,
 			},
 			expectError:    false,
 			expectedHosts:  []string{"ch-host1", "ch-host2"},
 			expectedWeight: 0.0,
 		},
 		{
-			name: "successful gathering with CH uppercase",
+			name: "successful gathering with kvm family single ch host",
 			hypervisors: []client.Object{
 				&hv1.Hypervisor{
 					ObjectMeta: metav1.ObjectMeta{
@@ -189,18 +132,8 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 					},
 				},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"capabilities:hypervisor_type": "CH",
-								},
-							},
-						},
-					},
-				},
+			request: compute.PlacementRequest{
+				HypervisorFamily: api.HypervisorFamilyKVM,
 			},
 			expectError:    false,
 			expectedHosts:  []string{"ch-host1"},
@@ -209,47 +142,11 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 		{
 			name:        "empty hypervisor list",
 			hypervisors: []client.Object{},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"capabilities:hypervisor_type": "qemu",
-								},
-							},
-						},
-					},
-				},
+			request: compute.PlacementRequest{
+				HypervisorFamily: api.HypervisorFamilyKVM,
 			},
 			expectError:    false,
 			expectedHosts:  []string{},
-			expectedWeight: 0.0,
-		},
-		{
-			name: "mixed case Qemu",
-			hypervisors: []client.Object{
-				&hv1.Hypervisor{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "host1",
-					},
-				},
-			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"capabilities:hypervisor_type": "Qemu",
-								},
-							},
-						},
-					},
-				},
-			},
-			expectError:    false,
-			expectedHosts:  []string{"host1"},
 			expectedWeight: 0.0,
 		},
 		{
@@ -261,19 +158,9 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 					},
 				},
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						Flavor: api.NovaObject[api.NovaFlavor]{
-							Data: api.NovaFlavor{
-								ExtraSpecs: map[string]string{
-									"capabilities:hypervisor_type": "qemu",
-								},
-							},
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				HypervisorFamily: api.HypervisorFamilyKVM,
+				Hosts: []compute.Host{
 					{ComputeHost: "old-host", HypervisorHostname: "old-hv"},
 				},
 				Weights: map[string]float64{
@@ -321,7 +208,7 @@ func TestCandidateGatherer_MutateWithAllCandidates(t *testing.T) {
 			}
 
 			// Verify each expected host is present
-			hostMap := make(map[string]api.ExternalSchedulerHost)
+			hostMap := make(map[string]compute.Host)
 			for _, host := range tt.request.Hosts {
 				hostMap[host.ComputeHost] = host
 			}

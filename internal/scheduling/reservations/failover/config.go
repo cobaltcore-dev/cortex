@@ -27,10 +27,6 @@ type FailoverConfig struct {
 	// This is used to read VM data from the Nova database.
 	DatasourceName string `json:"datasourceName"`
 
-	// SchedulerURL is the URL of the nova external scheduler API.
-	// Example: "http://localhost:8080/scheduler/nova/external"
-	SchedulerURL string `json:"schedulerURL"`
-
 	// MaxVMsToProcess limits the number of VMs to process per reconciliation cycle.
 	// Set to negative to process all VMs (default behavior).
 	// Useful for debugging and testing with large VM counts.
@@ -99,9 +95,6 @@ func (c *FailoverConfig) ApplyDefaults() {
 	if c.DatasourceName == "" {
 		c.DatasourceName = defaults.DatasourceName
 	}
-	if c.SchedulerURL == "" {
-		c.SchedulerURL = defaults.SchedulerURL
-	}
 	if c.ReconcileInterval.Duration == 0 {
 		c.ReconcileInterval = defaults.ReconcileInterval
 	}
@@ -142,7 +135,6 @@ func DefaultConfig() FailoverConfig {
 		MaxVMsToProcess:                     30,
 		Creator:                             "cortex-failover-controller",
 		DatasourceName:                      "nova-servers", // we have the server and flavor data source (both store in same postgres and same secret but still)
-		SchedulerURL:                        "http://localhost:8080/scheduler/nova/external",
 		TrustHypervisorLocation:             false,
 		RevalidationInterval:                metav1.Duration{Duration: 30 * time.Minute},
 		LimitOneNewReservationPerHypervisor: true,

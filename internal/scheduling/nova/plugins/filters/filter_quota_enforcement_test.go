@@ -9,6 +9,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -18,27 +19,44 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func makeQuotaEnforcementRequest(projectID, az, hwVersion string, memoryMB, numInstances uint64, hints map[string]any) api.ExternalSchedulerRequest {
-	flavor := api.NovaFlavor{
-		MemoryMB: memoryMB,
-		VCPUs:    4,
+// intentFromHint maps an old "_nova_check_type" scheduler hint value to the
+// typed scheduling intent the plugin now reads. The hints map carries at most
+// the "_nova_check_type" key in these tests.
+func intentFromHint(hints map[string]any) v1alpha1.SchedulingIntent {
+	raw, ok := hints["_nova_check_type"]
+	if !ok {
+		return ""
 	}
-	if hwVersion != "" {
-		flavor.ExtraSpecs = map[string]string{"quota:hw_version": hwVersion}
-	} else {
-		flavor.ExtraSpecs = map[string]string{}
+	switch raw {
+	case "evacuate":
+		return api.EvacuateIntent
+	case "live_migrate":
+		return api.LiveMigrationIntent
+	case "reserve_for_failover":
+		return api.ReserveForFailoverIntent
+	case "reserve_for_committed_resource":
+		return api.ReserveForCommittedResourceIntent
+	case "resize":
+		return api.ResizeIntent
+	case "capacity_probe":
+		return api.CapacityProbeIntent
+	default:
+		return ""
 	}
-	return api.ExternalSchedulerRequest{
-		Spec: api.NovaObject[api.NovaSpec]{
-			Data: api.NovaSpec{
-				ProjectID:        projectID,
-				AvailabilityZone: az,
-				NumInstances:     numInstances,
-				SchedulerHints:   hints,
-				Flavor:           api.NovaObject[api.NovaFlavor]{Data: flavor},
-			},
+}
+
+func makeQuotaEnforcementRequest(projectID, az, hwVersion string, memoryMB, numInstances uint64, hints map[string]any) compute.PlacementRequest {
+	return compute.PlacementRequest{
+		ProjectID:        projectID,
+		AvailabilityZone: az,
+		NumInstances:     numInstances,
+		Intent:           intentFromHint(hints),
+		HardwareVersion:  hwVersion,
+		Flavor: api.FlavorSpec{
+			VCPUs:    4,
+			MemoryMB: memoryMB,
 		},
-		Hosts: []api.ExternalSchedulerHost{
+		Hosts: []compute.Host{
 			{ComputeHost: "host1"},
 			{ComputeHost: "host2"},
 			{ComputeHost: "host3"},
@@ -55,8 +73,10 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 	type tc struct {
 		name    string
 		objects []client.Object
-		request api.ExternalSchedulerRequest
+		request compute.PlacementRequest
 		enforce bool
+		// crStateFilter sets Options.CRStateFilter; nil exercises the default (confirmed).
+		crStateFilter []v1alpha1.CommitmentStatus
 
 		expectAccept bool
 
@@ -84,7 +104,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 						Amount:           resource.MustParse("100Gi"),
 					},
 					Status: v1alpha1.CommittedResourceStatus{
-						UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("50Gi")},
+						Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("50Gi")}},
 					},
 				},
 			},
@@ -98,7 +118,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			expectFG:       "hana_v2",
 		},
 		{
-			name: "ACCEPT: CR has exact headroom (guaranteed state)",
+			name: "ACCEPT: CR has exact headroom (confirmed state)",
 			objects: []client.Object{
 				&v1alpha1.CommittedResource{
 					ObjectMeta: metav1.ObjectMeta{Name: "cr-1"},
@@ -107,11 +127,11 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 						AvailabilityZone: "az-1",
 						FlavorGroupName:  "hana_v2",
 						ResourceType:     v1alpha1.CommittedResourceTypeMemory,
-						State:            v1alpha1.CommitmentStatusGuaranteed,
+						State:            v1alpha1.CommitmentStatusConfirmed,
 						Amount:           resource.MustParse("100Gi"),
 					},
 					Status: v1alpha1.CommittedResourceStatus{
-						UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("90Gi")},
+						Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("90Gi")}},
 					},
 				},
 			},
@@ -138,7 +158,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 						Amount:           resource.MustParse("50Gi"),
 					},
 					Status: v1alpha1.CommittedResourceStatus{
-						UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("50Gi")},
+						Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("50Gi")}},
 					},
 				},
 				&v1alpha1.ProjectQuota{
@@ -180,7 +200,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 						Amount:           resource.MustParse("50Gi"),
 					},
 					Status: v1alpha1.CommittedResourceStatus{
-						UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("50Gi")},
+						Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("50Gi")}},
 					},
 				},
 				&v1alpha1.ProjectQuota{
@@ -342,7 +362,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 						Amount:           resource.MustParse("100Gi"),
 					},
 					Status: v1alpha1.CommittedResourceStatus{
-						UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("0")},
+						Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("0")}},
 					},
 				},
 				&v1alpha1.ProjectQuota{
@@ -384,7 +404,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 						Amount:           resource.MustParse("100Gi"),
 					},
 					Status: v1alpha1.CommittedResourceStatus{
-						UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("0")},
+						Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("0")}},
 					},
 				},
 				&v1alpha1.ProjectQuota{
@@ -440,6 +460,87 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			expectMode:     "enforce",
 			expectDecision: "reject",
 			expectResource: "ram",
+			expectAZ:       "az-1",
+			expectFG:       "hana_v2",
+		},
+		{
+			name: "confirmed CR is deducted from PAYG headroom (reject)",
+			objects: []client.Object{
+				&v1alpha1.CommittedResource{
+					ObjectMeta: metav1.ObjectMeta{Name: "cr-confirmed-full"},
+					Spec: v1alpha1.CommittedResourceSpec{
+						ProjectID:        "project-1",
+						AvailabilityZone: "az-1",
+						FlavorGroupName:  "hana_v2",
+						ResourceType:     v1alpha1.CommittedResourceTypeMemory,
+						State:            v1alpha1.CommitmentStatusConfirmed,
+						Amount:           resource.MustParse("100Gi"),
+					},
+					// Fully used, so it provides no CR headroom itself — the request
+					// falls through to the PAYG check where its amount is deducted.
+					Status: v1alpha1.CommittedResourceStatus{
+						Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("100Gi")}},
+					},
+				},
+				&v1alpha1.ProjectQuota{
+					ObjectMeta: metav1.ObjectMeta{Name: "quota-project-1-az-1"},
+					Spec: v1alpha1.ProjectQuotaSpec{
+						ProjectID:        "project-1",
+						AvailabilityZone: "az-1",
+						Quota:            map[string]int64{"hw_version_hana_v2_ram": 150},
+					},
+					Status: v1alpha1.ProjectQuotaStatus{
+						PaygUsage: map[string]int64{"hw_version_hana_v2_ram": 45},
+					},
+				},
+			},
+			// headroom = 150 - 100 (confirmed CR) - 45 = 5 < 10 requested → reject.
+			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
+			expectAccept:   false,
+			enforce:        true,
+			expectMode:     "enforce",
+			expectDecision: "reject",
+			expectResource: "ram",
+			expectAZ:       "az-1",
+			expectFG:       "hana_v2",
+		},
+		{
+			name: "guaranteed CR is excluded from PAYG headroom under default filter (accept)",
+			objects: []client.Object{
+				&v1alpha1.CommittedResource{
+					ObjectMeta: metav1.ObjectMeta{Name: "cr-guaranteed-full"},
+					Spec: v1alpha1.CommittedResourceSpec{
+						ProjectID:        "project-1",
+						AvailabilityZone: "az-1",
+						FlavorGroupName:  "hana_v2",
+						ResourceType:     v1alpha1.CommittedResourceTypeMemory,
+						State:            v1alpha1.CommitmentStatusGuaranteed,
+						Amount:           resource.MustParse("100Gi"),
+					},
+					Status: v1alpha1.CommittedResourceStatus{
+						Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("100Gi")}},
+					},
+				},
+				&v1alpha1.ProjectQuota{
+					ObjectMeta: metav1.ObjectMeta{Name: "quota-project-1-az-1"},
+					Spec: v1alpha1.ProjectQuotaSpec{
+						ProjectID:        "project-1",
+						AvailabilityZone: "az-1",
+						Quota:            map[string]int64{"hw_version_hana_v2_ram": 150},
+					},
+					Status: v1alpha1.ProjectQuotaStatus{
+						PaygUsage: map[string]int64{"hw_version_hana_v2_ram": 45},
+					},
+				},
+			},
+			// Default filter (confirmed only) excludes the guaranteed CR:
+			// headroom = 150 - 0 - 45 = 105 >= 10 requested → accept via PAYG.
+			request:        makeQuotaEnforcementRequest("project-1", "az-1", "hana_v2", 10240, 1, nil),
+			expectAccept:   true,
+			enforce:        true,
+			expectMode:     "enforce",
+			expectDecision: "accept_payg",
+			expectResource: "",
 			expectAZ:       "az-1",
 			expectFG:       "hana_v2",
 		},
@@ -741,7 +842,7 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 						Amount:           resource.MustParse("100Gi"),
 					},
 					Status: v1alpha1.CommittedResourceStatus{
-						UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("50Gi")},
+						Billing: &v1alpha1.BillingStatus{UsedResources: map[string]resource.Quantity{"memory": resource.MustParse("50Gi")}},
 					},
 				},
 				&v1alpha1.ProjectQuota{
@@ -906,6 +1007,13 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			filter := &FilterQuotaEnforcement{}
 			filter.Client = fakeClient
 			filter.Options.Enforce = tt.enforce
+			// Production supplies the CR state filter via Helm; mirror that
+			// default here so cases that don't set one exercise confirmed-only.
+			crStateFilter := tt.crStateFilter
+			if crStateFilter == nil {
+				crStateFilter = []v1alpha1.CommitmentStatus{v1alpha1.CommitmentStatusConfirmed}
+			}
+			filter.Options.CRStateFilter = crStateFilter
 
 			result, err := filter.Run(logr.Discard(), tt.request)
 			if err != nil {

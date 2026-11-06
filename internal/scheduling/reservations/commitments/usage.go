@@ -12,8 +12,9 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	knowledge "github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
 	"github.com/sapcc/go-api-declarations/liquid"
 	. "go.xyrillian.de/gg/option"
@@ -98,14 +99,13 @@ func (c *UsageCalculator) CalculateUsage(
 	allAZs []liquid.AvailabilityZone,
 ) (liquid.ServiceUsageReport, error) {
 
-	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
-	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
+	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, c.client, nil)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, fmt.Errorf("failed to get flavor groups: %w", err)
 	}
 
 	var infoVersion int64 = -1
-	if knowledgeCRD, err := knowledge.Get(ctx); err == nil && knowledgeCRD != nil && !knowledgeCRD.Status.LastContentChange.IsZero() {
+	if knowledgeCRD, err := knowledge.GetFlavorGroupsKnowledge(ctx, c.client); err == nil && knowledgeCRD != nil && !knowledgeCRD.Status.LastContentChange.IsZero() {
 		infoVersion = knowledgeCRD.Status.LastContentChange.Unix()
 	}
 
@@ -156,7 +156,10 @@ func (c *UsageCalculator) BuildVMAssignmentsFromStatus(ctx context.Context, proj
 	}
 	assignments := make(map[string]string)
 	for _, cr := range crList.Items {
-		for _, vmUUID := range cr.Status.AssignedInstances {
+		if cr.Status.Billing == nil {
+			continue
+		}
+		for _, vmUUID := range cr.Status.Billing.AssignedInstances {
 			assignments[vmUUID] = cr.Spec.CommitmentUUID
 		}
 	}
@@ -240,7 +243,7 @@ func getProjectVMs(
 	vmSource reservations.VMSource,
 	log logr.Logger,
 	projectID string,
-	flavorGroups map[string]compute.FlavorGroupFeature,
+	flavorGroups map[string]knowledge.FlavorGroupFeature,
 	allAZs []liquid.AvailabilityZone,
 ) ([]VMUsageInfo, error) {
 
@@ -274,10 +277,10 @@ func getProjectVMs(
 
 		memoryMB := uint64(0)
 		vcpus := uint64(0)
-		if qty, ok := vm.Resources["memory"]; ok {
+		if qty, ok := vm.Resources[string(hv1.ResourceMemory)]; ok {
 			memoryMB = uint64(qty.Value()) / (1024 * 1024) //nolint:gosec
 		}
-		if qty, ok := vm.Resources["vcpus"]; ok {
+		if qty, ok := vm.Resources[string(hv1.ResourceCPU)]; ok {
 			vcpus = uint64(qty.Value()) //nolint:gosec
 		}
 
@@ -429,7 +432,7 @@ func buildCombinedQuotaMap(pqs []v1alpha1.ProjectQuota) map[string]map[string]in
 func (c *UsageCalculator) buildUsageResponse(
 	vms []VMUsageInfo,
 	vmAssignments map[string]string,
-	flavorGroups map[string]compute.FlavorGroupFeature,
+	flavorGroups map[string]knowledge.FlavorGroupFeature,
 	allAZs []liquid.AvailabilityZone,
 	infoVersion int64,
 	quotaByResourceAZ map[string]map[string]int64,

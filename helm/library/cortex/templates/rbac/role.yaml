@@ -17,7 +17,6 @@ rules:
   - committedresourcechanges
   - projectquotas
   - flavorgroupcapacities
-  - decisions
   - deschedulings
   - pipelines
   - kpis
@@ -41,7 +40,6 @@ rules:
   - committedresourcechanges/finalizers
   - projectquotas/finalizers
   - flavorgroupcapacities/finalizers
-  - decisions/finalizers
   - deschedulings/finalizers
   - pipelines/finalizers
   - kpis/finalizers
@@ -59,7 +57,6 @@ rules:
   - committedresourcechanges/status
   - projectquotas/status
   - flavorgroupcapacities/status
-  - decisions/status
   - deschedulings/status
   - pipelines/status
   - kpis/status

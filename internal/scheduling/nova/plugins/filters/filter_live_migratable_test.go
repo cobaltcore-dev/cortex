@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -200,7 +201,7 @@ func TestFilterLiveMigratableStep_checkHasSufficientFeatures(t *testing.T) {
 func TestFilterLiveMigratableStep_Run(t *testing.T) {
 	tests := []struct {
 		name          string
-		request       api.ExternalSchedulerRequest
+		request       compute.PlacementRequest
 		hypervisors   []hv1.Hypervisor
 		expectedHosts []string
 		filteredHosts []string
@@ -208,15 +209,9 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 	}{
 		{
 			name: "Not a live migration - all hosts pass",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"_nova_check_type": "rebuild",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				Intent: api.EvacuateIntent,
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -241,15 +236,9 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 		},
 		{
 			name: "Live migration without source_host - all hosts pass",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"_nova_check_type": "live_migrate",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				Intent: api.LiveMigrationIntent,
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -274,16 +263,10 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 		},
 		{
 			name: "Live migration with compatible hosts",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"_nova_check_type": "live_migrate",
-							"source_host":      "host1",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				Intent:     api.LiveMigrationIntent,
+				SourceHost: "host1",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -330,16 +313,10 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 		},
 		{
 			name: "Live migration with incompatible architecture",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"_nova_check_type": "live_migrate",
-							"source_host":      "host1",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				Intent:     api.LiveMigrationIntent,
+				SourceHost: "host1",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -380,16 +357,10 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 		},
 		{
 			name: "Live migration with missing CPU modes",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"_nova_check_type": "live_migrate",
-							"source_host":      "host1",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				Intent:     api.LiveMigrationIntent,
+				SourceHost: "host1",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -436,16 +407,10 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 		},
 		{
 			name: "Live migration with missing features",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"_nova_check_type": "live_migrate",
-							"source_host":      "host1",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				Intent:     api.LiveMigrationIntent,
+				SourceHost: "host1",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -476,16 +441,10 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 		},
 		{
 			name: "Live migration with missing devices",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"_nova_check_type": "live_migrate",
-							"source_host":      "host1",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				Intent:     api.LiveMigrationIntent,
+				SourceHost: "host1",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 				},
@@ -516,16 +475,10 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 		},
 		{
 			name: "Live migration with non-existent target host",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"_nova_check_type": "live_migrate",
-							"source_host":      "host1",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				Intent:     api.LiveMigrationIntent,
+				SourceHost: "host1",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host-nonexistent"},
@@ -551,16 +504,10 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 		},
 		{
 			name: "Live migration with all hosts filtered",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"_nova_check_type": "live_migrate",
-							"source_host":      "host1",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: compute.PlacementRequest{
+				Intent:     api.LiveMigrationIntent,
+				SourceHost: "host1",
+				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -592,16 +539,10 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 		},
 		{
 			name: "Live migration with empty host list",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						SchedulerHints: map[string]any{
-							"_nova_check_type": "live_migrate",
-							"source_host":      "host1",
-						},
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{},
+			request: compute.PlacementRequest{
+				Intent:     api.LiveMigrationIntent,
+				SourceHost: "host1",
+				Hosts:      []compute.Host{},
 			},
 			hypervisors: []hv1.Hypervisor{
 				{
@@ -634,8 +575,8 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 				Build()
 
 			step := &FilterLiveMigratableStep{
-				BaseFilter: lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
-					BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+				BaseFilter: lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+					BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
 						Client: fakeClient,
 					},
 				},
@@ -677,16 +618,10 @@ func TestFilterLiveMigratableStep_Run(t *testing.T) {
 }
 
 func TestFilterLiveMigratableStep_Run_SourceHostNotFound(t *testing.T) {
-	request := api.ExternalSchedulerRequest{
-		Spec: api.NovaObject[api.NovaSpec]{
-			Data: api.NovaSpec{
-				SchedulerHints: map[string]any{
-					"_nova_check_type": "live_migrate",
-					"source_host":      "nonexistent-host",
-				},
-			},
-		},
-		Hosts: []api.ExternalSchedulerHost{
+	request := compute.PlacementRequest{
+		Intent:     api.LiveMigrationIntent,
+		SourceHost: "nonexistent-host",
+		Hosts: []compute.Host{
 			{ComputeHost: "host1"},
 			{ComputeHost: "host2"},
 		},
@@ -721,8 +656,8 @@ func TestFilterLiveMigratableStep_Run_SourceHostNotFound(t *testing.T) {
 		Build()
 
 	step := &FilterLiveMigratableStep{
-		BaseFilter: lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
-			BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+		BaseFilter: lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+			BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
 				Client: fakeClient,
 			},
 		},
@@ -738,16 +673,10 @@ func TestFilterLiveMigratableStep_Run_SourceHostNotFound(t *testing.T) {
 }
 
 func TestFilterLiveMigratableStep_Run_ClientError(t *testing.T) {
-	request := api.ExternalSchedulerRequest{
-		Spec: api.NovaObject[api.NovaSpec]{
-			Data: api.NovaSpec{
-				SchedulerHints: map[string]any{
-					"_nova_check_type": "live_migrate",
-					"source_host":      "host1",
-				},
-			},
-		},
-		Hosts: []api.ExternalSchedulerHost{
+	request := compute.PlacementRequest{
+		Intent:     api.LiveMigrationIntent,
+		SourceHost: "host1",
+		Hosts: []compute.Host{
 			{ComputeHost: "host1"},
 		},
 	}
@@ -767,8 +696,8 @@ func TestFilterLiveMigratableStep_Run_ClientError(t *testing.T) {
 		Build()
 
 	step := &FilterLiveMigratableStep{
-		BaseFilter: lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
-			BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+		BaseFilter: lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
+			BaseFilterWeigherPipelineStep: lib.BaseFilterWeigherPipelineStep[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]{
 				Client: fakeClient,
 			},
 		},

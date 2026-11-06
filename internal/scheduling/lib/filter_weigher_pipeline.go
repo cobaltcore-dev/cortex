@@ -23,7 +23,7 @@ var pipelineLog = logf.Log.WithName("scheduler-pipeline")
 type FilterWeigherPipeline[RequestType FilterWeigherPipelineRequest] interface {
 	// Run the scheduling pipeline with the given request.
 	// Call-time options are read from request.GetOptions().
-	Run(request RequestType) (v1alpha1.DecisionResult, error)
+	Run(request RequestType) (PipelineResult, error)
 }
 
 // Pipeline of scheduler steps.
@@ -142,7 +142,7 @@ func InitNewFilterWeigherPipeline[RequestType FilterWeigherPipelineRequest](
 func (p *filterWeigherPipeline[RequestType]) runFilters(
 	traceLog logr.Logger,
 	request RequestType,
-) (filteredRequest RequestType, stepResults []v1alpha1.StepResult) {
+) (filteredRequest RequestType, stepResults []StepResult) {
 
 	filteredRequest = request
 	for _, filterName := range p.filtersOrder {
@@ -159,7 +159,7 @@ func (p *filterWeigherPipeline[RequestType]) runFilters(
 			continue
 		}
 		stepLog.V(1).Info("scheduler: finished filter")
-		stepResults = append(stepResults, v1alpha1.StepResult{
+		stepResults = append(stepResults, StepResult{
 			StepName:    filterName,
 			Activations: result.Activations,
 		})
@@ -269,10 +269,10 @@ func (s *filterWeigherPipeline[RequestType]) sortHostsByWeights(weights map[stri
 }
 
 // Evaluate the pipeline and return a list of hosts in order of preference.
-func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.DecisionResult, error) {
+func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (PipelineResult, error) {
 	opts := request.GetOptions()
 	if err := opts.Validate(); err != nil {
-		return v1alpha1.DecisionResult{}, err
+		return PipelineResult{}, err
 	}
 	traceLog := pipelineLog.WithValues(request.GetTraceLogArgs()...)
 
@@ -341,13 +341,13 @@ func (p *filterWeigherPipeline[RequestType]) Run(request RequestType) (v1alpha1.
 		if !ok {
 			continue
 		}
-		stepResults = append(stepResults, v1alpha1.StepResult{
+		stepResults = append(stepResults, StepResult{
 			StepName:    weigherName,
 			Activations: activations,
 		})
 	}
 
-	result := v1alpha1.DecisionResult{
+	result := PipelineResult{
 		RawInWeights:         request.GetWeights(),
 		NormalizedInWeights:  inWeights,
 		StepResults:          stepResults,
