@@ -11,7 +11,7 @@ require (
 	github.com/gophercloud/gophercloud/v2 v2.15.0
 	github.com/ironcore-dev/ironcore v0.9.0
 	github.com/lib/pq v1.12.3
-	github.com/mattn/go-sqlite3 v1.14.52
+	github.com/mattn/go-sqlite3 v1.14.53
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
