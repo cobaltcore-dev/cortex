@@ -428,6 +428,8 @@ func main() {
 		featureGates := conf.GetConfigOrDie[nova.FeatureGates]()
 		noHostFoundCounter := crs.NewNoHostFoundCounter()
 		placementCounter := crs.NewPlacementCounter()
+		failoverHostMatcherMonitor := failoverhost.NewMatcherMonitor()
+		metrics.Registry.MustRegister(failoverHostMatcherMonitor)
 		// Filter-weigher pipeline controller setup.
 		filterWeigherController := &nova.FilterWeigherPipelineController{
 			Monitor: filterWeigherPipelineMonitor,
@@ -452,9 +454,15 @@ func main() {
 		}
 		novaAPIConfig := conf.GetConfigOrDie[nova.HTTPAPIConfig]()
 		setupLog.Info("loaded nova API config",
-			"evacuationShuffleK", novaAPIConfig.EvacuationShuffleK,
 			"novaLimitHostsToRequest", novaAPIConfig.NovaLimitHostsToRequest)
-		nova.NewAPI(novaAPIConfig, novaScheduler, vmHandler, crRecorder, featureGates).Init(mux)
+		// FailoverMatcher pins an evacuation's gang target to a failover host
+		// reservation after the pipeline runs, as a post-hook under the scheduler
+		// lock (see nova.NewAPI).
+		failoverMatcher := &failoverhost.Matcher{
+			Client:  multiclusterClient,
+			Monitor: failoverHostMatcherMonitor,
+		}
+		nova.NewAPI(novaAPIConfig, novaScheduler, vmHandler, crRecorder, featureGates, failoverMatcher).Init(mux)
 
 		// Detector pipeline controller setup.
 		novaClient := nova.NewNovaClient()
