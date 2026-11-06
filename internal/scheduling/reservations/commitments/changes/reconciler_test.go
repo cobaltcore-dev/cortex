@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 )
 
 // ============================================================================
@@ -1076,6 +1077,131 @@ func TestCRTReconciler_Terminal(t *testing.T) {
 			got := getTx(t, c, tx.Name).Status.Phase
 			if got != tt.phase {
 				t.Errorf("terminal phase changed: want %q, got %q", tt.phase, got)
+			}
+		})
+	}
+}
+
+// ============================================================================
+// TestCRTReconciler_GC
+// ============================================================================
+
+// txExists reports whether a CommittedResourceChange with the given name still exists.
+func txExists(t *testing.T, c client.Client, name string) bool {
+	t.Helper()
+	var tx v1alpha1.CommittedResourceChange
+	err := c.Get(testCtx, types.NamespacedName{Name: name}, &tx)
+	if err == nil {
+		return true
+	}
+	if client.IgnoreNotFound(err) == nil {
+		return false
+	}
+	t.Fatalf("txExists(%q): %v", name, err)
+	return false
+}
+
+// seedTerminal sets a terminal phase with a Finished condition backdated by finishedAge,
+// simulating a change request that reached the terminal phase that long ago.
+func seedTerminal(t *testing.T, c client.Client, txName string, phase v1alpha1.ChangePhase, finishedAge time.Duration) {
+	t.Helper()
+	tx := getTx(t, c, txName)
+	tx.Status.Phase = phase
+	tx.Status.Conditions = []metav1.Condition{{
+		Type:               v1alpha1.ChangeConditionFinished,
+		Status:             metav1.ConditionTrue,
+		Reason:             string(phase),
+		LastTransitionTime: metav1.NewTime(time.Now().Add(-finishedAge)),
+	}}
+	if err := c.Status().Update(testCtx, tx); err != nil {
+		t.Fatalf("seedTerminal %q on %q: %v", phase, txName, err)
+	}
+}
+
+// TestCRTReconciler_GC covers retention-window garbage collection of terminal change requests
+// and the never-GC-non-terminal invariant.
+func TestCRTReconciler_GC(t *testing.T) {
+	hour := func(h time.Duration) metav1.Duration { return metav1.Duration{Duration: h} }
+	defaults := commitments.ChangeReconcilerConfig{
+		AcceptedRetention:   hour(time.Hour),
+		RejectedRetention:   hour(120 * time.Hour),
+		SupersededRetention: hour(120 * time.Hour),
+	}
+
+	tests := []struct {
+		name        string
+		conf        commitments.ChangeReconcilerConfig
+		phase       v1alpha1.ChangePhase
+		nonTerminal bool          // seed a non-terminal phase via Progressing instead of Finished
+		age         time.Duration // how long ago the request became terminal / entered its phase
+		wantDeleted bool
+		wantRequeue bool // RequeueAfter > 0 (kept, scheduled for later GC)
+	}{
+		{
+			name: "Accepted past window is deleted",
+			conf: defaults, phase: v1alpha1.ChangePhaseAccepted, age: 2 * time.Hour,
+			wantDeleted: true,
+		},
+		{
+			name: "Accepted within window is kept and requeued",
+			conf: defaults, phase: v1alpha1.ChangePhaseAccepted, age: 10 * time.Minute,
+			wantDeleted: false, wantRequeue: true,
+		},
+		{
+			name: "Rejected uses the longer window: kept at 2h",
+			conf: defaults, phase: v1alpha1.ChangePhaseRejected, age: 2 * time.Hour,
+			wantDeleted: false, wantRequeue: true,
+		},
+		{
+			name: "Rejected past the long window is deleted",
+			conf: defaults, phase: v1alpha1.ChangePhaseRejected, age: 130 * time.Hour,
+			wantDeleted: true,
+		},
+		{
+			name: "Superseded past its window is deleted",
+			conf: defaults, phase: v1alpha1.ChangePhaseSuperseded, age: 130 * time.Hour,
+			wantDeleted: true,
+		},
+		{
+			name: "zero retention disables GC: kept without requeue",
+			conf: commitments.ChangeReconcilerConfig{}, phase: v1alpha1.ChangePhaseAccepted, age: 2 * time.Hour,
+			wantDeleted: false, wantRequeue: false,
+		},
+		{
+			name: "old non-terminal is never GC'd",
+			conf: defaults, phase: v1alpha1.ChangePhaseRollingBack, nonTerminal: true, age: 1000 * time.Hour,
+			wantDeleted: false, wantRequeue: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := testScheme(t)
+			tx := &v1alpha1.CommittedResourceChange{
+				ObjectMeta: metav1.ObjectMeta{Name: "tx-gc"},
+				Spec: v1alpha1.CommittedResourceChangeSpec{
+					AvailabilityZone: "az-1",
+					Source:           v1alpha1.TxSourceAPI,
+				},
+			}
+			c := testClient(t, scheme, tx)
+			r := testReconciler(c, scheme)
+			r.Conf = tt.conf
+
+			if tt.nonTerminal {
+				setPhase(t, c, tx.Name, tt.phase)
+				backdateProgressingCondition(t, c, tx.Name, tt.age)
+			} else {
+				seedTerminal(t, c, tx.Name, tt.phase, tt.age)
+			}
+
+			res := doReconcile(t, r, tx.Name)
+
+			if got := txExists(t, c, tx.Name); got == tt.wantDeleted {
+				t.Errorf("exists=%v, wantDeleted=%v", got, tt.wantDeleted)
+			}
+			if gotRequeue := res.RequeueAfter > 0; gotRequeue != tt.wantRequeue {
+				t.Errorf("RequeueAfter>0 = %v, want %v (RequeueAfter=%v)", gotRequeue, tt.wantRequeue, res.RequeueAfter)
 			}
 		})
 	}
