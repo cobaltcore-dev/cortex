@@ -422,10 +422,6 @@ func main() {
 	// must run in the same process — see the cortex-nova-scheduling deployment).
 	var novaScheduler *compute.Placement
 
-	// Tracks whether any pipeline validating webhook was registered, so the
-	// readyz check can gate on the webhook server actually serving.
-	var webhookEnabled bool
-
 	if slices.Contains(mainConfig.EnabledControllers, "nova-pipeline-controllers") {
 		featureGates := conf.GetConfigOrDie[nova.FeatureGates]()
 		noHostFoundCounter := crs.NewNoHostFoundCounter()
@@ -494,7 +490,6 @@ func main() {
 			setupLog.Error(err, "unable to setup nova pipeline webhook")
 			os.Exit(1)
 		}
-		webhookEnabled = true
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "inflight-reservation-controller") {
 		setupLog.Info("enabling controller",
@@ -557,7 +552,6 @@ func main() {
 			setupLog.Error(err, "unable to setup manila pipeline webhook")
 			os.Exit(1)
 		}
-		webhookEnabled = true
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "cinder-decisions-pipeline-controller") {
 		setupLog.Info("enabling controller", "controller", "cinder-decisions-pipeline-controller")
@@ -578,7 +572,6 @@ func main() {
 			setupLog.Error(err, "unable to setup cinder pipeline webhook")
 			os.Exit(1)
 		}
-		webhookEnabled = true
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "ironcore-decisions-pipeline-controller") {
 		setupLog.Info("enabling controller", "controller", "ironcore-decisions-pipeline-controller")
@@ -598,7 +591,6 @@ func main() {
 			setupLog.Error(err, "unable to setup ironcore pipeline webhook")
 			os.Exit(1)
 		}
-		webhookEnabled = true
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "pods-decisions-pipeline-controller") {
 		setupLog.Info("enabling controller", "controller", "pods-decisions-pipeline-controller")
@@ -618,7 +610,6 @@ func main() {
 			setupLog.Error(err, "unable to setup pods pipeline webhook")
 			os.Exit(1)
 		}
-		webhookEnabled = true
 	}
 
 	if slices.Contains(mainConfig.EnabledControllers, "committed-resource-reservations-controller") {
@@ -961,15 +952,6 @@ func main() {
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
-	}
-	// When a validating webhook is registered, gate readiness on the webhook
-	// server actually serving. This ensures `helm upgrade --wait` only applies
-	// the pipeline hooks once the manager can validate them.
-	if webhookEnabled {
-		if err := mgr.AddReadyzCheck("webhook", webhookServer.StartedChecker()); err != nil {
-			setupLog.Error(err, "unable to set up webhook ready check")
-			os.Exit(1)
-		}
 	}
 
 	if slices.Contains(mainConfig.EnabledTasks, "commitments-sync-task") {

@@ -3,10 +3,6 @@ apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
   name: vmware-general-purpose-load-balancing
-  annotations:
-    "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": "1"
-    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   schedulingDomain: nova
   description: |
@@ -65,10 +61,6 @@ apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
   name: vmware-hana-bin-packing
-  annotations:
-    "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": "1"
-    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   schedulingDomain: nova
   description: |
