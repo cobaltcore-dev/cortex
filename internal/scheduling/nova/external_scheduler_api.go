@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"slices"
 
@@ -25,9 +24,6 @@ import (
 
 // Custom configuration for the Nova external scheduler api.
 type HTTPAPIConfig struct {
-	// Number of top hosts to shuffle for evacuation requests.
-	// Set to 0 or negative to disable shuffling.
-	EvacuationShuffleK int `json:"evacuationShuffleK,omitempty"`
 	// NovaLimitHostsToRequest, if true, will filter the Nova scheduler response
 	// to only include hosts that were in the original request.
 	NovaLimitHostsToRequest bool `json:"novaLimitHostsToRequest,omitempty"`
@@ -164,26 +160,6 @@ func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerReque
 	default:
 		return "", fmt.Errorf("unsupported hypervisor_type: %s", hvType)
 	}
-}
-
-// shuffleTopHosts randomly reorders the first k hosts if the request
-// is an evacuation. This helps distribute evacuated VMs across multiple hosts
-// rather than concentrating them on the single "best" host.
-func shuffleTopHosts(hosts []string, k int) []string {
-	if k <= 0 {
-		return hosts
-	}
-	n := min(k, len(hosts))
-	if n <= 1 {
-		return hosts
-	}
-	result := make([]string, len(hosts))
-	copy(result, hosts)
-	rand.Shuffle(n, func(i, j int) { //nolint:gosec // non-crypto shuffle for load balancing
-		result[i], result[j] = result[j], result[i]
-	})
-	schedulerLog.V(1).Info("shuffled top hosts for evacuation", "k", n, "hosts", result[:n])
-	return result
 }
 
 // Limit the external scheduler response to the hosts provided in the  external
@@ -353,11 +329,6 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		hosts = limitHostsToRequest(requestData, hosts)
 		logger.V(1).Info("limited hosts to request",
 			"hosts", hosts, "originalHosts", result.OrderedHosts)
-	}
-	// This is a hack to address the problem that Nova only uses the first host in hosts for evacuation requests.
-	// Only for evacuation we shuffle the first k hosts to ensure that we do not get stuck on a single host
-	if intent == api.EvacuateIntent {
-		hosts = shuffleTopHosts(hosts, httpAPI.config.EvacuationShuffleK)
 	}
 	// Ensure we always return an array, never null. Nova's schema requires
 	// hosts to be an array, and a nil slice would serialize to null.

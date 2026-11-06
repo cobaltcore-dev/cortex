@@ -452,7 +452,6 @@ func main() {
 		}
 		novaAPIConfig := conf.GetConfigOrDie[nova.HTTPAPIConfig]()
 		setupLog.Info("loaded nova API config",
-			"evacuationShuffleK", novaAPIConfig.EvacuationShuffleK,
 			"novaLimitHostsToRequest", novaAPIConfig.NovaLimitHostsToRequest)
 		// FailoverMatcher pins an evacuation's gang target to a failover host
 		// reservation after the pipeline runs, as a post-hook under the scheduler
