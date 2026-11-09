@@ -61,6 +61,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/pods"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/rescheduler"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/capacity"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
@@ -361,6 +362,7 @@ func main() {
 			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}:   multicluster.CommittedResourceRouter{},
 			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "FlavorGroupCapacity"}: multicluster.FlavorGroupCapacityResourceRouter{},
 			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "ProjectQuota"}:        multicluster.ProjectQuotaResourceRouter{},
+			{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Rescheduling"}:        multicluster.ReschedulingResourceRouter{},
 		},
 	}
 	multiclusterClientConfig := conf.GetConfigOrDie[multicluster.ClientConfig]()
@@ -426,6 +428,8 @@ func main() {
 		featureGates := conf.GetConfigOrDie[nova.FeatureGates]()
 		noHostFoundCounter := crs.NewNoHostFoundCounter()
 		placementCounter := crs.NewPlacementCounter()
+		failoverHostMatcherMonitor := failoverhost.NewMatcherMonitor()
+		metrics.Registry.MustRegister(failoverHostMatcherMonitor)
 		// Filter-weigher pipeline controller setup.
 		filterWeigherController := &nova.FilterWeigherPipelineController{
 			Monitor: filterWeigherPipelineMonitor,
@@ -450,9 +454,15 @@ func main() {
 		}
 		novaAPIConfig := conf.GetConfigOrDie[nova.HTTPAPIConfig]()
 		setupLog.Info("loaded nova API config",
-			"evacuationShuffleK", novaAPIConfig.EvacuationShuffleK,
 			"novaLimitHostsToRequest", novaAPIConfig.NovaLimitHostsToRequest)
-		nova.NewAPI(novaAPIConfig, novaScheduler, vmHandler, crRecorder, featureGates).Init(mux)
+		// FailoverMatcher pins an evacuation's gang target to a failover host
+		// reservation after the pipeline runs, as a post-hook under the scheduler
+		// lock (see nova.NewAPI).
+		failoverMatcher := &failoverhost.Matcher{
+			Client:  multiclusterClient,
+			Monitor: failoverHostMatcherMonitor,
+		}
+		nova.NewAPI(novaAPIConfig, novaScheduler, vmHandler, crRecorder, featureGates, failoverMatcher).Init(mux)
 
 		// Detector pipeline controller setup.
 		novaClient := nova.NewNovaClient()
@@ -521,6 +531,16 @@ func main() {
 			NovaClient: novaClient,
 		}).SetupWithManager(mgr, multiclusterClient); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DeschedulingsExecutor")
+			os.Exit(1)
+		}
+	}
+	if slices.Contains(mainConfig.EnabledControllers, "rescheduler-controller") {
+		setupLog.Info("enabling controller", "controller", "rescheduler-controller")
+		if err := (&rescheduler.Scheduler{
+			Client: multiclusterClient,
+			Queue:  rescheduler.NewFIFOQueue(),
+		}).SetupWithManager(mgr, multiclusterClient); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "rescheduler-controller")
 			os.Exit(1)
 		}
 	}
