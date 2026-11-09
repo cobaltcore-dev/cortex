@@ -916,7 +916,7 @@ func (c *Reconciler) blockedResourcesByHost(ctx context.Context) (map[string]map
 			continue
 		}
 
-		resourcesToBlock := capacitypkg.ReservationBlock(*res, false)
+		resourcesToBlock := capacitypkg.RemainingReservation(*res, false)
 		for host := range hostsToBlock {
 			if blocked[host] == nil {
 				blocked[host] = make(map[string]int64)
@@ -987,7 +987,7 @@ func (c *Reconciler) reservedResourcesByGroupAZ(
 				"reservation", res.Name, "type", res.Spec.Type, "az", az)
 			continue
 		}
-		blockedRes := capacitypkg.ReservationBlock(*res, false)
+		blockedRes := capacitypkg.RemainingReservation(*res, false)
 		// Route each reservation to exactly one bucket by type; the two are disjoint.
 		bucket := committed
 		if res.Spec.Type == v1alpha1.ReservationTypeFailover {

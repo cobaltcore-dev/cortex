@@ -55,7 +55,7 @@ func crSlot(name, host string, memGiBVal, cpuVal int64) v1alpha1.Reservation {
 	}
 }
 
-func TestReservationBlock(t *testing.T) {
+func TestRemainingReservation(t *testing.T) {
 	memBytes := func(m map[hv1.ResourceName]resource.Quantity) int64 {
 		q := m[hv1.ResourceMemory]
 		return q.Value()
@@ -124,9 +124,9 @@ func TestReservationBlock(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := memBytes(ReservationBlock(tt.res, tt.ignoreAllocations)) / (1024 * 1024 * 1024)
+			got := memBytes(RemainingReservation(tt.res, tt.ignoreAllocations)) / (1024 * 1024 * 1024)
 			if got != tt.wantMemGiB {
-				t.Errorf("ReservationBlock() memory = %d GiB, want %d", got, tt.wantMemGiB)
+				t.Errorf("RemainingReservation() memory = %d GiB, want %d", got, tt.wantMemGiB)
 			}
 		})
 	}
@@ -135,7 +135,7 @@ func TestReservationBlock(t *testing.T) {
 		res := crWithAllocations(480, 480)
 		res.Spec.TargetHost = "new-host"
 		res.Status.Host = "old-host"
-		if got := memBytes(ReservationBlock(res, false)) / (1024 * 1024 * 1024); got != 480 {
+		if got := memBytes(RemainingReservation(res, false)) / (1024 * 1024 * 1024); got != 480 {
 			t.Errorf("expected full 480 GiB blocked mid-migration, got %d", got)
 		}
 	})
