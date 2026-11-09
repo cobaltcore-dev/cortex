@@ -352,37 +352,38 @@ func (c *DrainController) SetupWithManager(ctx context.Context, mgr ctrl.Manager
 		return err
 	}
 
-	isType := func(want func(client.Object) bool) predicate.Predicate {
-		return predicate.NewPredicateFuncs(want)
-	}
 	bldr := multicluster.BuildController(mcl, mgr)
 	var err error
-	// Reservation: enqueue the (cluster-scoped) reservation itself.
+	// Reservation (the primary object): enqueue the failover host reservation itself.
 	if bldr, err = bldr.WatchesMulticluster(&v1alpha1.Reservation{},
 		c.mapToRequests(func(_ context.Context, obj client.Object) []string {
-			res, ok := obj.(*v1alpha1.Reservation)
-			if !ok || res.Spec.Type != v1alpha1.ReservationTypeFailoverHost {
+			if res, ok := obj.(*v1alpha1.Reservation); ok && res.Spec.Type == v1alpha1.ReservationTypeFailoverHost {
+				return []string{res.Name}
+			}
+			return nil
+		}),
+	); err != nil {
+		return err
+	}
+	// Hypervisor: enqueue the failover host reservations on the changed host.
+	if bldr, err = bldr.WatchesMulticluster(&hv1.Hypervisor{},
+		c.mapToRequests(func(ctx context.Context, obj client.Object) []string {
+			return c.failoverReservationsOnHost(ctx, obj.GetName())
+		}),
+	); err != nil {
+		return err
+	}
+	// VirtualMachine: enqueue the failover host reservation of the VM's host, but
+	// only when the VM's host or deletion state changes (what affects emptiness).
+	if bldr, err = bldr.WatchesMulticluster(&vmv1alpha1.VirtualMachine{},
+		c.mapToRequests(func(ctx context.Context, obj client.Object) []string {
+			vm, ok := obj.(*vmv1alpha1.VirtualMachine)
+			if !ok || vm.Status.Nova == nil {
 				return nil
 			}
-			return []string{res.Name}
+			return c.failoverReservationsOnHost(ctx, vm.Status.Nova.Host)
 		}),
-		isType(func(obj client.Object) bool {
-			res, ok := obj.(*v1alpha1.Reservation)
-			return ok && res.Spec.Type == v1alpha1.ReservationTypeFailoverHost
-		}),
-	); err != nil {
-		return err
-	}
-	// Hypervisor: enqueue the failover host reservations on that host.
-	if bldr, err = bldr.WatchesMulticluster(&hv1.Hypervisor{},
-		c.mapToRequests(c.reservationsOnHost(func(obj client.Object) string { return obj.GetName() })),
-		isType(func(obj client.Object) bool { _, ok := obj.(*hv1.Hypervisor); return ok }),
-	); err != nil {
-		return err
-	}
-	// VirtualMachine: enqueue the failover host reservation of the VM's host.
-	if bldr, err = bldr.WatchesMulticluster(&vmv1alpha1.VirtualMachine{},
-		c.mapToRequests(c.reservationsOnHost(vmHost)), vmHostPredicate(),
+		vmHostChangedPredicate(),
 	); err != nil {
 		return err
 	}
@@ -390,16 +391,15 @@ func (c *DrainController) SetupWithManager(ctx context.Context, mgr ctrl.Manager
 	if bldr, err = bldr.WatchesMulticluster(&v1alpha1.Rescheduling{},
 		c.mapToRequests(func(_ context.Context, obj client.Object) []string {
 			rr, ok := obj.(*v1alpha1.Rescheduling)
-			if !ok {
+			if !ok || !isDrain(rr) {
 				return nil
 			}
-			names := make([]string, 0, len(drainHosts(rr)))
+			var names []string
 			for _, host := range drainHosts(rr) {
 				names = append(names, "failover-host-"+host)
 			}
 			return names
 		}),
-		isType(func(obj client.Object) bool { rr, ok := obj.(*v1alpha1.Rescheduling); return ok && isDrain(rr) }),
 	); err != nil {
 		return err
 	}
@@ -429,44 +429,44 @@ func (c *DrainController) mapToRequests(names func(context.Context, client.Objec
 	}
 }
 
-// reservationsOnHost returns a name-mapper that, given an object carrying a host
-// (via hostOf), lists the failover host reservations on that host. Used for the
-// Hypervisor and VirtualMachine watches via the shared reservation-by-host index.
-func (c *DrainController) reservationsOnHost(hostOf func(client.Object) string) func(context.Context, client.Object) []string {
-	return func(ctx context.Context, obj client.Object) []string {
-		host := hostOf(obj)
-		if host == "" {
-			return nil
-		}
-		list := &v1alpha1.ReservationList{}
-		if err := c.List(ctx, list, client.MatchingFields{reservations.IdxReservationByHost: host}); err != nil {
-			logf.FromContext(ctx).Error(err, "failed to list reservations for host", "host", host)
-			return nil
-		}
-		names := make([]string, 0, len(list.Items))
-		for i := range list.Items {
-			if list.Items[i].Spec.Type == v1alpha1.ReservationTypeFailoverHost {
-				names = append(names, list.Items[i].Name)
-			}
-		}
-		return names
+// failoverReservationsOnHost lists the names of the failover host reservations on
+// the given host, via the shared reservation-by-host index. Used by the Hypervisor
+// and VirtualMachine watches to map a host change to the reservation(s) to reconcile.
+func (c *DrainController) failoverReservationsOnHost(ctx context.Context, host string) []string {
+	if host == "" {
+		return nil
 	}
+	list := &v1alpha1.ReservationList{}
+	if err := c.List(ctx, list, client.MatchingFields{reservations.IdxReservationByHost: host}); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to list reservations for host", "host", host)
+		return nil
+	}
+	var names []string
+	for i := range list.Items {
+		if list.Items[i].Spec.Type == v1alpha1.ReservationTypeFailoverHost {
+			names = append(names, list.Items[i].Name)
+		}
+	}
+	return names
 }
 
-// vmHostPredicate fires only when a VM's observed host or deletion state changes,
-// the only transitions that affect whether a host is empty.
-func vmHostPredicate() predicate.Predicate {
+// vmHostChangedPredicate fires only when a VM's observed host or deletion state
+// changes, the only transitions that affect whether a host is empty.
+func vmHostChangedPredicate() predicate.Predicate {
+	novaHost := func(vm *vmv1alpha1.VirtualMachine) string {
+		if vm.Status.Nova == nil {
+			return ""
+		}
+		return vm.Status.Nova.Host
+	}
 	return predicate.Funcs{
-		CreateFunc:  func(e event.CreateEvent) bool { _, ok := e.Object.(*vmv1alpha1.VirtualMachine); return ok },
-		DeleteFunc:  func(e event.DeleteEvent) bool { _, ok := e.Object.(*vmv1alpha1.VirtualMachine); return ok },
-		GenericFunc: func(e event.GenericEvent) bool { _, ok := e.Object.(*vmv1alpha1.VirtualMachine); return ok },
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			oldVM, ok1 := e.ObjectOld.(*vmv1alpha1.VirtualMachine)
 			newVM, ok2 := e.ObjectNew.(*vmv1alpha1.VirtualMachine)
 			if !ok1 || !ok2 {
 				return false
 			}
-			return vmHost(oldVM) != vmHost(newVM) ||
+			return novaHost(oldVM) != novaHost(newVM) ||
 				(oldVM.Status.DeletionTime == nil) != (newVM.Status.DeletionTime == nil)
 		},
 	}
@@ -515,13 +515,4 @@ func drainHostsContain(rr *v1alpha1.Rescheduling, host string) bool {
 		}
 	}
 	return false
-}
-
-// vmHost returns the Nova-observed host of a VirtualMachine, or "" if unplaced.
-func vmHost(obj client.Object) string {
-	vm, ok := obj.(*vmv1alpha1.VirtualMachine)
-	if !ok || vm.Status.Nova == nil {
-		return ""
-	}
-	return vm.Status.Nova.Host
 }
