@@ -31,7 +31,7 @@ import (
 	knowledge "github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
+	capacitypkg "github.com/cobaltcore-dev/cortex/pkg/capacity"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/go-logr/logr"
 )
@@ -916,7 +916,7 @@ func (c *Reconciler) blockedResourcesByHost(ctx context.Context) (map[string]map
 			continue
 		}
 
-		resourcesToBlock := accounting.UnusedReservationCapacity(res, false)
+		resourcesToBlock := capacitypkg.ReservationBlock(*res, false)
 		for host := range hostsToBlock {
 			if blocked[host] == nil {
 				blocked[host] = make(map[string]int64)
@@ -987,7 +987,7 @@ func (c *Reconciler) reservedResourcesByGroupAZ(
 				"reservation", res.Name, "type", res.Spec.Type, "az", az)
 			continue
 		}
-		blockedRes := accounting.UnusedReservationCapacity(res, false)
+		blockedRes := capacitypkg.ReservationBlock(*res, false)
 		// Route each reservation to exactly one bucket by type; the two are disjoint.
 		bucket := committed
 		if res.Spec.Type == v1alpha1.ReservationTypeFailover {
