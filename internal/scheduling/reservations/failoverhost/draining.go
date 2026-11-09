@@ -31,20 +31,8 @@ import (
 
 const (
 	// LabelFailoverHostDrain marks the Rescheduling objects created by the drain
-	// controller, so they can be found and counted without matching on names.
+	// controller, so they can be listed and counted by label rather than by name.
 	LabelFailoverHostDrain = "reservations.cortex.cloud/failover-host-drain"
-
-	// idxReschedulingByHost indexes drain Reschedulings by the hosts they target,
-	// so the controller can cheaply find the drain (if any) for a reservation's
-	// host and count drains that are in flight across the whole fleet.
-	idxReschedulingByHost = "failoverhost.drain.targetHost"
-
-	// drainReschedulingPrefix is the GenerateName prefix for the drain
-	// Reschedulings this controller creates. A generated suffix is used (rather
-	// than a deterministic name) because nothing prunes a Succeeded drain
-	// Rescheduling, so a fixed name would clash with a lingering completed one on
-	// the next attempt for the same host.
-	drainReschedulingPrefix = "drain-failover-host-"
 
 	// novaStatusDeleted is the Nova instance status reported for a server that has
 	// been deleted. A virtual machine in this state no longer occupies its host.
@@ -201,64 +189,63 @@ func (c *DrainController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, c.markActive(ctx, res)
 	}
 
-	// 5. Host not empty: drive the drain.
-	return c.drive(ctx, res, host)
-}
-
-// drive advances the drain for a reservation whose host is not empty. It finds the
-// drain Rescheduling for this host (if any) and acts on its state.
-func (c *DrainController) drive(ctx context.Context, res *v1alpha1.Reservation, host string) (ctrl.Result, error) {
-	log := logf.FromContext(ctx).WithName("failoverhost-drain-reconcile").WithValues("host", host)
-
-	existing, err := c.drainForHost(ctx, host)
-	if err != nil {
+	// 5. Host not empty: drive the drain. Find this host's drain and, in the same
+	// scan, whether another host is already being drained (only one runs at a time).
+	drains := &v1alpha1.ReschedulingList{}
+	if err := c.List(ctx, drains, client.MatchingLabels{LabelFailoverHostDrain: "true"}); err != nil {
 		return ctrl.Result{}, err
 	}
-
-	if existing == nil {
-		// No drain for this host yet. Respect the single-drain-at-a-time rule: if
-		// any drain is already in flight anywhere in the fleet, wait. The
-		// Rescheduling watch re-triggers this reservation when that drain settles.
-		inFlight, err := c.anotherDrainInFlight(ctx, host)
-		if err != nil {
-			return ctrl.Result{}, err
+	var forHost *v1alpha1.Rescheduling // the drain targeting this host, if any.
+	otherInFlight := false             // a drain for a different host still occupying the single slot.
+	for i := range drains.Items {
+		rr := &drains.Items[i]
+		if !isDrain(rr) {
+			continue
 		}
-		if inFlight {
+		if drainHostsContain(rr, host) {
+			// Prefer a non-terminal drain for this host; otherwise keep the first
+			// terminal one so we can act on its Succeeded/Failed state below.
+			if forHost == nil || (isTerminalState(forHost.Status.State) && !isTerminalState(rr.Status.State)) {
+				forHost = rr
+			}
+			continue
+		}
+		// A drain for another host occupies the single slot unless it is fully
+		// terminal and clean (Succeeded/Rejected). Failed still holds the slot until
+		// the rescheduler prunes it, as it may carry partial state.
+		if s := rr.Status.State; s != v1alpha1.ReschedulingStateSucceeded && s != v1alpha1.ReschedulingStateRejected {
+			otherInFlight = true
+		}
+	}
+
+	// No drain for this host yet: create one unless another drain is in flight.
+	if forHost == nil {
+		if otherInFlight {
 			log.V(1).Info("another drain is in flight, waiting before draining this host")
 			return ctrl.Result{}, nil
 		}
-		if err := c.createDrain(ctx, res, host); err != nil {
-			return ctrl.Result{}, err
-		}
-		log.Info("created drain rescheduling for failover host")
-		return ctrl.Result{}, nil
+		log.Info("host not empty, creating drain rescheduling", "host", host)
+		return ctrl.Result{}, c.createDrain(ctx, res, host)
 	}
 
-	switch drainState(existing) {
+	switch forHost.Status.State {
 	case v1alpha1.ReschedulingStateSucceeded:
 		// The rescheduler reports the drain done. Do not trust it blindly (it may
-		// be a stub, or a best-effort drain): re-verify emptiness via the VM CRDs.
-		empty, err := c.hostEmpty(ctx, host)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if empty {
-			log.Info("drain succeeded and host is empty, marking failover host reservation active")
-			return ctrl.Result{}, c.markActive(ctx, res)
-		}
-		// Succeeded but the host is still occupied. The Rescheduling is terminal and
-		// nothing re-drives it, so do not requeue: the VM watch re-triggers us when
-		// workloads actually leave, and the TTL deletes the reservation otherwise.
+		// be a stub, or a best-effort drain): the host emptiness was already checked
+		// above and came back non-empty, so the drain left workload behind. The
+		// Rescheduling is terminal and nothing re-drives it, so do not requeue: the
+		// VM watch re-triggers us when workloads actually leave, and the TTL deletes
+		// the reservation otherwise.
 		log.Info("drain reported success but host still has virtual machines, leaving reservation designated")
 		return ctrl.Result{}, nil
 	case v1alpha1.ReschedulingStateFailed, v1alpha1.ReschedulingStateRejected:
 		// The rescheduler owns cleaning up a failed request. Wait for it to prune
 		// the object, then a fresh drain is created on a later reconcile.
-		log.V(1).Info("drain rescheduling in terminal error state, backing off", "state", drainState(existing))
+		log.V(1).Info("drain rescheduling in terminal error state, backing off", "state", forHost.Status.State)
 		return ctrl.Result{RequeueAfter: c.Config.RetryBackoff.Duration}, nil
 	default:
 		// Pending/Acknowledged/Processing/Accepted: in flight, wait for the watch.
-		log.V(1).Info("drain rescheduling in flight, waiting", "state", drainState(existing))
+		log.V(1).Info("drain rescheduling in flight, waiting", "state", forHost.Status.State)
 		return ctrl.Result{}, nil
 	}
 }
@@ -317,7 +304,7 @@ func (c *DrainController) deleteReservation(ctx context.Context, res *v1alpha1.R
 func (c *DrainController) createDrain(ctx context.Context, res *v1alpha1.Reservation, host string) error {
 	rr := &v1alpha1.Rescheduling{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: drainReschedulingPrefix + host + "-",
+			GenerateName: "drain-failover-host-" + host + "-",
 			Labels: map[string]string{
 				LabelFailoverHostDrain:        "true",
 				v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelFailoverHost,
@@ -342,61 +329,6 @@ func (c *DrainController) createDrain(ctx context.Context, res *v1alpha1.Reserva
 	return nil
 }
 
-// drainForHost returns the drain Rescheduling targeting the given host, or nil if
-// none exists. A terminal, no-longer-occupying request (Succeeded whose work this
-// controller has already consumed, or a pruned one) may still linger; the caller
-// inspects the returned object's state. Succeeded/Rejected drains for the host
-// that are no longer relevant are ignored here only in that drive() re-decides.
-func (c *DrainController) drainForHost(ctx context.Context, host string) (*v1alpha1.Rescheduling, error) {
-	list := &v1alpha1.ReschedulingList{}
-	if err := c.List(ctx, list, client.MatchingFields{idxReschedulingByHost: host}); err != nil {
-		return nil, err
-	}
-	// Prefer a non-terminal (in-flight) drain; otherwise fall back to a terminal
-	// one so drive() can act on Succeeded (re-verify) or Failed (back off). A
-	// lingering Succeeded drain that has already been consumed is harmless: the
-	// host is either empty (reservation already Active, handled earlier) or still
-	// occupied, in which case we must not create a second concurrent drain.
-	var terminal *v1alpha1.Rescheduling
-	for i := range list.Items {
-		rr := &list.Items[i]
-		if !isDrain(rr) {
-			continue
-		}
-		if drainInFlight(drainState(rr)) {
-			return rr, nil
-		}
-		if terminal == nil {
-			terminal = rr
-		}
-	}
-	return terminal, nil
-}
-
-// anotherDrainInFlight reports whether a drain Rescheduling is in flight for any
-// host other than the given one. A Failed drain still counts as occupying the
-// single-drain slot until the rescheduler prunes it, since it may hold partial
-// state.
-func (c *DrainController) anotherDrainInFlight(ctx context.Context, exceptHost string) (bool, error) {
-	list := &v1alpha1.ReschedulingList{}
-	if err := c.List(ctx, list, client.MatchingLabels{LabelFailoverHostDrain: "true"}); err != nil {
-		return false, err
-	}
-	for i := range list.Items {
-		rr := &list.Items[i]
-		if !isDrain(rr) {
-			continue
-		}
-		if drainTargetsHost(rr, exceptHost) {
-			continue
-		}
-		if drainOccupiesSlot(drainState(rr)) {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 // SetupWithManager wires the drain controller into the manager. It watches four
 // resources and enqueues the affected failover host reservation(s):
 //
@@ -419,33 +351,56 @@ func (c *DrainController) SetupWithManager(ctx context.Context, mgr ctrl.Manager
 	if err := reservations.IndexReservationByHost(ctx, mcl); err != nil {
 		return err
 	}
-	// Index drain Reschedulings by the hosts they target.
-	if err := mcl.IndexField(ctx,
-		&v1alpha1.Rescheduling{},
-		&v1alpha1.ReschedulingList{},
-		idxReschedulingByHost,
-		reschedulingHostsIndexFn,
+
+	isType := func(want func(client.Object) bool) predicate.Predicate {
+		return predicate.NewPredicateFuncs(want)
+	}
+	bldr := multicluster.BuildController(mcl, mgr)
+	var err error
+	// Reservation: enqueue the (cluster-scoped) reservation itself.
+	if bldr, err = bldr.WatchesMulticluster(&v1alpha1.Reservation{},
+		c.mapToRequests(func(_ context.Context, obj client.Object) []string {
+			res, ok := obj.(*v1alpha1.Reservation)
+			if !ok || res.Spec.Type != v1alpha1.ReservationTypeFailoverHost {
+				return nil
+			}
+			return []string{res.Name}
+		}),
+		isType(func(obj client.Object) bool {
+			res, ok := obj.(*v1alpha1.Reservation)
+			return ok && res.Spec.Type == v1alpha1.ReservationTypeFailoverHost
+		}),
 	); err != nil {
 		return err
 	}
-
-	bldr := multicluster.BuildController(mcl, mgr)
-	var err error
-	if bldr, err = bldr.WatchesMulticluster(&v1alpha1.Reservation{},
-		enqueueSelf(), failoverHostReservationPredicate()); err != nil {
-		return err
-	}
+	// Hypervisor: enqueue the failover host reservations on that host.
 	if bldr, err = bldr.WatchesMulticluster(&hv1.Hypervisor{},
-		c.enqueueReservationsForHost(func(obj client.Object) string { return obj.GetName() }),
-		hypervisorPredicate()); err != nil {
+		c.mapToRequests(c.reservationsOnHost(func(obj client.Object) string { return obj.GetName() })),
+		isType(func(obj client.Object) bool { _, ok := obj.(*hv1.Hypervisor); return ok }),
+	); err != nil {
 		return err
 	}
+	// VirtualMachine: enqueue the failover host reservation of the VM's host.
 	if bldr, err = bldr.WatchesMulticluster(&vmv1alpha1.VirtualMachine{},
-		c.enqueueReservationsForHost(vmHost), vmHostPredicate()); err != nil {
+		c.mapToRequests(c.reservationsOnHost(vmHost)), vmHostPredicate(),
+	); err != nil {
 		return err
 	}
+	// Rescheduling: enqueue the failover host reservation(s) the drain targets.
 	if bldr, err = bldr.WatchesMulticluster(&v1alpha1.Rescheduling{},
-		c.enqueueReservationsForDrain(), drainReschedulingPredicate()); err != nil {
+		c.mapToRequests(func(_ context.Context, obj client.Object) []string {
+			rr, ok := obj.(*v1alpha1.Rescheduling)
+			if !ok {
+				return nil
+			}
+			names := make([]string, 0, len(drainHosts(rr)))
+			for _, host := range drainHosts(rr) {
+				names = append(names, "failover-host-"+host)
+			}
+			return names
+		}),
+		isType(func(obj client.Object) bool { rr, ok := obj.(*v1alpha1.Rescheduling); return ok && isDrain(rr) }),
+	); err != nil {
 		return err
 	}
 	return bldr.Named("failoverhost-drain-controller").
@@ -453,98 +408,49 @@ func (c *DrainController) SetupWithManager(ctx context.Context, mgr ctrl.Manager
 		Complete(c)
 }
 
-// enqueueSelf enqueues a reconcile for the (cluster-scoped) object that changed.
-func enqueueSelf() handler.EventHandler {
-	h := handler.Funcs{}
-	enqueue := func(name string, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-		q.Add(ctrl.Request{NamespacedName: types.NamespacedName{Name: name}})
+// mapToRequests turns a function that maps a changed object to reservation names
+// into an event handler that enqueues a reconcile for each on create/update/delete.
+func (c *DrainController) mapToRequests(names func(context.Context, client.Object) []string) handler.EventHandler {
+	enqueue := func(ctx context.Context, obj client.Object, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+		for _, name := range names(ctx, obj) {
+			q.Add(ctrl.Request{NamespacedName: types.NamespacedName{Name: name}})
+		}
 	}
-	h.CreateFunc = func(_ context.Context, e event.CreateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-		enqueue(e.Object.GetName(), q)
+	return handler.Funcs{
+		CreateFunc: func(ctx context.Context, e event.CreateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			enqueue(ctx, e.Object, q)
+		},
+		UpdateFunc: func(ctx context.Context, e event.UpdateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			enqueue(ctx, e.ObjectNew, q)
+		},
+		DeleteFunc: func(ctx context.Context, e event.DeleteEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			enqueue(ctx, e.Object, q)
+		},
 	}
-	h.UpdateFunc = func(_ context.Context, e event.UpdateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-		enqueue(e.ObjectNew.GetName(), q)
-	}
-	h.DeleteFunc = func(_ context.Context, e event.DeleteEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-		enqueue(e.Object.GetName(), q)
-	}
-	return h
 }
 
-// enqueueReservationsForHost builds an event handler that maps an object to the
-// host it concerns (via hostOf) and enqueues every failover host reservation on
-// that host, using the shared reservation-by-host index.
-func (c *DrainController) enqueueReservationsForHost(hostOf func(client.Object) string) handler.EventHandler {
-	enqueue := func(ctx context.Context, obj client.Object, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+// reservationsOnHost returns a name-mapper that, given an object carrying a host
+// (via hostOf), lists the failover host reservations on that host. Used for the
+// Hypervisor and VirtualMachine watches via the shared reservation-by-host index.
+func (c *DrainController) reservationsOnHost(hostOf func(client.Object) string) func(context.Context, client.Object) []string {
+	return func(ctx context.Context, obj client.Object) []string {
 		host := hostOf(obj)
 		if host == "" {
-			return
+			return nil
 		}
 		list := &v1alpha1.ReservationList{}
 		if err := c.List(ctx, list, client.MatchingFields{reservations.IdxReservationByHost: host}); err != nil {
 			logf.FromContext(ctx).Error(err, "failed to list reservations for host", "host", host)
-			return
+			return nil
 		}
+		names := make([]string, 0, len(list.Items))
 		for i := range list.Items {
-			res := &list.Items[i]
-			if res.Spec.Type != v1alpha1.ReservationTypeFailoverHost {
-				continue
+			if list.Items[i].Spec.Type == v1alpha1.ReservationTypeFailoverHost {
+				names = append(names, list.Items[i].Name)
 			}
-			q.Add(ctrl.Request{NamespacedName: types.NamespacedName{Name: res.Name}})
 		}
+		return names
 	}
-	h := handler.Funcs{}
-	h.CreateFunc = func(ctx context.Context, e event.CreateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-		enqueue(ctx, e.Object, q)
-	}
-	h.UpdateFunc = func(ctx context.Context, e event.UpdateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-		enqueue(ctx, e.ObjectNew, q)
-	}
-	h.DeleteFunc = func(ctx context.Context, e event.DeleteEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-		enqueue(ctx, e.Object, q)
-	}
-	return h
-}
-
-// enqueueReservationsForDrain enqueues the failover host reservation(s) of the
-// hosts a drain Rescheduling targets, so a drain changing state re-triggers them.
-func (c *DrainController) enqueueReservationsForDrain() handler.EventHandler {
-	enqueue := func(obj client.Object, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-		rr, ok := obj.(*v1alpha1.Rescheduling)
-		if !ok {
-			return
-		}
-		for _, host := range drainHosts(rr) {
-			q.Add(ctrl.Request{NamespacedName: types.NamespacedName{Name: "failover-host-" + host}})
-		}
-	}
-	h := handler.Funcs{}
-	h.CreateFunc = func(_ context.Context, e event.CreateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-		enqueue(e.Object, q)
-	}
-	h.UpdateFunc = func(_ context.Context, e event.UpdateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-		enqueue(e.ObjectNew, q)
-	}
-	h.DeleteFunc = func(_ context.Context, e event.DeleteEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-		enqueue(e.Object, q)
-	}
-	return h
-}
-
-// ---- predicates ----
-
-func failoverHostReservationPredicate() predicate.Predicate {
-	return predicate.NewPredicateFuncs(func(obj client.Object) bool {
-		res, ok := obj.(*v1alpha1.Reservation)
-		return ok && res.Spec.Type == v1alpha1.ReservationTypeFailoverHost
-	})
-}
-
-func hypervisorPredicate() predicate.Predicate {
-	return predicate.NewPredicateFuncs(func(obj client.Object) bool {
-		_, ok := obj.(*hv1.Hypervisor)
-		return ok
-	})
 }
 
 // vmHostPredicate fires only when a VM's observed host or deletion state changes,
@@ -566,18 +472,6 @@ func vmHostPredicate() predicate.Predicate {
 	}
 }
 
-// drainReschedulingPredicate fires for drain Reschedulings created by this
-// controller. Terminal states are included on purpose: the controller reacts to
-// Succeeded (re-verify) and Failed (back off).
-func drainReschedulingPredicate() predicate.Predicate {
-	return predicate.NewPredicateFuncs(func(obj client.Object) bool {
-		rr, ok := obj.(*v1alpha1.Rescheduling)
-		return ok && isDrain(rr)
-	})
-}
-
-// ---- small helpers over Rescheduling / VirtualMachine ----
-
 // isDrain reports whether a Rescheduling is a failover host drain created by this
 // controller.
 func isDrain(rr *v1alpha1.Rescheduling) bool {
@@ -585,37 +479,17 @@ func isDrain(rr *v1alpha1.Rescheduling) bool {
 		rr.Labels[LabelFailoverHostDrain] == "true"
 }
 
-// drainState returns the effective state of a Rescheduling, treating the empty
-// (unset) state as Pending to match the CRD default.
-func drainState(rr *v1alpha1.Rescheduling) v1alpha1.ReschedulingState {
-	if rr.Status.State == "" {
-		return v1alpha1.ReschedulingStatePending
-	}
-	return rr.Status.State
-}
-
-// drainInFlight reports whether a drain in the given state is still being worked
-// on (not terminal).
-func drainInFlight(state v1alpha1.ReschedulingState) bool {
+// isTerminalState reports whether a drain in the given state is done being worked
+// on (Succeeded, Rejected or Failed). An empty state is the Pending default, i.e.
+// not terminal.
+func isTerminalState(state v1alpha1.ReschedulingState) bool {
 	switch state {
 	case v1alpha1.ReschedulingStateSucceeded,
 		v1alpha1.ReschedulingStateRejected,
 		v1alpha1.ReschedulingStateFailed:
-		return false
-	default:
 		return true
-	}
-}
-
-// drainOccupiesSlot reports whether a drain in the given state occupies the
-// single-drain-at-a-time slot. Failed still occupies it (it may hold partial
-// state) until the rescheduler prunes it; Succeeded and Rejected do not.
-func drainOccupiesSlot(state v1alpha1.ReschedulingState) bool {
-	switch state {
-	case v1alpha1.ReschedulingStateSucceeded, v1alpha1.ReschedulingStateRejected:
-		return false
 	default:
-		return true
+		return false
 	}
 }
 
@@ -633,24 +507,14 @@ func drainHosts(rr *v1alpha1.Rescheduling) []string {
 	return hosts
 }
 
-// drainTargetsHost reports whether a drain Rescheduling targets the given host.
-func drainTargetsHost(rr *v1alpha1.Rescheduling, host string) bool {
+// drainHostsContain reports whether a drain Rescheduling targets the given host.
+func drainHostsContain(rr *v1alpha1.Rescheduling, host string) bool {
 	for _, h := range drainHosts(rr) {
 		if h == host {
 			return true
 		}
 	}
 	return false
-}
-
-// reschedulingHostsIndexFn is the index function keying drain Reschedulings by the
-// hosts they target.
-func reschedulingHostsIndexFn(obj client.Object) []string {
-	rr, ok := obj.(*v1alpha1.Rescheduling)
-	if !ok || !isDrain(rr) {
-		return nil
-	}
-	return drainHosts(rr)
 }
 
 // vmHost returns the Nova-observed host of a VirtualMachine, or "" if unplaced.

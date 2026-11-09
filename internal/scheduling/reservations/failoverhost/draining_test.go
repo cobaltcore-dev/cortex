@@ -169,7 +169,7 @@ func TestDrainCreatesReschedulingForOccupiedHost(t *testing.T) {
 	if d.Spec.Drain.Constraints.Mode != v1alpha1.DrainConstraintModeAll {
 		t.Fatalf("expected Mode=all, got %q", d.Spec.Drain.Constraints.Mode)
 	}
-	if !drainTargetsHost(&d, "hv1") {
+	if !drainHostsContain(&d, "hv1") {
 		t.Fatalf("expected drain to target hv1")
 	}
 	// Reservation must NOT be Active yet.
@@ -191,7 +191,7 @@ func TestDrainSingleFlightWaitsForOtherDrain(t *testing.T) {
 	}
 	// No new drain for hv1 should have been created (still only the hv2 one).
 	for _, d := range listDrains(t, c) {
-		if drainTargetsHost(&d, "hv1") {
+		if drainHostsContain(&d, "hv1") {
 			t.Fatalf("expected no drain for hv1 while another drain is in flight")
 		}
 	}

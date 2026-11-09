@@ -44,7 +44,6 @@ func newTestClient(t *testing.T, objs ...client.Object) client.Client {
 		WithObjects(objs...).
 		WithStatusSubresource(&v1alpha1.Reservation{}, &v1alpha1.Rescheduling{}).
 		WithIndex(&v1alpha1.Reservation{}, reservations.IdxReservationByHost, reservationByHostIndexFn).
-		WithIndex(&v1alpha1.Rescheduling{}, idxReschedulingByHost, reschedulingHostsIndexFn).
 		Build()
 }
 
