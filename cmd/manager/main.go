@@ -66,6 +66,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/capacity"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	commitmentsapi "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments/api"
+	commitmentschanges "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments/changes"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failoverhost"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/inflight"
@@ -683,6 +684,11 @@ func main() {
 				os.Exit(1)
 			}
 		}
+
+		changeReconcilerConf := commitmentsConfig.ChangeReconciler
+		changeReconcilerConf.ApplyDefaults()
+		changeReconcilerMonitor := commitmentschanges.NewChangeReconcilerMonitor(multiclusterClient, changeReconcilerConf.StuckThreshold.Duration)
+		metrics.Registry.MustRegister(&changeReconcilerMonitor)
 
 		if commitmentsConfig.ReservationController.EnableOversubscriptionCheck {
 			reservationControllerMonitor := commitments.NewReservationControllerMonitor()

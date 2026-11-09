@@ -324,6 +324,11 @@ cortex-scheduling-controllers:
       # Also acts as the periodic fallback interval: a successful reconcile schedules
       # the next run after this duration, so this is also the maximum status staleness.
       cooldownInterval: "5m"
+    committedResourceChangeReconciler:
+      # How long a non-terminal change request may stay in its current phase before it is
+      # reported as stuck via the cortex_committed_resource_change_stuck metric, which backs
+      # the CortexNovaCommittedResourceChangeStuck alert.
+      stuckThreshold: "30m"
     # OvercommitMappings is a list of mappings that map hypervisor traits to
     # overcommit ratios. Note that this list is applied in order, so if there
     # are multiple mappings applying to the same hypervisors, the last mapping

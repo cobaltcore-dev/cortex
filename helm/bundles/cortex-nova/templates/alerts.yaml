@@ -356,6 +356,36 @@ spec:
           Investigate the hypervisor operator, the nova build pipeline, and
           the in-flight reservation controller logs.
 
+    - alert: CortexNovaCommittedResourceChangeStuck
+      # A CommittedResourceChange is a per-AZ change transaction. In healthy
+      # operation it reaches a terminal phase (Accepted/Rejected) within
+      # seconds to minutes. One that stays non-terminal past the reconciler's
+      # stuckThreshold is surfaced by this gauge (labelled by phase and AZ).
+      # Such change requests are never garbage-collected — deleting one would
+      # lose its rollback journal and the per-AZ active marker — so a stuck
+      # request must be investigated rather than cleaned up automatically.
+      expr: cortex_committed_resource_change_stuck{service="cortex-nova-metrics"} > 0
+      for: 15m
+      labels:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
+{{- end }}
+        context: reservations
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: docs/support/playbook/cortex/alerts/unready
+      annotations:
+        summary: "CommittedResourceChange stuck in a non-terminal phase"
+        description: >
+          One or more CommittedResourceChanges have remained in a non-terminal
+          phase (e.g. RollingBack, AwaitingScheduling) longer than the
+          configured stuckThreshold. These are never garbage-collected, so they
+          will not clear on their own. Inspect the change reconciler logs and
+          the affected AZ ({{ "{{" }} $labels.availability_zone {{ "}}" }},
+          phase {{ "{{" }} $labels.phase {{ "}}" }}) to determine why the
+          transaction is not advancing to a terminal state.
+
     - alert: CortexNovaCapabilitiesUnknownHypervisorType
       expr: |
         sum by (pipeline, step, hypervisor_type) (rate(cortex_filter_weigher_pipeline_step_events_total{service="cortex-nova-metrics", event="filter_capabilities_unknown_hypervisor_type"}[5m])) > 0.1
