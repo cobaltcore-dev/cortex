@@ -16,6 +16,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
@@ -165,17 +166,16 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request compute.Place
 		return result, nil
 	}
 
-	// Step 3: Compute resource demands from the request.
-	numInstances := request.NumInstances
-	if numInstances == 0 {
-		numInstances = 1
-	}
-	memoryMB := request.Flavor.MemoryMB
-	vcpus := request.Flavor.VCPUs
-	// MB to GiB: using 1024 as divisor is slightly conservative (overestimates GiB needed).
-	requestRAM := int64(math.Ceil(float64(memoryMB*numInstances) / 1024.0))
-	requestCores := int64(vcpus * numInstances) //nolint:gosec // VCPUs from flavor specs, realistically bounded
-	requestInstances := int64(numInstances)
+	// Step 3: Compute resource demands from the request. NumInstances is the
+	// multiplier; the adapter always sets it >= 1 (see PlacementRequest doc), so
+	// TotalCapacity already folds in the instance count for cpu/memory.
+	total := request.TotalCapacity()
+	totalMemBytes := total[hv1.ResourceMemory]
+	totalCores := total[hv1.ResourceCPU]
+	// Bytes to GiB: using 1024^3 as divisor, ceil is slightly conservative (overestimates GiB needed).
+	requestRAM := int64(math.Ceil(float64(totalMemBytes.Value()) / float64(1024*1024*1024)))
+	requestCores := totalCores.Value()
+	requestInstances := int64(request.NumInstances) //nolint:gosec // instance count bounded by Nova
 
 	// Step 4: Derive the liquid resource names.
 	resourceRAM := "hw_version_" + hwVersion + "_ram"

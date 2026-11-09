@@ -842,10 +842,7 @@ func (c *Reconciler) probeScheduler(
 		ForbiddenTraits:       forbiddenTraits,
 		RequestedCapabilities: schedulerapi.HypervisorTypeCapability(flavor.ExtraSpecs, false),
 		AcceleratorsRequested: schedulerapi.RequestsAccelerators(flavor.ExtraSpecs),
-		Flavor: schedulerapi.FlavorSpec{
-			VCPUs:    flavor.VCPUs,
-			MemoryMB: flavor.MemoryMB,
-		},
+		InstanceCapacity:      schedulerapi.CapacityFromVCPUsMemoryMB(flavor.VCPUs, flavor.MemoryMB),
 		Options: scheduling.Options{
 			ReadOnly:                      true,
 			AssumeEmptyHosts:              ignoreAllocations,

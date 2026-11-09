@@ -266,12 +266,9 @@ func newNovaRequestWithIntent(instanceUUID, projectID, flavorGroup string, vcpus
 		Intent:           intent,
 		HardwareVersion:  flavorGroup,
 		HypervisorFamily: api.HypervisorFamilyKVM,
-		Flavor: api.FlavorSpec{
-			VCPUs:    uint64(vcpus), //nolint:gosec // test code
-			MemoryMB: memoryMB,
-		},
-		Hosts:   hostList,
-		Weights: weights,
+		InstanceCapacity: api.CapacityFromVCPUsMemoryMB(uint64(vcpus), memoryMB), //nolint:gosec // test code
+		Hosts:            hostList,
+		Weights:          weights,
 	}
 }
 

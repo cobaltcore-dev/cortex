@@ -73,11 +73,9 @@ func newCRRequest(hosts []string) compute.PlacementRequest {
 		ProjectID:        "project-A",
 		AvailabilityZone: "qa-de-1a",
 		ResourceGroup:    "group-2101",
-		Flavor: api.FlavorSpec{
-			MemoryMB: 8 * 1024,
-		},
-		Hosts:   hostList,
-		Weights: weights,
+		InstanceCapacity: api.CapacityFromVCPUsMemoryMB(0, 8*1024),
+		Hosts:            hostList,
+		Weights:          weights,
 	}
 }
 
@@ -216,10 +214,8 @@ func TestKVMCommittedResourceReservationStep_Run(t *testing.T) {
 				AvailabilityZone: "qa-de-1a",
 				Intent:           api.ReserveForFailoverIntent,
 				ResourceGroup:    "group-2101",
-				Flavor: api.FlavorSpec{
-					MemoryMB: 4096,
-				},
-				Hosts: []compute.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
+				InstanceCapacity: api.CapacityFromVCPUsMemoryMB(0, 4096),
+				Hosts:            []compute.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},
 			},
 			opts:            KVMCommittedResourceReservationOpts{ReservationHostWeight: floatPtr(1.0), DefaultHostWeight: floatPtr(0.1)},
 			expectedWeights: map[string]float64{"host1": 0.0, "host2": 0.0},

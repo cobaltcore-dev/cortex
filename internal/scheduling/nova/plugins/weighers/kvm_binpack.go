@@ -13,7 +13,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 type KVMBinpackStepOpts struct {
@@ -85,7 +84,7 @@ func (s *KVMBinpackStep) Run(traceLog logr.Logger, request compute.PlacementRequ
 		}
 		hvsByName[hv.Name] = hv
 	}
-	vmResources := s.calcVMResources(request)
+	vmResources := request.TotalCapacity()
 
 	for host := range result.Activations {
 		hv, ok := hvsByName[host]
@@ -138,20 +137,6 @@ func (s *KVMBinpackStep) Run(traceLog logr.Logger, request compute.PlacementRequ
 	}
 
 	return result, nil
-}
-
-// calcVMResources calculates the total resource requests for the VM to be scheduled.
-func (s *KVMBinpackStep) calcVMResources(req compute.PlacementRequest) map[hv1.ResourceName]resource.Quantity {
-	resources := make(map[hv1.ResourceName]resource.Quantity)
-	resourcesMemBytes := int64(req.Flavor.MemoryMB) * (1024 * 1024) //nolint:gosec // memory values are bounded by Nova
-	resourcesMemBytes *= int64(req.NumInstances)                    //nolint:gosec // instance count is bounded by Nova
-	resources[hv1.ResourceMemory] = *resource.
-		NewQuantity(resourcesMemBytes, resource.BinarySI)
-	resourcesCPU := int64(req.Flavor.VCPUs) //nolint:gosec // vCPU values are bounded by Nova
-	resourcesCPU *= int64(req.NumInstances) //nolint:gosec // instance count is bounded by Nova
-	resources[hv1.ResourceCPU] = *resource.
-		NewQuantity(resourcesCPU, resource.DecimalSI)
-	return resources
 }
 
 func init() {

@@ -45,11 +45,8 @@ func newInstanceGroupRequest(policy string, members, hosts []string) compute.Pla
 		InstanceUUID:     "new-instance-uuid",
 		NumInstances:     1,
 		HypervisorFamily: api.HypervisorFamilyKVM,
-		Flavor: api.FlavorSpec{
-			VCPUs:    4,
-			MemoryMB: 8192,
-		},
-		Hosts: hostList,
+		InstanceCapacity: api.CapacityFromVCPUsMemoryMB(4, 8192),
+		Hosts:            hostList,
 	}
 
 	// Only set InstanceGroup if policy is provided

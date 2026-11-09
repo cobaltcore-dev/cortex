@@ -307,10 +307,7 @@ func (f *evacuationPathFinder) fetchSeedCandidates(ctx context.Context, seed See
 		// set (no default needed).
 		RequestedCapabilities: api.HypervisorTypeCapability(seed.Flavor.ExtraSpecs, false),
 		AcceleratorsRequested: api.RequestsAccelerators(seed.Flavor.ExtraSpecs),
-		Flavor: api.FlavorSpec{
-			VCPUs:    seed.Flavor.VCPUs,
-			MemoryMB: seed.Flavor.MemoryMB,
-		},
+		InstanceCapacity:      api.CapacityFromVCPUsMemoryMB(seed.Flavor.VCPUs, seed.Flavor.MemoryMB),
 		Options: scheduling.Options{
 			// Read-only probe: don't write any resources. ReadOnly additionally
 			// requires SkipInflight and SkipCommittedResourceTracking, else the
