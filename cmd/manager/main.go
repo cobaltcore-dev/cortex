@@ -854,6 +854,35 @@ func main() {
 			"minimum", failoverHostConfig.Minimum,
 			"generationInterval", failoverHostConfig.GenerationInterval)
 	}
+	if slices.Contains(mainConfig.EnabledControllers, "failover-host-drain-controller") {
+		setupLog.Info("enabling controller", "controller", "failover-host-drain-controller")
+		drainConfig := conf.GetConfigOrDie[failoverhost.Config]().Failover.Hosts.Drain
+		drainConfig.ApplyDefaults()
+		// The feature is opt-in: only start the controller when draining is
+		// enabled, so that when disabled no reservation is marked active and no
+		// draining happens.
+		if drainConfig.Enabled {
+			failoverHostDrainMonitor := failoverhost.NewMonitor()
+			if err := metrics.Registry.Register(failoverHostDrainMonitor); err != nil {
+				setupLog.Error(err, "failed to register failover host drain monitor metrics, continuing without metrics")
+				failoverHostDrainMonitor = nil
+			}
+			controller := &failoverhost.DrainController{
+				Client:  multiclusterClient,
+				Config:  drainConfig,
+				Monitor: failoverHostDrainMonitor,
+			}
+			if err := controller.SetupWithManager(ctx, mgr); err != nil {
+				setupLog.Error(err, "unable to create controller",
+					"controller", "failover-host-drain-controller")
+				os.Exit(1)
+			}
+			setupLog.Info("failover-host-drain-controller registered",
+				"ttl", drainConfig.TTL, "retryBackoff", drainConfig.RetryBackoff)
+		} else {
+			setupLog.Info("failover-host-drain-controller disabled by feature flag, not starting")
+		}
+	}
 	if slices.Contains(mainConfig.EnabledControllers, "capacity-controller") {
 		setupLog.Info("enabling controller", "controller", "capacity-controller")
 		capacityConfig := conf.GetConfigOrDie[capacity.Config]()

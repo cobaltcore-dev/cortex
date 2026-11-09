@@ -478,6 +478,39 @@ stateDiagram-v2
 > independently rather than as a single current-state field, so the arrows show the normal path rather than the
 > only possible transitions.
 
+### Draining a host to Active
+
+A freshly designated reservation already blocks new placements, but it is not yet a usable evacuation target:
+its host may still run workload. Advancing it **Designated → Active** is the job of the **drain controller**
+(the "failover host lifecycle reconciler"), a second, watch-driven controller separate from the partitioning
+loop above. The partitioning controller only ever writes a reservation's *spec and labels*; the drain
+controller owns its *status* — the `FailoverHostActive` condition and the deletion of reservations that can no
+longer be made Active. (The Matcher, further down, only ever advances `Active → InUse` and only ever *selects*
+`Active` reservations, so a Designated reservation is exclusively the drain controller's concern until it goes
+Active.)
+
+Draining live-migrates workloads around the datacenter, so it is **opt-in and off by default**: when the
+feature flag is disabled the drain controller is not even started, and no reservation is ever marked Active.
+When enabled, it reconciles each failover host reservation like so:
+
+- **Is the host empty?** Emptiness is read from the vm-operator `VirtualMachine` resources: a host counts as
+  occupied only if Nova reports a VM on it that is neither being pruned nor already deleted. If the host is
+  empty, the reservation is marked **Active** and reconciliation finishes.
+- **If not, drain it.** The controller creates a `Rescheduling` with the `drain` action targeting the host; the
+  rescheduler live-migrates the workloads away. Only the *inbound* reservation already blocks the host, so the
+  drain does not take a second, independent host-block (`reserve: false`). **At most one failover host drain
+  runs at a time across the whole fleet** — other designated hosts wait their turn, so the controller can never
+  trigger drains everywhere at once.
+- **When the drain reports success, verify before trusting it.** A `Succeeded` drain is treated as a hint, not
+  proof: the controller independently re-checks the host is empty (via the VM resources) before marking the
+  reservation Active. A drain that succeeded but left workload behind leaves the reservation Designated.
+- **Failure and timeouts delete the reservation.** If the host's hypervisor disappears, or the reservation
+  cannot be made Active within a conservative TTL (default `24h`) since its creation, the reservation is simply
+  **deleted** — the partitioning generator then designates a fresh one on its next pass. An *unready* (but still
+  present) hypervisor is deliberately *not* a delete trigger: the generator lists every hypervisor regardless of
+  readiness, so deleting on unready would race it recreating the reservation each interval; a genuinely
+  unschedulable host instead stops being designated, and the TTL cleans up anything left stuck.
+
 ## How failover host reservations affect scheduling
 
 Creating a reservation is only half the story — the scheduler has to *honor* it. Three cooperating pieces
@@ -577,6 +610,7 @@ Enable the controller and configure it under the nested `failover.hosts` key:
 ```yaml
 enabledControllers:
   - failover-host-reservations-controller
+  - failover-host-drain-controller   # optional: drains designated hosts to Active
 # ...
 failover:
   hosts:
@@ -584,11 +618,22 @@ failover:
     minimum: 1                 # floor per partition, > 0
     generationInterval: 5m     # how often to recompute, ≥ 1m
     externalSchedulerURL: "http://localhost:8080/scheduler/nova/external"
+    drain:
+      enabled: false           # gates the whole drain controller (off by default)
+      ttl: 24h                 # delete a reservation stuck non-Active this long
+      retryBackoff: 1m         # wait before retrying after a failed drain
 ```
 
 The flavors the partitioning is seeded from (see [Step 1](#step-1--discover-who-can-rescue-whom)) are read
 from the `flavor-groups` Knowledge CRD, which Cortex already extracts into the cluster — so the controller
 needs no OpenStack credentials of its own to enumerate them.
+
+The **drain controller** that advances designated reservations to Active (see
+[Draining a host to Active](#draining-a-host-to-active)) is a separate `enabledControllers` entry,
+`failover-host-drain-controller`, and reads its settings from `failover.hosts.drain`. It is off by default
+(`enabled: false`): draining live-migrates workloads, so it is deliberately opt-in. When disabled the
+controller is not started and no reservation is marked Active. The `ttl` bounds how long a reservation may stay
+non-Active before it is deleted and regenerated, and is intentionally conservative.
 
 > [!NOTE]
 > The settings live under `failover.hosts` as a deliberate example of grouping a controller's config under its

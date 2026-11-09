@@ -107,6 +107,46 @@ type ControllerConfig struct {
 	// GenerationInterval is the interval within which failover partitions are
 	// recalculated and failover host reservations are updated accordingly.
 	GenerationInterval metav1.Duration `json:"generationInterval"`
+
+	// Drain configures the drain controller that brings fresh failover host
+	// reservations into an Active state by emptying the reserved host. It is a
+	// separate, watch-driven controller (see draining.go) and is disabled by
+	// default.
+	Drain DrainConfig `json:"drain,omitempty"`
+}
+
+// DrainConfig configures the failover host drain controller (draining.go), which
+// brings freshly designated failover host reservations into an Active state by
+// ensuring the reserved host is empty of virtual machines. It is gated by
+// Enabled, which is false by default: draining live-migrates workloads around
+// the datacenter, so it is opt-in.
+type DrainConfig struct {
+	// Enabled gates the entire drain controller. When false (the default) the
+	// controller is not started: no reservation is marked Active and no draining
+	// happens.
+	Enabled bool `json:"enabled,omitempty"`
+
+	// TTL is the maximum time a reservation may stay non-Active (counted from its
+	// creation) before the drain controller deletes it, so the partitioning
+	// generator can designate a fresh one. It is deliberately conservative to
+	// avoid the controller causing drains all over the datacenter. Defaults to 24h.
+	TTL metav1.Duration `json:"ttl,omitempty"`
+
+	// RetryBackoff is the requeue delay used while waiting for the rescheduler to
+	// prune a Failed/Rejected drain Rescheduling before a fresh attempt. Defaults
+	// to 1m.
+	RetryBackoff metav1.Duration `json:"retryBackoff,omitempty"`
+}
+
+// ApplyDefaults fills in the default TTL and retry backoff when unset. Enabled is
+// intentionally left at its zero value (false) so the controller stays opt-in.
+func (d *DrainConfig) ApplyDefaults() {
+	if d.TTL.Duration <= 0 {
+		d.TTL = metav1.Duration{Duration: 24 * time.Hour}
+	}
+	if d.RetryBackoff.Duration <= 0 {
+		d.RetryBackoff = metav1.Duration{Duration: time.Minute}
+	}
 }
 
 // Controller keeps the cluster's failover host reservations in sync with the

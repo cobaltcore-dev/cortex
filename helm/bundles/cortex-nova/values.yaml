@@ -209,6 +209,7 @@ cortex-scheduling-controllers:
       - committed-resource-reservations-controller
       - failover-reservations-controller
       - failover-host-reservations-controller
+      - failover-host-drain-controller
       - quota-controller
       - capacity-controller
     enabledTasks:
@@ -404,6 +405,23 @@ cortex-scheduling-controllers:
         # How often the failover partitions are recalculated and the reservations
         # updated to match. Must be at least 1m.
         generationInterval: 5m
+        # The drain controller brings freshly designated failover host
+        # reservations into an Active state by ensuring the reserved host is
+        # empty of virtual machines (live-migrating them away via a drain
+        # Rescheduling if needed). It is opt-in: draining moves workloads around
+        # the datacenter, so it is off by default and the controller is not even
+        # started unless enabled here.
+        drain:
+          # Gates the entire drain controller. When false (default) no reservation
+          # is marked Active and no draining happens.
+          enabled: false
+          # Maximum time a reservation may stay non-Active (since creation) before
+          # it is deleted so the partitioning generator can designate a fresh one.
+          # Deliberately conservative to avoid causing drains all over the fleet.
+          ttl: 24h
+          # Requeue delay while waiting for the rescheduler to prune a failed drain
+          # Rescheduling before a fresh attempt.
+          retryBackoff: 1m
 
 cortex-knowledge-controllers:
   <<: *cortex

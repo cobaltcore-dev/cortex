@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	vmv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -41,8 +42,28 @@ func newTestClient(t *testing.T, objs ...client.Object) client.Client {
 	return fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(objs...).
-		WithStatusSubresource(&v1alpha1.Reservation{}).
+		WithStatusSubresource(&v1alpha1.Reservation{}, &v1alpha1.Rescheduling{}).
+		WithIndex(&v1alpha1.Reservation{}, reservations.IdxReservationByHost, reservationByHostIndexFn).
+		WithIndex(&v1alpha1.Rescheduling{}, idxReschedulingByHost, reschedulingHostsIndexFn).
 		Build()
+}
+
+// reservationByHostIndexFn mirrors IndexReservationByHost's extractor so the fake
+// client's MatchingFields queries resolve in tests (the production index is
+// registered on the multicluster client, not the fake client).
+func reservationByHostIndexFn(obj client.Object) []string {
+	res, ok := obj.(*v1alpha1.Reservation)
+	if !ok {
+		return nil
+	}
+	hosts := make([]string, 0, 2)
+	if res.Spec.TargetHost != "" {
+		hosts = append(hosts, res.Spec.TargetHost)
+	}
+	if res.Status.Host != "" && res.Status.Host != res.Spec.TargetHost {
+		hosts = append(hosts, res.Status.Host)
+	}
+	return hosts
 }
 
 // failoverReservation builds a minimal failover host reservation targeting the
