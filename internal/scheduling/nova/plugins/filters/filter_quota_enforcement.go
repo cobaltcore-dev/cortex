@@ -247,7 +247,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request compute.Place
 		if !crHasHeadroom {
 			usedGiB := int64(0)
 			if cr.Status.Billing != nil {
-				if usedQty, ok := cr.Status.Billing.UsedResources["memory"]; ok {
+				if usedQty, ok := cr.Status.Billing.UsedResources[string(hv1.ResourceMemory)]; ok {
 					usedGiB = quantityToGiB(usedQty)
 				}
 			}
