@@ -69,7 +69,7 @@ func TestTotalCapacity(t *testing.T) {
 		NumInstances:     3,
 		InstanceCapacity: api.CapacityFromVCPUsMemoryMB(2, 1024),
 	}
-	total := req.TotalCapacity()
+	total := req.TotalCapacityDemand()
 	wantCPU := int64(2 * 3)
 	wantMemBytes := int64(1024) * 1024 * 1024 * 3
 	if got := total[hv1.ResourceCPU]; got.Value() != wantCPU {
@@ -88,7 +88,7 @@ func TestTotalCapacity(t *testing.T) {
 
 func TestTotalCapacityNilMap(t *testing.T) {
 	req := PlacementRequest{NumInstances: 5}
-	if total := req.TotalCapacity(); len(total) != 0 {
+	if total := req.TotalCapacityDemand(); len(total) != 0 {
 		t.Errorf("nil InstanceCapacity yielded %v, want empty map", total)
 	}
 }

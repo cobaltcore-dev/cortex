@@ -108,7 +108,7 @@ func (s *VMwareBinpackStep) Run(traceLog logr.Logger, request sched.PlacementReq
 	for _, hostUtilization := range hostUtilizations {
 		utilizationByHost[hostUtilization.ComputeHost] = hostUtilization
 	}
-	vmResources := request.TotalCapacity()
+	vmResources := request.TotalCapacityDemand()
 
 	for host := range result.Activations {
 		utilization, ok := utilizationByHost[host]

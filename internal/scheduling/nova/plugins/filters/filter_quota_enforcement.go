@@ -169,7 +169,7 @@ func (s *FilterQuotaEnforcement) Run(traceLog logr.Logger, request compute.Place
 	// Step 3: Compute resource demands from the request. NumInstances is the
 	// multiplier; the adapter always sets it >= 1 (see PlacementRequest doc), so
 	// TotalCapacity already folds in the instance count for cpu/memory.
-	total := request.TotalCapacity()
+	total := request.TotalCapacityDemand()
 	totalMemBytes := total[hv1.ResourceMemory]
 	totalCores := total[hv1.ResourceCPU]
 	// Bytes to GiB: using 1024^3 as divisor, ceil is slightly conservative (overestimates GiB needed).

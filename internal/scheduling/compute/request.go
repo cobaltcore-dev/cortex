@@ -130,7 +130,7 @@ type PlacementRequest struct {
 	// reservation slots use, so capacity/bin-pack steps consume it directly. A nil
 	// map (or a missing/zero entry) means a zero-sized instance to those steps
 	// (fits anywhere) — the adapter always populates it for real placements. Use
-	// TotalCapacity for the across-all-instances total.
+	// TotalCapacityDemand for the across-all-instances total.
 	InstanceCapacity map[hv1.ResourceName]resource.Quantity
 
 	// RequiredTraits are trait names the host must have (adapter stripped the
@@ -196,12 +196,12 @@ func (r PlacementRequest) GetHosts() []string {
 // GetWeights returns the per-host input weights.
 func (r PlacementRequest) GetWeights() map[string]float64 { return r.Weights }
 
-// TotalCapacity returns InstanceCapacity scaled by NumInstances, i.e. the total
+// TotalCapacityDemand returns InstanceCapacity scaled by NumInstances, i.e. the total
 // capacity across all instances this request represents. Each quantity keeps its
 // source format (DecimalSI for cpu, BinarySI for memory). NumInstances is the
 // single source of truth for the multiplier; the adapter always sets it >= 1. A
 // nil InstanceCapacity yields an empty map.
-func (r PlacementRequest) TotalCapacity() map[hv1.ResourceName]resource.Quantity {
+func (r PlacementRequest) TotalCapacityDemand() map[hv1.ResourceName]resource.Quantity {
 	total := make(map[hv1.ResourceName]resource.Quantity, len(r.InstanceCapacity))
 	factor := int64(r.NumInstances) //nolint:gosec // instance count is bounded by Nova
 	for name, q := range r.InstanceCapacity {

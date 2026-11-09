@@ -84,7 +84,7 @@ func (s *KVMBinpackStep) Run(traceLog logr.Logger, request compute.PlacementRequ
 		}
 		hvsByName[hv.Name] = hv
 	}
-	vmResources := request.TotalCapacity()
+	vmResources := request.TotalCapacityDemand()
 
 	for host := range result.Activations {
 		hv, ok := hvsByName[host]
