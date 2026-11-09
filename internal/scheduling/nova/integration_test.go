@@ -284,12 +284,11 @@ func NewIntegrationTestServer(t *testing.T, pipelineConfig PipelineConfig, objec
 	controller.PipelineConfigs[testPipeline.Name] = testPipeline
 
 	// Create the HTTP API backed by a real compute.Placement over the controller.
-	// Set EvacuationShuffleK=0 to disable shuffle for deterministic test results.
 	// KVM requests trigger candidate gathering; use a passthrough gatherer
 	// (nil gatheredHosts) so the test's preselected hosts are preserved.
 	scheduler := compute.NewPlacement(controller, &mockCandidateGatherer{})
 	api := &httpAPI{
-		config:     HTTPAPIConfig{EvacuationShuffleK: 0},
+		config:     HTTPAPIConfig{},
 		monitor:    lib.NewSchedulerMonitor(), // Create new monitor but don't register
 		scheduler:  scheduler,
 		vmHandler:  &VirtualMachineHandler{Client: k8sClient},

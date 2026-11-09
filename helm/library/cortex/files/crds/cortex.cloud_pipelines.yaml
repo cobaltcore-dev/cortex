@@ -266,6 +266,11 @@ spec:
             - schedulingDomain
             - type
             type: object
+            x-kubernetes-validations:
+            - message: detector pipelines must not set filters or weighers
+              rule: self.type != 'detector' || (!has(self.filters) && !has(self.weighers))
+            - message: filter-weigher pipelines must not set detectors
+              rule: self.type != 'filter-weigher' || !has(self.detectors)
           status:
             description: status defines the observed state of Pipeline
             properties:

@@ -36,7 +36,16 @@ func stubScheduler(t *testing.T, candidatesByFlavor map[string][]string, errFlav
 // stubPipelineProvider serves the same stub pipeline for every pipeline name the
 // probe infers (always a KVM pipeline here).
 type stubPipelineProvider struct {
-	pipeline *stubPipeline
+	pipeline lib.FilterWeigherPipeline[compute.PlacementRequest]
+}
+
+// passthroughGatherer is a compute.CandidateGatherer that leaves the request's
+// preselected hosts unchanged. The tests seed their own eligible hosts, so
+// gathering is a no-op here.
+type passthroughGatherer struct{}
+
+func (passthroughGatherer) MutateWithAllCandidates(context.Context, *compute.PlacementRequest) error {
+	return nil
 }
 
 func (p *stubPipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[compute.PlacementRequest], bool) {

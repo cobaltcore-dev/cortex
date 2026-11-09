@@ -1,5 +1,125 @@
 # Changelog
 
+## Release PR [#1495](https://github.com/cobaltcore-dev/cortex/pull/1495) — 2026-11-09
+
+### Bumped Versions
+
+| Package | Previous | New |
+|---|---|---|
+| cortex | 0.8.0 | 0.8.1 |
+| cortex-postgres | 0.6.31 | 0.6.32 |
+| cortex-shim | 0.1.36 | 0.1.37 |
+| bundles | 0.0.111 | 0.0.112 |
+| cortex-placement-shim | 0.1.36 | 0.1.37 |
+
+### Features
+
+- **Rescheduling CRD & controller** ([#1467](https://github.com/cobaltcore-dev/cortex/pull/1467)) — Introduces the `Rescheduling` Custom Resource and a new rescheduler controller for declarative host-drain operations. The cluster-scoped CRD (`cortex.cloud_reschedulings.yaml`) defines a full state machine (`Pending → Acknowledged → Processing → Accepted → Succeeded/Failed/Rejected`) enforced via CEL validation rules. The first supported action (`drain`) allows requesting that entities be moved off specified hosts, with optional capacity reservation and `all`/`bestEffort` constraint modes. Includes an in-memory FIFO scheduling queue (modelled after kube-scheduler), a noop scheduler skeleton that reconciles objects through the state machine, and a `ReschedulingResourceRouter` for multicluster routing by availability zone. The `rescheduler-controller` is enabled in `cortex-nova`; `Rescheduling`/`ReschedulingList` GVKs are registered across all bundles (nova, cinder, manila, ironcore, pods) with RBAC rules updated. Tests cover CEL validation transition rules, immutability, the FIFO queue, and the scheduler reconcile loop.
+
+- **Failover host reservation matching in Nova pipeline** ([#1462](https://github.com/cobaltcore-dev/cortex/pull/1462)) — Wires failover host reservations into the Nova scheduling pipeline so reserved hosts are actually honored during placement and evacuation. Adds a `filter_failover_host` filter (removes reserved hosts for ordinary requests; for evacuations removes all but the deterministically-selected target), a `weigher_failover_host` weigher (gives the selected failover target a dominating weight), and a post-pipeline matcher that runs under the controller's exclusive write lock to mark the selected reservation `InUse` only when it is the pipeline's top candidate. Deterministic selection prefers an already-In Use reservation for the source, never one used by another source, otherwise the first Active one by name. Includes a new Prometheus alert for frequent failover-match misses. The redundant `FailoverHostDesignated` status condition is dropped. Comprehensive unit tests for the filter (265 lines), weigher (204 lines), and matcher (372 lines), plus updated generation and pathfinding tests.
+
+### Improvements
+
+- **Degrade admission webhook to warnings** ([#1490](https://github.com/cobaltcore-dev/cortex/pull/1490)) — The Pipeline admission webhook now issues warnings instead of hard rejections for structural errors, improving the operator experience. Structural validation is moved to CRD-level CEL `x-kubernetes-validations` rules (e.g. "filter-weigher pipelines must not set detectors"), so the API server itself enforces correctness. Includes a step-by-step `kind`-based reproduction script for verifying the CEL rules.
+
+### Security
+
+- **Rebuild Postgres image to resolve CVEs** ([#1494](https://github.com/cobaltcore-dev/cortex/pull/1494)) — The daily CVE scan detected fixable vulnerabilities in the published `cortex-postgres` image. This triggers a rebuild with `apt-get upgrade` to pick up security patches.
+
+### Dependency Updates
+
+| Dependency | Old | New | PR |
+|---|---|---|---|
+| `github.com/sapcc/go-bits` | digest `0cf0269` | digest `1388674` | [#1488](https://github.com/cobaltcore-dev/cortex/pull/1488) |
+| `github.com/mattn/go-sqlite3` | v1.14.52 | v1.14.53 | [#1489](https://github.com/cobaltcore-dev/cortex/pull/1489) |
+| `kube-prometheus-stack` (Helm) | 92.18.0 | 92.22.0 | [#1489](https://github.com/cobaltcore-dev/cortex/pull/1489), [#1492](https://github.com/cobaltcore-dev/cortex/pull/1492) |
+| `k8s.io/apiextensions-apiserver`, `k8s.io/apiserver`, `k8s.io/component-base` | v0.37.0 | v0.37.2 | [#1467](https://github.com/cobaltcore-dev/cortex/pull/1467) |
+
+### App Version Bump
+
+- `cortex`: `sha-06024c69` → `sha-9179b000`
+- `cortex-shim`: `sha-821050ce` → `sha-977d35d3`
+- `cortex-postgres`: `sha-e2e2980d` → `sha-9179b000`
+
+### Operational Notes
+
+1. **New CRD — `cortex.cloud_reschedulings`:** The new `Rescheduling` CRD must be installed before upgrading the manager. Helm handles this via the `crds/` folder, but verify ordering in CI/CD pipelines that apply CRDs separately.
+2. **RBAC changes:** The manager's cluster roles now include `reschedulings` permissions across all bundles. Ensure RBAC manifests are applied before the new rescheduler controller starts.
+3. **New controller — `rescheduler-controller`:** Enabled by default in `cortex-nova`. The controller is a noop skeleton in this release — real scheduling logic will follow in a later milestone.
+4. **Pipeline CRD updated:** New CEL validation rules have been added to the Pipeline CRD. Existing Pipeline resources that violate the new rules (e.g. filter-weigher pipelines with detectors set) will be rejected on update. Review existing Pipeline resources before upgrading.
+5. **Admission webhook behavior change:** The Pipeline admission webhook now returns warnings instead of rejections. Operators relying on hard rejections for structural validation should note that enforcement has moved to CRD-level CEL rules.
+6. **Failover host pipeline integration:** The failover host reservation system is now fully wired into the Nova scheduling pipeline. The `FailoverHostDesignated` status condition has been removed — draining is inferred from the absence of `FailoverHostActive`. Update any tooling or dashboards referencing this condition.
+7. **New Prometheus alert:** A new alert fires on frequent failover-match misses (no suitable failover reservation found). Review routing and thresholds.
+
+**Contributors:** @umswmayj, @PhilippMatthes, @SoWieMarkus, @renovate[bot], @github-actions[bot]
+
+**PR:** [#1495](https://github.com/cobaltcore-dev/cortex/pull/1495) | **Commits:** 8 | **Files changed:** 45 | **+3,900 / −800**
+
+## Release PR [#1485](https://github.com/cobaltcore-dev/cortex/pull/1485) — 2026-11-05
+
+### Bumped Versions
+
+| Package | Previous | New |
+|---|---|---|
+| cortex | 0.7.3 | 0.8.0 |
+| cortex-postgres | 0.6.30 | 0.6.31 |
+| cortex-shim | 0.1.35 | 0.1.36 |
+| bundles | 0.0.110 | 0.0.111 |
+| cortex-placement-shim | 0.1.35 | 0.1.36 |
+
+### ⚠️ Breaking Changes
+
+- **`Decision` CRD removed:** The `cortex.cloud_decisions` custom resource definition has been fully deleted (type file, CRD YAML, all controller references). Any tooling using `kubectl get decisions` or importing the Decision type must be removed. Decision state KPI metrics for Cinder, Manila, and Nova are no longer emitted.
+- **`CommittedResource` CRD schema change** ([#1438](https://github.com/cobaltcore-dev/cortex/pull/1438)) — Allocation tracking has moved from `Spec.CommittedResourceReservation.Allocations` to `Status.CommittedResourceReservation.Allocation`. Billing fields have been consolidated into a new `Status.Billing` sub-struct (`AssignedInstances`, `UsedResources`, `LastReconcileAt`, `ObservedGeneration`). The flat billing fields on `CommittedResourceStatus` (`AssignedInstances`, `UsedResources`, `LastUsageReconcileAt`, `UsageObservedGeneration`) are retained but deprecated. Generation tracking has been migrated from `ParentGeneration`/`ObservedParentGeneration` to standard Kubernetes conditions with `ObservedGeneration` signaling.
+- **`Reservation` CRD schema expanded** ([#1438](https://github.com/cobaltcore-dev/cortex/pull/1438)) — New `Status.CommittedResourceReservation.Allocation` field replaces spec-level allocations. `PrimaryResource` field added to `CommittedResourceReservationSpec`. `CreationTimestamp` on `CommittedResourceAllocation` is deprecated. Resource keys are normalised to canonical `hv1.ResourceName` constants.
+- **Pipeline CRD trimmed** — Several `spec` fields have been removed from the Pipeline CRD.
+- **Helm values** — New required key `kvm.crStateFilter` in `cortex-nova/values.yaml` (defaults to `["confirmed"]`). Removed KPI alert templates for Cinder/Manila/Nova decision-state metrics.
+
+### Bug Fixes
+
+- **Quota: unify CR state filter to confirmed-only default** ([#1461](https://github.com/cobaltcore-dev/cortex/pull/1461)) — Aligned `FilterQuotaEnforcement` and the quota controller to count only `confirmed` CRs toward capacity, dropping `guaranteed` from the default filter. This prepares for the future removal of the guaranteed state.
+
+- **Move CR reservation allocations from spec to status** ([#1438](https://github.com/cobaltcore-dev/cortex/pull/1438)) — Major CRD refactor: allocation tracking moved to `Status.Allocation`, allocation accounting rewritten for multi-slot spanning, grace period replaced with live `VMSource.GetVM()` lookup, and billing fields grouped into `Status.Billing`.
+
+- **Fix location of flavor group client** ([#1481](https://github.com/cobaltcore-dev/cortex/pull/1481)) — Corrected the import path for the flavor group client after the Nova API directory reorganisation.
+
+- **Polish failover host controller & fix probe reservation handling** ([#1484](https://github.com/cobaltcore-dev/cortex/pull/1484)) — The path finder now ignores *all* reservation types during capacity probes (not just failover), so capacity is no longer understated when probing. Alert window bumped to 60 minutes; partition descriptions now show the full flavor list; progress logging added for long passes.
+
+- **Don't enforce image properties when unset in compute pipeline** ([#1483](https://github.com/cobaltcore-dev/cortex/pull/1483)) — Boot-from-volume VMs no longer cause spurious image property alignment errors. Image property checks are now only applied when an image is actually specified, simplifying failover scheduling calls.
+
+### Chores & Refactoring
+
+- **Clean up scheduling pipeline** ([#1464](https://github.com/cobaltcore-dev/cortex/pull/1464)) — General scheduling pipeline code clean-up: the `Decision` type is fully removed, test helpers are deduplicated, and pipeline controller signatures are simplified to use the new `compute.Request`/`compute.Placement` types.
+
+- **Drive CR state filter from a single Helm value** ([#1472](https://github.com/cobaltcore-dev/cortex/pull/1472)) — Eliminated duplicated Go-level defaults for the CR state filter. `kvm.crStateFilter` is now the single source of truth, wired into both the quota controller and the enforcement filter via a YAML anchor.
+
+- **Remove deprecated failover package** ([#1479](https://github.com/cobaltcore-dev/cortex/pull/1479)) — Removed the deprecated failover package as a dependency from the failover host controller; reuses shared message-parsing code for pipeline name inference.
+
+- **Move Nova-specific types into `api/external/nova/`** ([#1480](https://github.com/cobaltcore-dev/cortex/pull/1480)) — Introduced `placement_types.go` (typed `FlavorSpec`, `Capability`, `HypervisorFamily`, `RequestedDestination`, `InstanceGroupSpec`, and trait/capability parsing helpers) and `messages.go` (Nova wire types, intent constants, request/response structs) with full test coverage. This separates Nova wire-format types from the internal scheduling API.
+
+### Dependency Updates
+
+| Dependency | Old | New |
+|---|---|---|
+| `kube-prometheus-stack` | — | **v92.17.1** |
+| `github.com/sapcc/go-bits` | — | digest `0cf0269` |
+| `github.com/cobaltcore-dev/openstack-hypervisor-operator` | — | **v1.4.0** |
+| External dependencies | — | batch update |
+| `debian:trixie-slim` | — | digest `a72b443` |
+
+### ⚠️ Operational Notes
+
+1. **CRD migration — `cortex.cloud_decisions` deleted:** The Decision CRD YAML has been removed from the Helm CRDs folder. Ensure any existing Decision resources are cleaned up before or during upgrade. If your CI/CD pipeline applies CRDs separately, remove the old `cortex.cloud_decisions` CRD manifest.
+2. **CRD migration — `cortex.cloud_committedresources`:** The new `Status.Allocation` and `Status.Billing` fields will be empty after upgrade until the controllers reconcile. The deprecated flat billing fields are still populated during a transition period — migrate consumers to `Status.Billing` before the next major release.
+3. **CRD migration — `cortex.cloud_reservations`:** Spec-level `Allocations` are deprecated; the controller now writes to `Status.CommittedResourceReservation.Allocation`. Existing spec-level allocations will be migrated automatically.
+4. **Helm values — `kvm.crStateFilter`:** A new required key. The default is `["confirmed"]`, which changes behavior if your deployment previously counted `guaranteed` CRs toward quota. Review quota behavior in staging before rollout.
+5. **Dashboard/alert updates:** KPI templates for Cinder, Manila, and Nova decision-state metrics have been removed. Remove any dashboards or alert rules referencing these metrics.
+6. **Major version bump (0.7.x → 0.8.0):** This release carries a minor version bump reflecting the breaking CRD schema changes and Decision type removal.
+
+**Contributors:** @SoWieMarkus, @PhilippMatthes, @mblos, @renovate[bot], @cortex-ai-agents[bot]
+
+**PR:** [#1485](https://github.com/cobaltcore-dev/cortex/pull/1485) | **Commits:** 14 | **Files changed:** 100 | **+3,728 / −7,181**
+
 ## Release PR [#1458](https://github.com/cobaltcore-dev/cortex/pull/1458) — 2026-11-02
 
 ### Bumped Versions

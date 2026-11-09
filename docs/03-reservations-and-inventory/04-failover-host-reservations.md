@@ -460,8 +460,11 @@ stateDiagram-v2
 ```
 
 - **Designated** — the host has been chosen as a target but may still have VMs that need draining off it. No
-  *new* VMs are placed here. It stays in this stage until the host is empty.
-- **Active** — the host is empty and ready to absorb an evacuation.
+  *new* VMs are placed here. It stays in this stage until the host is empty. This is the *absence* of the
+  `FailoverHostActive` condition rather than a condition of its own: a freshly created reservation is
+  Designated by default.
+- **Active** — the host is empty and ready to absorb an evacuation (the `FailoverHostActive` condition is
+  True). Only from here on can an evacuation be routed onto it.
 - **Failed** — draining failed repeatedly or took too long; the host is held back from being re-chosen for a
   cooldown period.
 - **In Use** — a gang evacuation onto this host is underway (and may absorb further failures until it
@@ -474,6 +477,98 @@ stateDiagram-v2
 > Treat this diagram as the *intended progression*, not a strict state machine. The stages are tracked
 > independently rather than as a single current-state field, so the arrows show the normal path rather than the
 > only possible transitions.
+
+## How failover host reservations affect scheduling
+
+Creating a reservation is only half the story — the scheduler has to *honor* it. Three cooperating pieces
+wire failover host reservations into the Nova scheduling pipeline, split along a natural seam: a **filter**
+and a **weigher** shape the candidate list *inside* the pipeline, and a thin **post-pipeline step** records
+the outcome. Together they keep new workload *off* reserved hosts and steer a dead host's workload *onto* the
+one reserved host it should gang-evacuate to — while deliberately *keeping* the ordinary candidates so Nova
+can retry if that landing fails.
+
+### Selecting the target: one deterministic rule
+
+For an evacuation (identified by the `evacuate` intent) the dead host is read from the `source_host`
+scheduler hint, and a single **deterministic rule** picks which reserved host this source should evacuate
+onto. Both the filter and the weigher apply this same rule, independently, over the *same* reservation
+snapshot within one pipeline run, so they always agree without coordinating:
+
+1. Keep the failover host reservations whose `sourceHosts` include the source host — the reservations this
+   host may evacuate onto.
+2. If one is already **In Use** *by this same source host*, that is the selected target (the
+   gang-evacuation path — the whole gang lands on the same target).
+3. Otherwise ignore any reservation **In Use** by a *different* source (pinning it would steal a landing
+   zone actively absorbing another host's gang), and any reservation that is not yet **Active** (still
+   draining, so not a usable landing zone yet — see the lifecycle below), then sort the rest by target
+   host name and take the first.
+4. If nothing remains, there is no match and the evacuation simply uses the ordinary candidates.
+
+> [!NOTE]
+> A reservation only becomes a *selectable* evacuation target once it is **Active** (its host has been
+> fully drained). Before that — from the moment it is created, while it is still draining — it already
+> **blocks** ordinary placements (the filter removes it for non-evacuation requests), but it is skipped by
+> step 3 above. This keeps VMs off a host that is being emptied without yet routing an evacuation onto a
+> host that is not actually empty.
+
+### The filter: block reserved hosts, keep only the selected target
+
+The **`filter_failover_host`** pipeline filter is purely *subtractive* — it only ever removes hosts — so its
+position in the pipeline does not matter and all other filters and weighers still apply around it. It is
+toggled by the `kvm.failoverHostMatching.enabled` Helm value (default `false`) and is a no-op when disabled. What it
+removes depends on the request:
+
+- **Ordinary (non-evacuation) requests:** it removes *every* failover host, so no new VM is placed on a host
+  being drained or kept empty as a landing zone.
+- **Evacuations:** it removes every failover host *except* the one selected by the rule above. The ordinary,
+  non-reserved candidates are left untouched.
+
+Pruning the *other* reserved hosts is the key to mutual exclusion between failover targets. Consider a VM
+that could go to reserved `[h1, h2]` (both failover targets reachable from this source) plus ordinary
+`[h3, h4]`, where only `h1` is selected. The filter emits `[h1, h3, h4]` — **not** `[h1, h2, h3, h4]`: `h2`
+is held back so a *second*, concurrent host failure still has its own free landing zone rather than finding
+it already consumed. Keeping `h3` and `h4` means that if the evacuation onto `h1` fails, Nova retries onto an
+ordinary host instead of being forced onto an unmatched reserved slot.
+
+The filter also honors the **call-time** `ignoredReservationTypes` request option. This is what keeps the
+**path finder probe** working: the probe asks the scheduler which hosts would accept a flavor, and it passes
+`ignoredReservationTypes: [FailoverHostReservation]` precisely so a reserved host is *not* hidden from its own
+partition. Because the filter obeys that option, the probe still discovers already-reserved hosts and the
+partitioning does not fragment.
+
+### The weigher: lift the selected target to the front
+
+The **`weigher_failover_host`** weigher gives the selected target a dominating weight — far larger than any
+other weigher can contribute — so the pipeline's ordinary descending-weight sort places it first. It selects
+the same host the filter kept (same rule, same snapshot), so it simply lifts the one reserved host that
+survived filtering above the retained ordinary candidates. For non-evacuation requests, or when no target is
+selected, it has no effect. Because the weigher only *weighs*, the ordinary candidates keep their relative
+order behind the target and remain available as retry fallbacks.
+
+### The post-pipeline step: pin the target for gang-evacuation
+
+A thin **Matcher** runs *after* the pipeline has produced its ordered candidates, from inside the pipeline's
+global execution lock, on write runs only. It does **not** touch the candidate list — the filter and weigher
+have already shaped it. Its sole job is the stateful write: it re-derives the selected reservation with the
+same rule and, **only if that target is actually the top candidate**, marks it **In Use** and records the
+source host on its status.
+
+Gating the write on the *outcome* is deliberate. If the selected target lost to other scheduling constraints
+(the filter removed it, so an ordinary host ended up on top), the evacuation falls back to that ordinary host
+and the Matcher writes nothing — no dangling `In Use` is left behind. In that case, and when no reservation
+matches or all are taken by other sources, it increments a metric
+(`cortex_failover_host_evacuations_without_reservation_total`) that drives an alert on frequent occurrences.
+
+Running inside the global pipeline lock is what makes **gang-evacuation** work. The *first* VM evacuated from
+a dead host pins its target and writes `In Use` while holding the lock; every subsequent VM from the same
+source host — serialized behind the same lock — sees that `In Use` reservation, so the selection rule keeps
+choosing it (step 2) and the whole gang lands on the *same* target. The reuse is idempotent: a reservation
+already `In Use` by this source needs no second write. Writing the pin *after* the pipeline (rather than
+inside the filter) is what lets the write be gated on the final ordering.
+
+The Matcher only ever advances a reservation *to* `In Use`. Moving it back out — to `Active` once the
+evacuation completes, or on cleanup — stays with the failover host lifecycle reconciler, based on the real
+workload present on the host.
 
 ## Configuration
 

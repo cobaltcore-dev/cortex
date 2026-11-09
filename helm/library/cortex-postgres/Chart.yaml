@@ -5,5 +5,5 @@ apiVersion: v2
 name: cortex-postgres
 description: Postgres setup for Cortex.
 type: application
-version: 0.6.30
-appVersion: "sha-7f53e4df"
+version: 0.6.32
+appVersion: "sha-9179b000"

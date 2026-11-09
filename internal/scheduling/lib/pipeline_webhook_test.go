@@ -6,7 +6,6 @@ package lib
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -97,25 +96,7 @@ func TestPipelineAdmissionWebhook_ValidateCreate_FilterWeigherPipeline(t *testin
 			expectWarnings: true,
 		},
 		{
-			name: "invalid filter-weigher pipeline with detectors",
-			pipeline: &v1alpha1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-pipeline"},
-				Spec: v1alpha1.PipelineSpec{
-					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					Type:             v1alpha1.PipelineTypeFilterWeigher,
-					Detectors: []v1alpha1.DetectorSpec{
-						{Name: "detector1", Params: nil},
-					},
-				},
-			},
-			filters:        map[string]Validatable{},
-			weighers:       map[string]Validatable{},
-			detectors:      map[string]Validatable{},
-			expectError:    true,
-			expectWarnings: false,
-		},
-		{
-			name: "filter validation error",
+			name: "filter validation failure surfaces as warning",
 			pipeline: &v1alpha1.Pipeline{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-pipeline"},
 				Spec: v1alpha1.PipelineSpec{
@@ -135,11 +116,11 @@ func TestPipelineAdmissionWebhook_ValidateCreate_FilterWeigherPipeline(t *testin
 			},
 			weighers:       map[string]Validatable{},
 			detectors:      map[string]Validatable{},
-			expectError:    true,
-			expectWarnings: false,
+			expectError:    false,
+			expectWarnings: true,
 		},
 		{
-			name: "weigher validation error",
+			name: "weigher validation failure surfaces as warning",
 			pipeline: &v1alpha1.Pipeline{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-pipeline"},
 				Spec: v1alpha1.PipelineSpec{
@@ -159,8 +140,8 @@ func TestPipelineAdmissionWebhook_ValidateCreate_FilterWeigherPipeline(t *testin
 				},
 			},
 			detectors:      map[string]Validatable{},
-			expectError:    true,
-			expectWarnings: false,
+			expectError:    false,
+			expectWarnings: true,
 		},
 	}
 
@@ -240,43 +221,7 @@ func TestPipelineAdmissionWebhook_ValidateCreate_DetectorPipeline(t *testing.T) 
 			expectWarnings: true,
 		},
 		{
-			name: "invalid detector pipeline with filters",
-			pipeline: &v1alpha1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-pipeline"},
-				Spec: v1alpha1.PipelineSpec{
-					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					Type:             v1alpha1.PipelineTypeDetector,
-					Filters: []v1alpha1.FilterSpec{
-						{Name: "filter1", Params: nil},
-					},
-				},
-			},
-			filters:        map[string]Validatable{},
-			weighers:       map[string]Validatable{},
-			detectors:      map[string]Validatable{},
-			expectError:    true,
-			expectWarnings: false,
-		},
-		{
-			name: "invalid detector pipeline with weighers",
-			pipeline: &v1alpha1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-pipeline"},
-				Spec: v1alpha1.PipelineSpec{
-					SchedulingDomain: v1alpha1.SchedulingDomainNova,
-					Type:             v1alpha1.PipelineTypeDetector,
-					Weighers: []v1alpha1.WeigherSpec{
-						{Name: "weigher1", Params: nil},
-					},
-				},
-			},
-			filters:        map[string]Validatable{},
-			weighers:       map[string]Validatable{},
-			detectors:      map[string]Validatable{},
-			expectError:    true,
-			expectWarnings: false,
-		},
-		{
-			name: "detector validation error",
+			name: "detector validation failure surfaces as warning",
 			pipeline: &v1alpha1.Pipeline{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-pipeline"},
 				Spec: v1alpha1.PipelineSpec{
@@ -296,8 +241,8 @@ func TestPipelineAdmissionWebhook_ValidateCreate_DetectorPipeline(t *testing.T) 
 					},
 				},
 			},
-			expectError:    true,
-			expectWarnings: false,
+			expectError:    false,
+			expectWarnings: true,
 		},
 	}
 
@@ -356,6 +301,9 @@ func TestPipelineAdmissionWebhook_ValidateCreate_DifferentSchedulingDomain(t *te
 }
 
 func TestPipelineAdmissionWebhook_ValidateCreate_UnknownPipelineType(t *testing.T) {
+	// The pipeline type enum and the type/step-list constraints are enforced by
+	// the API server via CEL on the CRD, not by the webhook. The webhook only
+	// validates referenced steps and never rejects based on the type itself.
 	webhook := &PipelineAdmissionWebhook{
 		SchedulingDomain:     v1alpha1.SchedulingDomainNova,
 		ValidatableFilters:   map[string]Validatable{},
@@ -373,11 +321,8 @@ func TestPipelineAdmissionWebhook_ValidateCreate_UnknownPipelineType(t *testing.
 
 	_, err := webhook.ValidateCreate(t.Context(), pipeline)
 
-	if err == nil {
-		t.Error("expected error for unknown pipeline type, got nil")
-	}
-	if !strings.Contains(err.Error(), "unknown pipeline type") {
-		t.Errorf("expected error message to contain 'unknown pipeline type', got %q", err.Error())
+	if err != nil {
+		t.Errorf("expected no error from the webhook for pipeline type, got: %v", err)
 	}
 }
 

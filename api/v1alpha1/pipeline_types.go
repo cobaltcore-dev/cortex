@@ -69,6 +69,16 @@ const (
 	PipelineTypeDetector PipelineType = "detector"
 )
 
+// PipelineSpec defines the desired state of a scheduling or descheduling pipeline.
+//
+// The structural constraints between type and the step lists are enforced by the
+// API server via CEL, so they hold regardless of which controller version is
+// running. Version-specific checks (whether a referenced step exists in the
+// running controller and whether its params are valid) are surfaced as admission
+// warnings by the pipeline webhook, not hard rejections, so a rolling upgrade is
+// never blocked.
+// +kubebuilder:validation:XValidation:rule="self.type != 'detector' || (!has(self.filters) && !has(self.weighers))",message="detector pipelines must not set filters or weighers"
+// +kubebuilder:validation:XValidation:rule="self.type != 'filter-weigher' || !has(self.detectors)",message="filter-weigher pipelines must not set detectors"
 type PipelineSpec struct {
 	// SchedulingDomain defines in which scheduling domain this pipeline
 	// is used (e.g., nova, cinder, manila).

@@ -1070,5 +1070,32 @@ spec:
           path finder are failing (transport errors or non-2xx responses). The path finder
           cannot determine valid evacuation targets, so failover partitions and reservations
           cannot be recomputed. Check that the external scheduler is reachable and healthy.
+    - alert: CortexNovaFailoverHostEvacuationsWithoutReservation
+      # An evacuation came in whose source host matched no failover host
+      # reservation, so the request fell back to ordinary candidates instead of a
+      # pre-validated, gang-evacuable landing zone. Frequent occurrences mean the
+      # partitioning is not keeping failover headroom where failures actually
+      # happen (e.g. the source host's partition reserves nothing, or the host
+      # left its partition), so evacuations are re-solved under pressure.
+      expr: sum by (az) (increase(cortex_failover_host_evacuations_without_reservation_total{service="cortex-nova-metrics"}[15m])) > 0
+      for: 15m
+      labels:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
+{{- end }}
+        context: failover-hosts
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: ""
+      annotations:
+        summary: "Evacuations landing without a failover host reservation in `{{ "{{" }} $labels.az {{ "}}" }}`"
+        description: >
+          Evacuation scheduling requests in `{{ "{{" }} $labels.az {{ "}}" }}` are matching no
+          failover host reservation for their source host, so they fall back to the ordinary
+          candidate set rather than a pre-validated, gang-evacuable landing zone. This means
+          the source hosts have no reserved failover target — check whether their partition
+          reserves anything (a partition of fewer than two hosts reserves nothing) and the
+          failover host calculation loop is healthy.
     {{- end }}
 {{- end }}
