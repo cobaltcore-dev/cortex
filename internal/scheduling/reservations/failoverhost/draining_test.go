@@ -89,65 +89,118 @@ func listDrains(t *testing.T, c client.Client) []v1alpha1.Rescheduling {
 	return list.Items
 }
 
-func TestDrainDeletesWhenHypervisorGone(t *testing.T) {
-	res := freshReservation() // no hypervisor object in the cluster.
-	c := &DrainController{Client: newTestClient(t, res), Config: drainConfig()}
-	if _, err := c.Reconcile(context.Background(), reconcileReq(res.Name)); err != nil {
-		t.Fatalf("reconcile: %v", err)
-	}
-	err := c.Get(context.Background(), client.ObjectKey{Name: res.Name}, &v1alpha1.Reservation{})
-	if !apierrors.IsNotFound(err) {
-		t.Fatalf("expected reservation deleted, got err=%v", err)
-	}
-}
-
-func TestDrainDoesNotDeleteWhenHypervisorUnready(t *testing.T) {
-	hv := buildHV("hv1", 64, 32) // present but no Ready condition.
-	res := freshReservation()
-	vm := buildVM("vm1", "hv1", "ACTIVE")
-	c := &DrainController{Client: newTestClient(t, hv, res, vm), Config: drainConfig()}
-	if _, err := c.Reconcile(context.Background(), reconcileReq(res.Name)); err != nil {
-		t.Fatalf("reconcile: %v", err)
-	}
-	// Reservation must survive (unready != gone); and since the host is occupied a
-	// drain should have been created.
-	getDrainReservation(t, c, res.Name)
-	if len(listDrains(t, c)) != 1 {
-		t.Fatalf("expected a drain to be created for the occupied host")
-	}
-}
-
-func TestDrainMarksActiveWhenHostEmpty(t *testing.T) {
-	c := &DrainController{Client: newTestClient(t, readyHV(), freshReservation()), Config: drainConfig()}
-	if _, err := c.Reconcile(context.Background(), reconcileReq("failover-host-hv1")); err != nil {
-		t.Fatalf("reconcile: %v", err)
-	}
-	res := getDrainReservation(t, c, "failover-host-hv1")
-	if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive) {
-		t.Fatalf("expected reservation to be marked Active")
-	}
-}
-
-func TestDrainIgnoresDeletedAndTerminatingVMs(t *testing.T) {
-	deleting := buildVM("vm1", "hv1", "ACTIVE")
+func TestDrainReconcile(t *testing.T) {
+	terminating := buildVM("vm-terminating", "hv1", "ACTIVE")
 	now := metav1.Now()
-	deleting.Status.DeletionTime = &now
-	gone := buildVM("vm2", "hv1", novaStatusDeleted)
-	elsewhere := buildVM("vm3", "hv2", "ACTIVE")
-	c := &DrainController{
-		Client: newTestClient(t, readyHV(), freshReservation(), deleting, gone, elsewhere),
-		Config: drainConfig(),
+	terminating.Status.DeletionTime = &now
+	expired := freshReservation()
+	expired.CreationTimestamp = metav1.NewTime(time.Now().Add(-25 * time.Hour))
+	active := freshReservation()
+	meta.SetStatusCondition(&active.Status.Conditions, metav1.Condition{
+		Type: v1alpha1.ConditionTypeFailoverHostActive, Status: metav1.ConditionTrue, Reason: ReasonHostDrained,
+	})
+	inFlight := &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: "in-flight-1"},
+		Spec:       v1alpha1.ReservationSpec{Type: v1alpha1.ReservationTypeInFlight, TargetHost: "hv1"},
 	}
-	if _, err := c.Reconcile(context.Background(), reconcileReq("failover-host-hv1")); err != nil {
-		t.Fatalf("reconcile: %v", err)
+	occupant := func() client.Object { return buildVM("vm1", "hv1", "ACTIVE") }
+	drain := func(host string, state v1alpha1.ReschedulingState) client.Object {
+		return drainRescheduling("drain-"+host, host, state)
 	}
-	res := getDrainReservation(t, c, "failover-host-hv1")
-	if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive) {
-		t.Fatalf("expected reservation Active: only non-present VMs are on the host")
+
+	const (
+		requeueNone    = "none"
+		requeueBackoff = "backoff"
+		requeueTTL     = "ttl"
+	)
+	tests := []struct {
+		name          string
+		res           *v1alpha1.Reservation
+		objs          []client.Object
+		wantDeleted   bool
+		wantActive    bool
+		wantHV1Drains int
+		wantRequeue   string
+	}{
+		{name: "hypervisor gone deletes", res: freshReservation(), wantDeleted: true},
+		{name: "unready hypervisor is not deleted", res: freshReservation(),
+			objs: []client.Object{buildHV("hv1", 64, 32), occupant()}, wantHV1Drains: 1},
+		{name: "empty host goes active", res: freshReservation(),
+			objs: []client.Object{readyHV()}, wantActive: true},
+		{name: "deleted, terminating and foreign VMs do not occupy", res: freshReservation(),
+			objs:       []client.Object{readyHV(), terminating, buildVM("vm2", "hv1", novaStatusDeleted), buildVM("vm3", "hv2", "ACTIVE")},
+			wantActive: true},
+		{name: "occupied host gets a drain", res: freshReservation(),
+			objs: []client.Object{readyHV(), occupant()}, wantHV1Drains: 1},
+		{name: "waits while another drain holds the slot", res: freshReservation(),
+			objs:        []client.Object{readyHV(), occupant(), drain("hv2", v1alpha1.ReschedulingStateProcessing)},
+			wantRequeue: requeueTTL},
+		{name: "own drain in flight waits", res: freshReservation(),
+			objs:          []client.Object{readyHV(), occupant(), drain("hv1", v1alpha1.ReschedulingStateProcessing)},
+			wantHV1Drains: 1, wantRequeue: requeueTTL},
+		{name: "succeeded drain and empty host goes active", res: freshReservation(),
+			objs: []client.Object{readyHV(), drain("hv1", v1alpha1.ReschedulingStateSucceeded)}, wantActive: true, wantHV1Drains: 1},
+		{name: "succeeded drain but occupied stays designated", res: freshReservation(),
+			objs:          []client.Object{readyHV(), occupant(), drain("hv1", v1alpha1.ReschedulingStateSucceeded)},
+			wantHV1Drains: 1, wantRequeue: requeueTTL},
+		{name: "failed drain backs off", res: freshReservation(),
+			objs:          []client.Object{readyHV(), occupant(), drain("hv1", v1alpha1.ReschedulingStateFailed)},
+			wantHV1Drains: 1, wantRequeue: requeueBackoff},
+		{name: "TTL expiry deletes", res: expired,
+			objs: []client.Object{readyHV(), occupant()}, wantDeleted: true},
+		{name: "active is sticky with VMs present", res: active,
+			objs: []client.Object{readyHV(), occupant()}, wantActive: true},
+		{name: "non failover host reservation is ignored", res: inFlight,
+			objs: []client.Object{readyHV(), occupant()}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			c := &DrainController{Client: newTestClient(t, append(tt.objs, tt.res)...), Config: drainConfig()}
+			result, err := c.Reconcile(ctx, reconcileReq(tt.res.Name))
+			if err != nil {
+				t.Fatalf("reconcile: %v", err)
+			}
+
+			got := &v1alpha1.Reservation{}
+			err = c.Get(ctx, client.ObjectKey{Name: tt.res.Name}, got)
+			if deleted := apierrors.IsNotFound(err); deleted != tt.wantDeleted {
+				t.Fatalf("deleted = %v, want %v (err=%v)", deleted, tt.wantDeleted, err)
+			}
+			if !tt.wantDeleted {
+				if active := meta.IsStatusConditionTrue(got.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive); active != tt.wantActive {
+					t.Errorf("active = %v, want %v", active, tt.wantActive)
+				}
+			}
+			hv1Drains := 0
+			for _, d := range listDrains(t, c) {
+				if drainTargetsHost(&d, "hv1") {
+					hv1Drains++
+				}
+			}
+			if hv1Drains != tt.wantHV1Drains {
+				t.Errorf("drains for hv1 = %d, want %d", hv1Drains, tt.wantHV1Drains)
+			}
+
+			switch requeue := result.RequeueAfter; tt.wantRequeue {
+			case requeueBackoff:
+				if requeue != c.Config.RetryBackoff.Duration {
+					t.Errorf("requeueAfter = %v, want %v", requeue, c.Config.RetryBackoff.Duration)
+				}
+			case requeueTTL:
+				if requeue <= 0 || requeue > c.Config.TTL.Duration {
+					t.Errorf("requeueAfter = %v, want within (0, %v]", requeue, c.Config.TTL.Duration)
+				}
+			default:
+				if requeue != 0 {
+					t.Errorf("requeueAfter = %v, want none", requeue)
+				}
+			}
+		})
 	}
 }
 
-func TestDrainCreatesReschedulingForOccupiedHost(t *testing.T) {
+func TestDrainCreatesRescheduling(t *testing.T) {
 	c := &DrainController{
 		Client: newTestClient(t, readyHV(), freshReservation(), buildVM("vm1", "hv1", "ACTIVE")),
 		Config: drainConfig(),
@@ -160,148 +213,29 @@ func TestDrainCreatesReschedulingForOccupiedHost(t *testing.T) {
 		t.Fatalf("expected exactly one drain, got %d", len(drains))
 	}
 	d := drains[0]
-	if d.Spec.Action != v1alpha1.ReschedulingActionDrain || d.Spec.Drain == nil {
+	switch {
+	case d.Spec.Action != v1alpha1.ReschedulingActionDrain || d.Spec.Drain == nil:
 		t.Fatalf("expected a drain-action rescheduling")
-	}
-	if d.Spec.Drain.Reserve {
+	case d.Spec.Drain.Reserve:
 		t.Fatalf("expected Reserve=false")
-	}
-	if d.Spec.Drain.Constraints.Mode != v1alpha1.DrainConstraintModeAll {
+	case d.Spec.Drain.Constraints.Mode != v1alpha1.DrainConstraintModeAll:
 		t.Fatalf("expected Mode=all, got %q", d.Spec.Drain.Constraints.Mode)
-	}
-	if !drainHostsContain(&d, "hv1") {
+	case d.Labels[LabelFailoverHostDrain] != "true":
+		t.Fatalf("expected drain label, got %v", d.Labels)
+	case !drainTargetsHost(&d, "hv1"):
 		t.Fatalf("expected drain to target hv1")
 	}
-	// Reservation must NOT be Active yet.
-	res := getDrainReservation(t, c, "failover-host-hv1")
-	if meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive) {
-		t.Fatalf("reservation should not be Active while draining")
-	}
 }
 
-func TestDrainSingleFlightWaitsForOtherDrain(t *testing.T) {
-	// A drain for hv2 is already Processing; hv1 is occupied but must wait.
-	other := drainRescheduling("drain-hv2", "hv2", v1alpha1.ReschedulingStateProcessing)
-	c := &DrainController{
-		Client: newTestClient(t, readyHV(), freshReservation(), buildVM("vm1", "hv1", "ACTIVE"), other),
-		Config: drainConfig(),
-	}
-	if _, err := c.Reconcile(context.Background(), reconcileReq("failover-host-hv1")); err != nil {
-		t.Fatalf("reconcile: %v", err)
-	}
-	// No new drain for hv1 should have been created (still only the hv2 one).
-	for _, d := range listDrains(t, c) {
-		if drainHostsContain(&d, "hv1") {
-			t.Fatalf("expected no drain for hv1 while another drain is in flight")
-		}
-	}
-}
-
-func TestDrainSucceededAndEmptyMarksActive(t *testing.T) {
-	done := drainRescheduling("drain-hv1", "hv1", v1alpha1.ReschedulingStateSucceeded)
-	// Host is now empty (no VMs).
-	c := &DrainController{
-		Client: newTestClient(t, readyHV(), freshReservation(), done),
-		Config: drainConfig(),
-	}
-	if _, err := c.Reconcile(context.Background(), reconcileReq("failover-host-hv1")); err != nil {
-		t.Fatalf("reconcile: %v", err)
-	}
-	res := getDrainReservation(t, c, "failover-host-hv1")
-	if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive) {
-		t.Fatalf("expected Active after a succeeded drain emptied the host")
-	}
-}
-
-func TestDrainSucceededButStillFullStaysDesignated(t *testing.T) {
-	done := drainRescheduling("drain-hv1", "hv1", v1alpha1.ReschedulingStateSucceeded)
-	c := &DrainController{
-		Client: newTestClient(t, readyHV(), freshReservation(), done, buildVM("vm1", "hv1", "ACTIVE")),
-		Config: drainConfig(),
-	}
-	result, err := c.Reconcile(context.Background(), reconcileReq("failover-host-hv1"))
-	if err != nil {
-		t.Fatalf("reconcile: %v", err)
-	}
-	if result.RequeueAfter != 0 {
-		t.Fatalf("expected no requeue when drain succeeded but host still full, got %v", result.RequeueAfter)
-	}
-	res := getDrainReservation(t, c, "failover-host-hv1")
-	if meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive) {
-		t.Fatalf("reservation must not be Active while the host is still occupied")
-	}
-	// No second drain should be created (the Succeeded one still targets the host).
-	if n := len(listDrains(t, c)); n != 1 {
-		t.Fatalf("expected no new drain, got %d drains", n)
-	}
-}
-
-func TestDrainFailedBacksOff(t *testing.T) {
-	failed := drainRescheduling("drain-hv1", "hv1", v1alpha1.ReschedulingStateFailed)
-	c := &DrainController{
-		Client: newTestClient(t, readyHV(), freshReservation(), failed, buildVM("vm1", "hv1", "ACTIVE")),
-		Config: drainConfig(),
-	}
-	result, err := c.Reconcile(context.Background(), reconcileReq("failover-host-hv1"))
-	if err != nil {
-		t.Fatalf("reconcile: %v", err)
-	}
-	if result.RequeueAfter != c.Config.RetryBackoff.Duration {
-		t.Fatalf("expected requeue after %v, got %v", c.Config.RetryBackoff.Duration, result.RequeueAfter)
-	}
-}
-
-func TestDrainTTLExpiryDeletes(t *testing.T) {
-	res := freshReservation()
-	res.CreationTimestamp = metav1.NewTime(time.Now().Add(-25 * time.Hour)) // older than the 24h TTL.
-	c := &DrainController{
-		Client: newTestClient(t, readyHV(), res, buildVM("vm1", "hv1", "ACTIVE")),
-		Config: drainConfig(),
-	}
-	if _, err := c.Reconcile(context.Background(), reconcileReq(res.Name)); err != nil {
-		t.Fatalf("reconcile: %v", err)
-	}
-	err := c.Get(context.Background(), client.ObjectKey{Name: res.Name}, &v1alpha1.Reservation{})
-	if !apierrors.IsNotFound(err) {
-		t.Fatalf("expected reservation deleted at TTL, got err=%v", err)
-	}
-}
-
-func TestDrainActiveReservationIsStickyWithVMsPresent(t *testing.T) {
-	res := freshReservation()
-	meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
-		Type: v1alpha1.ConditionTypeFailoverHostActive, Status: metav1.ConditionTrue, Reason: "HostDrained",
+func TestDrainWakesDesignatedReservationsOnDrainChange(t *testing.T) {
+	active := failoverReservation("hv2")
+	meta.SetStatusCondition(&active.Status.Conditions, metav1.Condition{
+		Type: v1alpha1.ConditionTypeFailoverHostActive, Status: metav1.ConditionTrue, Reason: ReasonHostDrained,
 	})
-	// An in-progress InUse evacuation has landed a VM on the (Active) host.
-	c := &DrainController{
-		Client: newTestClient(t, readyHV(), res, buildVM("vm1", "hv1", "ACTIVE")),
-		Config: drainConfig(),
-	}
-	if _, err := c.Reconcile(context.Background(), reconcileReq(res.Name)); err != nil {
-		t.Fatalf("reconcile: %v", err)
-	}
-	got := getDrainReservation(t, c, res.Name)
-	if !meta.IsStatusConditionTrue(got.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive) {
-		t.Fatalf("Active must stay sticky even with VMs present")
-	}
-	if len(listDrains(t, c)) != 0 {
-		t.Fatalf("must not drain an Active reservation")
-	}
-}
-
-func TestDrainIgnoresNonFailoverHostReservation(t *testing.T) {
-	res := &v1alpha1.Reservation{
-		ObjectMeta: metav1.ObjectMeta{Name: "in-flight-1"},
-		Spec:       v1alpha1.ReservationSpec{Type: v1alpha1.ReservationTypeInFlight},
-	}
-	c := &DrainController{Client: newTestClient(t, res), Config: drainConfig()}
-	if _, err := c.Reconcile(context.Background(), reconcileReq(res.Name)); err != nil {
-		t.Fatalf("reconcile: %v", err)
-	}
-	// Untouched: still present, no drains.
-	getDrainReservation(t, c, res.Name)
-	if len(listDrains(t, c)) != 0 {
-		t.Fatalf("must not act on non-failover-host reservations")
+	c := &DrainController{Client: newTestClient(t, freshReservation(), &active), Config: drainConfig()}
+	reqs := c.designatedFailoverReservations(context.Background(), nil)
+	if len(reqs) != 1 || reqs[0].Name != "failover-host-hv1" {
+		t.Fatalf("expected only the designated reservation to be woken, got %v", reqs)
 	}
 }
 

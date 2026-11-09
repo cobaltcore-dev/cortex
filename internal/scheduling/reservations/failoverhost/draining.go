@@ -6,6 +6,8 @@ package failoverhost
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -17,8 +19,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -31,19 +31,21 @@ import (
 
 const (
 	// LabelFailoverHostDrain marks the Rescheduling objects created by the drain
-	// controller, so they can be listed and counted by label rather than by name.
+	// controller, so they can be listed by label.
 	LabelFailoverHostDrain = "reservations.cortex.cloud/failover-host-drain"
 
-	// novaStatusDeleted is the Nova instance status reported for a server that has
-	// been deleted. A virtual machine in this state no longer occupies its host.
+	// ReasonHostDrained is the FailoverHostActive condition reason set once the
+	// reserved host is empty.
+	ReasonHostDrained = "HostDrained"
+
+	// novaStatusDeleted is the Nova status of a deleted server, which no longer
+	// occupies its host.
 	novaStatusDeleted = "DELETED"
 )
 
-// DrainControllerConfig is the top-level config section the drain controller reads
-// from the shared cortex conf.json. Its settings live under failover.hosts.drain,
-// alongside the partitioning controller's failover.hosts settings (same domain),
-// but it is loaded as its own struct so the two controllers stay decoupled: the
-// partitioning controller's ControllerConfig carries no drain-specific fields.
+// DrainControllerConfig is the slice of the shared cortex config the drain
+// controller reads. Its settings live under failover.hosts.drain next to the
+// partitioning controller's, but are loaded separately to keep both decoupled.
 type DrainControllerConfig struct {
 	Failover struct {
 		Hosts struct {
@@ -52,31 +54,21 @@ type DrainControllerConfig struct {
 	} `json:"failover"`
 }
 
-// DrainConfig configures the failover host drain controller, which brings freshly
-// designated failover host reservations into an Active state by ensuring the
-// reserved host is empty of virtual machines. It is gated by Enabled, which is
-// false by default: draining live-migrates workloads around the datacenter, so it
-// is opt-in.
+// DrainConfig configures the drain controller.
 type DrainConfig struct {
-	// Enabled gates the entire drain controller. When false (the default) the
-	// controller is not started: no reservation is marked Active and no draining
-	// happens.
+	// Enabled gates the whole controller. Draining live-migrates workloads, so it
+	// is opt-in: when false the controller is not started at all.
 	Enabled bool `json:"enabled,omitempty"`
-
-	// TTL is the maximum time a reservation may stay non-Active (counted from its
-	// creation) before the drain controller deletes it, so the partitioning
-	// generator can designate a fresh one. It is deliberately conservative to
-	// avoid the controller causing drains all over the datacenter. Defaults to 24h.
+	// TTL is how long a reservation may stay non-Active (since creation) before
+	// it is deleted so the generator can designate a fresh one. Defaults to 24h.
 	TTL metav1.Duration `json:"ttl,omitempty"`
-
-	// RetryBackoff is the requeue delay used while waiting for the rescheduler to
-	// prune a Failed/Rejected drain Rescheduling before a fresh attempt. Defaults
-	// to 1m.
+	// RetryBackoff is the requeue delay while waiting for the rescheduler to
+	// prune a Failed/Rejected drain. Defaults to 1m.
 	RetryBackoff metav1.Duration `json:"retryBackoff,omitempty"`
 }
 
-// ApplyDefaults fills in the default TTL and retry backoff when unset. Enabled is
-// intentionally left at its zero value (false) so the controller stays opt-in.
+// ApplyDefaults fills in TTL and RetryBackoff when unset. Enabled stays false
+// unless configured, keeping the controller opt-in.
 func (d *DrainConfig) ApplyDefaults() {
 	if d.TTL.Duration <= 0 {
 		d.TTL = metav1.Duration{Duration: 24 * time.Hour}
@@ -86,222 +78,171 @@ func (d *DrainConfig) ApplyDefaults() {
 	}
 }
 
-// DrainController is the failover host lifecycle reconciler: it brings freshly
-// designated failover host reservations (Reservations of type
-// FailoverHostReservation without the FailoverHostActive condition) into an
-// Active state by ensuring the reserved host is empty of virtual machines.
+// DrainController advances failover host reservations Designated -> Active by
+// making sure the reserved host runs no virtual machines, draining it via a
+// Rescheduling if needed. At most one such drain runs at a time fleet-wide.
 //
-// It is the counterpart to the partitioning Controller in this package: that
-// controller creates and prunes the reservation objects (writing only their spec
-// and labels), while this one owns the reservation status — the Designated ->
-// Active transition and the deletion of reservations that can no longer be made
-// Active. The Matcher (matching.go) only ever advances a reservation Active ->
-// InUse, and only ever selects Active reservations, so a Designated reservation
-// is exclusively this controller's concern until it goes Active.
-//
-// A host that still runs virtual machines is drained by creating a Rescheduling
-// with the drain action; the rescheduler live-migrates the workloads away. Only
-// one such drain runs at a time across the whole fleet, and draining is gated by
-// a feature flag that is off by default (see DrainConfig): the controller is not
-// started at all when disabled.
+// Ownership: the partitioning Controller writes reservation spec and labels;
+// this controller owns the FailoverHostActive condition and deletes reservations
+// that can no longer become Active. The Matcher only touches Active reservations.
 type DrainController struct {
 	client.Client
-
-	// Config holds the TTL and retry backoff. Enabled gating happens before the
-	// controller is constructed (in main.go), so by the time a DrainController
-	// exists, draining is enabled.
 	Config DrainConfig
-
-	// Monitor records Prometheus metrics. It may be nil (e.g. in tests); every
-	// call site nil-guards it.
+	// Monitor records metrics; nil disables them.
 	Monitor *Monitor
 }
 
-// Reconcile drives a single failover host reservation toward Active, draining its
-// host if necessary. The branches, in order:
-//
-//  1. the hypervisor is gone              -> delete the reservation.
-//  2. the reservation is already Active   -> nothing to do (Active is sticky).
-//  3. the reservation is older than the TTL and still not Active -> delete it.
-//  4. the host is already empty           -> mark the reservation Active.
-//  5. the host is not empty               -> drive the drain Rescheduling:
-//     create one (respecting the single-drain-at-a-time rule), wait for one in
-//     flight, re-verify emptiness on Succeeded, or back off on Failed/Rejected.
-//
-// It is level-triggered and idempotent, and never demotes an Active reservation:
-// once Active a reservation may legitimately gain inbound VMs from an in-progress
-// gang evacuation (InUse), and flipping it back would break that evacuation.
+// Reconcile drives one failover host reservation toward Active. It never
+// demotes an Active reservation: once Active it may legitimately receive VMs
+// from a gang evacuation (InUse), and flipping it back would break that.
 func (c *DrainController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := logf.FromContext(ctx).WithName("failoverhost-drain-reconcile").
-		WithValues("reservationName", req.Name)
-
 	res := &v1alpha1.Reservation{}
 	if err := c.Get(ctx, req.NamespacedName, res); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	// Sanity guards; the predicate already filters to failover host reservations.
-	if res.Spec.Type != v1alpha1.ReservationTypeFailoverHost || res.Spec.FailoverHostReservation == nil {
+	if !isFailoverHostReservation(res) || res.Spec.FailoverHostReservation == nil || res.Spec.TargetHost == "" {
 		return ctrl.Result{}, nil
 	}
 	host := res.Spec.TargetHost
-	if host == "" {
-		log.V(1).Info("failover host reservation has no target host, nothing to drain")
-		return ctrl.Result{}, nil
-	}
+	log := logf.FromContext(ctx).WithName("failoverhost-drain").WithValues("reservation", res.Name, "host", host)
+	ctx = logf.IntoContext(ctx, log)
 
-	// 1. The hypervisor is gone: the reservation can never be satisfied, so delete
-	// it and let the partitioning generator designate a fresh one. An unready (but
-	// still present) hypervisor is deliberately NOT a delete trigger: the generator
-	// lists all hypervisors regardless of readiness, so deleting on unready would
-	// race the generator recreating the reservation every generation interval. A
-	// genuinely unschedulable host instead stops being designated by the generator,
-	// and a reservation stuck non-Active is eventually cleaned up by the TTL below.
-	hv := &hv1.Hypervisor{}
-	if err := c.Get(ctx, client.ObjectKey{Name: host}, hv); err != nil {
-		if apierrors.IsNotFound(err) {
-			log.Info("hypervisor gone, deleting failover host reservation", "host", host)
-			return ctrl.Result{}, c.deleteReservation(ctx, res)
+	// A missing hypervisor can never be drained into a failover target. An
+	// unready one is deliberately not a trigger: the generator designates hosts
+	// regardless of readiness, so deleting here would fight it every interval.
+	// Stuck reservations are cleaned up by the TTL instead.
+	if err := c.Get(ctx, client.ObjectKey{Name: host}, &hv1.Hypervisor{}); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return ctrl.Result{}, fmt.Errorf("get hypervisor %s: %w", host, err)
 		}
-		return ctrl.Result{}, err
+		log.Info("hypervisor gone, deleting failover host reservation")
+		return ctrl.Result{}, c.deleteReservation(ctx, res)
 	}
 
-	// 2. Already Active: never demote. Removal when the host leaves a partition is
-	// the partitioning controller's job; advancing Active -> InUse is the Matcher's.
 	if meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive) {
 		return ctrl.Result{}, nil
 	}
 
-	// 3. TTL: a reservation that has not reached Active within the (conservative)
-	// TTL since creation is deleted so the generator can try a fresh host.
-	if age := time.Since(res.CreationTimestamp.Time); age > c.Config.TTL.Duration {
-		log.Info("failover host reservation exceeded drain TTL, deleting",
-			"host", host, "age", age, "ttl", c.Config.TTL.Duration)
+	ttlLeft := c.Config.TTL.Duration - time.Since(res.CreationTimestamp.Time)
+	if ttlLeft <= 0 {
+		log.Info("failover host reservation exceeded drain TTL, deleting", "ttl", c.Config.TTL.Duration)
 		return ctrl.Result{}, c.deleteReservation(ctx, res)
 	}
 
-	// 4. Host empty: mark the reservation Active.
 	empty, err := c.hostEmpty(ctx, host)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	if empty {
-		log.Info("host is empty, marking failover host reservation active", "host", host)
+		log.Info("host is empty, marking failover host reservation active")
 		return ctrl.Result{}, c.markActive(ctx, res)
 	}
+	return c.driveDrain(ctx, res, ttlLeft)
+}
 
-	// 5. Host not empty: drive the drain. Find this host's drain and, in the same
-	// scan, whether another host is already being drained (only one runs at a time).
+// driveDrain moves an occupied host's drain forward: it creates a drain when
+// none exists and the fleet-wide slot is free, and otherwise waits on the
+// existing one. Waiting results requeue at the TTL deadline so the TTL fires
+// even if no watch event arrives.
+func (c *DrainController) driveDrain(ctx context.Context, res *v1alpha1.Reservation, ttlLeft time.Duration) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+	host := res.Spec.TargetHost
+	waitUntilTTL := ctrl.Result{RequeueAfter: ttlLeft}
+
 	drains := &v1alpha1.ReschedulingList{}
 	if err := c.List(ctx, drains, client.MatchingLabels{LabelFailoverHostDrain: "true"}); err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("list drain reschedulings: %w", err)
 	}
-	var forHost *v1alpha1.Rescheduling // the drain targeting this host, if any.
-	otherInFlight := false             // a drain for a different host still occupying the single slot.
+	var own *v1alpha1.Rescheduling
+	slotTaken := false
 	for i := range drains.Items {
 		rr := &drains.Items[i]
-		if !isDrain(rr) {
+		switch {
+		case rr.Spec.Action != v1alpha1.ReschedulingActionDrain:
 			continue
-		}
-		if drainHostsContain(rr, host) {
-			// Prefer a non-terminal drain for this host; otherwise keep the first
-			// terminal one so we can act on its Succeeded/Failed state below.
-			if forHost == nil || (isTerminalState(forHost.Status.State) && !isTerminalState(rr.Status.State)) {
-				forHost = rr
+		case drainTargetsHost(rr, host):
+			// Several drains may exist for a host (Succeeded ones are never pruned);
+			// prefer the one still in progress.
+			if own == nil || (isTerminalState(own.Status.State) && !isTerminalState(rr.Status.State)) {
+				own = rr
 			}
-			continue
-		}
-		// A drain for another host occupies the single slot unless it is fully
-		// terminal and clean (Succeeded/Rejected). Failed still holds the slot until
-		// the rescheduler prunes it, as it may carry partial state.
-		if s := rr.Status.State; s != v1alpha1.ReschedulingStateSucceeded && s != v1alpha1.ReschedulingStateRejected {
-			otherInFlight = true
+		case holdsDrainSlot(rr.Status.State):
+			slotTaken = true
 		}
 	}
 
-	// No drain for this host yet: create one unless another drain is in flight.
-	if forHost == nil {
-		if otherInFlight {
-			log.V(1).Info("another drain is in flight, waiting before draining this host")
-			return ctrl.Result{}, nil
+	if own == nil {
+		if slotTaken {
+			log.V(1).Info("another failover host drain is in flight, waiting")
+			return waitUntilTTL, nil
 		}
-		log.Info("host not empty, creating drain rescheduling", "host", host)
-		return ctrl.Result{}, c.createDrain(ctx, res, host)
+		log.Info("host not empty, creating drain rescheduling")
+		return ctrl.Result{}, c.createDrain(ctx, res)
 	}
 
-	switch forHost.Status.State {
+	switch own.Status.State {
 	case v1alpha1.ReschedulingStateSucceeded:
-		// The rescheduler reports the drain done. Do not trust it blindly (it may
-		// be a stub, or a best-effort drain): the host emptiness was already checked
-		// above and came back non-empty, so the drain left workload behind. The
-		// Rescheduling is terminal and nothing re-drives it, so do not requeue: the
-		// VM watch re-triggers us when workloads actually leave, and the TTL deletes
-		// the reservation otherwise.
+		// The host was just found occupied, so the drain left workload behind. Do
+		// not re-drain: the VM watch triggers us once workloads leave, and the TTL
+		// deletes the reservation otherwise.
 		log.Info("drain reported success but host still has virtual machines, leaving reservation designated")
-		return ctrl.Result{}, nil
+		return waitUntilTTL, nil
 	case v1alpha1.ReschedulingStateFailed, v1alpha1.ReschedulingStateRejected:
-		// The rescheduler owns cleaning up a failed request. Wait for it to prune
-		// the object, then a fresh drain is created on a later reconcile.
-		log.V(1).Info("drain rescheduling in terminal error state, backing off", "state", forHost.Status.State)
-		return ctrl.Result{RequeueAfter: c.Config.RetryBackoff.Duration}, nil
+		// The rescheduler prunes failed drains; a fresh one is created afterwards.
+		log.V(1).Info("drain rescheduling failed, backing off", "state", own.Status.State)
+		return ctrl.Result{RequeueAfter: min(c.Config.RetryBackoff.Duration, ttlLeft)}, nil
 	default:
-		// Pending/Acknowledged/Processing/Accepted: in flight, wait for the watch.
-		log.V(1).Info("drain rescheduling in flight, waiting", "state", forHost.Status.State)
-		return ctrl.Result{}, nil
+		log.V(1).Info("drain rescheduling in flight, waiting", "state", own.Status.State)
+		return waitUntilTTL, nil
 	}
 }
 
-// hostEmpty reports whether no live virtual machine runs on the given host, based
-// on the vm-operator VirtualMachine resources. A VM counts as present only if Nova
-// reports it on this host and it is neither being pruned nor already deleted.
+// hostEmpty reports whether no live virtual machine runs on the host. A VM
+// counts only if Nova reports it there and it is neither pruned nor deleted.
 func (c *DrainController) hostEmpty(ctx context.Context, host string) (bool, error) {
 	vms := &vmv1alpha1.VirtualMachineList{}
 	if err := c.List(ctx, vms); err != nil {
-		return false, err
+		return false, fmt.Errorf("list virtual machines: %w", err)
 	}
 	for _, vm := range vms.Items {
-		if vm.Status.Nova == nil || vm.Status.Nova.Host != host {
-			continue // not placed yet, or on another host.
-		}
-		if vm.Status.DeletionTime != nil || vm.Status.Nova.Status == novaStatusDeleted {
-			continue // being pruned / already gone.
+		if novaHost(&vm) != host || vm.Status.DeletionTime != nil || vm.Status.Nova.Status == novaStatusDeleted {
+			continue
 		}
 		return false, nil
 	}
 	return true, nil
 }
 
-// markActive sets the FailoverHostActive condition to True on the reservation.
 func (c *DrainController) markActive(ctx context.Context, res *v1alpha1.Reservation) error {
-	old := res.DeepCopy()
+	base := res.DeepCopy()
 	meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
-		Type:    v1alpha1.ConditionTypeFailoverHostActive,
-		Status:  metav1.ConditionTrue,
-		Reason:  "HostDrained",
-		Message: "no virtual machines remain on the reserved host",
+		Type:               v1alpha1.ConditionTypeFailoverHostActive,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: res.Generation,
+		Reason:             ReasonHostDrained,
+		Message:            "no virtual machines remain on the reserved host",
 	})
-	if err := c.Status().Patch(ctx, res, client.MergeFrom(old)); err != nil {
+	if err := c.Status().Patch(ctx, res, client.MergeFrom(base)); err != nil {
 		c.Monitor.RecordReservationError("drain_mark_active")
-		return err
+		return fmt.Errorf("mark reservation %s active: %w", res.Name, err)
 	}
 	return nil
 }
 
-// deleteReservation deletes a reservation, tolerating a concurrent delete.
 func (c *DrainController) deleteReservation(ctx context.Context, res *v1alpha1.Reservation) error {
-	if err := c.Delete(ctx, res); err != nil && !apierrors.IsNotFound(err) {
+	if err := client.IgnoreNotFound(c.Delete(ctx, res)); err != nil {
 		c.Monitor.RecordReservationError("drain_delete")
-		return err
+		return fmt.Errorf("delete reservation %s: %w", res.Name, err)
 	}
 	c.Monitor.RecordReservationDeleted()
 	return nil
 }
 
-// createDrain creates a drain Rescheduling for the reservation's host. It uses a
-// generated name so repeated attempts never clash with a lingering Succeeded
-// Rescheduling (which nothing prunes). Reserve is false: the failover host
-// reservation and the pipeline filter already block the host from placement, so
-// the rescheduler needs no independent host-block.
-func (c *DrainController) createDrain(ctx context.Context, res *v1alpha1.Reservation, host string) error {
+// createDrain creates a drain Rescheduling for the reservation's host. The
+// generated name avoids clashing with lingering Succeeded drains. Reserve is
+// false because the failover host reservation already blocks the host.
+func (c *DrainController) createDrain(ctx context.Context, res *v1alpha1.Reservation) error {
+	host, az := res.Spec.TargetHost, res.Spec.AvailabilityZone
 	rr := &v1alpha1.Rescheduling{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "drain-failover-host-" + host + "-",
@@ -312,11 +253,11 @@ func (c *DrainController) createDrain(ctx context.Context, res *v1alpha1.Reserva
 		},
 		Spec: v1alpha1.ReschedulingSpec{
 			Action:           v1alpha1.ReschedulingActionDrain,
-			AvailabilityZone: res.Spec.AvailabilityZone,
+			AvailabilityZone: az,
 			Drain: &v1alpha1.DrainActionSpec{
 				Reserve: false,
 				Target: v1alpha1.DrainTarget{Hosts: []v1alpha1.DrainTargetHost{{
-					Host: v1alpha1.HostRef{Name: host, AvailabilityZone: res.Spec.AvailabilityZone},
+					Host: v1alpha1.HostRef{Name: host, AvailabilityZone: az},
 				}}},
 				Constraints: v1alpha1.DrainConstraints{Mode: v1alpha1.DrainConstraintModeAll},
 			},
@@ -324,115 +265,76 @@ func (c *DrainController) createDrain(ctx context.Context, res *v1alpha1.Reserva
 	}
 	if err := c.Create(ctx, rr); err != nil {
 		c.Monitor.RecordReservationError("drain_create")
-		return err
+		return fmt.Errorf("create drain rescheduling for host %s: %w", host, err)
 	}
 	return nil
 }
 
-// SetupWithManager wires the drain controller into the manager. It watches four
-// resources and enqueues the affected failover host reservation(s):
-//
-//   - Reservation (the primary object) — filtered to failover host reservations.
-//   - Hypervisor — so a host going away re-triggers its reservation.
-//   - VirtualMachine — so workloads leaving (or arriving on) a host re-triggers
-//     the reservation of that host.
-//   - Rescheduling — so a drain changing state re-triggers the reservation(s) it
-//     targets.
-//
-// Reconciles run one at a time (MaxConcurrentReconciles: 1), which both keeps the
-// single-drain-at-a-time bookkeeping race-free and bounds the load from the full
-// VM list the emptiness check performs.
+// SetupWithManager registers the controller. Besides failover host
+// reservations it watches Hypervisors (host removal), VirtualMachines (host
+// emptiness) and its own drain Reschedulings (drain progress and the
+// fleet-wide drain slot freeing up). Reconciles run one at a time, which keeps
+// the single-drain bookkeeping race-free.
 func (c *DrainController) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	mcl, ok := c.Client.(*multicluster.Client)
 	if !ok {
 		return errors.New("provided client must be a multicluster client")
 	}
-	// Shared reservation-by-host index, reused for the Hypervisor and VM watches.
 	if err := reservations.IndexReservationByHost(ctx, mcl); err != nil {
-		return err
+		return fmt.Errorf("index reservations by host: %w", err)
 	}
 
 	bldr := multicluster.BuildController(mcl, mgr)
-	var err error
-	// Reservation (the primary object): enqueue the failover host reservation itself.
-	if bldr, err = bldr.WatchesMulticluster(&v1alpha1.Reservation{},
-		c.mapToRequests(func(_ context.Context, obj client.Object) []string {
-			if res, ok := obj.(*v1alpha1.Reservation); ok && res.Spec.Type == v1alpha1.ReservationTypeFailoverHost {
-				return []string{res.Name}
-			}
-			return nil
+	bldr, err := bldr.WatchesMulticluster(&v1alpha1.Reservation{},
+		&handler.EnqueueRequestForObject{},
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			res, ok := obj.(*v1alpha1.Reservation)
+			return ok && isFailoverHostReservation(res)
 		}),
-	); err != nil {
-		return err
+	)
+	if err != nil {
+		return fmt.Errorf("watch reservations: %w", err)
 	}
-	// Hypervisor: enqueue the failover host reservations on the changed host.
-	if bldr, err = bldr.WatchesMulticluster(&hv1.Hypervisor{},
-		c.mapToRequests(func(ctx context.Context, obj client.Object) []string {
+	bldr, err = bldr.WatchesMulticluster(&hv1.Hypervisor{},
+		handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
 			return c.failoverReservationsOnHost(ctx, obj.GetName())
 		}),
-	); err != nil {
-		return err
+	)
+	if err != nil {
+		return fmt.Errorf("watch hypervisors: %w", err)
 	}
-	// VirtualMachine: enqueue the failover host reservation of the VM's host, but
-	// only when the VM's host or deletion state changes (what affects emptiness).
-	if bldr, err = bldr.WatchesMulticluster(&vmv1alpha1.VirtualMachine{},
-		c.mapToRequests(func(ctx context.Context, obj client.Object) []string {
+	bldr, err = bldr.WatchesMulticluster(&vmv1alpha1.VirtualMachine{},
+		handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
 			vm, ok := obj.(*vmv1alpha1.VirtualMachine)
-			if !ok || vm.Status.Nova == nil {
+			if !ok {
 				return nil
 			}
-			return c.failoverReservationsOnHost(ctx, vm.Status.Nova.Host)
+			return c.failoverReservationsOnHost(ctx, novaHost(vm))
 		}),
-		vmHostChangedPredicate(),
-	); err != nil {
-		return err
+		vmEmptinessChangedPredicate(),
+	)
+	if err != nil {
+		return fmt.Errorf("watch virtual machines: %w", err)
 	}
-	// Rescheduling: enqueue the failover host reservation(s) the drain targets.
-	if bldr, err = bldr.WatchesMulticluster(&v1alpha1.Rescheduling{},
-		c.mapToRequests(func(_ context.Context, obj client.Object) []string {
-			rr, ok := obj.(*v1alpha1.Rescheduling)
-			if !ok || !isDrain(rr) {
-				return nil
-			}
-			var names []string
-			for _, host := range drainHosts(rr) {
-				names = append(names, "failover-host-"+host)
-			}
-			return names
+	// Any drain change may free the fleet-wide slot, so wake every designated
+	// reservation rather than only the drained host's.
+	bldr, err = bldr.WatchesMulticluster(&v1alpha1.Rescheduling{},
+		handler.EnqueueRequestsFromMapFunc(c.designatedFailoverReservations),
+		predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			return obj.GetLabels()[LabelFailoverHostDrain] == "true"
 		}),
-	); err != nil {
-		return err
+	)
+	if err != nil {
+		return fmt.Errorf("watch reschedulings: %w", err)
 	}
 	return bldr.Named("failoverhost-drain-controller").
 		WithOptions(controller.Options{MaxConcurrentReconciles: 1}).
 		Complete(c)
 }
 
-// mapToRequests turns a function that maps a changed object to reservation names
-// into an event handler that enqueues a reconcile for each on create/update/delete.
-func (c *DrainController) mapToRequests(names func(context.Context, client.Object) []string) handler.EventHandler {
-	enqueue := func(ctx context.Context, obj client.Object, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-		for _, name := range names(ctx, obj) {
-			q.Add(ctrl.Request{NamespacedName: types.NamespacedName{Name: name}})
-		}
-	}
-	return handler.Funcs{
-		CreateFunc: func(ctx context.Context, e event.CreateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			enqueue(ctx, e.Object, q)
-		},
-		UpdateFunc: func(ctx context.Context, e event.UpdateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			enqueue(ctx, e.ObjectNew, q)
-		},
-		DeleteFunc: func(ctx context.Context, e event.DeleteEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-			enqueue(ctx, e.Object, q)
-		},
-	}
-}
-
-// failoverReservationsOnHost lists the names of the failover host reservations on
-// the given host, via the shared reservation-by-host index. Used by the Hypervisor
-// and VirtualMachine watches to map a host change to the reservation(s) to reconcile.
-func (c *DrainController) failoverReservationsOnHost(ctx context.Context, host string) []string {
+// failoverReservationsOnHost maps a host to its failover host reservations via
+// the shared reservation-by-host index.
+func (c *DrainController) failoverReservationsOnHost(ctx context.Context, host string) []reconcile.Request {
 	if host == "" {
 		return nil
 	}
@@ -441,29 +343,41 @@ func (c *DrainController) failoverReservationsOnHost(ctx context.Context, host s
 		logf.FromContext(ctx).Error(err, "failed to list reservations for host", "host", host)
 		return nil
 	}
-	var names []string
-	for i := range list.Items {
-		if list.Items[i].Spec.Type == v1alpha1.ReservationTypeFailoverHost {
-			names = append(names, list.Items[i].Name)
-		}
-	}
-	return names
+	return requestsFor(list.Items, isFailoverHostReservation)
 }
 
-// vmHostChangedPredicate fires only when a VM's observed host or deletion state
-// changes, the only transitions that affect whether a host is empty.
-func vmHostChangedPredicate() predicate.Predicate {
-	novaHost := func(vm *vmv1alpha1.VirtualMachine) string {
-		if vm.Status.Nova == nil {
-			return ""
-		}
-		return vm.Status.Nova.Host
+// designatedFailoverReservations maps any event to all failover host
+// reservations that are not yet Active.
+func (c *DrainController) designatedFailoverReservations(ctx context.Context, _ client.Object) []reconcile.Request {
+	list := &v1alpha1.ReservationList{}
+	if err := c.List(ctx, list, client.MatchingLabels{v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelFailoverHost}); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to list failover host reservations")
+		return nil
 	}
+	return requestsFor(list.Items, func(res *v1alpha1.Reservation) bool {
+		return isFailoverHostReservation(res) &&
+			!meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive)
+	})
+}
+
+func requestsFor(items []v1alpha1.Reservation, keep func(*v1alpha1.Reservation) bool) []reconcile.Request {
+	var reqs []reconcile.Request
+	for i := range items {
+		if keep(&items[i]) {
+			reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&items[i])})
+		}
+	}
+	return reqs
+}
+
+// vmEmptinessChangedPredicate passes VM updates only when the VM's host or
+// deletion state changed, the only transitions that affect host emptiness.
+func vmEmptinessChangedPredicate() predicate.Predicate {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			oldVM, ok1 := e.ObjectOld.(*vmv1alpha1.VirtualMachine)
-			newVM, ok2 := e.ObjectNew.(*vmv1alpha1.VirtualMachine)
-			if !ok1 || !ok2 {
+			oldVM, okOld := e.ObjectOld.(*vmv1alpha1.VirtualMachine)
+			newVM, okNew := e.ObjectNew.(*vmv1alpha1.VirtualMachine)
+			if !okOld || !okNew {
 				return false
 			}
 			return novaHost(oldVM) != novaHost(newVM) ||
@@ -472,47 +386,37 @@ func vmHostChangedPredicate() predicate.Predicate {
 	}
 }
 
-// isDrain reports whether a Rescheduling is a failover host drain created by this
-// controller.
-func isDrain(rr *v1alpha1.Rescheduling) bool {
-	return rr.Spec.Action == v1alpha1.ReschedulingActionDrain &&
-		rr.Labels[LabelFailoverHostDrain] == "true"
+func isFailoverHostReservation(res *v1alpha1.Reservation) bool {
+	return res.Spec.Type == v1alpha1.ReservationTypeFailoverHost
 }
 
-// isTerminalState reports whether a drain in the given state is done being worked
-// on (Succeeded, Rejected or Failed). An empty state is the Pending default, i.e.
-// not terminal.
+// novaHost returns the host Nova reports the VM on, or "" if not placed yet.
+func novaHost(vm *vmv1alpha1.VirtualMachine) string {
+	if vm.Status.Nova == nil {
+		return ""
+	}
+	return vm.Status.Nova.Host
+}
+
+func drainTargetsHost(rr *v1alpha1.Rescheduling, host string) bool {
+	return rr.Spec.Drain != nil && slices.ContainsFunc(rr.Spec.Drain.Target.Hosts,
+		func(h v1alpha1.DrainTargetHost) bool { return h.Host.Name == host })
+}
+
+// isTerminalState reports whether a drain is no longer being worked on. The
+// empty state is the Pending default.
 func isTerminalState(state v1alpha1.ReschedulingState) bool {
 	switch state {
-	case v1alpha1.ReschedulingStateSucceeded,
-		v1alpha1.ReschedulingStateRejected,
-		v1alpha1.ReschedulingStateFailed:
+	case v1alpha1.ReschedulingStateSucceeded, v1alpha1.ReschedulingStateRejected, v1alpha1.ReschedulingStateFailed:
 		return true
 	default:
 		return false
 	}
 }
 
-// drainHosts returns the host names a drain Rescheduling targets.
-func drainHosts(rr *v1alpha1.Rescheduling) []string {
-	if rr.Spec.Drain == nil {
-		return nil
-	}
-	hosts := make([]string, 0, len(rr.Spec.Drain.Target.Hosts))
-	for _, h := range rr.Spec.Drain.Target.Hosts {
-		if h.Host.Name != "" {
-			hosts = append(hosts, h.Host.Name)
-		}
-	}
-	return hosts
-}
-
-// drainHostsContain reports whether a drain Rescheduling targets the given host.
-func drainHostsContain(rr *v1alpha1.Rescheduling, host string) bool {
-	for _, h := range drainHosts(rr) {
-		if h == host {
-			return true
-		}
-	}
-	return false
+// holdsDrainSlot reports whether a drain in this state still occupies the
+// fleet-wide single-drain slot. Failed drains keep holding it until the
+// rescheduler prunes them, as they may carry partial state.
+func holdsDrainSlot(state v1alpha1.ReschedulingState) bool {
+	return state != v1alpha1.ReschedulingStateSucceeded && state != v1alpha1.ReschedulingStateRejected
 }

@@ -5,13 +5,11 @@ package reservations
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // IdxReservationByHost is the field index key for looking up Reservations by host.
@@ -26,31 +24,25 @@ var onceIndexReservationByHost sync.Once
 // Safe to call multiple times — registration happens only once.
 func IndexReservationByHost(ctx context.Context, mcl *multicluster.Client) (err error) {
 	onceIndexReservationByHost.Do(func() {
-		log := logf.FromContext(ctx)
-		err = mcl.IndexField(ctx,
-			&v1alpha1.Reservation{},
-			&v1alpha1.ReservationList{},
-			IdxReservationByHost,
-			func(obj client.Object) []string {
-				res, ok := obj.(*v1alpha1.Reservation)
-				if !ok {
-					log.Error(errors.New("unexpected type"), "expected Reservation", "object", obj)
-					return nil
-				}
-				hosts := make(map[string]struct{})
-				if res.Spec.TargetHost != "" {
-					hosts[res.Spec.TargetHost] = struct{}{}
-				}
-				if res.Status.Host != "" {
-					hosts[res.Status.Host] = struct{}{}
-				}
-				result := make([]string, 0, len(hosts))
-				for h := range hosts {
-					result = append(result, h)
-				}
-				return result
-			},
-		)
+		err = mcl.IndexField(ctx, &v1alpha1.Reservation{}, &v1alpha1.ReservationList{},
+			IdxReservationByHost, ReservationHosts)
 	})
 	return err
+}
+
+// ReservationHosts is the IdxReservationByHost extractor: the distinct hosts a
+// Reservation targets (Spec.TargetHost) or sits on (Status.Host).
+func ReservationHosts(obj client.Object) []string {
+	res, ok := obj.(*v1alpha1.Reservation)
+	if !ok {
+		return nil
+	}
+	hosts := make([]string, 0, 2)
+	if res.Spec.TargetHost != "" {
+		hosts = append(hosts, res.Spec.TargetHost)
+	}
+	if res.Status.Host != "" && res.Status.Host != res.Spec.TargetHost {
+		hosts = append(hosts, res.Status.Host)
+	}
+	return hosts
 }

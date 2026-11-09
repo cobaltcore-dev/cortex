@@ -43,26 +43,8 @@ func newTestClient(t *testing.T, objs ...client.Object) client.Client {
 		WithScheme(scheme).
 		WithObjects(objs...).
 		WithStatusSubresource(&v1alpha1.Reservation{}, &v1alpha1.Rescheduling{}).
-		WithIndex(&v1alpha1.Reservation{}, reservations.IdxReservationByHost, reservationByHostIndexFn).
+		WithIndex(&v1alpha1.Reservation{}, reservations.IdxReservationByHost, reservations.ReservationHosts).
 		Build()
-}
-
-// reservationByHostIndexFn mirrors IndexReservationByHost's extractor so the fake
-// client's MatchingFields queries resolve in tests (the production index is
-// registered on the multicluster client, not the fake client).
-func reservationByHostIndexFn(obj client.Object) []string {
-	res, ok := obj.(*v1alpha1.Reservation)
-	if !ok {
-		return nil
-	}
-	hosts := make([]string, 0, 2)
-	if res.Spec.TargetHost != "" {
-		hosts = append(hosts, res.Spec.TargetHost)
-	}
-	if res.Status.Host != "" && res.Status.Host != res.Spec.TargetHost {
-		hosts = append(hosts, res.Status.Host)
-	}
-	return hosts
 }
 
 // failoverReservation builds a minimal failover host reservation targeting the
