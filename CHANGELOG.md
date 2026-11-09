@@ -1,5 +1,60 @@
 # Changelog
 
+## Release PR [#1495](https://github.com/cobaltcore-dev/cortex/pull/1495) — 2026-11-09
+
+### Bumped Versions
+
+| Package | Previous | New |
+|---|---|---|
+| cortex | 0.8.0 | 0.8.1 |
+| cortex-postgres | 0.6.31 | 0.6.32 |
+| cortex-shim | 0.1.36 | 0.1.37 |
+| bundles | 0.0.111 | 0.0.112 |
+| cortex-placement-shim | 0.1.36 | 0.1.37 |
+
+### Features
+
+- **Rescheduling CRD & controller** ([#1467](https://github.com/cobaltcore-dev/cortex/pull/1467)) — Introduces the `Rescheduling` Custom Resource and a new rescheduler controller for declarative host-drain operations. The cluster-scoped CRD (`cortex.cloud_reschedulings.yaml`) defines a full state machine (`Pending → Acknowledged → Processing → Accepted → Succeeded/Failed/Rejected`) enforced via CEL validation rules. The first supported action (`drain`) allows requesting that entities be moved off specified hosts, with optional capacity reservation and `all`/`bestEffort` constraint modes. Includes an in-memory FIFO scheduling queue (modelled after kube-scheduler), a noop scheduler skeleton that reconciles objects through the state machine, and a `ReschedulingResourceRouter` for multicluster routing by availability zone. The `rescheduler-controller` is enabled in `cortex-nova`; `Rescheduling`/`ReschedulingList` GVKs are registered across all bundles (nova, cinder, manila, ironcore, pods) with RBAC rules updated. Tests cover CEL validation transition rules, immutability, the FIFO queue, and the scheduler reconcile loop.
+
+- **Failover host reservation matching in Nova pipeline** ([#1462](https://github.com/cobaltcore-dev/cortex/pull/1462)) — Wires failover host reservations into the Nova scheduling pipeline so reserved hosts are actually honored during placement and evacuation. Adds a `filter_failover_host` filter (removes reserved hosts for ordinary requests; for evacuations removes all but the deterministically-selected target), a `weigher_failover_host` weigher (gives the selected failover target a dominating weight), and a post-pipeline matcher that runs under the controller's exclusive write lock to mark the selected reservation `InUse` only when it is the pipeline's top candidate. Deterministic selection prefers an already-In Use reservation for the source, never one used by another source, otherwise the first Active one by name. Includes a new Prometheus alert for frequent failover-match misses. The redundant `FailoverHostDesignated` status condition is dropped. Comprehensive unit tests for the filter (265 lines), weigher (204 lines), and matcher (372 lines), plus updated generation and pathfinding tests.
+
+### Improvements
+
+- **Degrade admission webhook to warnings** ([#1490](https://github.com/cobaltcore-dev/cortex/pull/1490)) — The Pipeline admission webhook now issues warnings instead of hard rejections for structural errors, improving the operator experience. Structural validation is moved to CRD-level CEL `x-kubernetes-validations` rules (e.g. "filter-weigher pipelines must not set detectors"), so the API server itself enforces correctness. Includes a step-by-step `kind`-based reproduction script for verifying the CEL rules.
+
+### Security
+
+- **Rebuild Postgres image to resolve CVEs** ([#1494](https://github.com/cobaltcore-dev/cortex/pull/1494)) — The daily CVE scan detected fixable vulnerabilities in the published `cortex-postgres` image. This triggers a rebuild with `apt-get upgrade` to pick up security patches.
+
+### Dependency Updates
+
+| Dependency | Old | New | PR |
+|---|---|---|---|
+| `github.com/sapcc/go-bits` | digest `0cf0269` | digest `1388674` | [#1488](https://github.com/cobaltcore-dev/cortex/pull/1488) |
+| `github.com/mattn/go-sqlite3` | v1.14.52 | v1.14.53 | [#1489](https://github.com/cobaltcore-dev/cortex/pull/1489) |
+| `kube-prometheus-stack` (Helm) | 92.18.0 | 92.22.0 | [#1489](https://github.com/cobaltcore-dev/cortex/pull/1489), [#1492](https://github.com/cobaltcore-dev/cortex/pull/1492) |
+| `k8s.io/apiextensions-apiserver`, `k8s.io/apiserver`, `k8s.io/component-base` | v0.37.0 | v0.37.2 | [#1467](https://github.com/cobaltcore-dev/cortex/pull/1467) |
+
+### App Version Bump
+
+- `cortex`: `sha-06024c69` → `sha-9179b000`
+- `cortex-shim`: `sha-821050ce` → `sha-977d35d3`
+- `cortex-postgres`: `sha-e2e2980d` → `sha-9179b000`
+
+### Operational Notes
+
+1. **New CRD — `cortex.cloud_reschedulings`:** The new `Rescheduling` CRD must be installed before upgrading the manager. Helm handles this via the `crds/` folder, but verify ordering in CI/CD pipelines that apply CRDs separately.
+2. **RBAC changes:** The manager's cluster roles now include `reschedulings` permissions across all bundles. Ensure RBAC manifests are applied before the new rescheduler controller starts.
+3. **New controller — `rescheduler-controller`:** Enabled by default in `cortex-nova`. The controller is a noop skeleton in this release — real scheduling logic will follow in a later milestone.
+4. **Pipeline CRD updated:** New CEL validation rules have been added to the Pipeline CRD. Existing Pipeline resources that violate the new rules (e.g. filter-weigher pipelines with detectors set) will be rejected on update. Review existing Pipeline resources before upgrading.
+5. **Admission webhook behavior change:** The Pipeline admission webhook now returns warnings instead of rejections. Operators relying on hard rejections for structural validation should note that enforcement has moved to CRD-level CEL rules.
+6. **Failover host pipeline integration:** The failover host reservation system is now fully wired into the Nova scheduling pipeline. The `FailoverHostDesignated` status condition has been removed — draining is inferred from the absence of `FailoverHostActive`. Update any tooling or dashboards referencing this condition.
+7. **New Prometheus alert:** A new alert fires on frequent failover-match misses (no suitable failover reservation found). Review routing and thresholds.
+
+**Contributors:** @umswmayj, @PhilippMatthes, @SoWieMarkus, @renovate[bot], @github-actions[bot]
+
+**PR:** [#1495](https://github.com/cobaltcore-dev/cortex/pull/1495) | **Commits:** 8 | **Files changed:** 45 | **+3,900 / −800**
+
 ## Release PR [#1485](https://github.com/cobaltcore-dev/cortex/pull/1485) — 2026-11-05
 
 ### Bumped Versions
