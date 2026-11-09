@@ -856,7 +856,7 @@ func main() {
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "failover-host-drain-controller") {
 		setupLog.Info("enabling controller", "controller", "failover-host-drain-controller")
-		drainConfig := conf.GetConfigOrDie[failoverhost.Config]().Failover.Hosts.Drain
+		drainConfig := conf.GetConfigOrDie[failoverhost.DrainControllerConfig]().Failover.Hosts.Drain
 		drainConfig.ApplyDefaults()
 		// The feature is opt-in: only start the controller when draining is
 		// enabled, so that when disabled no reservation is marked active and no

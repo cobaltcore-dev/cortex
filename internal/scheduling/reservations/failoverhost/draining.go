@@ -51,6 +51,53 @@ const (
 	novaStatusDeleted = "DELETED"
 )
 
+// DrainControllerConfig is the top-level config section the drain controller reads
+// from the shared cortex conf.json. Its settings live under failover.hosts.drain,
+// alongside the partitioning controller's failover.hosts settings (same domain),
+// but it is loaded as its own struct so the two controllers stay decoupled: the
+// partitioning controller's ControllerConfig carries no drain-specific fields.
+type DrainControllerConfig struct {
+	Failover struct {
+		Hosts struct {
+			Drain DrainConfig `json:"drain"`
+		} `json:"hosts"`
+	} `json:"failover"`
+}
+
+// DrainConfig configures the failover host drain controller, which brings freshly
+// designated failover host reservations into an Active state by ensuring the
+// reserved host is empty of virtual machines. It is gated by Enabled, which is
+// false by default: draining live-migrates workloads around the datacenter, so it
+// is opt-in.
+type DrainConfig struct {
+	// Enabled gates the entire drain controller. When false (the default) the
+	// controller is not started: no reservation is marked Active and no draining
+	// happens.
+	Enabled bool `json:"enabled,omitempty"`
+
+	// TTL is the maximum time a reservation may stay non-Active (counted from its
+	// creation) before the drain controller deletes it, so the partitioning
+	// generator can designate a fresh one. It is deliberately conservative to
+	// avoid the controller causing drains all over the datacenter. Defaults to 24h.
+	TTL metav1.Duration `json:"ttl,omitempty"`
+
+	// RetryBackoff is the requeue delay used while waiting for the rescheduler to
+	// prune a Failed/Rejected drain Rescheduling before a fresh attempt. Defaults
+	// to 1m.
+	RetryBackoff metav1.Duration `json:"retryBackoff,omitempty"`
+}
+
+// ApplyDefaults fills in the default TTL and retry backoff when unset. Enabled is
+// intentionally left at its zero value (false) so the controller stays opt-in.
+func (d *DrainConfig) ApplyDefaults() {
+	if d.TTL.Duration <= 0 {
+		d.TTL = metav1.Duration{Duration: 24 * time.Hour}
+	}
+	if d.RetryBackoff.Duration <= 0 {
+		d.RetryBackoff = metav1.Duration{Duration: time.Minute}
+	}
+}
+
 // DrainController is the failover host lifecycle reconciler: it brings freshly
 // designated failover host reservations (Reservations of type
 // FailoverHostReservation without the FailoverHostActive condition) into an
