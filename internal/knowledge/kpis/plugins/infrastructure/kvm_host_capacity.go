@@ -53,8 +53,6 @@ func (k *KVMHostCapacityKPI) Describe(ch chan<- *prometheus.Desc) {
 	ch <- k.capacityPerHost
 }
 
-// aggregateReservationsByHost groups Ready reservations by host, returning per-host
-
 func (k *KVMHostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	rawHypervisors := &hv1.HypervisorList{}
 	if err := k.Client.List(context.Background(), rawHypervisors); err != nil {
