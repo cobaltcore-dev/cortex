@@ -5,14 +5,14 @@ package failover
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
+	"slices"
 	"testing"
 
-	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -475,22 +475,40 @@ func buildSchedulingTestVMWithResources(uuid, hypervisor string, memoryMB, vcpus
 	}
 }
 
-// captureSchedulerRequest spins up a test HTTP server that captures one scheduler request
-// and returns a single host. The captured request is written into *out.
-func captureSchedulerRequest(t *testing.T, host string, out *novaapi.ExternalSchedulerRequest) *httptest.Server {
-	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := json.NewDecoder(r.Body).Decode(out); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		resp := novaapi.ExternalSchedulerResponse{Hosts: []string{host}}
-		_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
-	}))
+// capturingPipeline records the last SchedulerRequest it ran and returns a
+// single fixed host, so tests can assert the options the controller built.
+type capturingPipeline struct {
+	host     string
+	captured *sched.PlacementRequest
 }
 
-// buildMinimalController returns a FailoverReservationController wired to a scheduler at the given URL.
-func buildMinimalController(t *testing.T, schedulerURL string) *FailoverReservationController {
+func (p *capturingPipeline) Run(req sched.PlacementRequest) (sched.PlacementResult, error) {
+	*p.captured = req
+	return sched.PlacementResult{OrderedHosts: []string{p.host}}, nil
+}
+
+// capturingProvider serves the same capturingPipeline for every pipeline name.
+type capturingProvider struct{ pipeline *capturingPipeline }
+
+func (f capturingProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.PlacementRequest], bool) {
+	return f.pipeline, true
+}
+
+// capturingGatherer is a no-op gatherer (the tests preselect their own hosts).
+type capturingGatherer struct{}
+
+func (capturingGatherer) MutateWithAllCandidates(context.Context, *sched.PlacementRequest) error {
+	return nil
+}
+
+// newCapturingScheduler builds an in-process scheduler whose pipeline returns
+// the given host and records every request it ran into *out.
+func newCapturingScheduler(host string, out *sched.PlacementRequest) *sched.Placement {
+	return sched.NewPlacement(capturingProvider{pipeline: &capturingPipeline{host: host, captured: out}}, capturingGatherer{})
+}
+
+// buildMinimalController returns a FailoverReservationController wired to the given scheduler.
+func buildMinimalController(t *testing.T, scheduler *sched.Placement) *FailoverReservationController {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
@@ -500,10 +518,9 @@ func buildMinimalController(t *testing.T, schedulerURL string) *FailoverReservat
 		t.Fatalf("add hv1 to scheme: %v", err)
 	}
 	k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	schedulerClient := reservations.NewSchedulerClient(schedulerURL + "/scheduler/nova/external")
 	config := FailoverConfig{}
 	config.ApplyDefaults()
-	return NewFailoverReservationController(k8sClient, nil, config, schedulerClient, nil)
+	return NewFailoverReservationController(k8sClient, nil, config, scheduler, nil)
 }
 
 // ============================================================================
@@ -559,11 +576,10 @@ func TestFailoverSchedulerOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var capturedReq novaapi.ExternalSchedulerRequest
-			server := captureSchedulerRequest(t, "host-2", &capturedReq)
-			defer server.Close()
+			var capturedReq sched.PlacementRequest
+			scheduler := newCapturingScheduler("host-2", &capturedReq)
 
-			tt.call(buildMinimalController(t, server.URL), context.Background())
+			tt.call(buildMinimalController(t, scheduler), context.Background())
 
 			if capturedReq.Options.ReadOnly != tt.wantReadOnly {
 				t.Errorf("ReadOnly = %v, want %v", capturedReq.Options.ReadOnly, tt.wantReadOnly)
@@ -576,61 +592,47 @@ func TestFailoverSchedulerOptions(t *testing.T) {
 }
 
 // ============================================================================
-// Test: imagePropertiesFromFlavor
+// Test: trait and hypervisor_type constraints sent to the scheduler
 // ============================================================================
 
-func TestImagePropertiesFromFlavor(t *testing.T) {
+// TestFailoverSchedulerFlavorConstraints verifies the scheduler request carries
+// the flavor's traits and capabilities:hypervisor_type, so
+// filter_has_requested_traits / filter_capabilities keep a workload off an
+// incompatible host — including the qemu default when the flavor omits the
+// hypervisor type.
+func TestFailoverSchedulerFlavorConstraints(t *testing.T) {
 	tests := []struct {
 		name       string
 		extraSpecs map[string]string
-		want       map[string]any
+		wantHVType string
+		wantTraits []string
 	}{
+		{name: "flavor without hypervisor_type defaults to canonical QEMU", extraSpecs: nil, wantHVType: "QEMU"},
+		{name: "explicit CH preserved", extraSpecs: map[string]string{"capabilities:hypervisor_type": "CH"}, wantHVType: "CH"},
 		{
-			name:       "qemu (lowercase) -> kvm img_hv_type",
-			extraSpecs: map[string]string{"capabilities:hypervisor_type": "qemu"},
-			want:       map[string]any{"img_hv_type": "kvm"},
-		},
-		{
-			name:       "QEMU (uppercase) -> kvm img_hv_type",
-			extraSpecs: map[string]string{"capabilities:hypervisor_type": "QEMU"},
-			want:       map[string]any{"img_hv_type": "kvm"},
-		},
-		{
-			name:       "CH -> kvm img_hv_type",
-			extraSpecs: map[string]string{"capabilities:hypervisor_type": "CH"},
-			want:       map[string]any{"img_hv_type": "kvm"},
-		},
-		{
-			name:       "VMware -> hypervisor_type=vmware",
-			extraSpecs: map[string]string{"capabilities:hypervisor_type": "VMware vCenter Server"},
-			want:       map[string]any{"hypervisor_type": "vmware"},
-		},
-		{
-			name:       "Ironic -> hypervisor_type=baremetal",
-			extraSpecs: map[string]string{"capabilities:hypervisor_type": "Ironic"},
-			want:       map[string]any{"hypervisor_type": "baremetal"},
-		},
-		{
-			name:       "unspecified -> nil",
-			extraSpecs: map[string]string{},
-			want:       nil,
-		},
-		{
-			name:       "unknown value -> nil",
-			extraSpecs: map[string]string{"capabilities:hypervisor_type": "SomeFuturisticThing"},
-			want:       nil,
+			name:       "lowercase qemu canonicalized and trait forwarded",
+			extraSpecs: map[string]string{"capabilities:hypervisor_type": "qemu", "trait:CUSTOM_HANA_EXCLUSIVE_HOST": "required"},
+			wantHVType: "QEMU",
+			wantTraits: []string{"CUSTOM_HANA_EXCLUSIVE_HOST"},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := imagePropertiesFromFlavor(tt.extraSpecs)
-			if len(got) != len(tt.want) {
-				t.Fatalf("length mismatch: got %v want %v", got, tt.want)
+			vm := buildSchedulingTestVM("vm-1", "host-1")
+			vm.FlavorExtraSpecs = tt.extraSpecs
+			resolved := resolveVMSpecForScheduling(context.Background(), vm, false, nil)
+
+			var capturedReq sched.PlacementRequest
+			scheduler := newCapturingScheduler("host-2", &capturedReq)
+			c := buildMinimalController(t, scheduler)
+			_, _ = c.scheduleAndBuildNewFailoverReservation(context.Background(), vm, []string{"host-1", "host-2"}, nil, nil, resolved) //nolint:errcheck
+
+			wantCap := []api.Capability{{Name: "hypervisor_type", Value: tt.wantHVType}}
+			if len(capturedReq.RequestedCapabilities) != 1 || capturedReq.RequestedCapabilities[0] != wantCap[0] {
+				t.Errorf("RequestedCapabilities = %v, want %v", capturedReq.RequestedCapabilities, wantCap)
 			}
-			for k, v := range tt.want {
-				if got[k] != v {
-					t.Errorf("key %q: got %v want %v", k, got[k], v)
-				}
+			if !slices.Equal(capturedReq.RequiredTraits, tt.wantTraits) {
+				t.Errorf("RequiredTraits = %v, want %v", capturedReq.RequiredTraits, tt.wantTraits)
 			}
 		})
 	}

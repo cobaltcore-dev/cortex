@@ -111,18 +111,6 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
-  name: cortex-nova-decision-state
-spec:
-  schedulingDomain: nova
-  impl: decision_state_kpi
-  opts:
-    decisionSchedulingDomain: nova
-  description: |
-    This aggregated KPI tracks the state of decision resources managed by cortex.
----
-apiVersion: cortex.cloud/v1alpha1
-kind: KPI
-metadata:
   name: cortex-nova-kpi-state
 spec:
   schedulingDomain: nova

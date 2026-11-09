@@ -398,31 +398,21 @@ func characterizePartitions(partitions []Partition) []string {
 	return labels
 }
 
-// maxDescribedFlavors caps how many flavor names describePartition spells out, so
-// a partition that runs hundreds of flavors doesn't bloat the reservation's
-// PartitionDescription field. The rest are summarized as a "(+k more)" count; the
-// full set is still logged per pass.
-const maxDescribedFlavors = 5
-
 // describePartition renders the human-readable PartitionDescription stored on each
 // reservation: the distinguishing label (see characterizePartitions) followed by
-// the flavors the partition can run (see Partition.Flavors), e.g.
-// "spec.aggregates=[hana] | flavors: hana.4xl, hana.8xl (+3 more)". flavors is
-// assumed sorted. Either half is omitted when empty, so a partition with no
-// distinguishing label still reports its flavors and vice versa.
+// every flavor the partition can run (see Partition.Flavors), e.g.
+// "spec.aggregates=[hana] | flavors: hana.4xl, hana.8xl". The full flavor list is
+// spelled out rather than truncated, so an individual flavor missing from one of
+// the partitions supporting many flavors can be spotted. flavors is assumed sorted.
+// Either half is omitted when empty, so a partition with no distinguishing label
+// still reports its flavors and vice versa.
 func describePartition(label string, flavors []string) string {
 	parts := []string{}
 	if label != "" {
 		parts = append(parts, label)
 	}
 	if len(flavors) > 0 {
-		shown := flavors
-		suffix := ""
-		if len(flavors) > maxDescribedFlavors {
-			shown = flavors[:maxDescribedFlavors]
-			suffix = fmt.Sprintf(" (+%d more)", len(flavors)-maxDescribedFlavors)
-		}
-		parts = append(parts, "flavors: "+strings.Join(shown, ", ")+suffix)
+		parts = append(parts, "flavors: "+strings.Join(flavors, ", "))
 	}
 	return strings.Join(parts, " | ")
 }

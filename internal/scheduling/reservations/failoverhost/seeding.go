@@ -25,8 +25,8 @@ import (
 // fields fed into api.NovaFlavor, so the rest of the flavor-group shape never
 // leaks into the pathfinder.
 type Flavor struct {
-	// Name is the flavor name, forwarded as the probe's flavor name so
-	// flavor-name-sensitive filters behave as in a real placement.
+	// Name is the flavor name, used for pipeline inference, trait/capability
+	// extraction and to label the failover edges a seed supports.
 	Name string
 	// MemoryMB and VCPUs size the probe. RAM is in MiB (despite the "MB" label),
 	// matching what the scheduler expects on NovaFlavor.MemoryMB.

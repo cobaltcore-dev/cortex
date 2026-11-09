@@ -8,20 +8,19 @@ import (
 	"github.com/go-logr/logr"
 	"slices"
 
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
 
 type FilterHasAcceleratorsStep struct {
-	lib.BaseFilter[api.ExternalSchedulerRequest, lib.EmptyFilterWeigherPipelineStepOpts]
+	lib.BaseFilter[compute.PlacementRequest, lib.EmptyFilterWeigherPipelineStepOpts]
 }
 
 // If requested, only get hosts with accelerators.
-func (s *FilterHasAcceleratorsStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *FilterHasAcceleratorsStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
-	extraSpecs := request.Spec.Data.Flavor.Data.ExtraSpecs
-	if _, ok := extraSpecs["accel:device_profile"]; !ok {
+	if !request.AcceleratorsRequested {
 		traceLog.V(1).Info("no accelerators requested, skipping filter")
 		return result, nil
 	}

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,39 +34,30 @@ func newHypervisorWithInstances(name string, instanceIDs ...string) *hv1.Hypervi
 	}
 }
 
-func newInstanceGroupRequest(policy string, members, hosts []string) api.ExternalSchedulerRequest {
-	hostList := make([]api.ExternalSchedulerHost, len(hosts))
+func newInstanceGroupRequest(policy string, members, hosts []string) compute.PlacementRequest {
+	hostList := make([]compute.Host, len(hosts))
 	for i, h := range hosts {
-		hostList[i] = api.ExternalSchedulerHost{ComputeHost: h}
+		hostList[i] = compute.Host{ComputeHost: h}
 	}
 
-	extraSpecs := map[string]string{
-		"capabilities:hypervisor_type": "qemu",
-	}
-
-	spec := api.NovaSpec{
-		ProjectID:    "project-A",
-		InstanceUUID: "new-instance-uuid",
-		NumInstances: 1,
-		Flavor: api.NovaObject[api.NovaFlavor]{
-			Data: api.NovaFlavor{
-				Name:       "m1.large",
-				VCPUs:      4,
-				MemoryMB:   8192,
-				ExtraSpecs: extraSpecs,
-			},
+	req := compute.PlacementRequest{
+		ProjectID:        "project-A",
+		InstanceUUID:     "new-instance-uuid",
+		NumInstances:     1,
+		HypervisorFamily: api.HypervisorFamilyKVM,
+		Flavor: api.FlavorSpec{
+			VCPUs:    4,
+			MemoryMB: 8192,
 		},
+		Hosts: hostList,
 	}
 
 	// Only set InstanceGroup if policy is provided
 	if policy != "" {
-		spec.InstanceGroup = &api.NovaObject[api.NovaInstanceGroup]{
-			Data: api.NovaInstanceGroup{
-				UUID:    "instance-group-uuid",
-				Name:    "test-instance-group",
-				Policy:  policy,
-				Members: members,
-			},
+		req.InstanceGroup = &api.InstanceGroupSpec{
+			UUID:    "instance-group-uuid",
+			Policy:  policy,
+			Members: members,
 		}
 	}
 
@@ -73,12 +65,9 @@ func newInstanceGroupRequest(policy string, members, hosts []string) api.Externa
 	for _, h := range hosts {
 		weights[h] = 1.0
 	}
+	req.Weights = weights
 
-	return api.ExternalSchedulerRequest{
-		Spec:    api.NovaObject[api.NovaSpec]{Data: spec},
-		Hosts:   hostList,
-		Weights: weights,
-	}
+	return req
 }
 
 func TestKVMInstanceGroupSoftAffinityStep_Run(t *testing.T) {
@@ -87,7 +76,7 @@ func TestKVMInstanceGroupSoftAffinityStep_Run(t *testing.T) {
 	tests := []struct {
 		name            string
 		hypervisors     []*hv1.Hypervisor
-		request         api.ExternalSchedulerRequest
+		request         compute.PlacementRequest
 		expectedWeights map[string]float64
 		wantErr         bool
 	}{

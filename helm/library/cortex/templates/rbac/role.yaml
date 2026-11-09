@@ -17,11 +17,11 @@ rules:
   - committedresourcechanges
   - projectquotas
   - flavorgroupcapacities
-  - decisions
   - deschedulings
   - pipelines
   - kpis
   - histories
+  - reschedulings
   verbs:
   - create
   - delete
@@ -40,11 +40,11 @@ rules:
   - committedresourcechanges/finalizers
   - projectquotas/finalizers
   - flavorgroupcapacities/finalizers
-  - decisions/finalizers
   - deschedulings/finalizers
   - pipelines/finalizers
   - kpis/finalizers
   - histories/finalizers
+  - reschedulings/finalizers
   verbs:
   - update
 - apiGroups:
@@ -57,11 +57,11 @@ rules:
   - committedresourcechanges/status
   - projectquotas/status
   - flavorgroupcapacities/status
-  - decisions/status
   - deschedulings/status
   - pipelines/status
   - kpis/status
   - histories/status
+  - reschedulings/status
   verbs:
   - get
   - patch

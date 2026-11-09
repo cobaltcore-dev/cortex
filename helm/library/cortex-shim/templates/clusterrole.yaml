@@ -14,7 +14,6 @@ rules:
   - knowledges
   - datasources
   - reservations
-  - decisions
   - deschedulings
   - pipelines
   - kpis
@@ -33,7 +32,6 @@ rules:
   - knowledges/finalizers
   - datasources/finalizers
   - reservations/finalizers
-  - decisions/finalizers
   - deschedulings/finalizers
   - pipelines/finalizers
   - kpis/finalizers
@@ -46,7 +44,6 @@ rules:
   - knowledges/status
   - datasources/status
   - reservations/status
-  - decisions/status
   - deschedulings/status
   - pipelines/status
   - kpis/status

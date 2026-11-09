@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"slices"
 	"sort"
-	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
@@ -31,45 +31,15 @@ var DefaultFailoverOptions = scheduling.Options{
 	SkipCommittedResourceTracking: true,
 }
 
-// inferFailoverPipeline returns the standard pipeline for a failover scheduling call based on
+// InferFailoverPipeline returns the standard pipeline for a failover scheduling call based on
 // the VM's flavor extra specs — the same HANA vs general-purpose split used by Nova placement.
-func inferFailoverPipeline(extraSpecs map[string]string) string {
-	if strings.ToLower(extraSpecs["trait:CUSTOM_HANA_EXCLUSIVE_HOST"]) == "required" {
+// An unparseable flavor type falls back to the general-purpose pipeline.
+func InferFailoverPipeline(extraSpecs map[string]string) string {
+	flavorType, err := api.FlavorTypeFromExtraSpecs(extraSpecs)
+	if err == nil && flavorType == api.FlavorTypeHANA {
 		return "kvm-hana-bin-packing"
 	}
 	return "kvm-general-purpose-load-balancing"
-}
-
-// imagePropertiesFromFlavor synthesizes Glance-style image properties from a flavor's
-// capabilities:hypervisor_type extra spec. The failover controller does not have access
-// to the real Glance image metadata of the VM, but for reservation scheduling the VM
-// already exists and has passed FilterImagePropertiesStep at original create time, so
-// this synthesis is safe: it exists only to keep the filter from emitting spurious
-// "image_properties_hv_type_undetermined" events when the failover controller reuses
-// the EvacuateIntent to validate reservation hosts.
-//
-// The extra-spec values below duplicate the canonical mapping in
-// nova.Flavor.GetHypervisorType() (see internal/knowledge/datasources/plugins/openstack/nova/nova_types.go);
-// keep the two in sync. Real observed fixtures also carry lowercase "qemu"/"ch", so
-// those are accepted here too.
-//
-// Returns nil for unknown/unspecified hypervisor types, which preserves the filter's
-// existing tolerant fallback (log a warning event, keep all hosts).
-//
-// TODO(vm-crd): remove this and populate image properties from real Glance metadata
-// once the VM CRD carries them. See also the TODO on validateVMViaSchedulerEvacuation.
-func imagePropertiesFromFlavor(flavorExtraSpecs map[string]string) map[string]any {
-	switch flavorExtraSpecs["capabilities:hypervisor_type"] {
-	case "QEMU", "CH", "qemu", "ch":
-		// KVM family; the kvm-flavored key is "img_hv_type".
-		return map[string]any{"img_hv_type": string(api.NovaImageMetaHVTypeKVM)}
-	case "VMware vCenter Server":
-		return map[string]any{"hypervisor_type": string(api.NovaImageMetaHVTypeVMware)}
-	case "Ironic":
-		return map[string]any{"hypervisor_type": string(api.NovaImageMetaHVTypeBaremetal)}
-	default:
-		return nil
-	}
 }
 
 func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm reservations.VM, allHypervisors []string, pipeline string, resSpec resolvedReservationSpec, intent v1alpha1.SchedulingIntent, opts scheduling.Options) ([]string, error) {
@@ -94,38 +64,40 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 
 	ignoreHypervisors := []string{vm.CurrentHypervisor}
 
-	// Build flavor extra specs from VM's extra specs
-	// Start with the VM's actual extra specs, then ensure required defaults are set
-	flavorExtraSpecs := make(map[string]string)
-	for k, v := range vm.FlavorExtraSpecs {
-		flavorExtraSpecs[k] = v
+	// Build the typed scheduler request directly (in-process; no HTTP). KVM
+	// failover reservations gather all candidates; the eligible list is a
+	// starting set. The filter_correct_az filter excludes hosts outside the VM's
+	// AZ. ImageHypervisorType is irrelevant here: filter_image_properties skips
+	// the failover/reuse reservation intents.
+	hosts := make([]compute.Host, 0, len(eligibleHypervisors))
+	weights := make(map[string]float64, len(eligibleHypervisors))
+	for _, h := range eligibleHypervisors {
+		hosts = append(hosts, compute.Host{ComputeHost: h.ComputeHost, HypervisorHostname: h.HypervisorHostname})
+		weights[h.ComputeHost] = 0.0
 	}
-	// Ensure hypervisor_type is set for KVM scheduling if not already present
-	if _, ok := flavorExtraSpecs["capabilities:hypervisor_type"]; !ok {
-		flavorExtraSpecs["capabilities:hypervisor_type"] = "qemu"
-	}
-
-	// Schedule the reservation using the SchedulerClient.
-	// Note: We pass all hypervisors (from all AZs) in EligibleHosts. The scheduler pipeline's
-	// filter_correct_az filter will exclude hosts that are not in the VM's availability zone.
-	// Use resSpec.FlavorName and reservation spec resources so the scheduler checks capacity for the
-	// correct flavor size (which may be the LargestFlavor from the flavor group).
-	scheduleReq := reservations.ScheduleReservationRequest{
-		InstanceUUID:     vm.UUID,
-		ProjectID:        vm.ProjectID,
-		FlavorName:       resSpec.FlavorName,
-		FlavorExtraSpecs: flavorExtraSpecs,
-		MemoryMB:         resSpec.MemoryMB,
-		VCPUs:            resSpec.VCPUs,
-		EligibleHosts:    eligibleHypervisors,
-		IgnoreHosts:      ignoreHypervisors,
-		Pipeline:         pipeline,
-		AvailabilityZone: vm.AvailabilityZone,
-		SchedulerHints: map[string]any{
-			"_nova_check_type":       string(intent),
-			api.HintKeyResourceGroup: resSpec.ResourceGroup(vm.FlavorName),
+	requiredTraits, forbiddenTraits := api.SplitTraits(vm.FlavorExtraSpecs)
+	schedReq := compute.PlacementRequest{
+		Pipeline:              pipeline,
+		GatherAllCandidates:   true,
+		HypervisorFamily:      api.HypervisorFamilyKVM,
+		Hosts:                 hosts,
+		Weights:               weights,
+		Options:               opts,
+		Intent:                intent,
+		InstanceUUID:          vm.UUID,
+		NumInstances:          1, // one reservation per VM; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
+		ProjectID:             vm.ProjectID,
+		AvailabilityZone:      vm.AvailabilityZone,
+		IgnoreHosts:           ignoreHypervisors,
+		ResourceGroup:         resSpec.ResourceGroup(vm.FlavorName),
+		RequiredTraits:        requiredTraits,
+		ForbiddenTraits:       forbiddenTraits,
+		RequestedCapabilities: api.HypervisorTypeCapability(vm.FlavorExtraSpecs, true),
+		AcceleratorsRequested: api.RequestsAccelerators(vm.FlavorExtraSpecs),
+		Flavor: api.FlavorSpec{
+			VCPUs:    resSpec.VCPUs,
+			MemoryMB: resSpec.MemoryMB,
 		},
-		ImageProperties: imagePropertiesFromFlavor(flavorExtraSpecs),
 	}
 
 	logger.V(1).Info("scheduling failover reservation",
@@ -134,7 +106,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		"eligibleHypervisors", len(eligibleHypervisors),
 		"ignoreHypervisors", ignoreHypervisors)
 
-	scheduleResp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq, opts)
+	out, err := c.runScheduler(ctx, schedReq)
 	if err != nil {
 		logger.Error(err, "failed to schedule failover reservation", "vmUUID", vm.UUID, "pipeline", pipeline)
 		return nil, fmt.Errorf("failed to schedule failover reservation: %w", err)
@@ -145,9 +117,19 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		"pipeline", pipeline,
 		"eligibleHypervisors", len(eligibleHypervisors),
 		"ignoreHypervisors", ignoreHypervisors,
-		"returnedHypervisors", scheduleResp.Hosts)
+		"returnedHypervisors", out.OrderedHosts)
 
-	return scheduleResp.Hosts, nil
+	return out.OrderedHosts, nil
+}
+
+// runScheduler runs the shared scheduler, choosing the lock-free path for
+// read-only runs (e.g. reuse/evacuate compatibility checks) and the locked path
+// for runs that mutate shared reservation state.
+func (c *FailoverReservationController) runScheduler(ctx context.Context, req compute.PlacementRequest) (compute.PlacementResult, error) {
+	if req.Options.ReadOnly {
+		return c.Scheduler.RunWithoutLock(ctx, req, nil, nil)
+	}
+	return c.Scheduler.Run(ctx, req, nil, nil)
 }
 
 // tryReuseExistingReservation finds an existing reservation that can be reused for a VM.
@@ -166,7 +148,7 @@ func (c *FailoverReservationController) tryReuseExistingReservation(
 
 	reuseOpts := DefaultFailoverOptions
 	reuseOpts.ReadOnly = true
-	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, inferFailoverPipeline(vm.FlavorExtraSpecs), resSpec, api.ReuseFailoverReservationIntent, reuseOpts)
+	validHypervisors, err := c.queryHypervisorsFromScheduler(ctx, vm, allHypervisors, InferFailoverPipeline(vm.FlavorExtraSpecs), resSpec, api.ReuseFailoverReservationIntent, reuseOpts)
 	if err != nil {
 		logger.Error(err, "failed to get potential hypervisors for VM", "vmUUID", vm.UUID)
 		return nil
@@ -233,7 +215,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		vcpus = uint64(vcpusRes.Value()) //nolint:gosec // vcpus values won't overflow
 	}
 
-	// Build flavor extra specs from VM's extra specs
+	// Infer the pipeline from the VM's flavor extra specs (HANA vs general purpose).
 	flavorExtraSpecs := make(map[string]string)
 	for k, v := range vm.FlavorExtraSpecs {
 		flavorExtraSpecs[k] = v
@@ -242,57 +224,61 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		flavorExtraSpecs["capabilities:hypervisor_type"] = "qemu"
 	}
 
-	// Build a single-host request to validate the VM can use the reservation host
-	// Use vm.CurrentHypervisor directly instead of a separate parameter to avoid stale data
-	// Set _nova_check_type to "evacuate" so that filter_has_enough_capacity unlocks
-	// the failover reservation's resources for this VM (avoiding self-blocking).
-	// Use the actual VM UUID (not prefixed) so the filter can match it in the reservation's allocations.
-	scheduleReq := reservations.ScheduleReservationRequest{
-		InstanceUUID:     vm.UUID,
-		ProjectID:        vm.ProjectID,
-		FlavorName:       vm.FlavorName,
-		FlavorExtraSpecs: flavorExtraSpecs,
-		MemoryMB:         memoryMB,
-		VCPUs:            vcpus,
-		EligibleHosts:    []api.ExternalSchedulerHost{{ComputeHost: reservationHost}},
-		IgnoreHosts:      []string{vm.CurrentHypervisor},
-		Pipeline:         inferFailoverPipeline(flavorExtraSpecs),
-		AvailabilityZone: vm.AvailabilityZone,
-		SchedulerHints:   map[string]any{"_nova_check_type": string(api.EvacuateIntent)},
-		ImageProperties:  imagePropertiesFromFlavor(flavorExtraSpecs),
+	// Validate the VM can use the reservation host. Set the Evacuate intent so
+	// filter_has_enough_capacity unlocks the failover reservation's resources for
+	// this VM (avoiding self-blocking). Use the actual VM UUID so the filter can
+	// match it in the reservation's allocations. KVM gathers all candidates; the
+	// reservation host must come back ranked for the VM to be compatible.
+	pipeline := InferFailoverPipeline(flavorExtraSpecs)
+	requiredTraits, forbiddenTraits := api.SplitTraits(flavorExtraSpecs)
+	evacuateOpts := DefaultFailoverOptions
+	evacuateOpts.ReadOnly = true
+	evacuateOpts.LockReservations = true
+	schedReq := compute.PlacementRequest{
+		Pipeline:              pipeline,
+		GatherAllCandidates:   true,
+		HypervisorFamily:      api.HypervisorFamilyKVM,
+		Hosts:                 []compute.Host{{ComputeHost: reservationHost, HypervisorHostname: reservationHost}},
+		Weights:               map[string]float64{reservationHost: 0.0},
+		Options:               evacuateOpts,
+		Intent:                api.EvacuateIntent,
+		InstanceUUID:          vm.UUID,
+		NumInstances:          1, // validating one VM; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
+		ProjectID:             vm.ProjectID,
+		AvailabilityZone:      vm.AvailabilityZone,
+		IgnoreHosts:           []string{vm.CurrentHypervisor},
+		RequiredTraits:        requiredTraits,
+		ForbiddenTraits:       forbiddenTraits,
+		RequestedCapabilities: api.HypervisorTypeCapability(flavorExtraSpecs, true),
+		AcceleratorsRequested: api.RequestsAccelerators(flavorExtraSpecs),
+		Flavor: api.FlavorSpec{
+			VCPUs:    vcpus,
+			MemoryMB: memoryMB,
+		},
 	}
 
 	logger.V(1).Info("validating VM via scheduler evacuation",
 		"vmUUID", vm.UUID,
 		"reservationHost", reservationHost,
 		"vmCurrentHost", vm.CurrentHypervisor,
-		"pipeline", scheduleReq.Pipeline)
+		"pipeline", pipeline)
 
-	evacuateOpts := DefaultFailoverOptions
-	evacuateOpts.ReadOnly = true
-	evacuateOpts.LockReservations = true
-	resp, err := c.SchedulerClient.ScheduleReservation(ctx, scheduleReq, evacuateOpts)
+	out, err := c.runScheduler(ctx, schedReq)
 	if err != nil {
 		logger.Error(err, "failed to validate VM for reservation host", "vmUUID", vm.UUID, "reservationHost", reservationHost)
 		return false, fmt.Errorf("failed to validate VM for reservation host: %w", err)
 	}
+	hosts := out.OrderedHosts
 
 	// Handle empty response - no hosts returned
-	if len(resp.Hosts) < 1 {
+	if len(hosts) < 1 {
 		logger.V(1).Info("scheduler returned no hosts for VM validation", "vmUUID", vm.UUID, "reservationHost", reservationHost)
 		return false, nil
 	}
 
-	// Log unexpected scheduler responses
-	if len(resp.Hosts) > 1 || resp.Hosts[0] != reservationHost {
-		logger.Error(nil, "scheduler returned unexpected hosts for single-host validation request",
-			"vmUUID", vm.UUID,
-			"reservationHost", reservationHost,
-			"returnedHosts", resp.Hosts)
-	}
-
-	// If the reservation host is returned, the VM can use it
-	return resp.Hosts[0] == reservationHost, nil
+	// The reservation host must be among the returned hosts for the VM to be
+	// compatible with it.
+	return slices.Contains(hosts, reservationHost), nil
 }
 
 // scheduleAndBuildNewFailoverReservation schedules a failover reservation for a VM.

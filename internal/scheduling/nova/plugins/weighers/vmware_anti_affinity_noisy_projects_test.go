@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -219,18 +219,14 @@ func TestVMwareAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		request        api.ExternalSchedulerRequest
+		request        sched.PlacementRequest
 		downvotedHosts map[string]struct{}
 	}{
 		{
 			name: "Noisy project",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project1",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: sched.PlacementRequest{
+				ProjectID: "project1",
+				Hosts: []sched.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -243,13 +239,9 @@ func TestVMwareAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "Non-noisy project",
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						ProjectID: "project2",
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{
+			request: sched.PlacementRequest{
+				ProjectID: "project2",
+				Hosts: []sched.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},
@@ -259,8 +251,8 @@ func TestVMwareAntiAffinityNoisyProjectsStep_Run(t *testing.T) {
 		},
 		{
 			name: "No noisy project data",
-			request: api.ExternalSchedulerRequest{
-				Hosts: []api.ExternalSchedulerHost{
+			request: sched.PlacementRequest{
+				Hosts: []sched.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
 					{ComputeHost: "host3"},

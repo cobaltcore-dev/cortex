@@ -180,13 +180,6 @@ spec:
                   - name
                   type: object
                 type: array
-              ignorePreselection:
-                default: false
-                description: |-
-                  If this pipeline should ignore host preselection and gather all
-                  available placement candidates before applying filters, instead of
-                  relying on a pre-filtered set and weights.
-                type: boolean
               schedulingDomain:
                 description: |-
                   SchedulingDomain defines in which scheduling domain this pipeline
@@ -273,6 +266,11 @@ spec:
             - schedulingDomain
             - type
             type: object
+            x-kubernetes-validations:
+            - message: detector pipelines must not set filters or weighers
+              rule: self.type != 'detector' || (!has(self.filters) && !has(self.weighers))
+            - message: filter-weigher pipelines must not set detectors
+              rule: self.type != 'filter-weigher' || !has(self.detectors)
           status:
             description: status defines the observed state of Pipeline
             properties:

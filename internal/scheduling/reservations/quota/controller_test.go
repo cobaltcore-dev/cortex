@@ -18,8 +18,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+// testQuotaConfig returns a controller config mirroring the production
+// deployment, where Helm supplies the CR state filter (confirmed).
+func testQuotaConfig() QuotaControllerConfig {
+	c := DefaultQuotaControllerConfig()
+	c.CRStateFilter = []v1alpha1.CommitmentStatus{v1alpha1.CommitmentStatusConfirmed}
+	return c
+}
+
 func TestComputeTotalUsage(t *testing.T) {
-	ctrl := &QuotaController{Config: DefaultQuotaControllerConfig()}
+	ctrl := &QuotaController{Config: testQuotaConfig()}
 
 	flavorGroups := map[string]compute.FlavorGroupFeature{
 		"hana_v2": {
@@ -146,7 +154,7 @@ func TestComputeTotalUsage(t *testing.T) {
 }
 
 func TestComputeCRUsage(t *testing.T) {
-	ctrl := &QuotaController{Config: DefaultQuotaControllerConfig()}
+	ctrl := &QuotaController{Config: testQuotaConfig()}
 
 	// Flavor groups — MemoryMB value is no longer used for unit conversion (now fixed at 1 GiB).
 	testFlavorGroups := map[string]compute.FlavorGroupFeature{
@@ -390,7 +398,7 @@ func TestIncrementDecrementUsage(t *testing.T) {
 }
 
 func TestIsCRStateIncluded(t *testing.T) {
-	ctrl := &QuotaController{Config: DefaultQuotaControllerConfig()}
+	ctrl := &QuotaController{Config: testQuotaConfig()}
 
 	if !ctrl.isCRStateIncluded(v1alpha1.CommitmentStatusConfirmed) {
 		t.Error("expected confirmed to be included")
@@ -449,7 +457,7 @@ func TestUsageDelta(t *testing.T) {
 func TestReconcile_NilTotalUsage(t *testing.T) {
 	// When TotalUsage is nil, Reconcile should skip and return no error.
 	// This validates the early-return branch logic used in Reconcile().
-	ctrl := &QuotaController{Config: DefaultQuotaControllerConfig()}
+	ctrl := &QuotaController{Config: testQuotaConfig()}
 
 	// computeCRUsage on nil slice should return empty map (no panic)
 	result := ctrl.computeCRUsage(nil, nil)
@@ -466,7 +474,7 @@ func TestReconcile_NilTotalUsage(t *testing.T) {
 
 func TestAccumulateAddedVM_UnknownFlavor(t *testing.T) {
 	// Verifies that accumulateAddedVM gracefully handles a VM with an unknown flavor
-	ctrl := &QuotaController{Config: DefaultQuotaControllerConfig()}
+	ctrl := &QuotaController{Config: testQuotaConfig()}
 
 	flavorGroups := map[string]compute.FlavorGroupFeature{
 		"hana_v2": {
@@ -529,7 +537,7 @@ func TestAccumulateAddedVM_KnownFlavor(t *testing.T) {
 
 	qc := &QuotaController{
 		Client: k8sClient,
-		Config: DefaultQuotaControllerConfig(),
+		Config: testQuotaConfig(),
 	}
 
 	flavorGroups := map[string]compute.FlavorGroupFeature{

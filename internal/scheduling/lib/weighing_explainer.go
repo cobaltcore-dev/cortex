@@ -8,8 +8,6 @@ import (
 	"math"
 	"sort"
 	"strings"
-
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 )
 
 const (
@@ -55,7 +53,7 @@ type weigherContribution struct {
 //
 // Returns an empty string when the result is nil, has fewer than 2 ordered
 // hosts, or contains no weigher steps.
-func ExplainWeighing(result *v1alpha1.DecisionResult) string {
+func ExplainWeighing(result *PipelineResult) string {
 	if result == nil || len(result.OrderedHosts) < 2 {
 		return ""
 	}
@@ -199,7 +197,7 @@ func ExplainWeighing(result *v1alpha1.DecisionResult) string {
 // recovery is not possible (e.g., all activations are zero, or the system is
 // under-determined). It reports only the initial weight bias and raw activation
 // differentials without exact contribution magnitudes.
-func explainWithoutMultipliers(result *v1alpha1.DecisionResult, topHosts []string, _ []v1alpha1.StepResult) string {
+func explainWithoutMultipliers(result *PipelineResult, topHosts []string, _ []StepResult) string {
 	topN := len(topHosts)
 	var sb strings.Builder
 
@@ -239,13 +237,13 @@ func explainWithoutMultipliers(result *v1alpha1.DecisionResult, topHosts []strin
 // weigher (scoring) steps rather than filter steps. A weigher step is one
 // whose activation map contains entries for ALL hosts in OrderedHosts —
 // filters reduce the host set while weighers score all remaining hosts.
-func identifyWeigherSteps(result *v1alpha1.DecisionResult) []v1alpha1.StepResult {
+func identifyWeigherSteps(result *PipelineResult) []StepResult {
 	orderedHostSet := make(map[string]struct{}, len(result.OrderedHosts))
 	for _, h := range result.OrderedHosts {
 		orderedHostSet[h] = struct{}{}
 	}
 
-	var weigherSteps []v1alpha1.StepResult
+	var weigherSteps []StepResult
 	for _, step := range result.StepResults {
 		if len(step.Activations) == 0 {
 			continue
@@ -281,7 +279,7 @@ func identifyWeigherSteps(result *v1alpha1.DecisionResult) []v1alpha1.StepResult
 // Returns the recovered multipliers and true on success, or nil and false if
 // the system is under-determined or ill-conditioned.
 func recoverMultipliers(
-	weigherSteps []v1alpha1.StepResult,
+	weigherSteps []StepResult,
 	orderedHosts []string,
 	normalizedIn map[string]float64,
 	aggregatedOut map[string]float64,

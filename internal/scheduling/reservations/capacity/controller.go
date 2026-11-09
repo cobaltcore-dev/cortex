@@ -28,8 +28,10 @@ import (
 	schedulerapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	knowledge "github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/go-logr/logr"
 )
@@ -102,20 +104,20 @@ func capacityMapsEqual(a, b map[hv1.ResourceName]resource.Quantity) bool {
 // periodic floor timer. All watch events are coalesced into a single reconcile key so
 // rapid changes produce at most one queued reconcile.
 type Reconciler struct {
-	client          client.Client
-	vmSource        reservations.VMSource
-	schedulerClient *reservations.SchedulerClient
-	config          Config
+	client    client.Client
+	vmSource  reservations.VMSource
+	scheduler *sched.Placement
+	config    Config
 
 	lastReconcileAt time.Time
 }
 
-func NewController(c client.Client, config Config, vmSource reservations.VMSource) *Reconciler {
+func NewController(c client.Client, config Config, vmSource reservations.VMSource, scheduler *sched.Placement) *Reconciler {
 	return &Reconciler{
-		client:          c,
-		vmSource:        vmSource,
-		schedulerClient: reservations.NewSchedulerClient(config.SchedulerURL),
-		config:          config,
+		client:    c,
+		vmSource:  vmSource,
+		scheduler: scheduler,
+		config:    config,
 	}
 }
 
@@ -195,7 +197,7 @@ type vmUsage struct {
 // probeGroupResult holds the outcome of probing all flavors in one (group × AZ).
 type probeGroupResult struct {
 	groupName string
-	groupData compute.FlavorGroupFeature
+	groupData knowledge.FlavorGroupFeature
 	flavors   []v1alpha1.FlavorCapacityStatus
 	// allFresh is false if any scheduler probe failed; the group's CRD is left unchanged.
 	allFresh           bool
@@ -223,8 +225,7 @@ func (c *Reconciler) reconcileAll(ctx context.Context) error {
 	logger := LoggerFromContext(ctx)
 	startTime := time.Now()
 
-	knowledge := &reservations.FlavorGroupKnowledgeClient{Client: c.client}
-	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
+	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, c.client, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get flavor groups: %w", err)
 	}
@@ -272,7 +273,7 @@ func (c *Reconciler) reconcileAll(ctx context.Context) error {
 // On error returns an empty map with fresh=false — callers must not overwrite running fields.
 func (c *Reconciler) computeVMUsage(
 	ctx context.Context,
-	flavorGroups map[string]compute.FlavorGroupFeature,
+	flavorGroups map[string]knowledge.FlavorGroupFeature,
 	hvs []hv1.Hypervisor,
 ) map[vmUsageKey]vmUsage {
 
@@ -376,7 +377,7 @@ func hvRemainingResources(hv hv1.Hypervisor, blockedResources map[string]int64) 
 func (c *Reconciler) probeGroup(
 	ctx context.Context,
 	groupName string,
-	groupData compute.FlavorGroupFeature,
+	groupData knowledge.FlavorGroupFeature,
 	az string,
 	hvByName map[string]hv1.Hypervisor,
 	blockedByReservations map[string]map[string]int64,
@@ -402,7 +403,7 @@ func (c *Reconciler) probeGroup(
 	}
 
 	// Probe all flavors. Sort for stable CRD output.
-	flavors := make([]compute.FlavorInGroup, len(groupData.Flavors))
+	flavors := make([]knowledge.FlavorInGroup, len(groupData.Flavors))
 	copy(flavors, groupData.Flavors)
 	sort.Slice(flavors, func(i, j int) bool { return flavors[i].Name < flavors[j].Name })
 
@@ -520,7 +521,7 @@ func buildSplitInputs(
 func (c *Reconciler) reconcileAZ(
 	ctx context.Context,
 	az string,
-	flavorGroups map[string]compute.FlavorGroupFeature,
+	flavorGroups map[string]knowledge.FlavorGroupFeature,
 	hvByName map[string]hv1.Hypervisor,
 	blockedByReservations map[string]map[string]int64,
 	committedByGroupAZ map[vmUsageKey]map[string]int64,
@@ -643,7 +644,7 @@ func sumEffectiveCapacity(hostNames []string, hvByName map[string]hv1.Hypervisor
 
 // computeTotalCapacity returns the maximum memory bytes and CPU cores representable
 // by the flavor with the highest slot count in the group (empty-datacenter view).
-func computeTotalCapacity(newFlavors []v1alpha1.FlavorCapacityStatus, flavorSpecByName map[string]compute.FlavorInGroup) (maxMemBytes, maxCPUCores int64) {
+func computeTotalCapacity(newFlavors []v1alpha1.FlavorCapacityStatus, flavorSpecByName map[string]knowledge.FlavorInGroup) (maxMemBytes, maxCPUCores int64) {
 	for _, f := range newFlavors {
 		spec, ok := flavorSpecByName[f.FlavorName]
 		if !ok || f.TotalCapacityVMSlots <= 0 {
@@ -665,7 +666,7 @@ func computeTotalCapacity(newFlavors []v1alpha1.FlavorCapacityStatus, flavorSpec
 func (c *Reconciler) writeCRD(
 	ctx context.Context,
 	groupName string,
-	groupData compute.FlavorGroupFeature,
+	groupData knowledge.FlavorGroupFeature,
 	az string,
 	newFlavors []v1alpha1.FlavorCapacityStatus,
 	committedCapacity int64,
@@ -696,7 +697,7 @@ func (c *Reconciler) writeCRD(
 		return fmt.Errorf("failed to get FlavorGroupCapacity %s: %w", crdName, err)
 	}
 
-	flavorSpecByName := make(map[string]compute.FlavorInGroup, len(groupData.Flavors))
+	flavorSpecByName := make(map[string]knowledge.FlavorInGroup, len(groupData.Flavors))
 	for _, f := range groupData.Flavors {
 		flavorSpecByName[f.Name] = f
 	}
@@ -783,7 +784,7 @@ func (c *Reconciler) markCRDNotReady(ctx context.Context, groupName, az string) 
 // ignoreAllocations=true (total probe) uses raw effective capacity; false (placeable probe) subtracts allocations.
 func (c *Reconciler) probeScheduler(
 	ctx context.Context,
-	flavor compute.FlavorInGroup,
+	flavor knowledge.FlavorInGroup,
 	az, pipeline string,
 	hvByName map[string]hv1.Hypervisor,
 	ignoreAllocations bool,
@@ -814,29 +815,50 @@ func (c *Reconciler) probeScheduler(
 		}
 	}
 
-	resp, err := c.schedulerClient.ScheduleReservation(ctx, reservations.ScheduleReservationRequest{
-		InstanceUUID:     "capacity-" + flavor.Name,
-		ProjectID:        "cortex-capacity-probe",
-		FlavorName:       flavor.Name,
-		MemoryMB:         flavor.MemoryMB,
-		VCPUs:            flavor.VCPUs,
-		FlavorExtraSpecs: flavor.ExtraSpecs,
-		AvailabilityZone: az,
-		Pipeline:         pipeline,
-		EligibleHosts:    eligibleHosts,
-		SchedulerHints:   map[string]any{"_nova_check_type": string(schedulerapi.CapacityProbeIntent)},
-	}, scheduling.Options{
-		ReadOnly:                      true,
-		AssumeEmptyHosts:              ignoreAllocations,
-		IgnoredReservationTypes:       ignoredReservationTypes,
-		SkipInflight:                  true,
-		SkipCommittedResourceTracking: true,
-	})
+	probeHosts := make([]sched.Host, 0, len(eligibleHosts))
+	probeWeights := make(map[string]float64, len(eligibleHosts))
+	for _, h := range eligibleHosts {
+		probeHosts = append(probeHosts, sched.Host{ComputeHost: h.ComputeHost, HypervisorHostname: h.HypervisorHostname})
+		probeWeights[h.ComputeHost] = 0.0
+	}
+	// Honor the flavor's trait and hypervisor-type constraints so the probe only
+	// counts compatible hosts (the typed request is built directly, so
+	// filter_has_requested_traits/filter_capabilities would otherwise see empty
+	// slices and become no-ops). No hypervisor-type default — only match when the
+	// flavor names one.
+	requiredTraits, forbiddenTraits := schedulerapi.SplitTraits(flavor.ExtraSpecs)
+	out, err := c.scheduler.RunWithoutLock(ctx, sched.PlacementRequest{
+		Pipeline:              pipeline,
+		GatherAllCandidates:   true,
+		HypervisorFamily:      schedulerapi.HypervisorFamilyKVM,
+		Hosts:                 probeHosts,
+		Weights:               probeWeights,
+		Intent:                schedulerapi.CapacityProbeIntent,
+		InstanceUUID:          "capacity-" + flavor.Name,
+		NumInstances:          1, // probe a single flavor slot; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
+		ProjectID:             "cortex-capacity-probe",
+		AvailabilityZone:      az,
+		RequiredTraits:        requiredTraits,
+		ForbiddenTraits:       forbiddenTraits,
+		RequestedCapabilities: schedulerapi.HypervisorTypeCapability(flavor.ExtraSpecs, false),
+		AcceleratorsRequested: schedulerapi.RequestsAccelerators(flavor.ExtraSpecs),
+		Flavor: schedulerapi.FlavorSpec{
+			VCPUs:    flavor.VCPUs,
+			MemoryMB: flavor.MemoryMB,
+		},
+		Options: scheduling.Options{
+			ReadOnly:                      true,
+			AssumeEmptyHosts:              ignoreAllocations,
+			IgnoredReservationTypes:       ignoredReservationTypes,
+			SkipInflight:                  true,
+			SkipCommittedResourceTracking: true,
+		},
+	}, nil, nil)
 	if err != nil {
 		return 0, 0, nil, fmt.Errorf("scheduler call failed (pipeline=%s): %w", pipeline, err)
 	}
 
-	for _, hostName := range resp.Hosts {
+	for _, hostName := range out.OrderedHosts {
 		hv, ok := hvByName[hostName]
 		if !ok {
 			continue
@@ -897,7 +919,7 @@ func (c *Reconciler) blockedResourcesByHost(ctx context.Context) (map[string]map
 			continue
 		}
 
-		resourcesToBlock := reservations.UnusedReservationCapacity(res, false)
+		resourcesToBlock := accounting.UnusedReservationCapacity(res, false)
 		for host := range hostsToBlock {
 			if blocked[host] == nil {
 				blocked[host] = make(map[string]int64)
@@ -921,7 +943,7 @@ func (c *Reconciler) blockedResourcesByHost(ctx context.Context) (map[string]map
 // Only placed reservations are included, each once.
 func (c *Reconciler) reservedResourcesByGroupAZ(
 	ctx context.Context,
-	flavorGroups map[string]compute.FlavorGroupFeature,
+	flavorGroups map[string]knowledge.FlavorGroupFeature,
 	hvByName map[string]hv1.Hypervisor,
 ) (committed, failover map[vmUsageKey]map[string]int64, err error) {
 
@@ -968,7 +990,7 @@ func (c *Reconciler) reservedResourcesByGroupAZ(
 				"reservation", res.Name, "type", res.Spec.Type, "az", az)
 			continue
 		}
-		blockedRes := reservations.UnusedReservationCapacity(res, false)
+		blockedRes := accounting.UnusedReservationCapacity(res, false)
 		// Route each reservation to exactly one bucket by type; the two are disjoint.
 		bucket := committed
 		if res.Spec.Type == v1alpha1.ReservationTypeFailover {
@@ -993,7 +1015,7 @@ func (c *Reconciler) reservedResourcesByGroupAZ(
 // to its group) when useFlavorGroupResources is disabled. Returns false if none can be determined.
 func resolveReservationGroup(
 	res *v1alpha1.Reservation,
-	flavorGroups map[string]compute.FlavorGroupFeature,
+	flavorGroups map[string]knowledge.FlavorGroupFeature,
 	flavorToGroup map[string]string,
 ) (string, bool) {
 

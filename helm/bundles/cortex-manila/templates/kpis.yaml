@@ -39,18 +39,6 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
-  name: cortex-manila-decision-state
-spec:
-  schedulingDomain: manila
-  impl: decision_state_kpi
-  opts:
-    decisionSchedulingDomain: manila
-  description: |
-    This aggregated KPI tracks the state of decision resources managed by cortex.
----
-apiVersion: cortex.cloud/v1alpha1
-kind: KPI
-metadata:
   name: cortex-manila-kpi-state
 spec:
   schedulingDomain: manila

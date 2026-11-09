@@ -12,7 +12,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -20,8 +19,9 @@ import (
 	"testing"
 	"time"
 
-	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
@@ -46,19 +46,18 @@ const (
 // e2eEnv is a full end-to-end test environment: real controllers, fake k8s client,
 // mock scheduler, and a background reconcile driver goroutine.
 type e2eEnv struct {
-	t            *testing.T
-	k8sClient    client.Client
-	httpServer   *httptest.Server
-	schedulerSrv *httptest.Server
-	crCtrl       *commitments.CommittedResourceController
-	resCtrl      *commitments.CommitmentReservationController
-	cancelBg     context.CancelFunc
-	bgDone       chan struct{}
+	t          *testing.T
+	k8sClient  client.Client
+	httpServer *httptest.Server
+	crCtrl     *commitments.CommittedResourceController
+	resCtrl    *commitments.CommitmentReservationController
+	cancelBg   context.CancelFunc
+	bgDone     chan struct{}
 }
 
 // newE2EEnv creates an e2eEnv with the given flavors and scheduler handler.
 // The scheduler handler controls what the mock Nova scheduler returns.
-func newE2EEnv(t *testing.T, flavors []*TestFlavor, infoVersion int64, schedulerHandler http.HandlerFunc) *e2eEnv {
+func newE2EEnv(t *testing.T, flavors []*TestFlavor, infoVersion int64, scheduler *sched.Placement) *e2eEnv {
 	t.Helper()
 	log.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
 
@@ -98,8 +97,6 @@ func newE2EEnv(t *testing.T, flavors []*TestFlavor, infoVersion int64, scheduler
 		}).
 		Build()
 
-	schedulerSrv := httptest.NewServer(schedulerHandler)
-
 	crCtrl := &commitments.CommittedResourceController{
 		Client: k8sClient,
 		Scheme: scheme,
@@ -107,10 +104,10 @@ func newE2EEnv(t *testing.T, flavors []*TestFlavor, infoVersion int64, scheduler
 	}
 
 	resCtrl := &commitments.CommitmentReservationController{
-		Client: k8sClient,
-		Scheme: scheme,
+		Client:    k8sClient,
+		Scheme:    scheme,
+		Scheduler: scheduler,
 		Conf: commitments.ReservationControllerConfig{
-			SchedulerURL:          schedulerSrv.URL,
 			RequeueIntervalActive: metav1.Duration{Duration: 5 * time.Minute},
 			RequeueIntervalRetry:  metav1.Duration{Duration: 100 * time.Millisecond},
 		},
@@ -133,14 +130,13 @@ func newE2EEnv(t *testing.T, flavors []*TestFlavor, infoVersion int64, scheduler
 
 	ctx, cancel := context.WithCancel(context.Background())
 	env := &e2eEnv{
-		t:            t,
-		k8sClient:    k8sClient,
-		httpServer:   httpServer,
-		schedulerSrv: schedulerSrv,
-		crCtrl:       crCtrl,
-		resCtrl:      resCtrl,
-		cancelBg:     cancel,
-		bgDone:       make(chan struct{}),
+		t:          t,
+		k8sClient:  k8sClient,
+		httpServer: httpServer,
+		crCtrl:     crCtrl,
+		resCtrl:    resCtrl,
+		cancelBg:   cancel,
+		bgDone:     make(chan struct{}),
 	}
 	go env.driveReconciles(ctx)
 	return env
@@ -150,7 +146,6 @@ func (e *e2eEnv) close() {
 	e.cancelBg()
 	<-e.bgDone
 	e.httpServer.Close()
-	e.schedulerSrv.Close()
 }
 
 // asCRTestEnv wraps e2eEnv as a CRTestEnv to reuse its HTTP-call and assertion helpers.
@@ -273,26 +268,34 @@ func e2eIsTerminalReservation(res v1alpha1.Reservation) bool {
 // Scheduler handlers
 // ============================================================================
 
-func e2eAcceptScheduler(t *testing.T) http.HandlerFunc {
-	t.Helper()
-	return func(w http.ResponseWriter, r *http.Request) {
-		resp := &schedulerdelegationapi.ExternalSchedulerResponse{Hosts: []string{"host-1"}}
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			t.Errorf("scheduler encode: %v", err)
-		}
-	}
+// e2eFakePipeline models a scheduler run returning a fixed host list.
+type e2eFakePipeline struct{ hosts []string }
+
+func (p e2eFakePipeline) Run(sched.PlacementRequest) (sched.PlacementResult, error) {
+	return sched.PlacementResult{OrderedHosts: p.hosts}, nil
 }
 
-func e2eRejectScheduler(t *testing.T) http.HandlerFunc {
-	t.Helper()
-	return func(w http.ResponseWriter, r *http.Request) {
-		// Return an empty hosts list — the reservation controller treats this as NoHostsFound.
-		resp := &schedulerdelegationapi.ExternalSchedulerResponse{Hosts: []string{}}
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			t.Errorf("scheduler encode: %v", err)
-		}
-	}
+type e2eFakeProvider struct{ hosts []string }
+
+func (f e2eFakeProvider) GetPipeline(string) (lib.FilterWeigherPipeline[sched.PlacementRequest], bool) {
+	return e2eFakePipeline(f), true
 }
+
+type e2eFakeGatherer struct{}
+
+func (e2eFakeGatherer) MutateWithAllCandidates(context.Context, *sched.PlacementRequest) error {
+	return nil
+}
+
+func e2eScheduler(hosts []string) *sched.Placement {
+	return sched.NewPlacement(e2eFakeProvider{hosts: hosts}, e2eFakeGatherer{})
+}
+
+// e2eAcceptScheduler returns a scheduler that always places on host-1.
+func e2eAcceptScheduler() *sched.Placement { return e2eScheduler([]string{"host-1"}) }
+
+// e2eRejectScheduler returns a scheduler that finds no host (NoHostsFound).
+func e2eRejectScheduler() *sched.Placement { return e2eScheduler(nil) }
 
 // assertNoDryRunProbes verifies that all probe CommittedResource CRDs and their child
 // Reservations have been cleaned up. It only checks objects associated with dry-run probes
@@ -333,7 +336,7 @@ var e2eFlavor = &TestFlavor{Name: "m1.small", Group: "hana_1", MemoryMB: 1024, V
 func TestE2EChangeCommitments(t *testing.T) {
 	testCases := []struct {
 		Name       string
-		Scheduler  func(*testing.T) http.HandlerFunc
+		Scheduler  func() *sched.Placement
 		ReqJSON    string
 		WantResp   APIResponseExpectation
 		WantAbsent []string
@@ -521,7 +524,7 @@ func TestE2EChangeCommitments(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			env := newE2EEnv(t, []*TestFlavor{e2eFlavor}, e2eInfoVersion, tc.Scheduler(t))
+			env := newE2EEnv(t, []*TestFlavor{e2eFlavor}, e2eInfoVersion, tc.Scheduler())
 			defer env.close()
 
 			te := env.asCRTestEnv()

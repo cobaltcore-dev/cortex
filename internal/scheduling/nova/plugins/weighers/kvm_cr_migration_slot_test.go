@@ -9,6 +9,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -35,22 +36,16 @@ func newCRMigrationSlotWeigher(t *testing.T, opts KVMCRMigrationSlotOpts, objs .
 }
 
 // migrationRequest builds a live-migration request from the given candidate hosts.
-func migrationRequest(hosts ...string) api.ExternalSchedulerRequest {
-	hostList := make([]api.ExternalSchedulerHost, len(hosts))
+func migrationRequest(hosts ...string) compute.PlacementRequest {
+	hostList := make([]compute.Host, len(hosts))
 	for i, h := range hosts {
-		hostList[i] = api.ExternalSchedulerHost{ComputeHost: h}
+		hostList[i] = compute.Host{ComputeHost: h}
 	}
-	return api.ExternalSchedulerRequest{
-		Spec: api.NovaObject[api.NovaSpec]{
-			Data: api.NovaSpec{
-				InstanceUUID: testInstanceUUID,
-				ProjectID:    testProjectID,
-				SchedulerHints: map[string]any{
-					"_nova_check_type": "live_migrate",
-				},
-			},
-		},
-		Hosts: hostList,
+	return compute.PlacementRequest{
+		InstanceUUID: testInstanceUUID,
+		ProjectID:    testProjectID,
+		Intent:       api.LiveMigrationIntent,
+		Hosts:        hostList,
 	}
 }
 
@@ -143,7 +138,7 @@ func TestKVMCRMigrationSlotStep_Run(t *testing.T) {
 	tests := []struct {
 		name            string
 		objects         []client.Object
-		request         api.ExternalSchedulerRequest
+		request         compute.PlacementRequest
 		opts            KVMCRMigrationSlotOpts
 		expectedWeights map[string]float64
 	}{
@@ -152,15 +147,11 @@ func TestKVMCRMigrationSlotStep_Run(t *testing.T) {
 			objects: []client.Object{
 				confirmedSourceSlot("16Gi"),
 			},
-			request: api.ExternalSchedulerRequest{
-				Spec: api.NovaObject[api.NovaSpec]{
-					Data: api.NovaSpec{
-						InstanceUUID: testInstanceUUID,
-						ProjectID:    testProjectID,
-						// no _nova_check_type → CreateIntent
-					},
-				},
-				Hosts: []api.ExternalSchedulerHost{{ComputeHost: "host-a"}, {ComputeHost: "host-b"}},
+			request: compute.PlacementRequest{
+				InstanceUUID: testInstanceUUID,
+				ProjectID:    testProjectID,
+				// no Intent → CreateIntent
+				Hosts: []compute.Host{{ComputeHost: "host-a"}, {ComputeHost: "host-b"}},
 			},
 			opts:            defaultOpts,
 			expectedWeights: map[string]float64{"host-a": 0.0, "host-b": 0.0},

@@ -59,11 +59,11 @@ import (
 	"context"
 	"errors"
 	"maps"
-	"net/http"
 	"sync"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -107,10 +107,6 @@ type ControllerConfig struct {
 	// GenerationInterval is the interval within which failover partitions are
 	// recalculated and failover host reservations are updated accordingly.
 	GenerationInterval metav1.Duration `json:"generationInterval"`
-
-	// ExternalSchedulerURL is the URL of the external scheduler service that
-	// will be used to request failover host placements.
-	ExternalSchedulerURL string `json:"externalSchedulerURL"`
 }
 
 // Controller keeps the cluster's failover host reservations in sync with the
@@ -128,6 +124,11 @@ type Controller struct {
 	client.Client // k8s client
 
 	Config ControllerConfig
+
+	// Scheduler is the shared in-process scheduler the path finder probes for
+	// placement candidates. Required (the controller cannot compute failover
+	// partitions without it).
+	Scheduler *compute.Placement
 
 	// Monitor records Prometheus metrics for the calculation loop and the
 	// reconciler. It may be nil (e.g. in tests); every call site nil-guards it.
@@ -336,15 +337,16 @@ func (c *Controller) SetupWithManager(mgr ctrl.Manager) error {
 	// Default the generator. Tests may set it before calling Setup to substitute
 	// a fake; here we wire the production pipeline stages.
 	if c.generator == nil {
+		if c.Scheduler == nil {
+			return errors.New("scheduler cannot be nil")
+		}
 		c.generator = &pipelineGenerator{
 			Client:  c.Client,
 			Monitor: c.Monitor,
 			seeder:  &seeder{k8s: c.Client},
 			pathFinder: &evacuationPathFinder{
-				// Timeout so a hung scheduler can't stall the calculation loop.
-				httpClient:   &http.Client{Timeout: 30 * time.Second},
-				schedulerURL: c.Config.ExternalSchedulerURL,
-				monitor:      c.Monitor,
+				scheduler: c.Scheduler,
+				monitor:   c.Monitor,
 			},
 			partitionBuilder:   cliquePartitionBuilder{},
 			reservationPlanner: ratioReservationPlanner{ratio: c.Config.Ratio, minimum: c.Config.Minimum},

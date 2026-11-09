@@ -10,6 +10,7 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
 
@@ -45,22 +46,21 @@ func (o KVMFailoverEvacuationOpts) GetDefaultHostWeight() float64 {
 // Hosts that match a failover reservation for the VM being scheduled get a higher weight,
 // encouraging placement on pre-reserved failover capacity.
 type KVMFailoverEvacuationStep struct {
-	lib.BaseWeigher[api.ExternalSchedulerRequest, KVMFailoverEvacuationOpts]
+	lib.BaseWeigher[compute.PlacementRequest, KVMFailoverEvacuationOpts]
 }
 
 // Run the weigher step.
 // For evacuation requests, hosts matching a failover reservation where the VM is in Allocations get a higher weight.
 // For non-evacuation requests (e.g., live migration, rebuild), this weigher has no effect.
-func (s *KVMFailoverEvacuationStep) Run(traceLog logr.Logger, request api.ExternalSchedulerRequest) (*lib.FilterWeigherPipelineStepResult, error) {
+func (s *KVMFailoverEvacuationStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
-	intent, err := request.GetIntent()
-	if err != nil || intent != api.EvacuateIntent {
+	if request.Intent != api.EvacuateIntent {
 		traceLog.V(1).Info("skipping failover weigher for non-evacuation request")
-		return result, nil //nolint:nilerr // intentionally skip weigher on error
+		return result, nil
 	}
 
-	instanceUUID := request.Spec.Data.InstanceUUID
+	instanceUUID := request.InstanceUUID
 
 	// Fetch all reservations
 	var reservations v1alpha1.ReservationList

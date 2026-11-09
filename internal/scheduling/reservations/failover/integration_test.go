@@ -18,6 +18,7 @@ import (
 
 	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
@@ -31,6 +32,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+// passthroughGatherer is a nova.CandidateGatherer that leaves the request's
+// preselected hosts unchanged (the tests seed their own eligible hosts).
+type passthroughGatherer struct{}
+
+func (passthroughGatherer) MutateWithAllCandidates(context.Context, *compute.PlacementRequest) error {
+	return nil
+}
 
 // ============================================================================
 // Integration Tests
@@ -695,7 +704,9 @@ func (env *IntegrationTestEnv) LogStateSummary() {
 func (env *IntegrationTestEnv) TriggerFailoverReconcile(flavorRequirements map[string]int) error {
 	env.T.Helper()
 
-	schedulerClient := reservations.NewSchedulerClient(env.SchedulerBaseURL + "/scheduler/nova/external")
+	// Drive the same in-process pipeline the testHTTPAPI uses, so the failover
+	// reservation flow exercises the real scheduler over the env's nova controller.
+	scheduler := compute.NewPlacement(env.NovaController, passthroughGatherer{})
 
 	config := FailoverConfig{
 		ReconcileInterval:          metav1.Duration{Duration: time.Minute},
@@ -708,7 +719,7 @@ func (env *IntegrationTestEnv) TriggerFailoverReconcile(flavorRequirements map[s
 		env.K8sClient,
 		env.VMSource,
 		config,
-		schedulerClient,
+		scheduler,
 		nil,
 	)
 
@@ -1142,9 +1153,9 @@ func newIntegrationTestEnv(t *testing.T, vms []reservations.VM, hypervisors []*h
 		Build()
 
 	novaController := &nova.FilterWeigherPipelineController{
-		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]]{
+		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[compute.PlacementRequest]]{
 			Client:          k8sClient,
-			Pipelines:       make(map[string]lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]),
+			Pipelines:       make(map[string]lib.FilterWeigherPipeline[compute.PlacementRequest]),
 			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 		},
 		Monitor: getSharedMonitor(),
@@ -1223,7 +1234,7 @@ func newIntegrationTestEnv(t *testing.T, vms []reservations.VM, hypervisors []*h
 		novaController.PipelineConfigs[pipeline.Name] = pipeline
 	}
 
-	api := &testHTTPAPI{delegate: novaController}
+	api := &testHTTPAPI{scheduler: compute.NewPlacement(novaController, passthroughGatherer{})}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/scheduler/nova/external", api.NovaExternalScheduler)
 	server := httptest.NewServer(mux)
@@ -1242,7 +1253,7 @@ func newIntegrationTestEnv(t *testing.T, vms []reservations.VM, hypervisors []*h
 // testHTTPAPI is a simplified HTTP API for testing that delegates to the controller.
 // It does NOT shuffle evacuation hosts, ensuring deterministic test results.
 type testHTTPAPI struct {
-	delegate nova.HTTPAPIDelegate
+	scheduler *compute.Placement
 }
 
 // NovaExternalScheduler handles the POST request from the Nova scheduler.
@@ -1260,49 +1271,26 @@ func (api *testHTTPAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	rawBytes, err := json.Marshal(requestData)
-	if err != nil {
-		http.Error(w, "failed to marshal request", http.StatusInternalServerError)
-		return
-	}
-	raw := runtime.RawExtension{Raw: rawBytes}
-
 	pipelineName := requestData.Pipeline
 	if pipelineName == "" {
 		pipelineName = "test-filter-pipeline"
 	}
 
-	decision := &v1alpha1.Decision{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Decision",
-			APIVersion: "cortex.cloud/v1alpha1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "nova-",
-		},
-		Spec: v1alpha1.DecisionSpec{
-			SchedulingDomain: v1alpha1.SchedulingDomainNova,
-			PipelineRef: corev1.ObjectReference{
-				Name: pipelineName,
-			},
-			ResourceID: requestData.Spec.Data.InstanceUUID,
-			NovaRaw:    &raw,
-		},
+	// Resolve the scheduling intent from the request hints, mirroring the
+	// production handler (external_scheduler_api.go).
+	intent, err := requestData.GetIntent()
+	if err != nil {
+		intent = novaapi.CreateIntent
 	}
 
-	ctx := r.Context()
-	if err := api.delegate.ProcessNewDecisionFromAPI(ctx, decision); err != nil {
+	req := nova.ToSchedulerRequest(requestData, intent, pipelineName)
+	out, err := api.scheduler.Run(r.Context(), req, nil, nil)
+	if err != nil {
 		http.Error(w, "failed to process scheduling decision", http.StatusInternalServerError)
 		return
 	}
 
-	if decision.Status.Result == nil {
-		http.Error(w, "decision didn't produce a result", http.StatusInternalServerError)
-		return
-	}
-
-	hosts := decision.Status.Result.OrderedHosts
-	response := novaapi.ExternalSchedulerResponse{Hosts: hosts}
+	response := novaapi.ExternalSchedulerResponse{Hosts: out.OrderedHosts}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
@@ -1342,9 +1330,9 @@ func newIntegrationTestEnvWithTraitsFilter(t *testing.T, vms []reservations.VM, 
 		Build()
 
 	novaController := &nova.FilterWeigherPipelineController{
-		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]]{
+		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[compute.PlacementRequest]]{
 			Client:          k8sClient,
-			Pipelines:       make(map[string]lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]),
+			Pipelines:       make(map[string]lib.FilterWeigherPipeline[compute.PlacementRequest]),
 			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 		},
 		Monitor: getSharedMonitor(),
@@ -1424,7 +1412,7 @@ func newIntegrationTestEnvWithTraitsFilter(t *testing.T, vms []reservations.VM, 
 		novaController.PipelineConfigs[pipeline.Name] = pipeline
 	}
 
-	api := &testHTTPAPI{delegate: novaController}
+	api := &testHTTPAPI{scheduler: compute.NewPlacement(novaController, passthroughGatherer{})}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/scheduler/nova/external", api.NovaExternalScheduler)
 	server := httptest.NewServer(mux)

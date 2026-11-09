@@ -72,8 +72,6 @@ type ReservationControllerConfig struct {
 	// When false, violations are detected and exposed via metrics but no eviction is performed.
 	// Has no effect when EnableOversubscriptionCheck is false.
 	EnableOversubscriptionReservationEviction bool `json:"enableOversubscriptionReservationEviction,omitempty"`
-	// SchedulerURL is the endpoint of the nova external scheduler.
-	SchedulerURL string `json:"schedulerURL"`
 	// PipelineDefault is the fallback pipeline when no FlavorGroupPipelines entry matches.
 	PipelineDefault string `json:"pipelineDefault"`
 	// FlavorGroupPipelines maps flavor group IDs to pipeline names; "*" acts as catch-all.

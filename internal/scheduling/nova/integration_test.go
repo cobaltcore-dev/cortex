@@ -15,7 +15,9 @@ import (
 
 	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/crs"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/filters"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova/plugins/weighers"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -247,9 +249,9 @@ func NewIntegrationTestServer(t *testing.T, pipelineConfig PipelineConfig, objec
 
 	// Create the pipeline controller with shared monitor to avoid duplicate registration
 	controller := &FilterWeigherPipelineController{
-		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]]{
+		BasePipelineController: lib.BasePipelineController[lib.FilterWeigherPipeline[compute.PlacementRequest]]{
 			Client:          k8sClient,
-			Pipelines:       make(map[string]lib.FilterWeigherPipeline[novaapi.ExternalSchedulerRequest]),
+			Pipelines:       make(map[string]lib.FilterWeigherPipeline[compute.PlacementRequest]),
 			PipelineConfigs: make(map[string]v1alpha1.Pipeline),
 		},
 		Monitor: getSharedMonitor(),
@@ -281,12 +283,16 @@ func NewIntegrationTestServer(t *testing.T, pipelineConfig PipelineConfig, objec
 	controller.Pipelines[testPipeline.Name] = result.Pipeline
 	controller.PipelineConfigs[testPipeline.Name] = testPipeline
 
-	// Create the HTTP API with the controller as delegate - skip metrics registration
-	// Set EvacuationShuffleK=0 to disable shuffle for deterministic test results
+	// Create the HTTP API backed by a real compute.Placement over the controller.
+	// KVM requests trigger candidate gathering; use a passthrough gatherer
+	// (nil gatheredHosts) so the test's preselected hosts are preserved.
+	scheduler := compute.NewPlacement(controller, &mockCandidateGatherer{})
 	api := &httpAPI{
-		config:   HTTPAPIConfig{EvacuationShuffleK: 0},
-		monitor:  lib.NewSchedulerMonitor(), // Create new monitor but don't register
-		delegate: controller,
+		config:     HTTPAPIConfig{},
+		monitor:    lib.NewSchedulerMonitor(), // Create new monitor but don't register
+		scheduler:  scheduler,
+		vmHandler:  &VirtualMachineHandler{Client: k8sClient},
+		crRecorder: crs.Recorder{Client: k8sClient},
 	}
 
 	// Create test server

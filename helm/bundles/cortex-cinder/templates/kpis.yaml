@@ -26,18 +26,6 @@ spec:
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
 metadata:
-  name: cortex-cinder-decision-state
-spec:
-  schedulingDomain: cinder
-  impl: decision_state_kpi
-  opts:
-    decisionSchedulingDomain: cinder
-  description: |
-    This aggregated KPI tracks the state of decision resources managed by cortex.
----
-apiVersion: cortex.cloud/v1alpha1
-kind: KPI
-metadata:
   name: cortex-cinder-kpi-state
 spec:
   schedulingDomain: cinder
