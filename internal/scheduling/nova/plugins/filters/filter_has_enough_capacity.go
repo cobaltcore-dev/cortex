@@ -235,8 +235,8 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 					"host", host)
 				continue
 			}
-			if cpu, ok := resourcesToBlock["cpu"]; ok {
-				if freeCPU, exists := freeResourcesByHost[host]["cpu"]; exists {
+			if cpu, ok := resourcesToBlock[hv1.ResourceCPU]; ok {
+				if freeCPU, exists := freeResourcesByHost[host][hv1.ResourceCPU]; exists {
 					freeCPU.Sub(cpu)
 					if freeCPU.Value() < 0 {
 						traceLog.V(1).Info("negative free CPU after blocking reservation",
@@ -247,11 +247,11 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 							"blocked", cpu.String())
 						freeCPU = resource.Quantity{}
 					}
-					freeResourcesByHost[host]["cpu"] = freeCPU
+					freeResourcesByHost[host][hv1.ResourceCPU] = freeCPU
 				}
 			}
-			if memory, ok := resourcesToBlock["memory"]; ok {
-				if freeMemory, exists := freeResourcesByHost[host]["memory"]; exists {
+			if memory, ok := resourcesToBlock[hv1.ResourceMemory]; ok {
+				if freeMemory, exists := freeResourcesByHost[host][hv1.ResourceMemory]; exists {
 					freeMemory.Sub(memory)
 					if freeMemory.Value() < 0 {
 						traceLog.V(1).Info("negative free memory after blocking reservation",
@@ -262,7 +262,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 							"blocked", memory.String())
 						freeMemory = resource.Quantity{}
 					}
-					freeResourcesByHost[host]["memory"] = freeMemory
+					freeResourcesByHost[host][hv1.ResourceMemory] = freeMemory
 				}
 			}
 		}
@@ -278,7 +278,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 		if requestedCPU <= 0 {
 			return nil, errors.New("request has 0 cpu capacity")
 		}
-		freeCPU, ok := free["cpu"]
+		freeCPU, ok := free[hv1.ResourceCPU]
 		if !ok || freeCPU.Value() < 0 {
 			traceLog.V(1).Info(
 				"host with invalid CPU capacity",
@@ -306,7 +306,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 		if requestedMemoryBytes <= 0 {
 			return nil, errors.New("request has 0 memory capacity")
 		}
-		freeMemory, ok := free["memory"]
+		freeMemory, ok := free[hv1.ResourceMemory]
 		if !ok || freeMemory.Value() < 0 {
 			traceLog.V(1).Info(
 				"host with invalid memory capacity",
