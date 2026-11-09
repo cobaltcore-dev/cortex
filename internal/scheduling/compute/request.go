@@ -203,9 +203,11 @@ func (r PlacementRequest) GetWeights() map[string]float64 { return r.Weights }
 // nil InstanceCapacity yields an empty map.
 func (r PlacementRequest) TotalCapacity() map[hv1.ResourceName]resource.Quantity {
 	total := make(map[hv1.ResourceName]resource.Quantity, len(r.InstanceCapacity))
+	factor := int64(r.NumInstances) //nolint:gosec // instance count is bounded by Nova
 	for name, q := range r.InstanceCapacity {
-		scaled := resource.NewQuantity(q.Value()*int64(r.NumInstances), q.Format) //nolint:gosec // instance count is bounded by Nova
-		total[name] = *scaled
+		scaled := q.DeepCopy()
+		scaled.Mul(factor)
+		total[name] = scaled
 	}
 	return total
 }
