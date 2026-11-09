@@ -131,14 +131,12 @@ func (c *DrainController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// watch event arrives.
 	waitUntilTTL := ctrl.Result{RequeueAfter: ttlLeft}
 
-	// The host is empty when no live VM runs on it: Nova reports it there and it
-	// is neither being pruned nor deleted.
 	vms := &vmv1alpha1.VirtualMachineList{}
 	if err := c.List(ctx, vms); err != nil {
 		return ctrl.Result{}, fmt.Errorf("list virtual machines: %w", err)
 	}
 	hostEmpty := !slices.ContainsFunc(vms.Items, func(vm vmv1alpha1.VirtualMachine) bool {
-		return novaHost(&vm) == host && vm.Status.DeletionTime == nil && vm.Status.Nova.Status != novaStatusDeleted
+		return occupiedHost(&vm) == host
 	})
 	if hostEmpty {
 		log.Info("host is empty, marking failover host reservation active")
@@ -284,21 +282,21 @@ func (c *DrainController) SetupWithManager(ctx context.Context, mgr ctrl.Manager
 		return fmt.Errorf("watch hypervisors: %w", err)
 	}
 
-	// Only a VM's host or deletion state affects host emptiness.
+	// Only a change of the host a VM occupies affects host emptiness. On update
+	// both the old and new object are mapped, so the vacated host is woken too.
 	bldr, err = bldr.WatchesMulticluster(&vmv1alpha1.VirtualMachine{},
 		handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
 			vm, ok := obj.(*vmv1alpha1.VirtualMachine)
 			if !ok {
 				return nil
 			}
-			return c.failoverReservationsOnHost(ctx, novaHost(vm))
+			return c.failoverReservationsOnHost(ctx, occupiedHost(vm))
 		}),
 		predicate.Funcs{
 			UpdateFunc: func(e event.UpdateEvent) bool {
 				oldVM, okOld := e.ObjectOld.(*vmv1alpha1.VirtualMachine)
 				newVM, okNew := e.ObjectNew.(*vmv1alpha1.VirtualMachine)
-				return okOld && okNew && (novaHost(oldVM) != novaHost(newVM) ||
-					(oldVM.Status.DeletionTime == nil) != (newVM.Status.DeletionTime == nil))
+				return okOld && okNew && occupiedHost(oldVM) != occupiedHost(newVM)
 			},
 		},
 	)
@@ -358,9 +356,10 @@ func (c *DrainController) failoverReservationsOnHost(ctx context.Context, host s
 	return reqs
 }
 
-// novaHost returns the host Nova reports the VM on, or "" if not placed yet.
-func novaHost(vm *vmv1alpha1.VirtualMachine) string {
-	if vm.Status.Nova == nil {
+// occupiedHost returns the host a VM keeps from being empty: the host Nova
+// reports it on, or "" if it is not placed yet, being pruned or deleted in Nova.
+func occupiedHost(vm *vmv1alpha1.VirtualMachine) string {
+	if vm.Status.Nova == nil || vm.Status.DeletionTime != nil || vm.Status.Nova.Status == novaStatusDeleted {
 		return ""
 	}
 	return vm.Status.Nova.Host

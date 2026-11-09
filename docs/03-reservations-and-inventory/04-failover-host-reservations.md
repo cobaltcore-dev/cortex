@@ -495,21 +495,29 @@ When enabled, it reconciles each failover host reservation like so:
 
 - **Is the host empty?** Emptiness is read from the vm-operator `VirtualMachine` resources: a host counts as
   occupied only if Nova reports a VM on it that is neither being pruned nor already deleted. If the host is
-  empty, the reservation is marked **Active** and reconciliation finishes.
+  empty, the reservation is marked **Active** (`FailoverHostActive=True`, reason `HostDrained`) and
+  reconciliation finishes. The controller watches the VMs, so any VM starting or stopping to occupy a host —
+  being placed, migrating away, being pruned or reaching Nova status `DELETED` — re-evaluates that host's
+  reservation right away.
 - **If not, drain it.** The controller creates a `Rescheduling` with the `drain` action targeting the host; the
   rescheduler live-migrates the workloads away. Only the *inbound* reservation already blocks the host, so the
   drain does not take a second, independent host-block (`reserve: false`). **At most one failover host drain
   runs at a time across the whole fleet** — other designated hosts wait their turn, so the controller can never
-  trigger drains everywhere at once.
+  trigger drains everywhere at once. Every change to a drain wakes all not-yet-Active reservations, so the next
+  host starts draining as soon as the slot frees up. A `Failed` drain keeps holding the slot until the
+  rescheduler prunes it (it may carry partial state); the drained host's reservation retries after
+  `retryBackoff`.
 - **When the drain reports success, verify before trusting it.** A `Succeeded` drain is treated as a hint, not
   proof: the controller independently re-checks the host is empty (via the VM resources) before marking the
-  reservation Active. A drain that succeeded but left workload behind leaves the reservation Designated.
+  reservation Active. A drain that succeeded but left workload behind leaves the reservation Designated; it is
+  not re-drained, and either goes Active once the workload leaves or is cleaned up by the TTL.
 - **Failure and timeouts delete the reservation.** If the host's hypervisor disappears, or the reservation
   cannot be made Active within a conservative TTL (default `24h`) since its creation, the reservation is simply
   **deleted** — the partitioning generator then designates a fresh one on its next pass. An *unready* (but still
   present) hypervisor is deliberately *not* a delete trigger: the generator lists every hypervisor regardless of
   readiness, so deleting on unready would race it recreating the reservation each interval; a genuinely
-  unschedulable host instead stops being designated, and the TTL cleans up anything left stuck.
+  unschedulable host instead stops being designated, and the TTL cleans up anything left stuck. A waiting
+  reservation is requeued for its TTL deadline, so the TTL fires even if nothing else changes in the meantime.
 
 ## How failover host reservations affect scheduling
 
