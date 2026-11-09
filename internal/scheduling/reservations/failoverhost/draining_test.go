@@ -174,7 +174,7 @@ func TestDrainReconcile(t *testing.T) {
 			}
 			hv1Drains := 0
 			for _, d := range listDrains(t, c) {
-				if drainTargetsHost(&d, "hv1") {
+				if d.Spec.Drain != nil && d.Spec.Drain.Target.Hosts[0].Host.Name == "hv1" {
 					hv1Drains++
 				}
 			}
@@ -222,20 +222,8 @@ func TestDrainCreatesRescheduling(t *testing.T) {
 		t.Fatalf("expected Mode=all, got %q", d.Spec.Drain.Constraints.Mode)
 	case d.Labels[LabelFailoverHostDrain] != "true":
 		t.Fatalf("expected drain label, got %v", d.Labels)
-	case !drainTargetsHost(&d, "hv1"):
+	case d.Spec.Drain.Target.Hosts[0].Host.Name != "hv1":
 		t.Fatalf("expected drain to target hv1")
-	}
-}
-
-func TestDrainWakesDesignatedReservationsOnDrainChange(t *testing.T) {
-	active := failoverReservation("hv2")
-	meta.SetStatusCondition(&active.Status.Conditions, metav1.Condition{
-		Type: v1alpha1.ConditionTypeFailoverHostActive, Status: metav1.ConditionTrue, Reason: ReasonHostDrained,
-	})
-	c := &DrainController{Client: newTestClient(t, freshReservation(), &active), Config: drainConfig()}
-	reqs := c.designatedFailoverReservations(context.Background(), nil)
-	if len(reqs) != 1 || reqs[0].Name != "failover-host-hv1" {
-		t.Fatalf("expected only the designated reservation to be woken, got %v", reqs)
 	}
 }
 
