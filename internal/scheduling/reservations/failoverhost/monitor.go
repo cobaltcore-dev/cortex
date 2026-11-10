@@ -35,9 +35,7 @@ type Monitor struct {
 	reservationsDeleted prometheus.Counter
 	reservationsErrors  *prometheus.CounterVec
 
-	drainsCreated          prometheus.Counter
-	reservationsDraining   prometheus.Gauge
-	reservationsReoccupied prometheus.Gauge
+	drainsCreated prometheus.Counter
 }
 
 // calculationSummary holds the statistics of a single calculation-loop pass,
@@ -105,14 +103,6 @@ func NewMonitor() *Monitor {
 		drainsCreated: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "cortex_failover_host_drains_created_total",
 			Help: "Total number of drain reschedulings created by the failover host drain controller since pod restart",
-		}),
-		reservationsDraining: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "cortex_failover_host_reservations_draining",
-			Help: "Number of failover host reservations currently draining (present but not yet FailoverHostActive) at the last drain reconcile",
-		}),
-		reservationsReoccupied: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "cortex_failover_host_reservations_reoccupied",
-			Help: "Number of active, not-in-use failover host reservations whose host has a virtual machine on it at the last drain reconcile; a filter-pipeline leak the controller does not auto-correct",
 		}),
 	}
 	// Pre-initialize the labelled series so they appear at zero before the first
@@ -201,25 +191,6 @@ func (m *Monitor) RecordDrainCreated() {
 	m.drainsCreated.Inc()
 }
 
-// SetReservationsDraining sets the gauge of failover host reservations currently
-// draining (present but not yet Active).
-func (m *Monitor) SetReservationsDraining(n int) {
-	if m == nil {
-		return
-	}
-	m.reservationsDraining.Set(float64(n))
-}
-
-// SetReservationsReoccupied sets the gauge of active, not-in-use failover host
-// reservations whose host has a virtual machine on it — a filter-pipeline leak
-// the controller does not auto-correct.
-func (m *Monitor) SetReservationsReoccupied(n int) {
-	if m == nil {
-		return
-	}
-	m.reservationsReoccupied.Set(float64(n))
-}
-
 // Describe implements prometheus.Collector.
 func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
 	m.calculationRuns.Describe(ch)
@@ -235,8 +206,6 @@ func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
 	m.reservationsDeleted.Describe(ch)
 	m.reservationsErrors.Describe(ch)
 	m.drainsCreated.Describe(ch)
-	m.reservationsDraining.Describe(ch)
-	m.reservationsReoccupied.Describe(ch)
 }
 
 // Collect implements prometheus.Collector.
@@ -254,6 +223,4 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	m.reservationsDeleted.Collect(ch)
 	m.reservationsErrors.Collect(ch)
 	m.drainsCreated.Collect(ch)
-	m.reservationsDraining.Collect(ch)
-	m.reservationsReoccupied.Collect(ch)
 }

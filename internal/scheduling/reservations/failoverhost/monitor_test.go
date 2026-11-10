@@ -46,8 +46,6 @@ func TestMonitor_Counters(t *testing.T) {
 	m.RecordSchedulerRequest("200", 50*time.Millisecond)
 	m.RecordSchedulerRequest("error", 100*time.Millisecond)
 	m.RecordDrainCreated()
-	m.SetReservationsDraining(3)
-	m.SetReservationsReoccupied(2)
 
 	expected := `
 # HELP cortex_failover_host_calculation_aborts_total Total number of failover host calculation-loop passes aborted before producing a desired state, by reason
@@ -81,12 +79,6 @@ cortex_failover_host_calculation_aborts_total{reason="seeding"} 0
 	if got := testutil.ToFloat64(m.drainsCreated); got != 1 {
 		t.Errorf("drainsCreated = %v, want 1", got)
 	}
-	if got := testutil.ToFloat64(m.reservationsDraining); got != 3 {
-		t.Errorf("reservationsDraining = %v, want 3", got)
-	}
-	if got := testutil.ToFloat64(m.reservationsReoccupied); got != 2 {
-		t.Errorf("reservationsReoccupied = %v, want 2", got)
-	}
 }
 
 // A nil monitor must be safe to call so controllers and tests can run without one.
@@ -100,6 +92,4 @@ func TestMonitor_NilSafe(t *testing.T) {
 	m.RecordReservationDeleted()
 	m.RecordReservationError("create")
 	m.RecordDrainCreated()
-	m.SetReservationsDraining(1)
-	m.SetReservationsReoccupied(1)
 }

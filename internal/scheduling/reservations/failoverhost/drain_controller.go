@@ -96,7 +96,6 @@ func (c *DrainController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 	host, az := res.Spec.TargetHost, res.Spec.AvailabilityZone
 	log := logf.FromContext(ctx).WithName("failoverhost-drain").WithValues("reservation", res.Name, "host", host)
-	c.recordDrainingGauge(ctx)
 
 	// A missing hypervisor can never be drained into a failover target. An
 	// unready one is deliberately not a trigger: the generator designates hosts
@@ -125,8 +124,8 @@ func (c *DrainController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		// is an anomaly — the filter pipeline should keep ordinary workloads off
 		// the host — but we deliberately do NOT re-drain it: a stale in-use read
 		// could otherwise migrate a genuine evacuee off its rescue host at the
-		// worst possible time. The gauge (recordDrainingGauge) surfaces such hosts
-		// for an alert to escalate instead.
+		// worst possible time. The failover_host_lifecycle KPI surfaces such hosts
+		// (cortex_failover_host_reservations_reoccupied) for an alert to escalate.
 		return ctrl.Result{}, nil
 	}
 
@@ -247,53 +246,6 @@ func (c *DrainController) deleteReservation(ctx context.Context, res *v1alpha1.R
 	}
 	c.Monitor.RecordReservationDeleted()
 	return nil
-}
-
-// recordDrainingGauge publishes two fleet-wide gauges every reconcile, so they
-// stay fresh even between drain events: how many failover host reservations are
-// still draining (present but not yet Active), and how many Active, not-in-use
-// reservations have a virtual machine on their host. The latter is an anomaly —
-// the filter pipeline should keep ordinary workloads off reserved hosts — that
-// the controller deliberately does not auto-correct (see Reconcile), so the
-// gauge is the signal an alert escalates on. In-use hosts are excluded: a gang
-// evacuation legitimately lands VMs there. A list error only skips the metric
-// update, never fails the reconcile.
-func (c *DrainController) recordDrainingGauge(ctx context.Context) {
-	if c.Monitor == nil {
-		return
-	}
-	list := &v1alpha1.ReservationList{}
-	if err := c.List(ctx, list, client.MatchingLabels{
-		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelFailoverHost,
-	}); err != nil {
-		logf.FromContext(ctx).V(1).Info("failed to list failover host reservations for gauges", "err", err)
-		return
-	}
-	vms := &vmv1alpha1.VirtualMachineList{}
-	if err := c.List(ctx, vms); err != nil {
-		logf.FromContext(ctx).V(1).Info("failed to list virtual machines for gauges", "err", err)
-		return
-	}
-	occupied := map[string]bool{}
-	for i := range vms.Items {
-		if h := occupiedHost(&vms.Items[i]); h != "" {
-			occupied[h] = true
-		}
-	}
-	draining, reoccupied := 0, 0
-	for _, res := range list.Items {
-		if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive) {
-			draining++
-			continue
-		}
-		// Active: flag it only if a VM occupies the host and no evacuation claims it.
-		if occupied[res.Spec.TargetHost] &&
-			!meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) {
-			reoccupied++
-		}
-	}
-	c.Monitor.SetReservationsDraining(draining)
-	c.Monitor.SetReservationsReoccupied(reoccupied)
 }
 
 // SetupWithManager registers the controller. Besides failover host
