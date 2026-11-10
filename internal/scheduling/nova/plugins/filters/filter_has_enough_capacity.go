@@ -69,13 +69,13 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 	// request-dependent, Nova-specific policy; pkg/capacity does the arithmetic once
 	// the active list is known. A reservation is dropped (its capacity handed to the
 	// request) when the request is entitled to it: a matching committed-resource slot,
-	// a failover slot being evacuated/reused by this very VM, or an explicitly ignored
-	// type. Everything else blocks.
+	// a failover slot being evacuated/reused by this very VM, or a failover-host
+	// reservation (handled by the dedicated filter_failover_host). Everything else blocks.
 	//
 	// The empty-datacenter view (assumeEmptyHosts) drops every reservation unconditionally:
 	// it asks how much a host could hold once fully cleared, so neither running workloads
-	// nor any reservation count. The reservation list is therefore left empty and the
-	// host's allocation is zeroed below.
+	// nor any reservation count. The reservation list is therefore left empty, and the fit
+	// check below runs against Total rather than Available.
 	var active []v1alpha1.Reservation
 	if !assumeEmptyHosts {
 		var reservations v1alpha1.ReservationList
@@ -101,22 +101,40 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 			delete(result.Activations, hv.Name)
 			continue
 		}
-		// Failover-host reservations are kept off these hosts by filter_failover_host, not
-		// by capacity, so exclude them from the fit check (they still appear in the
-		// report's per-type Reserved breakdown for observability).
-		if !rep.Fits(request.TotalCapacityDemand()) {
+		// Normal view fits against Available (Total − Used − Reserved). The empty-datacenter
+		// view asks what a host could hold once fully cleared, so it fits against Total,
+		// ignoring running workloads and reservations.
+		fitAgainst := rep.Available
+		if assumeEmptyHosts {
+			fitAgainst = rep.Total
+		}
+		// Demand fits when every requested resource has at least that much available. A
+		// non-positive demand imposes no constraint; a resource missing from the host fails.
+		demand := request.TotalCapacityDemand()
+		fits := true
+		for name, need := range demand {
+			if need.Sign() <= 0 {
+				continue
+			}
+			have, ok := fitAgainst[name]
+			if !ok || have.Cmp(need) < 0 {
+				fits = false
+				break
+			}
+		}
+		if !fits {
 			traceLog.V(1).Info("filtering host due to insufficient capacity",
 				"host", hv.Name,
-				"available", rep.Available,
-				"requested", request.TotalCapacityDemand(),
+				"available", fitAgainst,
+				"requested", demand,
 			)
 			delete(result.Activations, hv.Name)
 			continue
 		}
 		traceLog.V(1).Info("host has enough capacity",
 			"host", hv.Name,
-			"available", rep.Available,
-			"requested", request.TotalCapacityDemand(),
+			"available", fitAgainst,
+			"requested", demand,
 		)
 	}
 

@@ -36,7 +36,8 @@ type ResourceMap = map[hv1.ResourceName]resource.Quantity
 
 // HostUsageReport is a point-in-time, purely arithmetic breakdown of one host's capacity.
 // Build one with NewHostUsageReport. It carries no placement policy: Available subtracts
-// every reservation the caller passed in, and Fits answers "does demand fit into it".
+// every reservation the caller passed in; callers decide for themselves whether a demand
+// fits (against Available, or against Total for an empty-datacenter view).
 type HostUsageReport struct {
 	// Total is the schedulable capacity per resource: the effective (overcommit-adjusted)
 	// capacity, falling back to the raw capacity for any resource the effective map
@@ -81,24 +82,6 @@ func (r HostUsageReport) ReservedTotal(types ...v1alpha1.ReservationType) Resour
 	return total
 }
 
-// Fits reports whether demand fits into Available: for every resource demand asks for,
-// Available must hold at least that much. A non-positive or absent demand entry imposes no
-// constraint; a demanded resource missing from Available (or present but insufficient)
-// fails. Pass the total demand across all instances — Fits does no scaling.
-func (r HostUsageReport) Fits(demand ResourceMap) bool {
-	avail := r.Available
-	for name, need := range demand {
-		if need.Sign() <= 0 {
-			continue
-		}
-		have, ok := avail[name]
-		if !ok || have.Cmp(need) < 0 {
-			return false
-		}
-	}
-	return true
-}
-
 // NewHostUsageReport computes the arithmetic report for hv from the reservations the
 // caller has already decided should count. It always folds honestly:
 // Available = Total − Used − Reserved(all types).
@@ -113,10 +96,7 @@ func (r HostUsageReport) Fits(demand ResourceMap) bool {
 // no reservations and reads Total: with no workloads subtracted that is exactly the free
 // capacity. There is no flag for it — a flag that still counted reservations would be a
 // half-truth.
-func NewHostUsageReport(
-	hv hv1.Hypervisor,
-	reservations []v1alpha1.Reservation,
-) HostUsageReport {
+func NewHostUsageReport(hv hv1.Hypervisor, reservations []v1alpha1.Reservation) HostUsageReport {
 	rep := HostUsageReport{
 		Total:          ResourceMap{},
 		Used:           ResourceMap{},

@@ -179,24 +179,3 @@ func TestFailoverHostBlocking(t *testing.T) {
 		t.Errorf("failoverHost reserved=%d, want 1024", memGiB(rep.ReservedTotal(v1alpha1.ReservationTypeFailoverHost)))
 	}
 }
-
-// TestFits checks demand against the honest Available (Total − Used − Reserved(all)).
-// Which reservation types count is decided before the report is built (the capacity
-// filter drops failover-host via reservationBlocks), so Fits takes no ignore list.
-func TestFits(t *testing.T) {
-	// 1024 GiB host with a 256 GiB CR slot -> 768 GiB available.
-	rep := report(hvWithCap(1024, 256), crSlot("cr", "host", 256, 64))
-
-	if !rep.Fits(ResourceMap{hv1.ResourceMemory: gib(768), hv1.ResourceCPU: cpu(64)}) {
-		t.Error("exact fit against Available should pass")
-	}
-	if rep.Fits(ResourceMap{hv1.ResourceMemory: gib(769)}) {
-		t.Error("over-demand should fail")
-	}
-	if !rep.Fits(ResourceMap{hv1.ResourceMemory: resource.Quantity{}}) {
-		t.Error("zero demand imposes no constraint")
-	}
-	if rep.Fits(ResourceMap{"disk": gib(1)}) {
-		t.Error("demanding a resource the host lacks should fail")
-	}
-}
