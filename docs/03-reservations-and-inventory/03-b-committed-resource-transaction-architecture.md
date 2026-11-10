@@ -76,10 +76,7 @@ stateDiagram-v2
     Allocating --> Superseded : newer CRC for same AZ took over
 
     AwaitingScheduling --> Accepted : all CRs Ready (observedGeneration matches)
-    AwaitingScheduling --> DryRunCleanup : all CRs Ready, but DryRun=true
     AwaitingScheduling --> RollingBack : CR rejected or timeout
-
-    DryRunCleanup --> Accepted : pre-state restored (would-accept)
 
     RollingBack --> Rejected : pre-state restored (RollbackFailed on permanent failure)
 
