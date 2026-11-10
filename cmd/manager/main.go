@@ -847,7 +847,7 @@ func main() {
 			setupLog.Error(nil, "failover-host-reservations-controller requires nova-pipeline-controllers (in-process scheduler) to be enabled")
 			os.Exit(1)
 		}
-		controller := &failoverhost.Controller{
+		controller := &failoverhost.PartitioningController{
 			Client:    multiclusterClient,
 			Config:    failoverHostConfig,
 			Scheduler: novaScheduler,

@@ -113,7 +113,7 @@ type PartitioningConfig struct {
 	GenerationInterval metav1.Duration `json:"generationInterval"`
 }
 
-// Controller keeps the cluster's failover host reservations in sync with the
+// PartitioningController keeps the cluster's failover host reservations in sync with the
 // current cluster state. It has two cooperating halves (see the package doc for
 // the bigger picture):
 //
@@ -124,7 +124,7 @@ type PartitioningConfig struct {
 //
 // The loop is the single writer of desiredReservations and Reconcile the single
 // reader, both synchronised by desiredReservationsMu.
-type Controller struct {
+type PartitioningController struct {
 	client.Client // k8s client
 
 	Config PartitioningConfig
@@ -176,7 +176,7 @@ type Controller struct {
 // It is level-triggered and idempotent: it reads the current actual and desired
 // state on every call and makes at most one write, so redundant events and
 // retries are harmless.
-func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (c *PartitioningController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx).WithName("failoverhost-controller-reconcile").
 		WithValues("reservationName", req.Name)
 
@@ -293,7 +293,7 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 // one pass immediately (so reservations exist without waiting a full interval)
 // and re-runs loop on every tick. On shutdown it closes reconcileCh so the
 // reconciler's event source drains cleanly.
-func (c *Controller) Start(ctx context.Context) error {
+func (c *PartitioningController) Start(ctx context.Context) error {
 	log := logf.FromContext(ctx).WithName("failoverhost-controller-startup")
 	log.Info("starting failover host controller")
 
@@ -326,7 +326,7 @@ func (c *Controller) Start(ctx context.Context) error {
 
 // SetupWithManager wires both halves of the controller into the manager:
 //
-//   - It registers the Controller as a Runnable (mgr.Add) so the manager starts
+//   - It registers the PartitioningController as a Runnable (mgr.Add) so the manager starts
 //     and stops the periodic calculation loop (Start) alongside the controller.
 //   - It registers the reconciler with a channel event source, so the loop can
 //     enqueue reconcile requests by sending on reconcileCh.
@@ -334,7 +334,7 @@ func (c *Controller) Start(ctx context.Context) error {
 // It also defaults the generator to the production pipelineGenerator. Tests may
 // set it beforehand to substitute a fake (e.g. a path finder pointed at a stub
 // scheduler); it is only defaulted here when nil.
-func (c *Controller) SetupWithManager(mgr ctrl.Manager) error {
+func (c *PartitioningController) SetupWithManager(mgr ctrl.Manager) error {
 	if mgr == nil {
 		return errors.New("manager cannot be nil")
 	}
@@ -385,7 +385,7 @@ func (c *Controller) SetupWithManager(mgr ctrl.Manager) error {
 // A generator that returns ok=false aborts the pass without touching the desired
 // state: a partial recalculation is worse than a slightly stale one, as it could
 // drop reservations that are still valid.
-func (c *Controller) loop(ctx context.Context) {
+func (c *PartitioningController) loop(ctx context.Context) {
 	desired, topo, ok := c.generator.Generate(ctx)
 	if !ok {
 		return // the generator already logged the reason and recorded the abort.
@@ -403,7 +403,7 @@ func (c *Controller) loop(ctx context.Context) {
 // reconciler re-reads the desired state itself — so the event payload only needs
 // to identify the reservation. Sends block on reconcileCh; a cancelled ctx (the
 // manager shutting down) unblocks and returns.
-func (c *Controller) publish(ctx context.Context, topo topology, desired map[corev1.ObjectReference]v1alpha1.Reservation) {
+func (c *PartitioningController) publish(ctx context.Context, topo topology, desired map[corev1.ObjectReference]v1alpha1.Reservation) {
 	toReconcile := make(map[corev1.ObjectReference]v1alpha1.Reservation)
 	for k, v := range topo.existing {
 		toReconcile[k] = v

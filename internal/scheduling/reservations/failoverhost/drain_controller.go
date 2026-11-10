@@ -73,7 +73,7 @@ func (d *DrainConfig) ApplyDefaults() {
 // making sure the reserved host runs no virtual machines, draining it via a
 // Rescheduling if needed. At most one such drain runs at a time fleet-wide.
 //
-// Ownership: the partitioning Controller writes reservation spec and labels;
+// Ownership: the PartitioningController writes reservation spec and labels;
 // this controller owns the FailoverHostActive condition and deletes reservations
 // that can no longer become Active. The Matcher only touches Active reservations.
 type DrainController struct {
