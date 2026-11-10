@@ -36,14 +36,13 @@ const (
 )
 
 // DrainControllerConfig is the slice of the shared cortex config the drain
-// controller reads. Its settings live under failover.hosts.drain next to the
-// partitioning controller's, but are loaded separately to keep both decoupled.
+// controller reads. Its settings live under failoverhost.drain next to the
+// partitioning controller's failoverhost.partitioning, but are loaded separately
+// to keep both decoupled.
 type DrainControllerConfig struct {
-	Failover struct {
-		Hosts struct {
-			Drain DrainConfig `json:"drain"`
-		} `json:"hosts"`
-	} `json:"failover"`
+	FailoverHost struct {
+		Drain DrainConfig `json:"drain"`
+	} `json:"failoverhost"`
 }
 
 // DrainConfig configures the drain controller.

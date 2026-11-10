@@ -842,7 +842,7 @@ func main() {
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "failover-host-reservations-controller") {
 		setupLog.Info("enabling controller", "controller", "failover-host-reservations-controller")
-		failoverHostConfig := conf.GetConfigOrDie[failoverhost.Config]().Failover.Hosts
+		failoverHostConfig := conf.GetConfigOrDie[failoverhost.Config]().FailoverHost.Partitioning
 		if novaScheduler == nil {
 			setupLog.Error(nil, "failover-host-reservations-controller requires nova-pipeline-controllers (in-process scheduler) to be enabled")
 			os.Exit(1)
@@ -865,7 +865,7 @@ func main() {
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "failover-host-drain-controller") {
 		setupLog.Info("enabling controller", "controller", "failover-host-drain-controller")
-		drainConfig := conf.GetConfigOrDie[failoverhost.DrainControllerConfig]().Failover.Hosts.Drain
+		drainConfig := conf.GetConfigOrDie[failoverhost.DrainControllerConfig]().FailoverHost.Drain
 		drainConfig.ApplyDefaults()
 		// The feature is opt-in: only start the controller when draining is
 		// enabled, so that when disabled no reservation is marked active and no

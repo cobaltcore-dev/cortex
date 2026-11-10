@@ -80,17 +80,21 @@ import (
 )
 
 // Config is the top-level config section this controller reads from the shared
-// cortex conf.json. The controller's own settings are nested under failover.hosts
-// so they sit alongside the (flavor-based) failover controller's settings without
-// colliding with the flat, top-level keys read from the same file.
+// cortex conf.json. The failover host subsystem groups its settings under a
+// single failoverhost key with one sub-key per concern: partitioning (this
+// controller) and drain (the drain controller, see DrainControllerConfig). The
+// third concern, filtering, is configured separately as options on the
+// filter_failover_host / weigher_failover_host pipeline steps (part of the
+// Pipeline CRD), not here.
 type Config struct {
-	Failover struct {
-		Hosts ControllerConfig `json:"hosts"`
-	} `json:"failover"`
+	FailoverHost struct {
+		Partitioning PartitioningConfig `json:"partitioning"`
+	} `json:"failoverhost"`
 }
 
-// ControllerConfig contains configuration for failover host reservations.
-type ControllerConfig struct {
+// PartitioningConfig contains configuration for the failover host partitioning
+// and reservation-generation loop.
+type PartitioningConfig struct {
 	// Ratio is a global ratio that determines how many failover hosts inside
 	// a partition are created. For example, a ratio of 0.1 means that
 	// if a partition consists of 10 hosts, 1 failover host will be created.
@@ -123,7 +127,7 @@ type ControllerConfig struct {
 type Controller struct {
 	client.Client // k8s client
 
-	Config ControllerConfig
+	Config PartitioningConfig
 
 	// Scheduler is the shared in-process scheduler the path finder probes for
 	// placement candidates. Required (the controller cannot compute failover
