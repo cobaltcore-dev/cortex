@@ -50,7 +50,7 @@ func drainRescheduling(name, host string, state v1alpha1.ReschedulingState) *v1a
 	return &v1alpha1.Rescheduling{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   name,
-			Labels: map[string]string{LabelFailoverHostDrain: "true", v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelFailoverHost},
+			Labels: map[string]string{v1alpha1.LabelFailoverHostDrain: "true", v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelFailoverHost},
 		},
 		Spec: v1alpha1.ReschedulingSpec{
 			Action: v1alpha1.ReschedulingActionDrain,
@@ -97,11 +97,11 @@ func TestDrainReconcile(t *testing.T) {
 	expired.CreationTimestamp = metav1.NewTime(time.Now().Add(-25 * time.Hour))
 	active := freshReservation()
 	meta.SetStatusCondition(&active.Status.Conditions, metav1.Condition{
-		Type: v1alpha1.ConditionTypeFailoverHostActive, Status: metav1.ConditionTrue, Reason: ReasonHostDrained,
+		Type: v1alpha1.ConditionTypeFailoverHostActive, Status: metav1.ConditionTrue, Reason: v1alpha1.ReasonHostDrained,
 	})
 	activeInUse := freshReservation()
 	meta.SetStatusCondition(&activeInUse.Status.Conditions, metav1.Condition{
-		Type: v1alpha1.ConditionTypeFailoverHostActive, Status: metav1.ConditionTrue, Reason: ReasonHostDrained,
+		Type: v1alpha1.ConditionTypeFailoverHostActive, Status: metav1.ConditionTrue, Reason: v1alpha1.ReasonHostDrained,
 	})
 	meta.SetStatusCondition(&activeInUse.Status.Conditions, metav1.Condition{
 		Type: v1alpha1.ConditionTypeFailoverHostInUse, Status: metav1.ConditionTrue, Reason: "Evacuating",
@@ -231,7 +231,7 @@ func TestDrainCreatesRescheduling(t *testing.T) {
 		t.Fatalf("expected Reserve=false")
 	case d.Spec.Drain.Constraints.Mode != v1alpha1.DrainConstraintModeAll:
 		t.Fatalf("expected Mode=all, got %q", d.Spec.Drain.Constraints.Mode)
-	case d.Labels[LabelFailoverHostDrain] != "true":
+	case d.Labels[v1alpha1.LabelFailoverHostDrain] != "true":
 		t.Fatalf("expected drain label, got %v", d.Labels)
 	case d.Spec.Drain.Target.Hosts[0].Host.Name != "hv1":
 		t.Fatalf("expected drain to target hv1")
@@ -285,7 +285,7 @@ func TestDrainReoccupiedRestartsDraining(t *testing.T) {
 	ctx := context.Background()
 	active := freshReservation()
 	meta.SetStatusCondition(&active.Status.Conditions, metav1.Condition{
-		Type: v1alpha1.ConditionTypeFailoverHostActive, Status: metav1.ConditionTrue, Reason: ReasonHostDrained,
+		Type: v1alpha1.ConditionTypeFailoverHostActive, Status: metav1.ConditionTrue, Reason: v1alpha1.ReasonHostDrained,
 	})
 	c := &DrainController{
 		Client:  newTestClient(t, readyHV(), active, buildVM("squatter", "hv1", "ACTIVE")),
@@ -300,8 +300,8 @@ func TestDrainReoccupiedRestartsDraining(t *testing.T) {
 	}
 	res := getDrainReservation(t, c, "failover-host-hv1")
 	cond := meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive)
-	if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != ReasonHostReoccupied {
-		t.Fatalf("pass 1: expected Active=False reason=%s, got %+v", ReasonHostReoccupied, cond)
+	if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != v1alpha1.ReasonHostReoccupied {
+		t.Fatalf("pass 1: expected Active=False reason=%s, got %+v", v1alpha1.ReasonHostReoccupied, cond)
 	}
 	if drains := listDrains(t, c); len(drains) != 0 {
 		t.Fatalf("pass 1: expected no drain yet, got %d", len(drains))

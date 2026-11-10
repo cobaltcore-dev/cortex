@@ -30,21 +30,6 @@ import (
 )
 
 const (
-	// LabelFailoverHostDrain marks the Rescheduling objects created by the drain
-	// controller, so they can be listed by label.
-	LabelFailoverHostDrain = "reservations.cortex.cloud/failover-host-drain"
-
-	// ReasonHostDrained is the FailoverHostActive condition reason set once the
-	// reserved host is empty.
-	ReasonHostDrained = "HostDrained"
-
-	// ReasonHostReoccupied is the FailoverHostActive=False reason set when a
-	// virtual machine appears on an Active, not-yet-in-use failover host. The
-	// filter pipeline should keep ordinary workloads off the host, so this is an
-	// invariant violation: the controller demotes the reservation back to
-	// draining to evict the squatter and restore an empty landing zone.
-	ReasonHostReoccupied = "HostReoccupied"
-
 	// novaStatusDeleted is the Nova status of a deleted server, which no longer
 	// occupies its host.
 	novaStatusDeleted = "DELETED"
@@ -151,7 +136,7 @@ func (c *DrainController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			Type:               v1alpha1.ConditionTypeFailoverHostActive,
 			Status:             metav1.ConditionFalse,
 			ObservedGeneration: res.Generation,
-			Reason:             ReasonHostReoccupied,
+			Reason:             v1alpha1.ReasonHostReoccupied,
 			Message:            "a virtual machine appeared on the reserved host, draining again",
 		})
 		if err := c.Status().Patch(ctx, res, client.MergeFrom(base)); err != nil {
@@ -181,7 +166,7 @@ func (c *DrainController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			Type:               v1alpha1.ConditionTypeFailoverHostActive,
 			Status:             metav1.ConditionTrue,
 			ObservedGeneration: res.Generation,
-			Reason:             ReasonHostDrained,
+			Reason:             v1alpha1.ReasonHostDrained,
 			Message:            "no virtual machines remain on the reserved host",
 		})
 		if err := c.Status().Patch(ctx, res, client.MergeFrom(base)); err != nil {
@@ -197,7 +182,7 @@ func (c *DrainController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// Failed drains hold the slot until the rescheduler prunes them, as they may
 	// carry partial state.
 	drains := &v1alpha1.ReschedulingList{}
-	if err := c.List(ctx, drains, client.MatchingLabels{LabelFailoverHostDrain: "true"}); err != nil {
+	if err := c.List(ctx, drains, client.MatchingLabels{v1alpha1.LabelFailoverHostDrain: "true"}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("list drain reschedulings: %w", err)
 	}
 	var own *v1alpha1.Rescheduling
@@ -234,8 +219,8 @@ func (c *DrainController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: "drain-failover-host-" + host + "-",
 				Labels: map[string]string{
-					LabelFailoverHostDrain:        "true",
-					v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelFailoverHost,
+					v1alpha1.LabelFailoverHostDrain: "true",
+					v1alpha1.LabelReservationType:   v1alpha1.ReservationTypeLabelFailoverHost,
 				},
 			},
 			Spec: v1alpha1.ReschedulingSpec{
@@ -385,7 +370,7 @@ func (c *DrainController) SetupWithManager(ctx context.Context, mgr ctrl.Manager
 			return reqs
 		}),
 		predicate.NewPredicateFuncs(func(obj client.Object) bool {
-			return obj.GetLabels()[LabelFailoverHostDrain] == "true"
+			return obj.GetLabels()[v1alpha1.LabelFailoverHostDrain] == "true"
 		}),
 	)
 	if err != nil {
