@@ -174,6 +174,16 @@ type PlacementRequest struct {
 // Compile-time check that PlacementRequest satisfies the pipeline request contract.
 var _ lib.FilterWeigherPipelineRequest = PlacementRequest{}
 
+// ApplyDefaults fills in load-bearing fields that were left at an unusable zero
+// value. NumInstances is a multiplier in capacity and bin-pack math, where 0
+// makes every host look infinitely free (see the field doc), so a zero value is
+// normalized to a single instance.
+func (r *PlacementRequest) ApplyDefaults() {
+	if r.NumInstances == 0 {
+		r.NumInstances = 1
+	}
+}
+
 // GetIntent returns the resolved scheduling intent.
 func (r PlacementRequest) GetIntent() v1alpha1.SchedulingIntent { return r.Intent }
 
