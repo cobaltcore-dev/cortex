@@ -26,10 +26,6 @@ spec:
     - jsonPath: .spec.source
       name: Source
       type: string
-    - jsonPath: .spec.dryRun
-      name: DryRun
-      priority: 1
-      type: boolean
     - jsonPath: .status.conditions[?(@.type=='Progressing')].status
       name: Progressing
       priority: 1
@@ -78,10 +74,6 @@ spec:
               correlationID:
                 description: CorrelationID is the request/correlation ID.
                 type: string
-              dryRun:
-                description: DryRun controls whether the change request commits or
-                  only probes schedulability.
-                type: boolean
               newState:
                 additionalProperties:
                   description: CommittedResourceSpec defines the desired state of
@@ -264,7 +256,7 @@ spec:
                     t == oldSelf) || self == oldSelf
               rollbackStartedAt:
                 description: |-
-                  RollbackStartedAt is the time the CRC entered RollingBack or DryRunCleanup.
+                  RollbackStartedAt is the time the CRC entered RollingBack.
                   Used to measure RollbackTimeout from the correct starting point rather than relying on
                   the Progressing condition's LastTransitionTime, which is only updated on Status changes.
                 format: date-time

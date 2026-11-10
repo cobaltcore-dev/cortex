@@ -20,8 +20,6 @@ const (
 	ChangePhaseAwaitingScheduling ChangePhase = "AwaitingScheduling"
 	// ChangePhaseRollingBack: a CR was rejected or timed out; restoring pre-change state.
 	ChangePhaseRollingBack ChangePhase = "RollingBack"
-	// ChangePhaseDryRunCleanup: dry-run would-accept; restoring pre-change state.
-	ChangePhaseDryRunCleanup ChangePhase = "DryRunCleanup"
 	// ChangePhaseAccepted: terminal; change request committed successfully.
 	ChangePhaseAccepted ChangePhase = "Accepted"
 	// ChangePhaseRejected: terminal; change request rolled back.
@@ -83,10 +81,6 @@ type CommittedResourceChangeSpec struct {
 	// +kubebuilder:validation:Optional
 	AllowRejection bool `json:"allowRejection,omitempty"`
 
-	// DryRun controls whether the change request commits or only probes schedulability.
-	// +kubebuilder:validation:Optional
-	DryRun bool `json:"dryRun,omitempty"`
-
 	// NewState maps commitmentUUID to the desired CommittedResourceSpec.
 	// A nil value means the corresponding CommittedResource should be deleted.
 	// +kubebuilder:validation:Optional
@@ -112,7 +106,7 @@ type CommittedResourceChangeStatus struct {
 	// +kubebuilder:validation:Optional
 	UpsertedCommitments []corev1.ObjectReference `json:"upsertedCommitments,omitempty"`
 
-	// RollbackStartedAt is the time the CRC entered RollingBack or DryRunCleanup.
+	// RollbackStartedAt is the time the CRC entered RollingBack.
 	// Used to measure RollbackTimeout from the correct starting point rather than relying on
 	// the Progressing condition's LastTransitionTime, which is only updated on Status changes.
 	// +kubebuilder:validation:Optional
@@ -133,7 +127,6 @@ type CommittedResourceChangeStatus struct {
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 // +kubebuilder:printcolumn:name="AZ",type="string",JSONPath=".spec.availabilityZone"
 // +kubebuilder:printcolumn:name="Source",type="string",JSONPath=".spec.source"
-// +kubebuilder:printcolumn:name="DryRun",type="boolean",JSONPath=".spec.dryRun",priority=1
 // +kubebuilder:printcolumn:name="Progressing",type="string",JSONPath=".status.conditions[?(@.type=='Progressing')].status",priority=1
 // +kubebuilder:printcolumn:name="Finished",type="string",JSONPath=".status.conditions[?(@.type=='Finished')].status",priority=1
 
