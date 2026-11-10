@@ -35,7 +35,7 @@ type CommittedResourceChangeReconciler struct {
 	// AwaitingSchedulingTimeout is how long to wait in AwaitingScheduling before rolling back.
 	// Zero (default) means no timeout.
 	AwaitingSchedulingTimeout time.Duration
-	// RollbackTimeout is how long to attempt snapshot restore in RollingBack
+	// RollbackTimeout is how long to attempt snapshot restore in RollingBack/DryRunCleanup
 	// before giving up and terminating with RollbackFailed.
 	// Zero (default) means no timeout.
 	RollbackTimeout time.Duration
@@ -66,6 +66,8 @@ func (r *CommittedResourceChangeReconciler) Reconcile(ctx context.Context, req c
 		return r.reconcileAwaitingScheduling(ctx, logger, &tx)
 	case v1alpha1.ChangePhaseRollingBack:
 		return r.reconcileRollingBack(ctx, logger, &tx)
+	case v1alpha1.ChangePhaseDryRunCleanup:
+		return r.reconcileDryRunCleanup(ctx, logger, &tx)
 	case v1alpha1.ChangePhaseAccepted, v1alpha1.ChangePhaseRejected, v1alpha1.ChangePhaseSuperseded:
 		return ctrl.Result{}, nil
 	default:
@@ -153,7 +155,7 @@ func (r *CommittedResourceChangeReconciler) reconcileAllocating(ctx context.Cont
 
 // reconcileAwaitingScheduling reads UpsertedCommitments and waits for placement settlement.
 // Gates on each CR's ready-condition observedGeneration matching the generation written in Allocating.
-// All CRs accepted → Accepted.
+// All CRs accepted → Accepted (or DryRunCleanup when DryRun=true).
 // Any CR rejected → RollingBack.
 // Not yet settled → wait for the CR watch to re-enqueue.
 func (r *CommittedResourceChangeReconciler) reconcileAwaitingScheduling(ctx context.Context, logger logr.Logger, tx *v1alpha1.CommittedResourceChange) (ctrl.Result, error) {
@@ -219,6 +221,9 @@ func (r *CommittedResourceChangeReconciler) reconcileAwaitingScheduling(ctx cont
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
+	if tx.Spec.DryRun {
+		return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseDryRunCleanup, nil)
+	}
 	return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseAccepted, nil)
 }
 
@@ -233,11 +238,28 @@ func (r *CommittedResourceChangeReconciler) reconcileRollingBack(ctx context.Con
 	if !allSettled {
 		if r.RollbackTimeout > 0 && tx.Status.RollbackStartedAt != nil && time.Since(tx.Status.RollbackStartedAt.Time) > r.RollbackTimeout {
 			logger.Info("rollback timed out, terminalizing", "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "timeout", r.RollbackTimeout)
-			return r.terminateWithRollbackFailed(ctx, tx, "timed out restoring pre-change state")
+			return r.terminateWithRollbackFailed(ctx, tx, v1alpha1.ChangePhaseRejected, "timed out restoring pre-change state")
 		}
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 	return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseRejected, nil)
+}
+
+// reconcileDryRunCleanup restores pre-change state after a dry-run would-accept outcome.
+// Re-uses snapshot rollback logic; terminal phase is Accepted (not Rejected).
+func (r *CommittedResourceChangeReconciler) reconcileDryRunCleanup(ctx context.Context, logger logr.Logger, tx *v1alpha1.CommittedResourceChange) (ctrl.Result, error) {
+	allSettled, err := r.restoreFromSnapshot(ctx, logger, tx)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !allSettled {
+		if r.RollbackTimeout > 0 && tx.Status.RollbackStartedAt != nil && time.Since(tx.Status.RollbackStartedAt.Time) > r.RollbackTimeout {
+			logger.Info("dry-run cleanup timed out, terminalizing", "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "timeout", r.RollbackTimeout)
+			return r.terminateWithRollbackFailed(ctx, tx, v1alpha1.ChangePhaseAccepted, "timed out restoring pre-change state after dry run")
+		}
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+	return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseAccepted, nil)
 }
 
 // restoreFromSnapshot converges CommittedResources back to their pre-change state recorded in
@@ -294,10 +316,11 @@ func (r *CommittedResourceChangeReconciler) restoreFromSnapshot(ctx context.Cont
 	return true, nil
 }
 
-// terminateWithRollbackFailed stamps Finished=True/RollbackFailed and Progressing=False/RetryExhausted
-// and terminates the transaction as Rejected.
-func (r *CommittedResourceChangeReconciler) terminateWithRollbackFailed(ctx context.Context, tx *v1alpha1.CommittedResourceChange, msg string) (ctrl.Result, error) {
-	tx.Status.Phase = v1alpha1.ChangePhaseRejected
+// terminateWithRollbackFailed stamps Finished=True/RollbackFailed and Progressing=False/RetryExhausted.
+// phase controls the terminal FSM phase: Rejected for a failed rollback, Accepted for a DryRunCleanup
+// timeout (the scheduler accepted the change; only the post-probe cleanup stalled).
+func (r *CommittedResourceChangeReconciler) terminateWithRollbackFailed(ctx context.Context, tx *v1alpha1.CommittedResourceChange, phase v1alpha1.ChangePhase, msg string) (ctrl.Result, error) {
+	tx.Status.Phase = phase
 	tx.Status.Message = msg
 	meta.SetStatusCondition(&tx.Status.Conditions, metav1.Condition{
 		Type:               v1alpha1.ChangeConditionFinished,
@@ -337,7 +360,7 @@ func (r *CommittedResourceChangeReconciler) advanceTo(
 	if mutate != nil {
 		mutate(&tx.Status)
 	}
-	if phase == v1alpha1.ChangePhaseRollingBack && tx.Status.RollbackStartedAt == nil {
+	if (phase == v1alpha1.ChangePhaseRollingBack || phase == v1alpha1.ChangePhaseDryRunCleanup) && tx.Status.RollbackStartedAt == nil {
 		now := metav1.Now()
 		tx.Status.RollbackStartedAt = &now
 	}
