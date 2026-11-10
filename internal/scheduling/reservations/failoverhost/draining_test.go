@@ -97,11 +97,11 @@ func TestDrainReconcile(t *testing.T) {
 	expired.CreationTimestamp = metav1.NewTime(time.Now().Add(-25 * time.Hour))
 	active := freshReservation()
 	meta.SetStatusCondition(&active.Status.Conditions, metav1.Condition{
-		Type: v1alpha1.ConditionTypeFailoverHostActive, Status: metav1.ConditionTrue, Reason: v1alpha1.ReasonHostDrained,
+		Type: v1alpha1.ConditionTypeFailoverHostActive, Status: metav1.ConditionTrue, Reason: v1alpha1.ReasonFailoverHostDrained,
 	})
 	activeInUse := freshReservation()
 	meta.SetStatusCondition(&activeInUse.Status.Conditions, metav1.Condition{
-		Type: v1alpha1.ConditionTypeFailoverHostActive, Status: metav1.ConditionTrue, Reason: v1alpha1.ReasonHostDrained,
+		Type: v1alpha1.ConditionTypeFailoverHostActive, Status: metav1.ConditionTrue, Reason: v1alpha1.ReasonFailoverHostDrained,
 	})
 	meta.SetStatusCondition(&activeInUse.Status.Conditions, metav1.Condition{
 		Type: v1alpha1.ConditionTypeFailoverHostInUse, Status: metav1.ConditionTrue, Reason: "Evacuating",
@@ -285,7 +285,7 @@ func TestDrainReoccupiedRestartsDraining(t *testing.T) {
 	ctx := context.Background()
 	active := freshReservation()
 	meta.SetStatusCondition(&active.Status.Conditions, metav1.Condition{
-		Type: v1alpha1.ConditionTypeFailoverHostActive, Status: metav1.ConditionTrue, Reason: v1alpha1.ReasonHostDrained,
+		Type: v1alpha1.ConditionTypeFailoverHostActive, Status: metav1.ConditionTrue, Reason: v1alpha1.ReasonFailoverHostDrained,
 	})
 	c := &DrainController{
 		Client:  newTestClient(t, readyHV(), active, buildVM("squatter", "hv1", "ACTIVE")),
@@ -300,8 +300,8 @@ func TestDrainReoccupiedRestartsDraining(t *testing.T) {
 	}
 	res := getDrainReservation(t, c, "failover-host-hv1")
 	cond := meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive)
-	if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != v1alpha1.ReasonHostReoccupied {
-		t.Fatalf("pass 1: expected Active=False reason=%s, got %+v", v1alpha1.ReasonHostReoccupied, cond)
+	if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != v1alpha1.ReasonFailoverHostReoccupied {
+		t.Fatalf("pass 1: expected Active=False reason=%s, got %+v", v1alpha1.ReasonFailoverHostReoccupied, cond)
 	}
 	if drains := listDrains(t, c); len(drains) != 0 {
 		t.Fatalf("pass 1: expected no drain yet, got %d", len(drains))

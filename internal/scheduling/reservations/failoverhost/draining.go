@@ -136,7 +136,7 @@ func (c *DrainController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			Type:               v1alpha1.ConditionTypeFailoverHostActive,
 			Status:             metav1.ConditionFalse,
 			ObservedGeneration: res.Generation,
-			Reason:             v1alpha1.ReasonHostReoccupied,
+			Reason:             v1alpha1.ReasonFailoverHostReoccupied,
 			Message:            "a virtual machine appeared on the reserved host, draining again",
 		})
 		if err := c.Status().Patch(ctx, res, client.MergeFrom(base)); err != nil {
@@ -166,7 +166,7 @@ func (c *DrainController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			Type:               v1alpha1.ConditionTypeFailoverHostActive,
 			Status:             metav1.ConditionTrue,
 			ObservedGeneration: res.Generation,
-			Reason:             v1alpha1.ReasonHostDrained,
+			Reason:             v1alpha1.ReasonFailoverHostDrained,
 			Message:            "no virtual machines remain on the reserved host",
 		})
 		if err := c.Status().Patch(ctx, res, client.MergeFrom(base)); err != nil {
