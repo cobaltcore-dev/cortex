@@ -287,7 +287,7 @@ func TestReconcileAZ_CreatesCRD(t *testing.T) {
 	scheduler := newMockSchedulerHosts([]string{"host-1"})
 
 	ctrl := newController(t, fakeClient, Config{
-		TotalPipeline:     "kvm-report-capacity",
+		TotalPipeline:     "kvm-general-purpose-load-balancing",
 		PlaceablePipeline: "kvm-general-purpose",
 	}, scheduler)
 
@@ -352,7 +352,7 @@ func TestReconcileAZ_RawCapacityIncludesOccupiedHosts(t *testing.T) {
 		memMB         = 4096 // 4 GiB flavor
 		host1MemByte  = int64(memMB) * 1024 * 1024
 		host2MemByte  = 3 * int64(memMB) * 1024 * 1024 // distinct value so we can see host-2 in the sum
-		totalPipe     = "kvm-report-capacity"
+		totalPipe     = "kvm-general-purpose-load-balancing"
 		placeablePipe = "kvm-general-purpose"
 	)
 
@@ -429,7 +429,7 @@ func TestReconcileAZ_WritesReservedCapacity(t *testing.T) {
 	scheduler := newMockSchedulerHosts([]string{"host-1"})
 
 	ctrl := newController(t, fakeClient, Config{
-		TotalPipeline:     "kvm-report-capacity",
+		TotalPipeline:     "kvm-general-purpose-load-balancing",
 		PlaceablePipeline: "kvm-general-purpose",
 	}, scheduler)
 
@@ -602,7 +602,7 @@ func TestReconcileAZ_SkipsCRDWriteOnSchedulerError(t *testing.T) {
 
 	// Scheduler returns an error to simulate a failed probe.
 	ctrl := newController(t, fakeClient, Config{
-		TotalPipeline:     "kvm-report-capacity",
+		TotalPipeline:     "kvm-general-purpose-load-balancing",
 		PlaceablePipeline: "kvm-general-purpose",
 	}, newErrScheduler())
 
@@ -666,7 +666,7 @@ func TestReconcileAZ_MarksExistingCRDNotReadyOnSchedulerError(t *testing.T) {
 
 	// Scheduler returns an error to simulate a failed probe.
 	ctrl := newController(t, fakeClient, Config{
-		TotalPipeline:     "kvm-report-capacity",
+		TotalPipeline:     "kvm-general-purpose-load-balancing",
 		PlaceablePipeline: "kvm-general-purpose",
 	}, newErrScheduler())
 
@@ -730,7 +730,7 @@ func TestReconcileAZ_IdempotentUpdate(t *testing.T) {
 	scheduler := newMockSchedulerHosts([]string{"host-1"})
 
 	ctrl := newController(t, fakeClient, Config{
-		TotalPipeline:     "kvm-report-capacity",
+		TotalPipeline:     "kvm-general-purpose-load-balancing",
 		PlaceablePipeline: "kvm-general-purpose",
 	}, scheduler)
 
@@ -771,7 +771,7 @@ func TestReconcileAll_SkipsGroupsWithNoAZs(t *testing.T) {
 		Build()
 
 	ctrl := newController(t, fakeClient, Config{
-		TotalPipeline:     "kvm-report-capacity",
+		TotalPipeline:     "kvm-general-purpose-load-balancing",
 		PlaceablePipeline: "kvm-general-purpose",
 	}, newMockSchedulerHosts(nil)) // scheduler not called (no AZs)
 
@@ -893,7 +893,7 @@ func TestReconcileAll_MultipleGroupsAndAZs(t *testing.T) {
 	scheduler := newMockSchedulerHosts([]string{})
 
 	c := newController(t, fakeClient, Config{
-		TotalPipeline:     "kvm-report-capacity",
+		TotalPipeline:     "kvm-general-purpose-load-balancing",
 		PlaceablePipeline: "kvm-general-purpose",
 	}, scheduler)
 
@@ -943,7 +943,7 @@ func TestReconcileAll_FlavorGroupsKnowledgeNotReady(t *testing.T) {
 		Build()
 
 	c := newController(t, fakeClient, Config{
-		TotalPipeline:     "kvm-report-capacity",
+		TotalPipeline:     "kvm-general-purpose-load-balancing",
 		PlaceablePipeline: "kvm-general-purpose",
 	}, newMockSchedulerHosts(nil)) // scheduler not called (knowledge not ready)
 
@@ -1251,7 +1251,7 @@ func TestComputeVMUsage_ZerosOutWhenAllVMsRemoved(t *testing.T) {
 	vmSource := &mockVMSource{vms: []reservations.VM{}}
 
 	ctrl := NewController(fakeClient, Config{
-		TotalPipeline:     "kvm-report-capacity",
+		TotalPipeline:     "kvm-general-purpose-load-balancing",
 		PlaceablePipeline: "kvm-general-purpose",
 	}, vmSource, scheduler)
 
@@ -1386,7 +1386,7 @@ func TestReconcile_ReactsToKnowledgeChange(t *testing.T) {
 	scheduler := newMockSchedulerHosts([]string{"host-1"})
 
 	r := NewController(fakeClient, Config{
-		TotalPipeline:        "kvm-report-capacity",
+		TotalPipeline:        "kvm-general-purpose-load-balancing",
 		PlaceablePipeline:    "kvm-general-purpose",
 		ReconcileInterval:    metav1.Duration{Duration: 5 * time.Minute},
 		MinReconcileInterval: metav1.Duration{Duration: 30 * time.Second},
@@ -1436,7 +1436,7 @@ func TestReconcile_MinIntervalEarlyReturn(t *testing.T) {
 
 	minInterval := 30 * time.Second
 	r := NewController(fakeClient, Config{
-		TotalPipeline:        "kvm-report-capacity",
+		TotalPipeline:        "kvm-general-purpose-load-balancing",
 		PlaceablePipeline:    "kvm-general-purpose",
 		ReconcileInterval:    metav1.Duration{Duration: 5 * time.Minute},
 		MinReconcileInterval: metav1.Duration{Duration: minInterval},
