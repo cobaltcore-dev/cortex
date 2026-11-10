@@ -158,7 +158,7 @@ func TestNewHostUsageReport(t *testing.T) {
 		}
 	})
 
-	t.Run("ignoreWorkloads skips Used", func(t *testing.T) {
+	t.Run("assumeEmptyHosts skips Used", func(t *testing.T) {
 		hv := hvWithCap(1024, 256)
 		hv.Status.Allocation = map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)}
 		rep := NewHostUsageReport(hv, nil, true)

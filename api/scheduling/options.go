@@ -5,8 +5,6 @@ package scheduling
 
 import (
 	"errors"
-
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 )
 
 // Options configure the behavior of a single pipeline run at call time.
@@ -20,12 +18,10 @@ type Options struct {
 	// AssumeEmptyHosts enables the empty-datacenter view: it ignores both the running
 	// instances on hosts (their allocation) and every reservation, judging hosts purely
 	// by their total capacity. Use it to reason about what a host could hold once fully
-	// cleared. It makes IgnoredReservationTypes redundant.
+	// cleared.
 	AssumeEmptyHosts bool `json:"assume_empty_hosts,omitempty"`
 	// LockReservations prevents reservation unlocking, i.e. considering those as unavailable resources.
 	LockReservations bool `json:"lock_reservations,omitempty"`
-	// IgnoredReservationTypes lists reservation types which get completely ignored by filters/weighers.
-	IgnoredReservationTypes []v1alpha1.ReservationType `json:"ignored_reservation_types,omitempty"`
 
 	// MaxCandidates limits the number of candidates (hosts) returned after weighing. 0 means no limit.
 	MaxCandidates int `json:"max_candidates,omitempty"`

@@ -62,10 +62,10 @@ type HostUsageReport struct {
 // hv.Status.Allocation. A resource that is zero or absent in both capacity maps is
 // dropped. When no resource has non-zero capacity the zero report (nil maps) is returned.
 //
-// ignoreWorkloads, when true, leaves Used empty (the host's running workloads are not
+// assumeEmptyHosts, when true, leaves Used empty (the host's running workloads are not
 // subtracted), judging the host by its total capacity. It does NOT drop reservations:
 // which reservations count is decided by the caller before building the report.
-func NewHostUsageReport(hv hv1.Hypervisor, reservations []v1alpha1.Reservation, ignoreWorkloads bool) HostUsageReport {
+func NewHostUsageReport(hv hv1.Hypervisor, reservations []v1alpha1.Reservation, assumeEmptyHosts bool) HostUsageReport {
 	if hv.Status.EffectiveCapacity == nil && hv.Status.Capacity == nil {
 		return HostUsageReport{}
 	}
@@ -104,7 +104,7 @@ func NewHostUsageReport(hv hv1.Hypervisor, reservations []v1alpha1.Reservation, 
 	if len(rep.Total) == 0 {
 		return HostUsageReport{}
 	}
-	if !ignoreWorkloads {
+	if !assumeEmptyHosts {
 		for name, qty := range hv.Status.Allocation {
 			if _, ok := rep.Used[name]; ok {
 				rep.Used[name] = qty.DeepCopy()

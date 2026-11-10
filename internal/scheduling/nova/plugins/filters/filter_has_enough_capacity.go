@@ -5,7 +5,6 @@ package filters
 
 import (
 	"context"
-	"slices"
 
 	"github.com/go-logr/logr"
 
@@ -20,19 +19,6 @@ import (
 type FilterHasEnoughCapacityOpts struct {
 	// If reserved space should be locked even for matching requests.
 	LockReserved bool `json:"lockReserved"`
-
-	// IgnoredReservationTypes is a list of reservation types to ignore when calculating capacity.
-	// Valid values: "CommittedResourceReservation", "FailoverReservation"
-	// When a reservation type is in this list, its capacity is not blocked.
-	// Default: empty (all reservation types are considered)
-	IgnoredReservationTypes []v1alpha1.ReservationType `json:"ignoredReservationTypes,omitempty"`
-
-	// IgnoreAllocations enables the empty-datacenter view: running VM allocations
-	// (hv.Status.Allocation) are not subtracted AND no reservation of any type blocks,
-	// so hosts are judged purely by their total capacity. Use it to reason about what a
-	// host could hold once fully cleared. (Equivalent to the AssumeEmptyHosts call-time
-	// option.)
-	IgnoreAllocations bool `json:"ignoreAllocations,omitempty"`
 }
 
 func (FilterHasEnoughCapacityOpts) Validate() error { return nil }
@@ -69,9 +55,8 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 	opts := request.GetOptions()
 	result := s.IncludeAllHostsFromRequest(request)
 
-	// Merge call-time options with static step config.
-	ignoreWorkloads := s.Options.IgnoreAllocations || opts.AssumeEmptyHosts
-	ignoredReservationTypes := slices.Concat(s.Options.IgnoredReservationTypes, opts.IgnoredReservationTypes)
+	// Call-time options plus static step config.
+	assumeEmptyHosts := opts.AssumeEmptyHosts
 	lockReserved := s.Options.LockReserved || opts.LockReservations
 
 	hvs := &hv1.HypervisorList{}
@@ -87,18 +72,18 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 	// a failover slot being evacuated/reused by this very VM, or an explicitly ignored
 	// type. Everything else blocks.
 	//
-	// The empty-datacenter view (ignoreWorkloads) drops every reservation unconditionally:
+	// The empty-datacenter view (assumeEmptyHosts) drops every reservation unconditionally:
 	// it asks how much a host could hold once fully cleared, so neither running workloads
 	// nor any reservation count. The reservation list is therefore left empty.
 	var active []v1alpha1.Reservation
-	if !ignoreWorkloads {
+	if !assumeEmptyHosts {
 		var reservations v1alpha1.ReservationList
 		if err := s.Client.List(context.Background(), &reservations); err != nil {
 			return nil, err
 		}
 		active = make([]v1alpha1.Reservation, 0, len(reservations.Items))
 		for _, reservation := range reservations.Items {
-			if s.reservationBlocks(traceLog, request, reservation, ignoredReservationTypes, lockReserved) {
+			if s.reservationBlocks(traceLog, request, reservation, lockReserved) {
 				active = append(active, reservation)
 			}
 		}
@@ -109,7 +94,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 		if _, ok := result.Activations[hv.Name]; !ok {
 			continue
 		}
-		rep := capacity.NewHostUsageReport(hv, active, ignoreWorkloads)
+		rep := capacity.NewHostUsageReport(hv, active, assumeEmptyHosts)
 		if rep.Total == nil {
 			traceLog.V(1).Info("removing host with unknown capacity", "host", hv.Name)
 			delete(result.Activations, hv.Name)
@@ -150,7 +135,6 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 // entitled to the reservation's capacity; otherwise the reservation blocks.
 //
 // The decision mirrors the historical per-type logic:
-//   - An ignored reservation type never blocks.
 //   - An unconfirmed-but-placed reservation (TargetHost/Status.Host set, not Ready) always
 //     blocks — an unconfirmed slot must not be unlocked for anyone.
 //   - A committed-resource slot unlocks for a normal placement whose project and
@@ -162,13 +146,9 @@ func (s *FilterHasEnoughCapacity) reservationBlocks(
 	traceLog logr.Logger,
 	request compute.PlacementRequest,
 	reservation v1alpha1.Reservation,
-	ignoredReservationTypes []v1alpha1.ReservationType,
 	lockReserved bool,
 ) bool {
 
-	if slices.Contains(ignoredReservationTypes, reservation.Spec.Type) {
-		return false
-	}
 	// Not placed yet: nothing to block. Placed-but-not-ready: always block.
 	if !reservation.IsReady() {
 		return reservation.Spec.TargetHost != "" || reservation.Status.Host != ""

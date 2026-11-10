@@ -781,7 +781,7 @@ func (c *Reconciler) markCRDNotReady(ctx context.Context, groupName, az string) 
 }
 
 // probeScheduler calls the scheduler and returns slot count, host count, and candidate host names.
-// ignoreWorkloads=true (total probe) assumes empty hosts: raw effective capacity, ignoring both
+// assumeEmptyHosts=true (total probe) assumes empty hosts: raw effective capacity, ignoring both
 // running instances and all reservations. false (placeable probe) subtracts workloads and lets
 // reservations block.
 func (c *Reconciler) probeScheduler(
@@ -789,7 +789,7 @@ func (c *Reconciler) probeScheduler(
 	flavor knowledge.FlavorInGroup,
 	az, pipeline string,
 	hvByName map[string]hv1.Hypervisor,
-	ignoreWorkloads bool,
+	assumeEmptyHosts bool,
 	blockedByReservations map[string]map[string]int64,
 ) (capacity, hosts int64, candidateHosts []string, err error) {
 
@@ -839,7 +839,7 @@ func (c *Reconciler) probeScheduler(
 		InstanceCapacity:      schedulerapi.CapacityFromVCPUsMemoryMB(flavor.VCPUs, flavor.MemoryMB),
 		Options: scheduling.Options{
 			ReadOnly:                      true,
-			AssumeEmptyHosts:              ignoreWorkloads,
+			AssumeEmptyHosts:              assumeEmptyHosts,
 			SkipInflight:                  true,
 			SkipCommittedResourceTracking: true,
 		},
@@ -854,7 +854,7 @@ func (c *Reconciler) probeScheduler(
 			continue
 		}
 		var resources map[string]int64
-		if ignoreWorkloads {
+		if assumeEmptyHosts {
 			effCap := hv.Status.EffectiveCapacity
 			if effCap == nil {
 				effCap = hv.Status.Capacity
