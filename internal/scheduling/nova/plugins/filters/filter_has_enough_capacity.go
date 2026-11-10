@@ -125,10 +125,23 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 	if err := s.Client.List(context.Background(), &reservations); err != nil {
 		return nil, err
 	}
+	// Per-(VM, host) in-flight rule (ADR 8, UC2): once a VM lands on a host, its
+	// smallest in-flight hold there is already counted in hv.Status.Allocation,
+	// so skip it to avoid double-counting. Compute the skip set per host.
+	skipInFlightByHost := make(map[string]map[string]struct{})
+	for _, hv := range hvs.Items {
+		if skip := inFlightHoldsToSkip(reservations.Items, hv); len(skip) > 0 {
+			skipInFlightByHost[hv.Name] = skip
+		}
+	}
 	for _, reservation := range reservations.Items {
 		// Check if this reservation type should be ignored — applies regardless of ready state.
 		if slices.Contains(ignoredReservationTypes, reservation.Spec.Type) {
 			traceLog.V(1).Info("ignoring reservation type", "type", reservation.Spec.Type, "reservation", reservation.Name)
+			continue
+		}
+		if ownsInFlightHold(request, reservation) {
+			traceLog.V(1).Info("ignoring the request's own in-flight reservation", "reservation", reservation.Name)
 			continue
 		}
 
@@ -234,6 +247,15 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 					"reservation", reservation.Name,
 					"host", host)
 				continue
+			}
+			// Skip the smallest in-flight hold of a VM already landed on this
+			// host; its resources are already in hv.Status.Allocation.
+			if skip, ok := skipInFlightByHost[host]; ok {
+				if _, drop := skip[reservationKey(&reservation)]; drop {
+					traceLog.V(1).Info("skipping in-flight hold already counted in host allocation",
+						"reservation", reservation.Name, "host", host)
+					continue
+				}
 			}
 			if cpu, ok := resourcesToBlock["cpu"]; ok {
 				if freeCPU, exists := freeResourcesByHost[host]["cpu"]; exists {
@@ -351,4 +373,90 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 
 func init() {
 	Index["filter_has_enough_capacity"] = func() NovaFilter { return &FilterHasEnoughCapacity{} }
+}
+
+// ownsInFlightHold reports whether the reservation is an in-flight hold the
+// scheduling request owns itself (same VM) and may therefore skip, rather than
+// count against itself. Nova serializes operations per VM, so a Nova lifecycle
+// request for a VM may ignore that VM's in-flight holds — they belong to the
+// same, now-superseded scheduling of this VM. Cortex-internal requests (e.g.
+// failover scheduling, which also carries the VM uuid) are not serialized by
+// Nova, so the VM's in-flight reservations still block for them.
+func ownsInFlightHold(request compute.PlacementRequest, reservation v1alpha1.Reservation) bool {
+	spec := reservation.Spec.InFlightReservation
+	if reservation.Spec.Type != v1alpha1.ReservationTypeInFlight || spec == nil || spec.VMID != request.InstanceUUID {
+		return false
+	}
+	// An unset intent means initial placement, which is a Nova lifecycle request.
+	return request.Intent == "" || slices.Contains(api.NovaIntents, request.Intent)
+}
+
+// reservationKey uniquely identifies a reservation across namespaces, so a
+// reservation can be matched against the skip set while iterating.
+func reservationKey(res *v1alpha1.Reservation) string {
+	return res.Namespace + "/" + res.Name
+}
+
+// inFlightHoldsToSkip returns the in-flight reservations whose block must NOT be
+// counted on host hv, to avoid double-counting a landed VM (ADR 8, UC2).
+//
+// Once a VM lands on a host, that host's Status.Allocation already includes the
+// VM, but the in-flight hold for the same VM/host (kept until the owning
+// operation completes) would be subtracted again. For each VM present in
+// hv.Status.Instances with Active=true, the smallest of that VM's in-flight
+// holds on this host is skipped; all other holds (e.g. the larger target hold of
+// a resize, or a sibling candidate on another host) are still counted in full.
+//
+// Only in-flight reservations targeting hv (via Spec.TargetHost or Status.Host)
+// are considered. The result is keyed by reservationKey.
+func inFlightHoldsToSkip(allReservations []v1alpha1.Reservation, hv hv1.Hypervisor) map[string]struct{} {
+	activeVMs := make(map[string]struct{})
+	for _, inst := range hv.Status.Instances {
+		if inst.Active {
+			activeVMs[inst.ID] = struct{}{}
+		}
+	}
+	if len(activeVMs) == 0 {
+		return nil
+	}
+	holdsByVM := make(map[string][]*v1alpha1.Reservation)
+	for i := range allReservations {
+		res := &allReservations[i]
+		spec := res.Spec.InFlightReservation
+		if res.Spec.Type != v1alpha1.ReservationTypeInFlight || spec == nil {
+			continue
+		}
+		if res.Spec.TargetHost != hv.Name && res.Status.Host != hv.Name {
+			continue
+		}
+		if _, active := activeVMs[spec.VMID]; !active {
+			continue
+		}
+		holdsByVM[spec.VMID] = append(holdsByVM[spec.VMID], res)
+	}
+	skip := make(map[string]struct{}, len(holdsByVM))
+	for _, holds := range holdsByVM {
+		smallest := holds[0]
+		for _, res := range holds[1:] {
+			if inFlightHoldLess(res, smallest) {
+				smallest = res
+			}
+		}
+		skip[reservationKey(smallest)] = struct{}{}
+	}
+	return skip
+}
+
+// inFlightHoldLess orders in-flight holds by memory then CPU (ascending), with
+// name as a stable final tiebreak so the skipped hold is deterministic.
+func inFlightHoldLess(a, b *v1alpha1.Reservation) bool {
+	am, bm := a.Spec.Resources[hv1.ResourceMemory], b.Spec.Resources[hv1.ResourceMemory]
+	if c := am.Cmp(bm); c != 0 {
+		return c < 0
+	}
+	ac, bc := a.Spec.Resources[hv1.ResourceCPU], b.Spec.Resources[hv1.ResourceCPU]
+	if c := ac.Cmp(bc); c != 0 {
+		return c < 0
+	}
+	return a.Name < b.Name
 }

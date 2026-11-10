@@ -368,6 +368,29 @@ func TestHostFreeCapacity(t *testing.T) {
 			t.Errorf("expected 512 GiB, got %d", freeMemGiB(free))
 		}
 	})
+
+	t.Run("in-flight reservation is counted like any other reservation", func(t *testing.T) {
+		// Current behavior (see TODO in accounting.go): in-flight holds are not
+		// skipped, so they block capacity on their target host just like a CR slot.
+		hv := hvWithCap("host", 1024, 256)
+		inflight := v1alpha1.Reservation{
+			ObjectMeta: metav1.ObjectMeta{Name: "inflight-1"},
+			Spec: v1alpha1.ReservationSpec{
+				Type:                v1alpha1.ReservationTypeInFlight,
+				TargetHost:          "host",
+				Resources:           map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512), hv1.ResourceCPU: cpu(128)},
+				InFlightReservation: &v1alpha1.InFlightReservationSpec{VMID: "vm-1"},
+			},
+		}
+		free := HostFreeCapacity([]v1alpha1.Reservation{inflight}, hv)
+		// 1024 - 512 (in-flight hold) = 512 GiB; 256 - 128 = 128 CPU.
+		if freeMemGiB(free) != 512 {
+			t.Errorf("expected 512 GiB free (in-flight hold blocks), got %d", freeMemGiB(free))
+		}
+		if freeCPU(free) != 128 {
+			t.Errorf("expected 128 CPU free (in-flight hold blocks), got %d", freeCPU(free))
+		}
+	})
 }
 
 func TestHostHasCapacityForReservation(t *testing.T) {
@@ -513,6 +536,28 @@ func TestHostHasCapacityForReservation(t *testing.T) {
 						},
 					},
 					Status: v1alpha1.ReservationStatus{Host: "host-new"},
+				},
+			},
+			wantFits: false,
+		},
+		{
+			// Current behavior (see TODO in accounting.go): in-flight holds are
+			// counted like any other reservation, so they block the host.
+			name: "in-flight reservation on the host blocks capacity",
+			hv:   hvWithCapacity("host-new", 480, 40),
+			res:  resWithSlot("res-target", "host-old", 480, 40),
+			others: []v1alpha1.Reservation{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "inflight-blocker"},
+					Spec: v1alpha1.ReservationSpec{
+						Type:       v1alpha1.ReservationTypeInFlight,
+						TargetHost: "host-new",
+						Resources: map[hv1.ResourceName]resource.Quantity{
+							hv1.ResourceMemory: gib(480),
+							hv1.ResourceCPU:    cpu(40),
+						},
+						InFlightReservation: &v1alpha1.InFlightReservationSpec{VMID: "vm-1"},
+					},
 				},
 			},
 			wantFits: false,
