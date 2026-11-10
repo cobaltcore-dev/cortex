@@ -361,14 +361,6 @@ const (
 	// drain controller once the reserved host is empty and ready to accept
 	// evacuations.
 	ReasonFailoverHostDrained = "HostDrained"
-
-	// ReasonFailoverHostReoccupied is the FailoverHostActive=False reason set by
-	// the drain controller when a virtual machine appears on an active,
-	// not-yet-in-use failover host. The filter pipeline should keep ordinary
-	// workloads off the host, so this is an invariant violation: the controller
-	// demotes the reservation back to draining to evict the squatter and restore
-	// an empty landing zone.
-	ReasonFailoverHostReoccupied = "HostReoccupied"
 )
 
 // ReservationStatus defines the observed state of Reservation.

@@ -35,9 +35,9 @@ type Monitor struct {
 	reservationsDeleted prometheus.Counter
 	reservationsErrors  *prometheus.CounterVec
 
-	drainsCreated        prometheus.Counter
-	drainHostReoccupied  prometheus.Counter
-	reservationsDraining prometheus.Gauge
+	drainsCreated          prometheus.Counter
+	reservationsDraining   prometheus.Gauge
+	reservationsReoccupied prometheus.Gauge
 }
 
 // calculationSummary holds the statistics of a single calculation-loop pass,
@@ -106,13 +106,13 @@ func NewMonitor() *Monitor {
 			Name: "cortex_failover_host_drains_created_total",
 			Help: "Total number of drain reschedulings created by the failover host drain controller since pod restart",
 		}),
-		drainHostReoccupied: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "cortex_failover_host_drain_host_reoccupied_total",
-			Help: "Total number of times an active failover host was found occupied by a virtual machine and demoted back to draining since pod restart",
-		}),
 		reservationsDraining: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "cortex_failover_host_reservations_draining",
 			Help: "Number of failover host reservations currently draining (present but not yet FailoverHostActive) at the last drain reconcile",
+		}),
+		reservationsReoccupied: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "cortex_failover_host_reservations_reoccupied",
+			Help: "Number of active, not-in-use failover host reservations whose host has a virtual machine on it at the last drain reconcile; a filter-pipeline leak the controller does not auto-correct",
 		}),
 	}
 	// Pre-initialize the labelled series so they appear at zero before the first
@@ -126,7 +126,6 @@ func NewMonitor() *Monitor {
 	m.reservationsErrors.WithLabelValues("drain_create")
 	m.reservationsErrors.WithLabelValues("drain_delete")
 	m.reservationsErrors.WithLabelValues("drain_mark_active")
-	m.reservationsErrors.WithLabelValues("drain_demote")
 	return m
 }
 
@@ -202,15 +201,6 @@ func (m *Monitor) RecordDrainCreated() {
 	m.drainsCreated.Inc()
 }
 
-// RecordDrainHostReoccupied records an active failover host found occupied by a
-// virtual machine and demoted back to draining.
-func (m *Monitor) RecordDrainHostReoccupied() {
-	if m == nil {
-		return
-	}
-	m.drainHostReoccupied.Inc()
-}
-
 // SetReservationsDraining sets the gauge of failover host reservations currently
 // draining (present but not yet Active).
 func (m *Monitor) SetReservationsDraining(n int) {
@@ -218,6 +208,16 @@ func (m *Monitor) SetReservationsDraining(n int) {
 		return
 	}
 	m.reservationsDraining.Set(float64(n))
+}
+
+// SetReservationsReoccupied sets the gauge of active, not-in-use failover host
+// reservations whose host has a virtual machine on it — a filter-pipeline leak
+// the controller does not auto-correct.
+func (m *Monitor) SetReservationsReoccupied(n int) {
+	if m == nil {
+		return
+	}
+	m.reservationsReoccupied.Set(float64(n))
 }
 
 // Describe implements prometheus.Collector.
@@ -235,8 +235,8 @@ func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
 	m.reservationsDeleted.Describe(ch)
 	m.reservationsErrors.Describe(ch)
 	m.drainsCreated.Describe(ch)
-	m.drainHostReoccupied.Describe(ch)
 	m.reservationsDraining.Describe(ch)
+	m.reservationsReoccupied.Describe(ch)
 }
 
 // Collect implements prometheus.Collector.
@@ -254,6 +254,6 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	m.reservationsDeleted.Collect(ch)
 	m.reservationsErrors.Collect(ch)
 	m.drainsCreated.Collect(ch)
-	m.drainHostReoccupied.Collect(ch)
 	m.reservationsDraining.Collect(ch)
+	m.reservationsReoccupied.Collect(ch)
 }

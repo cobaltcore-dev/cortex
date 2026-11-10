@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	vmv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -157,8 +158,8 @@ func TestDrainReconcile(t *testing.T) {
 			objs: []client.Object{readyHV(), occupant()}, wantDeleted: true},
 		{name: "active with empty host stays active", res: active,
 			objs: []client.Object{readyHV()}, wantActive: true},
-		{name: "active but reoccupied demotes to draining", res: active,
-			objs: []client.Object{readyHV(), occupant()}, wantActive: false},
+		{name: "active but reoccupied stays active (no re-drain)", res: active,
+			objs: []client.Object{readyHV(), occupant()}, wantActive: true},
 		{name: "active and in use is sticky with VMs present", res: activeInUse,
 			objs: []client.Object{readyHV(), occupant()}, wantActive: true},
 		{name: "non failover host reservation is ignored", res: inFlight,
@@ -277,41 +278,62 @@ func TestDrainEndToEnd(t *testing.T) {
 	}
 }
 
-// TestDrainReoccupiedRestartsDraining covers the invariant-violation path: a VM
-// lands on an Active, not-in-use failover host (the filter should have blocked
-// it). The controller must demote the reservation back to draining and, on the
-// next pass, create a fresh drain to evict the squatter.
-func TestDrainReoccupiedRestartsDraining(t *testing.T) {
+// TestDrainReoccupiedStaysActive covers the invariant-violation path: a VM lands
+// on an Active, not-in-use failover host (the filter should have blocked it). The
+// controller must NOT re-drain it — re-draining could migrate a genuine evacuee
+// off its rescue host on a stale in-use read — but must flag it in the
+// reoccupied gauge so an alert can escalate. An in-use host is excluded from the
+// gauge, as a gang evacuation legitimately holds VMs there.
+func TestDrainReoccupiedStaysActive(t *testing.T) {
 	ctx := context.Background()
 	active := freshReservation()
 	meta.SetStatusCondition(&active.Status.Conditions, metav1.Condition{
 		Type: v1alpha1.ConditionTypeFailoverHostActive, Status: metav1.ConditionTrue, Reason: v1alpha1.ReasonFailoverHostDrained,
 	})
+	m := NewMonitor()
 	c := &DrainController{
 		Client:  newTestClient(t, readyHV(), active, buildVM("squatter", "hv1", "ACTIVE")),
 		Config:  drainConfig(),
-		Monitor: NewMonitor(),
+		Monitor: m,
 	}
 	req := reconcileReq("failover-host-hv1")
-
-	// Pass 1: the active host is occupied -> demote back to draining, no drain yet.
 	if _, err := c.Reconcile(ctx, req); err != nil {
-		t.Fatalf("pass 1: %v", err)
+		t.Fatalf("reconcile: %v", err)
 	}
 	res := getDrainReservation(t, c, "failover-host-hv1")
-	cond := meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive)
-	if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != v1alpha1.ReasonFailoverHostReoccupied {
-		t.Fatalf("pass 1: expected Active=False reason=%s, got %+v", v1alpha1.ReasonFailoverHostReoccupied, cond)
+	if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive) {
+		t.Fatalf("expected reservation to stay Active, got %+v",
+			meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive))
 	}
 	if drains := listDrains(t, c); len(drains) != 0 {
-		t.Fatalf("pass 1: expected no drain yet, got %d", len(drains))
+		t.Fatalf("expected no drain created, got %d", len(drains))
 	}
+	if got := testutil.ToFloat64(m.reservationsReoccupied); got != 1 {
+		t.Fatalf("reservationsReoccupied = %v, want 1", got)
+	}
+}
 
-	// Pass 2: now draining and still occupied -> a drain is created.
-	if _, err := c.Reconcile(ctx, req); err != nil {
-		t.Fatalf("pass 2: %v", err)
+// TestDrainReoccupiedInUseNotFlagged confirms an in-use Active host with a VM is
+// not counted as reoccupied: the VM is a legitimate evacuee.
+func TestDrainReoccupiedInUseNotFlagged(t *testing.T) {
+	ctx := context.Background()
+	res := freshReservation()
+	meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+		Type: v1alpha1.ConditionTypeFailoverHostActive, Status: metav1.ConditionTrue, Reason: v1alpha1.ReasonFailoverHostDrained,
+	})
+	meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+		Type: v1alpha1.ConditionTypeFailoverHostInUse, Status: metav1.ConditionTrue, Reason: "Evacuating",
+	})
+	m := NewMonitor()
+	c := &DrainController{
+		Client:  newTestClient(t, readyHV(), res, buildVM("evacuee", "hv1", "ACTIVE")),
+		Config:  drainConfig(),
+		Monitor: m,
 	}
-	if drains := listDrains(t, c); len(drains) != 1 {
-		t.Fatalf("pass 2: expected one drain, got %d", len(drains))
+	if _, err := c.Reconcile(ctx, reconcileReq("failover-host-hv1")); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if got := testutil.ToFloat64(m.reservationsReoccupied); got != 0 {
+		t.Fatalf("reservationsReoccupied = %v, want 0", got)
 	}
 }

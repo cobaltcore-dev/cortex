@@ -452,7 +452,6 @@ stateDiagram-v2
     Designated --> Failed: draining fails or takes too long
     Failed --> Designated: cooldown elapses, eligible again
     Active --> InUse: a gang evacuation lands here
-    Active --> Designated: a VM leaked onto the empty host (not in use) → drain again
     InUse --> Used: evacuation complete → host returns to service
     Active --> Revoked: no longer part of any partition
     Designated --> Revoked: no longer part of any partition
@@ -465,10 +464,12 @@ stateDiagram-v2
   `FailoverHostActive` condition rather than a condition of its own: a freshly created reservation is
   Designated by default.
 - **Active** — the host is empty and ready to absorb an evacuation (the `FailoverHostActive` condition is
-  True). Only from here on can an evacuation be routed onto it. An Active reservation is normally sticky, but
-  if a VM appears on it while it is *not* yet In Use — the filter should have kept ordinary placements off it,
-  so this is an invariant violation — the drain controller demotes it back to Designated (`FailoverHostActive`
-  set to False, reason `HostReoccupied`) and drains the squatter off again.
+  True). Only from here on can an evacuation be routed onto it. **Active is sticky: once a host has drained
+  successfully it is never demoted.** If a VM nonetheless appears on an Active, not-in-use host — the filter
+  should have kept ordinary placements off it, so this is an invariant violation — the controller deliberately
+  does *not* re-drain it (a stale in-use read could otherwise migrate a genuine evacuee off its rescue host).
+  Instead it flags the host in the `cortex_failover_host_reservations_reoccupied` gauge so an alert escalates it
+  for manual intervention.
 - **Failed** — draining failed repeatedly or took too long; the host is held back from being re-chosen for a
   cooldown period.
 - **In Use** — a gang evacuation onto this host is underway (and may absorb further failures until it
@@ -490,8 +491,8 @@ its host may still run workload. Advancing it **Designated → Active** is the j
 loop above. The partitioning controller only ever writes a reservation's *spec and labels*; the drain
 controller owns its *status* — the `FailoverHostActive` condition and the deletion of reservations that can no
 longer be made Active. (The Matcher, further down, only ever advances `Active → InUse` and only ever *selects*
-`Active` reservations, so advancing `Designated → Active` — and demoting `Active → Designated` when a VM leaks
-onto a not-in-use host — is exclusively the drain controller's concern.)
+`Active` reservations, so advancing `Designated → Active` is exclusively the drain controller's concern. Active
+is never demoted back to Designated.)
 
 Draining live-migrates workloads around the datacenter, so it is **opt-in and off by default**: when the
 feature flag is disabled the drain controller is not even started, and no reservation is ever marked Active.
@@ -503,13 +504,14 @@ When enabled, it reconciles each failover host reservation like so:
   reconciliation finishes. The controller watches the VMs, so any VM starting or stopping to occupy a host —
   being placed, migrating away, being pruned or reaching Nova status `DELETED` — re-evaluates that host's
   reservation right away.
-- **Did a VM leak onto an already-Active host?** An Active reservation is normally left untouched — once Active
-  it may legitimately receive inbound VMs from a gang evacuation (`InUse`), and flipping it back would break
-  that. But a VM on an Active reservation that is *not* In Use is an anomaly: the `filter_failover_host` filter
-  is supposed to keep ordinary placements off reserved hosts. When that happens the controller demotes the
-  reservation back to Designated (`FailoverHostActive=False`, reason `HostReoccupied`) and increments
-  `cortex_failover_host_drain_host_reoccupied_total`; the normal drain path then evicts the squatter and the
-  host drains back to empty.
+- **Did a VM leak onto an already-Active host?** An Active reservation is left Active — once Active it may
+  legitimately receive inbound VMs from a gang evacuation (`InUse`), and the controller never demotes it. A VM
+  on an Active reservation that is *not* In Use is an anomaly: the `filter_failover_host` filter is supposed to
+  keep ordinary placements off reserved hosts. The controller does **not** re-drain such a host — re-draining
+  could migrate a genuine evacuee off its rescue host if an in-use write had not yet propagated to the
+  controller's cache. Instead it counts the host in the `cortex_failover_host_reservations_reoccupied` gauge
+  (in-use hosts excluded, as they legitimately hold evacuees), which an alert escalates for manual intervention:
+  move the squatting VM off and investigate why the filter let it land.
 - **If not, drain it.** The controller creates a `Rescheduling` with the `drain` action targeting the host; the
   rescheduler live-migrates the workloads away. Only the *inbound* reservation already blocks the host, so the
   drain does not take a second, independent host-block (`reserve: false`). **At most one failover host drain

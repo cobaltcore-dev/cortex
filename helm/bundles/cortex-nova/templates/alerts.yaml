@@ -1098,14 +1098,18 @@ spec:
           reserves anything (a partition of fewer than two hosts reserves nothing) and the
           failover host calculation loop is healthy.
     - alert: CortexNovaFailoverHostReoccupied
-      # The drain controller demotes an Active failover host back to draining
-      # whenever a virtual machine appears on it without an evacuation claiming it.
-      # The filter pipeline is supposed to keep ordinary workloads off reserved
-      # hosts, so any demotion is an invariant violation: a VM leaked onto a
-      # drained landing zone. The controller self-heals by re-draining, but a
-      # recurring signal means the filter is not blocking placement as intended.
-      expr: increase(cortex_failover_host_drain_host_reoccupied_total{service="cortex-nova-metrics"}[15m]) > 0
-      for: 5m
+      # reservations_reoccupied counts Active, not-in-use failover host
+      # reservations whose host has a virtual machine on it. The filter pipeline
+      # is supposed to keep ordinary workloads off reserved hosts, so any such VM
+      # is an invariant violation: a VM leaked onto a drained landing zone, which
+      # now provides no usable failover capacity. The drain controller deliberately
+      # does NOT auto-correct this (re-draining could migrate a genuine evacuee off
+      # its rescue host on a stale read), so it must be escalated. In-use hosts are
+      # excluded from the gauge, as a gang evacuation legitimately holds VMs there.
+      # min_over_time > 0 means at least one host stayed reoccupied the whole
+      # window, i.e. not a transient blip.
+      expr: max(min_over_time(cortex_failover_host_reservations_reoccupied{service="cortex-nova-metrics"}[15m])) > 0
+      for: 15m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
         persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
@@ -1116,15 +1120,17 @@ spec:
         support_group: workload-management
         playbook: ""
       annotations:
-        summary: "Virtual machines are landing on drained failover hosts"
+        summary: "Virtual machines are occupying drained failover hosts"
         description: >
-          The failover host drain controller has had to demote an already-drained,
-          Active failover host back to draining because a virtual machine appeared on
-          it. The failover-host filter is meant to keep ordinary workloads off reserved
-          hosts, so this means placement is leaking onto a reserved landing zone. The
-          controller re-drains automatically, but recurring demotions indicate the
-          filter_failover_host step is disabled, misconfigured, or not seeing the
-          reservation. Check the filter configuration and the drain controller logs.
+          An already-drained, Active failover host has a virtual machine on it that
+          no evacuation claims. The failover-host filter is meant to keep ordinary
+          workloads off reserved hosts, so placement is leaking onto a reserved
+          landing zone — that host now provides no usable failover capacity. The
+          drain controller does not auto-correct this (re-draining could migrate a
+          legitimate evacuee off its rescue host), so investigate: the
+          filter_failover_host step may be disabled, misconfigured, or not seeing
+          the reservation. Check the filter configuration, then move the squatting
+          VM off the reserved host manually. Inspect the drain controller logs.
     - alert: CortexNovaFailoverHostDrainStuck
       # reservations_draining counts failover host reservations that are present
       # but not yet Active (still draining). A transient non-zero value is normal
