@@ -56,8 +56,10 @@ func indexReservationByVMID(obj client.Object) []string {
 // in-flight reservation as the primary resource and, based on the reservation's
 // owner-reference Kind, dispatches to an OwnerHandler that decides when the
 // owning operation is complete. On completion all reservations sharing the same
-// OperationID are released together; a TTL backstop releases reservations whose
-// owning operation never signals completion.
+// OperationID are released together. Terminality is decided by the owner (for
+// Nova, the VirtualMachine CRD); an optional TTL backstop additionally releases
+// a reservation if it carries an EndTime that has passed. Nova-request inflights
+// are created without an effective TTL, so for them the VM CRD is the authority.
 type Controller struct {
 	client.Client
 
@@ -110,9 +112,10 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			"MissingSpec", "In-flight reservation spec is required when type is InFlightReservation")
 	}
 
-	// TTL backstop: if the owning operation never signalled completion and the
-	// reservation outlived its EndTime, emit a metric and release it so an
-	// abandoned operation cannot strand capacity forever.
+	// TTL backstop: release the reservation only if it carries an EndTime that
+	// has passed. This is optional and not the primary cleanup for VM-owned
+	// inflights (those are created without an effective TTL and rely on the VM
+	// CRD); it only guards reservations that opt into a TTL.
 	if expired, err := c.handleTTL(ctx, obj); err != nil || expired {
 		return ctrl.Result{}, err
 	}
@@ -120,9 +123,10 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	handler := c.handlerFor(ctx, obj)
 	if handler == nil {
 		// No handler for this owner kind: we cannot determine terminality, so we
-		// surface it on the status, emit a metric to alert on, and rely on the
-		// TTL backstop for cleanup.
-		log.Info("No owner handler for reservation, awaiting TTL",
+		// surface it on the status and emit a metric to alert on. Cleanup then
+		// only happens if the reservation carries an EndTime the TTL backstop can
+		// act on; otherwise it waits for an operator to intervene.
+		log.Info("No owner handler for reservation",
 			"name", obj.Name, "ownerReferences", obj.OwnerReferences)
 		c.Monitor.RecordAnomaly(AnomalyNoOwnerHandler)
 		return ctrl.Result{}, c.setReadyCondition(ctx, obj, metav1.ConditionUnknown,

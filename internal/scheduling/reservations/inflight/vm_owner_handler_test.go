@@ -141,7 +141,7 @@ func TestVMHandler_TerminalState(t *testing.T) {
 			vm: newVM("vm-1", "host-1", cond(vmv1alpha1.ConditionTypeResizing, metav1.ConditionTrue, vmv1alpha1.ConditionReasonResizingOngoing))},
 		{name: "live migration: ongoing -> wait", intent: novaapi.LiveMigrationIntent,
 			vm: newVM("vm-1", "host-1", cond(vmv1alpha1.ConditionTypeMigrating, metav1.ConditionTrue, vmv1alpha1.ConditionReasonMigratingOngoing))},
-		// No VM CRD -> no terminal signal, keep waiting for the VM CRD or TTL
+		// No VM CRD -> no terminal signal, keep waiting for the VM CRD
 		// (regardless of intent).
 		{name: "no VM CRD: create -> wait", intent: novaapi.CreateIntent},
 		{name: "no VM CRD: resize -> wait", intent: novaapi.ResizeIntent},

@@ -180,7 +180,8 @@ func TestReconcile(t *testing.T) {
 		},
 		{
 			// No VM CRD yet: there is no terminal signal, so the hold is kept and
-			// the controller waits (TTL is the only release for an abandoned op).
+			// the controller waits for the VM CRD (an EndTime would let the TTL
+			// backstop release it, but none is set here).
 			name:            "no VM CRD requeues",
 			objects:         []client.Object{newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.CreateIntent})},
 			wantRequeue:     requeueInterval,
@@ -225,7 +226,8 @@ func TestReconcile(t *testing.T) {
 			wantKept:    []string{"b1"},
 		},
 		{
-			// No VM CRD hosts the VM -> without TTL this would just requeue.
+			// No VM CRD and a past EndTime: the optional TTL backstop releases the
+			// whole group (without an EndTime this would just requeue).
 			name: "TTL expiry releases operation group",
 			objects: []client.Object{
 				newInFlightReservation("res-1", "vm-uuid-1", "host-1", expiredA),
@@ -241,7 +243,7 @@ func TestReconcile(t *testing.T) {
 		},
 		{
 			// Live migration with a VM CRD that reports an ongoing migration: the
-			// holds are kept until the migration settles or the TTL backstop fires.
+			// holds are kept until the migration settles.
 			name: "non-create: live migration ongoing is kept",
 			objects: []client.Object{
 				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.LiveMigrationIntent, resources: cpu4}),

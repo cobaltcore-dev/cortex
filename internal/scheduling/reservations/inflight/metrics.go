@@ -10,9 +10,9 @@ import (
 
 // Monitor holds Prometheus metrics for the in-flight reservation controller.
 type Monitor struct {
-	// ttlExpiriesVec counts in-flight reservations released because they
-	// exceeded their TTL without the owning operation signalling completion,
-	// labeled by scheduling intent.
+	// ttlExpiriesVec counts in-flight reservations released by the optional TTL
+	// backstop because they carried an EndTime that passed before the owning
+	// operation signalled completion, labeled by scheduling intent.
 	ttlExpiriesVec *prometheus.CounterVec
 	// anomaliesVec counts reconcile anomalies worth alerting on, labeled by a
 	// stable reason (e.g. no_owner_handler, ambiguous_owner). Alert on any
@@ -33,7 +33,7 @@ func NewMonitor(reg prometheus.Registerer) *Monitor {
 		ttlExpiriesVec: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "cortex_inflight_reservation_ttl_expired_total",
-				Help: "Total number of in-flight reservations released after exceeding their TTL",
+				Help: "Total number of in-flight reservations released by the TTL backstop after their EndTime passed",
 			},
 			[]string{"intent"},
 		),

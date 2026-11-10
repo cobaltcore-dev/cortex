@@ -187,9 +187,11 @@ const (
 //
 //  2. Per-intent terminal condition on the VirtualMachine CRD: the reservation
 //     is released once the operation reaches a terminal state for its intent
-//     (see terminalForIntent). The VM CRD is required; while it is absent or
-//     does not yet carry a decisive condition, the hold is kept and only the
-//     TTL backstop in the reconcile loop releases it.
+//     (see terminalForIntent). The VM CRD is required and is the authority;
+//     while it is absent or does not yet carry a decisive condition, the hold is
+//     kept. An optional TTL backstop in the reconcile loop may release the hold
+//     if the reservation carries an EndTime, but Nova inflights are created
+//     without an effective TTL.
 //
 // Nova serializes its own operations per VM (see the controller docs): when
 // Cortex receives a Nova scheduling request for a VM, no other Nova operation on
@@ -217,16 +219,16 @@ func (h *VirtualMachineHandler) TerminalState(ctx context.Context, res *v1alpha1
 	}
 
 	// Read the VM CRD (named after the Nova instance uuid) to evaluate the
-	// per-intent terminal condition. The VM CRD is required: without it there is
-	// no trustworthy terminal signal, so we keep the hold and let the TTL
-	// backstop release it if the operation is abandoned.
+	// per-intent terminal condition. The VM CRD is required and is the authority:
+	// without it there is no trustworthy terminal signal, so we keep the hold and
+	// wait for it (an optional TTL backstop only acts if an EndTime is set).
 	vm := &vmv1alpha1.VirtualMachine{}
 	err = h.Get(ctx, client.ObjectKey{Name: spec.VMID}, vm)
 	switch {
 	case apierrors.IsNotFound(err):
-		log.V(1).Info("VM CRD not found for in-flight reservation, awaiting it or TTL", "vmID", spec.VMID)
+		log.V(1).Info("VM CRD not found for in-flight reservation, awaiting it", "vmID", spec.VMID)
 		return TerminalResult{RequeueAfter: requeueInterval, Reason: reasonAwaitingPlacement,
-			Message: "VM CRD not yet observed; awaiting terminal condition or TTL"}, nil
+			Message: "VM CRD not yet observed; awaiting terminal condition"}, nil
 	case err != nil:
 		return TerminalResult{}, err
 	}
@@ -235,8 +237,7 @@ func (h *VirtualMachineHandler) TerminalState(ctx context.Context, res *v1alpha1
 		return result, nil
 	}
 	// The VM CRD exists but does not yet carry a decisive condition for this
-	// intent. Keep waiting; the TTL backstop guards against a signal that never
-	// comes.
+	// intent. Keep waiting for the vm-operator to report a terminal condition.
 	return TerminalResult{RequeueAfter: requeueInterval, Reason: reasonAwaitingPlacement,
 		Message: "VM CRD does not yet carry a terminal condition"}, nil
 }
@@ -277,9 +278,9 @@ func (h *VirtualMachineHandler) terminalForIntent(res *v1alpha1.Reservation, vm 
 	case novaapi.ResizeIntent:
 		// UC2 resize: an unmanaged-source resize (e.g. VMware → KVM) has no KVM
 		// source hold, so the vm-operator never writes a Resizing condition for
-		// it. Release such a group on landing plus alive, and never on failure
-		// (the TTL backstops a failed resize). A KVM-source resize keeps the
-		// condition-based release below.
+		// it. Release such a group on landing plus alive, and never on failure (a
+		// failed resize is left for the optional TTL backstop or operator). A
+		// KVM-source resize keeps the condition-based release below.
 		if res.Labels[LabelInFlightSource] == LabelInFlightSourceUnmanaged {
 			placed := vm.Status.Host != nil && vm.Status.Host.Name != ""
 			running := meta.IsStatusConditionTrue(vm.Status.Conditions, vmv1alpha1.ConditionTypeRunning)
@@ -309,7 +310,8 @@ func (h *VirtualMachineHandler) terminalForIntent(res *v1alpha1.Reservation, vm 
 
 	default:
 		// Other intents (rebuild, evacuate, ...) have no dedicated condition
-		// yet; keep the hold and let the TTL backstop release it.
+		// yet; keep the hold pending a future condition (the optional TTL
+		// backstop only acts if an EndTime is set).
 		return TerminalResult{}, false
 	}
 }
@@ -323,9 +325,8 @@ func (h *VirtualMachineHandler) terminalForIntent(res *v1alpha1.Reservation, vm 
 // reservation was created no other Nova operation on the VM was in flight; a
 // terminal condition that transitioned *before* this reservation existed
 // therefore describes a previous operation and must not release the freshly
-// created holds. In that stale case we keep waiting (the vm-operator will
-// transition the condition for the current operation), with the TTL backstop
-// guarding against a signal that never comes.
+// created holds. In that stale case we keep waiting for the vm-operator to
+// transition the condition for the current operation.
 //
 // When Done is false the result carries the waiting reason/message.
 func terminalByReason(createdAt metav1.Time, conditions []metav1.Condition, condType, waitReason, waitMessage string, terminalReasons ...string) (TerminalResult, bool) {
@@ -343,8 +344,8 @@ func terminalByReason(createdAt metav1.Time, conditions []metav1.Condition, cond
 // created, i.e. the condition reflects a previous operation rather than the one
 // this reservation belongs to. A zero LastTransitionTime is treated as stale:
 // without a trustworthy transition time we cannot attribute the terminal signal
-// to the current operation, so we conservatively wait for the TTL backstop
-// rather than risk releasing holds early.
+// to the current operation, so we conservatively keep waiting rather than risk
+// releasing holds early.
 func conditionIsStale(cond *metav1.Condition, createdAt metav1.Time) bool {
 	if cond.LastTransitionTime.IsZero() {
 		return true
