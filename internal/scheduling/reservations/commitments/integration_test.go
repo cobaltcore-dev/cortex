@@ -1388,7 +1388,7 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 			placedSlots = append(placedSlots, r)
 		}
 	}
-	rep := capacity.NewHostUsageReport(*hv, placedSlots, false)
+	rep := capacity.NewHostUsageReport(*hv, placedSlots)
 	for rn, excess := range rep.Oversubscribed {
 		if excess.Sign() > 0 {
 			t.Errorf("host still over-subscribed for %s by %s after remediation", rn, excess.String())

@@ -74,7 +74,8 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 	//
 	// The empty-datacenter view (assumeEmptyHosts) drops every reservation unconditionally:
 	// it asks how much a host could hold once fully cleared, so neither running workloads
-	// nor any reservation count. The reservation list is therefore left empty.
+	// nor any reservation count. The reservation list is therefore left empty and the
+	// host's allocation is zeroed below.
 	var active []v1alpha1.Reservation
 	if !assumeEmptyHosts {
 		var reservations v1alpha1.ReservationList
@@ -94,12 +95,15 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 		if _, ok := result.Activations[hv.Name]; !ok {
 			continue
 		}
-		rep := capacity.NewHostUsageReport(hv, active, assumeEmptyHosts)
+		rep := capacity.NewHostUsageReport(hv, active)
 		if rep.Total == nil {
 			traceLog.V(1).Info("removing host with unknown capacity", "host", hv.Name)
 			delete(result.Activations, hv.Name)
 			continue
 		}
+		// Failover-host reservations are kept off these hosts by filter_failover_host, not
+		// by capacity, so exclude them from the fit check (they still appear in the
+		// report's per-type Reserved breakdown for observability).
 		if !rep.Fits(request.TotalCapacityDemand()) {
 			traceLog.V(1).Info("filtering host due to insufficient capacity",
 				"host", hv.Name,
@@ -185,6 +189,9 @@ func (s *FilterHasEnoughCapacity) reservationBlocks(
 			return false
 		}
 		return true
+	case v1alpha1.ReservationTypeFailoverHost:
+		// Failover-host reservations are handled by the dedicated filter, so this filter does not block them.
+		return false
 	}
 	return true
 }

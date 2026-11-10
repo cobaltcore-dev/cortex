@@ -81,7 +81,7 @@ func (k *KVMHostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	for _, hypervisor := range hypervisors {
-		rep := capacity.NewHostUsageReport(hypervisor.Hypervisor, reservations, false)
+		rep := capacity.NewHostUsageReport(hypervisor.Hypervisor, reservations)
 		if _, hasCPU := rep.Total[hv1.ResourceCPU]; !hasCPU {
 			log.V(1).Info("hypervisor missing cpu or ram capacity, skipping", "host", hypervisor.Name)
 			continue
@@ -102,13 +102,15 @@ func (k *KVMHostCapacityKPI) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(k.capacityPerHost, prometheus.GaugeValue, cpuUsed.AsApproximateFloat64(), append(labels, "cpu", "utilized")...)
 		ch <- prometheus.MustNewConstMetric(k.capacityPerHost, prometheus.GaugeValue, ramUsed.AsApproximateFloat64(), append(labels, "ram", "utilized")...)
 
-		cpuReserved := rep.Reserved[hv1.ResourceCPU]
-		ramReserved := rep.Reserved[hv1.ResourceMemory]
+		reserved := rep.ReservedTotal(v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeInFlight)
+		cpuReserved := reserved[hv1.ResourceCPU]
+		ramReserved := reserved[hv1.ResourceMemory]
 		ch <- prometheus.MustNewConstMetric(k.capacityPerHost, prometheus.GaugeValue, cpuReserved.AsApproximateFloat64(), append(labels, "cpu", "reserved")...)
 		ch <- prometheus.MustNewConstMetric(k.capacityPerHost, prometheus.GaugeValue, ramReserved.AsApproximateFloat64(), append(labels, "ram", "reserved")...)
 
-		cpuFailover := rep.Failover[hv1.ResourceCPU]
-		ramFailover := rep.Failover[hv1.ResourceMemory]
+		failover := rep.ReservedTotal(v1alpha1.ReservationTypeFailover, v1alpha1.ReservationTypeFailoverHost)
+		cpuFailover := failover[hv1.ResourceCPU]
+		ramFailover := failover[hv1.ResourceMemory]
 		ch <- prometheus.MustNewConstMetric(k.capacityPerHost, prometheus.GaugeValue, cpuFailover.AsApproximateFloat64(), append(labels, "cpu", "failover")...)
 		ch <- prometheus.MustNewConstMetric(k.capacityPerHost, prometheus.GaugeValue, ramFailover.AsApproximateFloat64(), append(labels, "ram", "failover")...)
 

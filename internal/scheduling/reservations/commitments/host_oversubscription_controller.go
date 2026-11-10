@@ -268,7 +268,7 @@ func (r *HostOversubscriptionController) SetupWithManager(mgr ctrl.Manager, mcl 
 // computeViolations returns the per-resource excess (positive quantity) for any resource where
 // the host is over-subscribed. Returns nil if capacity data is unavailable, empty map if no violation.
 func computeViolations(allReservations []v1alpha1.Reservation, hv hv1.Hypervisor) map[hv1.ResourceName]resource.Quantity {
-	rep := capacity.NewHostUsageReport(hv, allReservations, false)
+	rep := capacity.NewHostUsageReport(hv, allReservations)
 	if rep.Oversubscribed == nil {
 		return nil // no capacity data
 	}
@@ -331,7 +331,7 @@ func selectEvictionTarget(
 		}
 		entries := make([]allocatedEntry, len(allocated))
 		for i, res := range allocated {
-			unusedCap := capacity.RemainingReservation(*res)
+			unusedCap := capacity.ReservationEffectivelyBlockedCapacity(*res)
 			buckets := make(map[hv1.ResourceName]int64)
 			for rn, total := range res.Spec.Resources {
 				if t := total.Value(); t != 0 {
@@ -379,7 +379,7 @@ func evictReservation(
 
 	logger := LoggerFromContext(ctx).WithValues("component", "host-oversubscription", "reservation", res.Name)
 
-	freed := capacity.RemainingReservation(*res)
+	freed := capacity.ReservationEffectivelyBlockedCapacity(*res)
 
 	old := res.DeepCopy()
 	res.Spec.TargetHost = ""
