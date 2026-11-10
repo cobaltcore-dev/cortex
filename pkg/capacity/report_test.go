@@ -80,10 +80,9 @@ func TestRemainingReservation(t *testing.T) {
 	}
 
 	tests := []struct {
-		name              string
-		res               v1alpha1.Reservation
-		ignoreAllocations bool
-		wantMemGiB        int64
+		name       string
+		res        v1alpha1.Reservation
+		wantMemGiB int64
 	}{
 		{
 			name:       "failover: full slot blocked",
@@ -115,16 +114,10 @@ func TestRemainingReservation(t *testing.T) {
 			res:        crWithAllocations(480, 240),
 			wantMemGiB: 240,
 		},
-		{
-			name:              "CR ignoreAllocations: full slot blocked despite confirmed VMs",
-			res:               crWithAllocations(480, 480),
-			ignoreAllocations: true,
-			wantMemGiB:        480,
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := memBytes(RemainingReservation(tt.res, tt.ignoreAllocations)) / (1024 * 1024 * 1024)
+			got := memBytes(RemainingReservation(tt.res)) / (1024 * 1024 * 1024)
 			if got != tt.wantMemGiB {
 				t.Errorf("RemainingReservation() memory = %d GiB, want %d", got, tt.wantMemGiB)
 			}
@@ -135,7 +128,7 @@ func TestRemainingReservation(t *testing.T) {
 		res := crWithAllocations(480, 480)
 		res.Spec.TargetHost = "new-host"
 		res.Status.Host = "old-host"
-		if got := memBytes(RemainingReservation(res, false)) / (1024 * 1024 * 1024); got != 480 {
+		if got := memBytes(RemainingReservation(res)) / (1024 * 1024 * 1024); got != 480 {
 			t.Errorf("expected full 480 GiB blocked mid-migration, got %d", got)
 		}
 	})
@@ -165,7 +158,7 @@ func TestNewHostUsageReport(t *testing.T) {
 		}
 	})
 
-	t.Run("ignoreAllocations skips Used", func(t *testing.T) {
+	t.Run("ignoreWorkloads skips Used", func(t *testing.T) {
 		hv := hvWithCap(1024, 256)
 		hv.Status.Allocation = map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: gib(512)}
 		rep := NewHostUsageReport(hv, nil, true)

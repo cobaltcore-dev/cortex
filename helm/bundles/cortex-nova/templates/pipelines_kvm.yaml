@@ -732,11 +732,10 @@ spec:
     - name: filter_has_enough_capacity
       description: |
         Filters hosts that cannot fit the flavor based on raw hardware capacity.
-        VM allocations and all reservation types are ignored to represent an
-        empty datacenter scenario.
+        ignoreAllocations enables the empty-datacenter view: VM allocations and all
+        reservation types are ignored.
       params:
         - {key: ignoreAllocations, boolValue: true}
-        - {key: ignoredReservationTypes, stringListValue: ["CommittedResourceReservation", "FailoverReservation", "FailoverHostReservation"]}
     - name: filter_has_requested_traits
       description: |
         Ensures hosts have the hardware traits required by the flavor.

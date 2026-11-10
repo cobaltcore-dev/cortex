@@ -331,7 +331,7 @@ func selectEvictionTarget(
 		}
 		entries := make([]allocatedEntry, len(allocated))
 		for i, res := range allocated {
-			unusedCap := capacity.RemainingReservation(*res, false)
+			unusedCap := capacity.RemainingReservation(*res)
 			buckets := make(map[hv1.ResourceName]int64)
 			for rn, total := range res.Spec.Resources {
 				if t := total.Value(); t != 0 {
@@ -379,7 +379,7 @@ func evictReservation(
 
 	logger := LoggerFromContext(ctx).WithValues("component", "host-oversubscription", "reservation", res.Name)
 
-	freed := capacity.RemainingReservation(*res, false)
+	freed := capacity.RemainingReservation(*res)
 
 	old := res.DeepCopy()
 	res.Spec.TargetHost = ""

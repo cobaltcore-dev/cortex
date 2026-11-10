@@ -27,8 +27,11 @@ type FilterHasEnoughCapacityOpts struct {
 	// Default: empty (all reservation types are considered)
 	IgnoredReservationTypes []v1alpha1.ReservationType `json:"ignoredReservationTypes,omitempty"`
 
-	// IgnoreAllocations skips subtracting current VM allocations from host capacity.
-	// When true, only raw hardware capacity is considered (empty datacenter scenario).
+	// IgnoreAllocations enables the empty-datacenter view: running VM allocations
+	// (hv.Status.Allocation) are not subtracted AND no reservation of any type blocks,
+	// so hosts are judged purely by their total capacity. Use it to reason about what a
+	// host could hold once fully cleared. (Equivalent to the AssumeEmptyHosts call-time
+	// option.)
 	IgnoreAllocations bool `json:"ignoreAllocations,omitempty"`
 }
 
@@ -67,17 +70,13 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 	result := s.IncludeAllHostsFromRequest(request)
 
 	// Merge call-time options with static step config.
-	ignoreAllocations := s.Options.IgnoreAllocations || opts.AssumeEmptyHosts
+	ignoreWorkloads := s.Options.IgnoreAllocations || opts.AssumeEmptyHosts
 	ignoredReservationTypes := slices.Concat(s.Options.IgnoredReservationTypes, opts.IgnoredReservationTypes)
 	lockReserved := s.Options.LockReserved || opts.LockReservations
 
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
 		traceLog.Error(err, "failed to list hypervisors")
-		return nil, err
-	}
-	var reservations v1alpha1.ReservationList
-	if err := s.Client.List(context.Background(), &reservations); err != nil {
 		return nil, err
 	}
 
@@ -87,10 +86,21 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 	// request) when the request is entitled to it: a matching committed-resource slot,
 	// a failover slot being evacuated/reused by this very VM, or an explicitly ignored
 	// type. Everything else blocks.
-	active := make([]v1alpha1.Reservation, 0, len(reservations.Items))
-	for _, reservation := range reservations.Items {
-		if s.reservationBlocks(traceLog, request, reservation, ignoredReservationTypes, lockReserved) {
-			active = append(active, reservation)
+	//
+	// The empty-datacenter view (ignoreWorkloads) drops every reservation unconditionally:
+	// it asks how much a host could hold once fully cleared, so neither running workloads
+	// nor any reservation count. The reservation list is therefore left empty.
+	var active []v1alpha1.Reservation
+	if !ignoreWorkloads {
+		var reservations v1alpha1.ReservationList
+		if err := s.Client.List(context.Background(), &reservations); err != nil {
+			return nil, err
+		}
+		active = make([]v1alpha1.Reservation, 0, len(reservations.Items))
+		for _, reservation := range reservations.Items {
+			if s.reservationBlocks(traceLog, request, reservation, ignoredReservationTypes, lockReserved) {
+				active = append(active, reservation)
+			}
 		}
 	}
 
@@ -99,7 +109,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 		if _, ok := result.Activations[hv.Name]; !ok {
 			continue
 		}
-		rep := capacity.NewHostUsageReport(hv, active, ignoreAllocations)
+		rep := capacity.NewHostUsageReport(hv, active, ignoreWorkloads)
 		if rep.Total == nil {
 			traceLog.V(1).Info("removing host with unknown capacity", "host", hv.Name)
 			delete(result.Activations, hv.Name)

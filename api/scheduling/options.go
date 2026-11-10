@@ -17,7 +17,10 @@ type Options struct {
 	// Cortex may run read-only runs concurrently.
 	ReadOnly bool `json:"read_only,omitempty"`
 
-	// AssumeEmptyHosts ignores running instances on hosts, considering them as empty.
+	// AssumeEmptyHosts enables the empty-datacenter view: it ignores both the running
+	// instances on hosts (their allocation) and every reservation, judging hosts purely
+	// by their total capacity. Use it to reason about what a host could hold once fully
+	// cleared. It makes IgnoredReservationTypes redundant.
 	AssumeEmptyHosts bool `json:"assume_empty_hosts,omitempty"`
 	// LockReservations prevents reservation unlocking, i.e. considering those as unavailable resources.
 	LockReservations bool `json:"lock_reservations,omitempty"`

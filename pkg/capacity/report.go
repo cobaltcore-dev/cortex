@@ -62,10 +62,10 @@ type HostUsageReport struct {
 // hv.Status.Allocation. A resource that is zero or absent in both capacity maps is
 // dropped. When no resource has non-zero capacity the zero report (nil maps) is returned.
 //
-// ignoreAllocations, when true, treats every committed-resource slot as fully blocked
-// regardless of confirmed workloads and leaves Used empty — the empty-host view used by
-// capacity probing.
-func NewHostUsageReport(hv hv1.Hypervisor, reservations []v1alpha1.Reservation, ignoreAllocations bool) HostUsageReport {
+// ignoreWorkloads, when true, leaves Used empty (the host's running workloads are not
+// subtracted), judging the host by its total capacity. It does NOT drop reservations:
+// which reservations count is decided by the caller before building the report.
+func NewHostUsageReport(hv hv1.Hypervisor, reservations []v1alpha1.Reservation, ignoreWorkloads bool) HostUsageReport {
 	if hv.Status.EffectiveCapacity == nil && hv.Status.Capacity == nil {
 		return HostUsageReport{}
 	}
@@ -104,7 +104,7 @@ func NewHostUsageReport(hv hv1.Hypervisor, reservations []v1alpha1.Reservation, 
 	if len(rep.Total) == 0 {
 		return HostUsageReport{}
 	}
-	if !ignoreAllocations {
+	if !ignoreWorkloads {
 		for name, qty := range hv.Status.Allocation {
 			if _, ok := rep.Used[name]; ok {
 				rep.Used[name] = qty.DeepCopy()
@@ -124,7 +124,7 @@ func NewHostUsageReport(hv hv1.Hypervisor, reservations []v1alpha1.Reservation, 
 		if res.Spec.Type == v1alpha1.ReservationTypeFailover || res.Spec.Type == v1alpha1.ReservationTypeFailoverHost {
 			target = rep.Failover
 		}
-		for name, qty := range RemainingReservation(res, ignoreAllocations) {
+		for name, qty := range RemainingReservation(res) {
 			if _, ok := target[name]; !ok {
 				continue // host does not advertise this resource
 			}
@@ -178,20 +178,19 @@ func (r HostUsageReport) Fits(demand map[hv1.ResourceName]resource.Quantity) boo
 // A committed-resource reservation whose confirmed workloads already appear in the
 // hypervisor allocation holds only the unconfirmed remainder of its slot, i.e.
 // max(slot − sum(confirmed workloads), 0) per resource; this avoids double-counting
-// those workloads. The full slot is held instead when ignoreAllocations is set or when
-// mid-migration (TargetHost != Status.Host).
+// those workloads. The full slot is held instead when mid-migration
+// (TargetHost != Status.Host).
 //
 // A failover reservation holds its full Spec.Resources (nothing is allocated against it).
 //
 // A failover-host reservation holds nothing: it reserves an entire host and is
 // intentionally not yet counted as blocked capacity.
-func RemainingReservation(res v1alpha1.Reservation, ignoreAllocations bool) map[hv1.ResourceName]resource.Quantity {
+func RemainingReservation(res v1alpha1.Reservation) map[hv1.ResourceName]resource.Quantity {
 	if res.Spec.Type == v1alpha1.ReservationTypeFailoverHost {
 		// TODO: When failover host reservations are in use, account for them.
 		return nil
 	}
 	if res.Spec.Type == v1alpha1.ReservationTypeCommittedResource &&
-		!ignoreAllocations &&
 		res.Spec.TargetHost == res.Status.Host &&
 		res.Status.CommittedResourceReservation != nil &&
 		len(res.Status.CommittedResourceReservation.Allocation) > 0 {

@@ -929,29 +929,37 @@ func TestFilterHasEnoughCapacity_AssumeEmptyHosts(t *testing.T) {
 	scheme := buildTestScheme(t)
 
 	// host1: 8 CPU total, 6 CPU allocated to running VMs → 2 free; request needs 4 → fails normally.
-	// With AssumeEmptyHosts: allocations ignored → 8 free → passes.
+	// A CR reservation on host1 blocks a further 6 CPU, so even with allocations ignored (8 free)
+	// the host would fail (8 − 6 = 2 < 4) if reservations still counted. AssumeEmptyHosts ignores
+	// BOTH allocations and the reservation → 8 free → passes.
 	hypervisors := []*hv1.Hypervisor{
 		newHypervisor("host1", "8", "6", "32Gi", "0"),
 	}
+	reservations := []*v1alpha1.Reservation{
+		newCommittedReservation("cr-res", "host1", "project-X", "m1.large", "gp-other", "6", "8Gi", nil),
+	}
 	request := newNovaRequest("vm", "proj", "gp", 4, "1Gi", false, []string{"host1"})
 
-	objects := make([]client.Object, 0, len(hypervisors))
+	objects := make([]client.Object, 0, len(hypervisors)+len(reservations))
 	for _, h := range hypervisors {
 		objects = append(objects, h.DeepCopy())
+	}
+	for _, r := range reservations {
+		objects = append(objects, r.DeepCopy())
 	}
 
 	step := &FilterHasEnoughCapacity{}
 	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 	step.Options = FilterHasEnoughCapacityOpts{}
 
-	// Without AssumeEmptyHosts: host1 filtered (only 2 CPU free).
+	// Without AssumeEmptyHosts: host1 filtered (allocations + reservation leave too little).
 	resultWithout, err := step.Run(logr.Discard(), request)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	assertActivations(t, resultWithout.Activations, []string{}, []string{"host1"})
 
-	// With AssumeEmptyHosts via call-time options: allocations ignored → host1 passes.
+	// With AssumeEmptyHosts via call-time options: allocations AND reservation ignored → host1 passes.
 	request.Options = scheduling.Options{AssumeEmptyHosts: true}
 	resultWith, err := step.Run(logr.Discard(), request)
 	if err != nil {
