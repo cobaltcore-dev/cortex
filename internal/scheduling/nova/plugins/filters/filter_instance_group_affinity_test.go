@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	"testing"
 
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 )
@@ -34,7 +35,7 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		{
 			name: "Instance group with anti-affinity policy - all hosts pass",
 			request: compute.PlacementRequest{
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "anti-affinity", Hosts: []string{"host1", "host2"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "anti-affinity", Hosts: []string{"host1", "host2"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -47,7 +48,7 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		{
 			name: "Instance group with soft-affinity policy - all hosts pass",
 			request: compute.PlacementRequest{
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "soft-affinity", Hosts: []string{"host1"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "soft-affinity", Hosts: []string{"host1"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -59,7 +60,7 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		{
 			name: "Affinity policy with empty hosts list - all hosts pass",
 			request: compute.PlacementRequest{
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "affinity", Hosts: []string{}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -72,7 +73,7 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		{
 			name: "Affinity policy - only hosts in instance group pass",
 			request: compute.PlacementRequest{
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host1", "host3"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host1", "host3"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -85,7 +86,7 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		{
 			name: "Affinity policy - single host in group",
 			request: compute.PlacementRequest{
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host2"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host2"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -99,7 +100,7 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		{
 			name: "Affinity policy - all hosts filtered out",
 			request: compute.PlacementRequest{
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host5", "host6"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host5", "host6"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -112,7 +113,7 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		{
 			name: "Affinity policy - all hosts in group pass",
 			request: compute.PlacementRequest{
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host1", "host2", "host3"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host1", "host2", "host3"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -125,7 +126,7 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		{
 			name: "Affinity policy - partial overlap",
 			request: compute.PlacementRequest{
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host2", "host3", "host5"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host2", "host3", "host5"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -139,7 +140,7 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		{
 			name: "Affinity policy - empty request hosts",
 			request: compute.PlacementRequest{
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host1", "host2"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host1", "host2"}},
 				Hosts:         []compute.Host{},
 			},
 			expectedHosts: []string{},
@@ -148,7 +149,7 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		{
 			name: "Affinity policy - case sensitive host matching",
 			request: compute.PlacementRequest{
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"Host1", "HOST2"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"Host1", "HOST2"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -163,7 +164,7 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 			request: compute.PlacementRequest{
 				InstanceUUID:  "vm-uuid-123",
 				ProjectID:     "project-abc",
-				InstanceGroup: &compute.InstanceGroupSpec{UUID: "ig-uuid-456", Policy: "affinity", Hosts: []string{"host1", "host2"}, Members: []string{"vm-uuid-789"}},
+				InstanceGroup: &api.InstanceGroupSpec{UUID: "ig-uuid-456", Policy: "affinity", Hosts: []string{"host1", "host2"}, Members: []string{"vm-uuid-789"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -177,7 +178,7 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		{
 			name: "Affinity policy - duplicate hosts in group list",
 			request: compute.PlacementRequest{
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host1", "host2", "host1", "host2"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host1", "host2", "host1", "host2"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -190,7 +191,7 @@ func TestFilterInstanceGroupAffinityStep_Run(t *testing.T) {
 		{
 			name: "Affinity policy - single host scenario",
 			request: compute.PlacementRequest{
-				InstanceGroup: &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host1"}},
+				InstanceGroup: &api.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host1"}},
 				Hosts: []compute.Host{
 					{ComputeHost: "host1"},
 				},
@@ -235,7 +236,7 @@ func TestFilterInstanceGroupAffinityStep_SkipsForNonPlacementIntent(t *testing.T
 	for _, intent := range []string{"reserve_for_failover", "reuse_failover_reservation", "reserve_for_committed_resource", "capacity_probe"} {
 		t.Run(intent, func(t *testing.T) {
 			request := newNovaRequest("vm", "proj", "gp", 1, "1Gi", false, []string{"host1", "host2"})
-			request.InstanceGroup = &compute.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host1"}}
+			request.InstanceGroup = &api.InstanceGroupSpec{Policy: "affinity", Hosts: []string{"host1"}}
 			request.Intent = v1alpha1.SchedulingIntent(intent)
 			step := &FilterInstanceGroupAffinityStep{}
 

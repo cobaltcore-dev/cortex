@@ -356,31 +356,6 @@ spec:
           Investigate the hypervisor operator, the nova build pipeline, and
           the in-flight reservation controller logs.
 
-    - alert: CortexNovaImagePropertiesHypervisorTypeUndetermined
-      expr: |
-        sum by (pipeline, step, intent) (rate(cortex_filter_weigher_pipeline_step_events_total{service="cortex-nova-metrics", event="image_properties_hv_type_undetermined"}[5m])) > 0.1
-      for: 15m
-      labels:
-{{- if .Values.alerts.persesDashboardBaseURL }}
-        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
-{{- end }}
-        context: scheduling
-        service: cortex
-        severity: warning
-        support_group: workload-management
-        playbook: docs/support/playbook/cortex/alerts/scheduling
-      annotations:
-        summary: "Nova scheduling frequently cannot determine the hypervisor type from image properties"
-        description: >
-          The `filter_image_properties` step in pipeline `{{ "{{" }} $labels.pipeline {{ "}}" }}`
-          is frequently unable to determine the hypervisor type from the image properties
-          of incoming scheduling requests for intent `{{ "{{" }} $labels.intent {{ "}}" }}`.
-          In this case the filter is skipped and all hosts are returned, so kvm-only
-          images may be placed on non-kvm hypervisors (or vice versa). This may indicate
-          that images are missing the expected hypervisor type property, or that the
-          property format has changed. Investigate the image metadata of the affected
-          requests.
-
     - alert: CortexNovaCapabilitiesUnknownHypervisorType
       expr: |
         sum by (pipeline, step, hypervisor_type) (rate(cortex_filter_weigher_pipeline_step_events_total{service="cortex-nova-metrics", event="filter_capabilities_unknown_hypervisor_type"}[5m])) > 0.1
@@ -997,10 +972,12 @@ spec:
       # completes — in all cases the failover host reservations are no longer
       # being maintained and will silently drift from the cluster. A pod that is
       # down is covered by CortexNovaSchedulingDown, so require the series to
-      # still be exported (the metric is present but flat).
+      # still be exported (the metric is present but flat). The window is 60m so
+      # a slow pass (e.g. partitioning over a large, flavor-rich fleet) does not
+      # trip the alert.
       expr: |
-        increase(cortex_failover_host_calculation_runs_total{service="cortex-nova-metrics"}[30m]) == 0
-      for: 30m
+        increase(cortex_failover_host_calculation_runs_total{service="cortex-nova-metrics"}[60m]) == 0
+      for: 60m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
         persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
@@ -1014,7 +991,7 @@ spec:
         summary: "Failover host calculation loop is not completing passes"
         description: >
           The failover host controller has not completed a calculation-loop pass in
-          the last 30 minutes. Its failover host reservations are no longer being
+          the last 60 minutes. Its failover host reservations are no longer being
           recomputed and will drift from the actual cluster state. Check the
           failover-host-controller logs for a stuck loop or repeated aborts.
     - alert: CortexNovaFailoverHostCalculationAborting
@@ -1093,5 +1070,32 @@ spec:
           path finder are failing (transport errors or non-2xx responses). The path finder
           cannot determine valid evacuation targets, so failover partitions and reservations
           cannot be recomputed. Check that the external scheduler is reachable and healthy.
+    - alert: CortexNovaFailoverHostEvacuationsWithoutReservation
+      # An evacuation came in whose source host matched no failover host
+      # reservation, so the request fell back to ordinary candidates instead of a
+      # pre-validated, gang-evacuable landing zone. Frequent occurrences mean the
+      # partitioning is not keeping failover headroom where failures actually
+      # happen (e.g. the source host's partition reserves nothing, or the host
+      # left its partition), so evacuations are re-solved under pressure.
+      expr: sum by (az) (increase(cortex_failover_host_evacuations_without_reservation_total{service="cortex-nova-metrics"}[15m])) > 0
+      for: 15m
+      labels:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
+{{- end }}
+        context: failover-hosts
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: ""
+      annotations:
+        summary: "Evacuations landing without a failover host reservation in `{{ "{{" }} $labels.az {{ "}}" }}`"
+        description: >
+          Evacuation scheduling requests in `{{ "{{" }} $labels.az {{ "}}" }}` are matching no
+          failover host reservation for their source host, so they fall back to the ordinary
+          candidate set rather than a pre-validated, gang-evacuable landing zone. This means
+          the source hosts have no reserved failover target — check whether their partition
+          reserves anything (a partition of fewer than two hosts reserves nothing) and the
+          failover host calculation loop is healthy.
     {{- end }}
 {{- end }}

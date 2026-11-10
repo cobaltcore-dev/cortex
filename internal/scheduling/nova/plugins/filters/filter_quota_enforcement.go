@@ -38,24 +38,15 @@ type FilterQuotaEnforcementOpts struct {
 	// (headroom = Quota - sum(CR amounts) - PaygUsage). It MUST mirror the quota
 	// controller's crStateFilter (see internal/scheduling/reservations/quota/config.go)
 	// so the filter's CR deduction and the controller's PaygUsage derivation agree
-	// on what quota already accounts for. Empty means the shared default (confirmed).
+	// on what quota already accounts for. Empty means no CR states count; the
+	// deployment supplies the default (confirmed) via Helm.
 	CRStateFilter []v1alpha1.CommitmentStatus `json:"crStateFilter,omitempty"`
 }
 
-// defaultCRStateFilter mirrors the quota controller's default
-// (internal/scheduling/reservations/quota/config.go): confirmed only.
-var defaultCRStateFilter = []v1alpha1.CommitmentStatus{
-	v1alpha1.CommitmentStatusConfirmed,
-}
-
 // crStateIncluded reports whether a CR in the given state counts toward the CR
-// portion of quota. An unset CRStateFilter falls back to defaultCRStateFilter.
+// portion of quota.
 func (o FilterQuotaEnforcementOpts) crStateIncluded(state v1alpha1.CommitmentStatus) bool {
-	states := o.CRStateFilter
-	if len(states) == 0 {
-		states = defaultCRStateFilter
-	}
-	return slices.Contains(states, state)
+	return slices.Contains(o.CRStateFilter, state)
 }
 
 func (FilterQuotaEnforcementOpts) Validate() error { return nil }

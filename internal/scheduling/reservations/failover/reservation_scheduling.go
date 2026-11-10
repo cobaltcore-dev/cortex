@@ -8,13 +8,11 @@ import (
 	"fmt"
 	"slices"
 	"sort"
-	"strings"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
@@ -35,43 +33,13 @@ var DefaultFailoverOptions = scheduling.Options{
 
 // InferFailoverPipeline returns the standard pipeline for a failover scheduling call based on
 // the VM's flavor extra specs — the same HANA vs general-purpose split used by Nova placement.
+// An unparseable flavor type falls back to the general-purpose pipeline.
 func InferFailoverPipeline(extraSpecs map[string]string) string {
-	if strings.ToLower(extraSpecs["trait:CUSTOM_HANA_EXCLUSIVE_HOST"]) == "required" {
+	flavorType, err := api.FlavorTypeFromExtraSpecs(extraSpecs)
+	if err == nil && flavorType == api.FlavorTypeHANA {
 		return "kvm-hana-bin-packing"
 	}
 	return "kvm-general-purpose-load-balancing"
-}
-
-// imagePropertiesFromFlavor synthesizes Glance-style image properties from a flavor's
-// capabilities:hypervisor_type extra spec. The failover controller does not have access
-// to the real Glance image metadata of the VM, but for reservation scheduling the VM
-// already exists and has passed FilterImagePropertiesStep at original create time, so
-// this synthesis is safe: it exists only to keep the filter from emitting spurious
-// "image_properties_hv_type_undetermined" events when the failover controller reuses
-// the EvacuateIntent to validate reservation hosts.
-//
-// The extra-spec values below duplicate the canonical mapping in
-// nova.Flavor.GetHypervisorType() (see internal/knowledge/datasources/plugins/openstack/nova/nova_types.go);
-// keep the two in sync. Real observed fixtures also carry lowercase "qemu"/"ch", so
-// those are accepted here too.
-//
-// Returns nil for unknown/unspecified hypervisor types, which preserves the filter's
-// existing tolerant fallback (log a warning event, keep all hosts).
-//
-// TODO(vm-crd): remove this and populate image properties from real Glance metadata
-// once the VM CRD carries them. See also the TODO on validateVMViaSchedulerEvacuation.
-func imagePropertiesFromFlavor(flavorExtraSpecs map[string]string) map[string]any {
-	switch flavorExtraSpecs["capabilities:hypervisor_type"] {
-	case "QEMU", "CH", "qemu", "ch":
-		// KVM family; the kvm-flavored key is "img_hv_type".
-		return map[string]any{"img_hv_type": string(api.NovaImageMetaHVTypeKVM)}
-	case "VMware vCenter Server":
-		return map[string]any{"hypervisor_type": string(api.NovaImageMetaHVTypeVMware)}
-	case "Ironic":
-		return map[string]any{"hypervisor_type": string(api.NovaImageMetaHVTypeBaremetal)}
-	default:
-		return nil
-	}
 }
 
 func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx context.Context, vm reservations.VM, allHypervisors []string, pipeline string, resSpec resolvedReservationSpec, intent v1alpha1.SchedulingIntent, opts scheduling.Options) ([]string, error) {
@@ -107,11 +75,11 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		hosts = append(hosts, compute.Host{ComputeHost: h.ComputeHost, HypervisorHostname: h.HypervisorHostname})
 		weights[h.ComputeHost] = 0.0
 	}
-	requiredTraits, forbiddenTraits := nova.SplitTraits(vm.FlavorExtraSpecs)
+	requiredTraits, forbiddenTraits := api.SplitTraits(vm.FlavorExtraSpecs)
 	schedReq := compute.PlacementRequest{
 		Pipeline:              pipeline,
 		GatherAllCandidates:   true,
-		HypervisorFamily:      compute.HypervisorFamilyKVM,
+		HypervisorFamily:      api.HypervisorFamilyKVM,
 		Hosts:                 hosts,
 		Weights:               weights,
 		Options:               opts,
@@ -124,9 +92,9 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		ResourceGroup:         resSpec.ResourceGroup(vm.FlavorName),
 		RequiredTraits:        requiredTraits,
 		ForbiddenTraits:       forbiddenTraits,
-		RequestedCapabilities: reservations.HypervisorTypeCapability(vm.FlavorExtraSpecs, true),
-		AcceleratorsRequested: nova.RequestsAccelerators(vm.FlavorExtraSpecs),
-		Flavor: compute.FlavorSpec{
+		RequestedCapabilities: api.HypervisorTypeCapability(vm.FlavorExtraSpecs, true),
+		AcceleratorsRequested: api.RequestsAccelerators(vm.FlavorExtraSpecs),
+		Flavor: api.FlavorSpec{
 			VCPUs:    resSpec.VCPUs,
 			MemoryMB: resSpec.MemoryMB,
 		},
@@ -262,14 +230,14 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 	// match it in the reservation's allocations. KVM gathers all candidates; the
 	// reservation host must come back ranked for the VM to be compatible.
 	pipeline := InferFailoverPipeline(flavorExtraSpecs)
-	requiredTraits, forbiddenTraits := nova.SplitTraits(flavorExtraSpecs)
+	requiredTraits, forbiddenTraits := api.SplitTraits(flavorExtraSpecs)
 	evacuateOpts := DefaultFailoverOptions
 	evacuateOpts.ReadOnly = true
 	evacuateOpts.LockReservations = true
 	schedReq := compute.PlacementRequest{
 		Pipeline:              pipeline,
 		GatherAllCandidates:   true,
-		HypervisorFamily:      compute.HypervisorFamilyKVM,
+		HypervisorFamily:      api.HypervisorFamilyKVM,
 		Hosts:                 []compute.Host{{ComputeHost: reservationHost, HypervisorHostname: reservationHost}},
 		Weights:               map[string]float64{reservationHost: 0.0},
 		Options:               evacuateOpts,
@@ -281,9 +249,9 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		IgnoreHosts:           []string{vm.CurrentHypervisor},
 		RequiredTraits:        requiredTraits,
 		ForbiddenTraits:       forbiddenTraits,
-		RequestedCapabilities: reservations.HypervisorTypeCapability(flavorExtraSpecs, true),
-		AcceleratorsRequested: nova.RequestsAccelerators(flavorExtraSpecs),
-		Flavor: compute.FlavorSpec{
+		RequestedCapabilities: api.HypervisorTypeCapability(flavorExtraSpecs, true),
+		AcceleratorsRequested: api.RequestsAccelerators(flavorExtraSpecs),
+		Flavor: api.FlavorSpec{
 			VCPUs:    vcpus,
 			MemoryMB: memoryMB,
 		},

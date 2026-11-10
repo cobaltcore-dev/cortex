@@ -73,7 +73,7 @@ func newCRRequest(hosts []string) compute.PlacementRequest {
 		ProjectID:        "project-A",
 		AvailabilityZone: "qa-de-1a",
 		ResourceGroup:    "group-2101",
-		Flavor: compute.FlavorSpec{
+		Flavor: api.FlavorSpec{
 			MemoryMB: 8 * 1024,
 		},
 		Hosts:   hostList,
@@ -216,7 +216,7 @@ func TestKVMCommittedResourceReservationStep_Run(t *testing.T) {
 				AvailabilityZone: "qa-de-1a",
 				Intent:           api.ReserveForFailoverIntent,
 				ResourceGroup:    "group-2101",
-				Flavor: compute.FlavorSpec{
+				Flavor: api.FlavorSpec{
 					MemoryMB: 4096,
 				},
 				Hosts: []compute.Host{{ComputeHost: "host1"}, {ComputeHost: "host2"}},

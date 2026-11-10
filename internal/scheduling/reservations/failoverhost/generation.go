@@ -118,6 +118,7 @@ func (g *pipelineGenerator) Generate(ctx context.Context) (map[corev1.ObjectRefe
 		g.Monitor.RecordCalculationAbort("seeding")
 		return nil, topology{}, false
 	}
+	log.Info("enumerated failover seeds to probe", "seeds", len(seeds))
 
 	paths, err := g.pathFinder.FindPaths(ctx, topo, seeds)
 	if err != nil {
@@ -125,12 +126,13 @@ func (g *pipelineGenerator) Generate(ctx context.Context) (map[corev1.ObjectRefe
 		g.Monitor.RecordCalculationAbort("pathfinding")
 		return nil, topology{}, false
 	}
+	log.Info("probed seeds into failover paths", "seeds", len(seeds), "paths", len(paths))
 
 	// Cluster the failover edges into partitions. See partitioning.go for why a
 	// partition is a maximal clique of mutually-evacuable hosts, and how empty
 	// hosts are recruited into the partition that can reach them.
 	partitions := g.partitionBuilder.BuildPartitions(paths)
-	log.V(1).Info("clustered failover paths into partitions",
+	log.Info("clustered failover paths into partitions",
 		"paths", len(paths), "partitions", len(partitions))
 
 	// Maximal cliques overlap: a host with a mutual edge into two otherwise
@@ -250,6 +252,8 @@ func (g *pipelineGenerator) collect(ctx context.Context) (topology, bool) {
 			existing[corev1.ObjectReference{Name: reservation.Name}] = reservation
 		}
 	}
+	log.Info("collected cluster snapshot",
+		"hypervisors", len(hvsByName), "existingReservations", len(existing))
 
 	return topology{hypervisors: hvsByName, existing: existing}, true
 }

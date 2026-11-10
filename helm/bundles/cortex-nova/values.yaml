@@ -109,6 +109,22 @@ kvm:
     # Domain names that are explicitly treated as non-external-customer domains and
     # skipped by the filter, even if they match one of the prefixes above.
     ignoredDomainNames: []
+  # Options for the failover host matching scheduling steps. The
+  # filter_failover_host filter keeps new VMs off hosts with a failover host
+  # reservation (and, for evacuations, prunes all but the deterministically
+  # selected failover host so another failure keeps a free landing zone); the
+  # weigher_failover_host weigher lifts that selected host to the front of the
+  # candidate list. Applied to every KVM pipeline that uses the steps.
+  failoverHostMatching:
+    # Disabled by default until the failover host draining controller logic is
+    # implemented. Set to true to enable failover-host-aware scheduling.
+    enabled: false
+  # CommittedResource states that count toward the CR portion of project quota.
+  # Shared by the quota controller (PaygUsage derivation) and the
+  # filter_quota_enforcement pipeline step (CR deduction) — the two MUST agree,
+  # so this single value feeds both. Empty means no CR states count.
+  crStateFilter: &crStateFilter
+    - confirmed
 
 cortex: &cortex
   crd: {enable: false}
@@ -118,11 +134,16 @@ cortex: &cortex
   prometheus: {enable: false}
   conf: &cortexConf
     schedulingDomain: nova
+    # Consumed by the quota controller; mirrors the filter_quota_enforcement
+    # step's crStateFilter. See kvm.crStateFilter for the shared source.
+    crStateFilter: *crStateFilter
     apiservers:
       home:
         gvks:
           - cortex.cloud/v1alpha1/Descheduling
           - cortex.cloud/v1alpha1/DeschedulingList
+          - cortex.cloud/v1alpha1/Rescheduling
+          - cortex.cloud/v1alpha1/ReschedulingList
           - cortex.cloud/v1alpha1/Pipeline
           - cortex.cloud/v1alpha1/PipelineList
           - cortex.cloud/v1alpha1/Knowledge
@@ -183,6 +204,7 @@ cortex-scheduling-controllers:
       - nova-pipeline-controllers
       - inflight-reservation-controller
       - nova-deschedulings-executor
+      - rescheduler-controller
       - hypervisor-overcommit-controller
       - committed-resource-reservations-controller
       - failover-reservations-controller
@@ -212,9 +234,6 @@ cortex-scheduling-controllers:
     # If true, the external scheduler API will limit the list of hosts in its
     # response to those included in the scheduling request.
     novaLimitHostsToRequest: true
-    # Number of top hosts to shuffle for evacuation requests.
-    # Set to 0 or negative to disable shuffling.
-    evacuationShuffleK: 3
     # If true (default), the external scheduler API replicates Nova's
     # forced-destination behavior: requests with force_hosts/force_nodes skip
     # the scheduling pipeline and filters. Set to false to disable this as a

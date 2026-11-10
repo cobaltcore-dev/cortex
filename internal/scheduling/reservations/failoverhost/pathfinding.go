@@ -15,9 +15,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/failover"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -112,7 +109,23 @@ func (f *evacuationPathFinder) FindPaths(ctx context.Context, topo topology, see
 	// edge, deduplicating across seeds. We materialize it into the []Path slice at
 	// the end, carrying each edge's supporting flavors.
 	edges := map[string]map[string]map[string]bool{}
-	for _, seed := range seeds {
+	// Log progress every ~10% of seeds probed: a large fleet crossed with its
+	// flavor catalogue yields thousands of seeds, each a scheduler round-trip, so a
+	// pass can take minutes. Without this the loop looks wedged. nextProgress is the
+	// next seed index at which to log; step is a tenth of the seed count (at least
+	// one, so tiny seed sets still report).
+	step := len(seeds) / 10
+	if step == 0 {
+		step = 1
+	}
+	nextProgress := step
+	for i, seed := range seeds {
+		if i+1 >= nextProgress {
+			log.Info("probing failover seeds",
+				"probed", i+1, "total", len(seeds),
+				"percent", (i+1)*100/len(seeds), "edgesSoFar", len(edges))
+			nextProgress += step
+		}
 		accepting, err := f.fetchSeedCandidates(ctx, seed, topo.hypervisors)
 		if err != nil {
 			// A lookup error is an infrastructure failure (the scheduler is
@@ -217,10 +230,12 @@ func hvCapacity(hv hv1.Hypervisor) map[hv1.ResourceName]resource.Quantity {
 //     set (scheduling.Options.Validate rejects a ReadOnly run otherwise, and the
 //     scheduler calls Validate) so this probe neither creates in-flight
 //     reservations nor writes CR allocations.
-//   - IgnoredReservationTypes = FailoverHost, so existing failover host
-//     reservations don't block the very hosts we are reasoning about — otherwise
-//     a reserved host would be hidden from its own partition and the clustering
-//     would fragment.
+//   - IgnoredReservationTypes = every reservation type, so no existing
+//     reservation blocks the hosts we are reasoning about. Failover host
+//     reservations would otherwise hide a reserved host from its own partition
+//     and fragment the clustering; committed-resource, failover and in-flight
+//     reservations would understate capacity, which is wrong under the
+//     empty-host reasoning below.
 //   - AssumeEmptyHosts, so candidates are judged by their total capacity rather
 //     than their current free capacity. A failover target is reserved *empty*, so
 //     what matters for partitioning is whether a host could hold the workload once
@@ -254,17 +269,26 @@ func (f *evacuationPathFinder) fetchSeedCandidates(ctx context.Context, seed See
 	// considers compatible hosts (filter_has_requested_traits/filter_capabilities
 	// would otherwise see empty slices and become no-ops). The seeder only emits
 	// seeds whose flavor names a supported hypervisor type, so no default is needed.
-	requiredTraits, forbiddenTraits := nova.SplitTraits(seed.Flavor.ExtraSpecs)
+	requiredTraits, forbiddenTraits := api.SplitTraits(seed.Flavor.ExtraSpecs)
+	// Same HANA vs general-purpose split as regular failover placement, but with the
+	// load-balancing variant of the HANA pipeline used for pathfinding probes.
+	flavorType, err := api.FlavorTypeFromExtraSpecs(seed.Flavor.ExtraSpecs)
+	if err != nil {
+		return nil, err
+	}
+	pipeline := "kvm-general-purpose-load-balancing"
+	if flavorType == api.FlavorTypeHANA {
+		pipeline = "kvm-hana-bin-packing"
+	}
 	req := compute.PlacementRequest{
-		// Same HANA vs general-purpose split as regular failover placement.
-		Pipeline: failover.InferFailoverPipeline(seed.Flavor.ExtraSpecs),
+		Pipeline: pipeline,
 		// We offer the host set ourselves; the scheduler must not gather the
 		// cluster itself and overwrite our candidates.
 		GatherAllCandidates: false,
-		HypervisorFamily:    compute.HypervisorFamilyKVM,
+		HypervisorFamily:    api.HypervisorFamilyKVM,
 		// We only handle KVM virtual machines, so the flavor/image compatibility
 		// filter must see a KVM image hypervisor type.
-		ImageHypervisorType: compute.ImageHypervisorTypeKVM,
+		ImageHypervisorType: api.ImageHypervisorTypeKVM,
 		Hosts:               hosts,
 		Weights:             weights,
 		// Probe with evacuation intent. A failover cold-migrates (evacuates) the
@@ -281,9 +305,9 @@ func (f *evacuationPathFinder) fetchSeedCandidates(ctx context.Context, seed See
 		// Match the flavor's hypervisor type (QEMU vs CH). The seeder only emits
 		// seeds whose flavor names a supported hypervisor type, so this is always
 		// set (no default needed).
-		RequestedCapabilities: reservations.HypervisorTypeCapability(seed.Flavor.ExtraSpecs, false),
-		AcceleratorsRequested: nova.RequestsAccelerators(seed.Flavor.ExtraSpecs),
-		Flavor: compute.FlavorSpec{
+		RequestedCapabilities: api.HypervisorTypeCapability(seed.Flavor.ExtraSpecs, false),
+		AcceleratorsRequested: api.RequestsAccelerators(seed.Flavor.ExtraSpecs),
+		Flavor: api.FlavorSpec{
 			VCPUs:    seed.Flavor.VCPUs,
 			MemoryMB: seed.Flavor.MemoryMB,
 		},
@@ -299,11 +323,19 @@ func (f *evacuationPathFinder) fetchSeedCandidates(ctx context.Context, seed See
 			// workload once cleared must still be a valid candidate. Without this,
 			// occupied hosts never accept anyone and stay orphaned.
 			AssumeEmptyHosts: true,
-			// Ignore existing failover host reservations, otherwise they would
-			// block these hosts, separate them from their failover partition and
-			// break the clustering.
+			// Ignore every existing reservation while probing. We reason about
+			// whether a host *could* hold the evacuated workload once it is cleared
+			// (AssumeEmptyHosts), not about its current free space, so any reservation
+			// — failover host, committed resource, failover or in-flight — that would
+			// otherwise block these hosts must be ignored. Failover host reservations
+			// in particular would hide the very hosts we are reasoning about and
+			// fragment the clustering; the others would understate capacity for the
+			// same empty-host reasoning.
 			IgnoredReservationTypes: []v1alpha1.ReservationType{
 				v1alpha1.ReservationTypeFailoverHost,
+				v1alpha1.ReservationTypeCommittedResource,
+				v1alpha1.ReservationTypeFailover,
+				v1alpha1.ReservationTypeInFlight,
 			},
 		},
 	}

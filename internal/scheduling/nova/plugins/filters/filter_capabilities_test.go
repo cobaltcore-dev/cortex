@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	"testing"
 
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -256,7 +257,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		{
 			name: "Match CH hypervisor type",
 			request: compute.PlacementRequest{
-				RequestedCapabilities: []compute.Capability{
+				RequestedCapabilities: []api.Capability{
 					{Name: "hypervisor_type", Value: "CH"},
 				},
 				Hosts: []compute.Host{
@@ -271,7 +272,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		{
 			name: "Match QEMU hypervisor type",
 			request: compute.PlacementRequest{
-				RequestedCapabilities: []compute.Capability{
+				RequestedCapabilities: []api.Capability{
 					{Name: "hypervisor_type", Value: "QEMU"},
 				},
 				Hosts: []compute.Host{
@@ -287,7 +288,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		{
 			name: "Match x86_64 CPU architecture",
 			request: compute.PlacementRequest{
-				RequestedCapabilities: []compute.Capability{
+				RequestedCapabilities: []api.Capability{
 					{Name: "cpu_arch", Value: "x86_64"},
 				},
 				Hosts: []compute.Host{
@@ -303,7 +304,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		{
 			name: "Match aarch64 CPU architecture",
 			request: compute.PlacementRequest{
-				RequestedCapabilities: []compute.Capability{
+				RequestedCapabilities: []api.Capability{
 					{Name: "cpu_arch", Value: "aarch64"},
 				},
 				Hosts: []compute.Host{
@@ -319,7 +320,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		{
 			name: "Match both hypervisor type and CPU architecture",
 			request: compute.PlacementRequest{
-				RequestedCapabilities: []compute.Capability{
+				RequestedCapabilities: []api.Capability{
 					{Name: "hypervisor_type", Value: "CH"},
 					{Name: "cpu_arch", Value: "x86_64"},
 				},
@@ -336,7 +337,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		{
 			name: "Match QEMU with aarch64",
 			request: compute.PlacementRequest{
-				RequestedCapabilities: []compute.Capability{
+				RequestedCapabilities: []api.Capability{
 					{Name: "hypervisor_type", Value: "QEMU"},
 					{Name: "cpu_arch", Value: "aarch64"},
 				},
@@ -353,7 +354,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		{
 			name: "Ignore hypervisors not in request even with unknown type",
 			request: compute.PlacementRequest{
-				RequestedCapabilities: []compute.Capability{
+				RequestedCapabilities: []api.Capability{
 					{Name: "hypervisor_type", Value: "CH"},
 				},
 				Hosts: []compute.Host{
@@ -367,7 +368,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		{
 			name: "Candidate hypervisor with empty hypervisor type emits event and is filtered out",
 			request: compute.PlacementRequest{
-				RequestedCapabilities: []compute.Capability{
+				RequestedCapabilities: []api.Capability{
 					{Name: "hypervisor_type", Value: "CH"},
 				},
 				Hosts: []compute.Host{
@@ -383,7 +384,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		{
 			name: "Candidate hypervisor with unknown hypervisor type emits event and is filtered out",
 			request: compute.PlacementRequest{
-				RequestedCapabilities: []compute.Capability{
+				RequestedCapabilities: []api.Capability{
 					{Name: "hypervisor_type", Value: "CH"},
 				},
 				Hosts: []compute.Host{
@@ -399,7 +400,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		{
 			name: "No matching hosts",
 			request: compute.PlacementRequest{
-				RequestedCapabilities: []compute.Capability{
+				RequestedCapabilities: []api.Capability{
 					{Name: "hypervisor_type", Value: "KVM"},
 				},
 				Hosts: []compute.Host{
@@ -413,7 +414,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		{
 			name: "Mixed capability and non-capability extra specs",
 			request: compute.PlacementRequest{
-				RequestedCapabilities: []compute.Capability{
+				RequestedCapabilities: []api.Capability{
 					{Name: "hypervisor_type", Value: "CH"},
 					{Name: "cpu_arch", Value: "x86_64"},
 				},
@@ -429,7 +430,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		{
 			name: "Empty host list",
 			request: compute.PlacementRequest{
-				RequestedCapabilities: []compute.Capability{
+				RequestedCapabilities: []api.Capability{
 					{Name: "hypervisor_type", Value: "CH"},
 				},
 				Hosts: []compute.Host{},
@@ -440,7 +441,7 @@ func TestFilterCapabilitiesStep_Run(t *testing.T) {
 		{
 			name: "Case sensitive capability matching",
 			request: compute.PlacementRequest{
-				RequestedCapabilities: []compute.Capability{
+				RequestedCapabilities: []api.Capability{
 					{Name: "hypervisor_type", Value: "ch"}, // lowercase should not match
 				},
 				Hosts: []compute.Host{

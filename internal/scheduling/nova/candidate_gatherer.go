@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,7 +35,7 @@ func NewCandidateGatherer(c client.Client) CandidateGatherer {
 // the request accordingly.
 func (g *candidateGatherer) MutateWithAllCandidates(ctx context.Context, request *compute.PlacementRequest) error {
 	// Currently we can only get candidates for kvm placements.
-	if request.HypervisorFamily != compute.HypervisorFamilyKVM {
+	if request.HypervisorFamily != api.HypervisorFamilyKVM {
 		return fmt.Errorf(
 			"cannot gather all placement candidates for hypervisor family %q",
 			request.HypervisorFamily,

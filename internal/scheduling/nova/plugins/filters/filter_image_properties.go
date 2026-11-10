@@ -5,8 +5,9 @@ package filters
 
 import (
 	"context"
-	"github.com/go-logr/logr"
 	"slices"
+
+	"github.com/go-logr/logr"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
@@ -42,26 +43,17 @@ func (s *FilterImagePropertiesStep) Run(traceLog logr.Logger, request compute.Pl
 
 	hvType := request.ImageHypervisorType
 
-	// The image declared a hypervisor type that could not be parsed. Ignore the
-	// filter and keep all hosts, but surface an event so high-frequency
-	// occurrences can be alerted on (labeled by intent).
-	if hvType == compute.ImageHypervisorTypeUnparseable {
-		traceLog.Error(nil, "could not determine hypervisor type from image properties")
-		intentLabel := string(request.Intent)
-		if intentLabel == "" {
-			intentLabel = "unknown"
-		}
-		result.Events = append(result.Events, lib.FilterWeigherPipelineStepEvent{
-			Name:   "image_properties_hv_type_undetermined",
-			Labels: map[string]string{"intent": intentLabel},
-		})
+	// If the image hypervisor type is unset, we treat it as if no
+	// constraint is applied.
+	if hvType == api.ImageHypervisorTypeUnparseable || hvType == api.ImageHypervisorTypeUnset {
+		traceLog.Info("image hypervisor type is unset or unparseable, skipping filter")
 		return result, nil
 	}
 
 	// If the image properties indicate any other hypervisor type than kvm,
 	// we filter out all known kvm hypervisors. An unset image hypervisor type
 	// means the image declared none, so no image constraint applies.
-	if hvType != compute.ImageHypervisorTypeUnset && hvType != compute.ImageHypervisorTypeKVM {
+	if hvType != api.ImageHypervisorTypeUnset && hvType != api.ImageHypervisorTypeKVM {
 		traceLog.V(1).Info("filtering out all known kvm hypervisors since image properties indicate a different hypervisor type",
 			"image_hypervisor_type", hvType)
 		hvs := new(hv1.HypervisorList)

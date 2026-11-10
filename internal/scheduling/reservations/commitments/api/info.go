@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
+	knowledge "github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	commitments "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/commitments"
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
@@ -106,8 +106,7 @@ func mibToGiB(v *uint64) *uint64 {
 // All flavor groups report usage; only those with fixed RAM/core ratio accept commitments.
 func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (liquid.ServiceInfo, error) {
 	// Get all flavor groups from Knowledge CRDs
-	knowledge := &accounting.FlavorGroupKnowledgeClient{Client: api.client}
-	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
+	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, api.client, nil)
 	if err != nil {
 		// Return -1 as version when knowledge is not ready
 		return liquid.ServiceInfo{
@@ -220,7 +219,7 @@ func (api *HTTPAPI) buildServiceInfo(ctx context.Context, logger logr.Logger) (l
 
 	// Get last content changed from flavor group knowledge and treat it as version
 	var version int64 = -1
-	if knowledgeCRD, err := knowledge.Get(ctx); err == nil && knowledgeCRD != nil && !knowledgeCRD.Status.LastContentChange.IsZero() {
+	if knowledgeCRD, err := knowledge.GetFlavorGroupsKnowledge(ctx, api.client); err == nil && knowledgeCRD != nil && !knowledgeCRD.Status.LastContentChange.IsZero() {
 		version = knowledgeCRD.Status.LastContentChange.Unix()
 	}
 

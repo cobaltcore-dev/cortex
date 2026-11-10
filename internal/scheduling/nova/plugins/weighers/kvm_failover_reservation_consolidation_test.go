@@ -68,8 +68,8 @@ func newFailoverReservationRequest(resourceGroup string, hosts []string) compute
 		NumInstances:     1,
 		Intent:           api.ReserveForFailoverIntent,
 		ResourceGroup:    resourceGroup,
-		HypervisorFamily: compute.HypervisorFamilyKVM,
-		Flavor: compute.FlavorSpec{
+		HypervisorFamily: api.HypervisorFamilyKVM,
+		Flavor: api.FlavorSpec{
 			VCPUs:    4,
 			MemoryMB: 8192,
 		},

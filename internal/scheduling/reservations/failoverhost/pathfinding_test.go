@@ -36,7 +36,16 @@ func stubScheduler(t *testing.T, candidatesByFlavor map[string][]string, errFlav
 // stubPipelineProvider serves the same stub pipeline for every pipeline name the
 // probe infers (always a KVM pipeline here).
 type stubPipelineProvider struct {
-	pipeline *stubPipeline
+	pipeline lib.FilterWeigherPipeline[compute.PlacementRequest]
+}
+
+// passthroughGatherer is a compute.CandidateGatherer that leaves the request's
+// preselected hosts unchanged. The tests seed their own eligible hosts, so
+// gathering is a no-op here.
+type passthroughGatherer struct{}
+
+func (passthroughGatherer) MutateWithAllCandidates(context.Context, *compute.PlacementRequest) error {
+	return nil
 }
 
 func (p *stubPipelineProvider) GetPipeline(string) (lib.FilterWeigherPipeline[compute.PlacementRequest], bool) {
@@ -70,10 +79,10 @@ func (s *stubPipeline) Run(req compute.PlacementRequest) (compute.PlacementResul
 	if len(req.Hosts) == 0 {
 		s.t.Errorf("request for flavor %q has no candidate hosts", flavor)
 	}
-	if req.ImageHypervisorType != compute.ImageHypervisorTypeKVM {
+	if req.ImageHypervisorType != api.ImageHypervisorTypeKVM {
 		// The hypervisor-type filter needs the image hypervisor type to judge
 		// flavor/image compatibility; dropping it would make that filter misbehave.
-		s.t.Errorf("request for flavor %q must set ImageHypervisorType=%q, got %q", flavor, compute.ImageHypervisorTypeKVM, req.ImageHypervisorType)
+		s.t.Errorf("request for flavor %q must set ImageHypervisorType=%q, got %q", flavor, api.ImageHypervisorTypeKVM, req.ImageHypervisorType)
 	}
 	// The probe uses evacuation intent (cold migration) and sets no source host:
 	// a failover evacuates rather than live-migrates, so the live-migratability

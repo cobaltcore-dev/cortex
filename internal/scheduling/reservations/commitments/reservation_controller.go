@@ -32,10 +32,9 @@ import (
 	schedulerdelegationapi "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/nova"
+	knowledge "github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	"github.com/cobaltcore-dev/cortex/pkg/keystone"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/cobaltcore-dev/cortex/pkg/sso"
@@ -53,7 +52,7 @@ type CommitmentReservationController struct {
 	// Configuration for the controller.
 	Conf ReservationControllerConfig
 	// Scheduler is the in-process scheduler used to place reservations.
-	Scheduler *compute.Placement
+	Scheduler *sched.Placement
 	// DomainResolver resolves OpenStack domain IDs to domain names so the
 	// domain_name scheduler hint can be populated for filter_external_customer.
 	// Nil when KeystoneSecretRef is not configured; hint is omitted in that case.
@@ -239,8 +238,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	}
 
 	// Get flavor details from flavor group knowledge CRD
-	knowledge := &accounting.FlavorGroupKnowledgeClient{Client: r.Client}
-	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, nil)
+	flavorGroups, err := knowledge.GetAllFlavorGroups(ctx, r.Client, nil)
 	if err != nil {
 		logger.V(1).Info("flavor knowledge not ready, requeueing",
 			"resourceName", resourceName,
@@ -249,7 +247,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	}
 
 	// Search for the flavor across all flavor groups
-	flavorGroupName, flavorDetails, err := accounting.FindFlavorInGroups(resourceName, flavorGroups)
+	flavorGroupName, flavorDetails, err := knowledge.FindFlavorInGroups(resourceName, flavorGroups)
 	if err != nil {
 		logger.Error(err, "flavor not found in any flavor group",
 			"resourceName", resourceName)
@@ -305,10 +303,10 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	// Build the typed scheduler request directly (in-process; no HTTP). KVM
 	// reservations gather all candidates, so the eligible-host list is a starting
 	// set; GatherAllCandidates mirrors the previous ignore-preselection behavior.
-	hosts := make([]compute.Host, 0, len(eligibleHosts))
+	hosts := make([]sched.Host, 0, len(eligibleHosts))
 	weights := make(map[string]float64, len(eligibleHosts))
 	for _, h := range eligibleHosts {
-		hosts = append(hosts, compute.Host{ComputeHost: h.ComputeHost, HypervisorHostname: h.HypervisorHostname})
+		hosts = append(hosts, sched.Host{ComputeHost: h.ComputeHost, HypervisorHostname: h.HypervisorHostname})
 		weights[h.ComputeHost] = 0.0
 	}
 	// Honor the flavor's trait and hypervisor-type constraints so a
@@ -316,11 +314,11 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 	// request is built directly, so filter_has_requested_traits/filter_capabilities
 	// would otherwise see empty slices and become no-ops). No hypervisor-type
 	// default here — only match when the flavor names one.
-	requiredTraits, forbiddenTraits := nova.SplitTraits(flavorDetails.ExtraSpecs)
-	schedReq := compute.PlacementRequest{
+	requiredTraits, forbiddenTraits := schedulerdelegationapi.SplitTraits(flavorDetails.ExtraSpecs)
+	schedReq := sched.PlacementRequest{
 		Pipeline:              pipelineName,
 		GatherAllCandidates:   true,
-		HypervisorFamily:      compute.HypervisorFamilyKVM,
+		HypervisorFamily:      schedulerdelegationapi.HypervisorFamilyKVM,
 		Hosts:                 hosts,
 		Weights:               weights,
 		Intent:                schedulerdelegationapi.ReserveForCommittedResourceIntent,
@@ -331,9 +329,9 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		DomainName:            domainName,
 		RequiredTraits:        requiredTraits,
 		ForbiddenTraits:       forbiddenTraits,
-		RequestedCapabilities: reservations.HypervisorTypeCapability(flavorDetails.ExtraSpecs, false),
-		AcceleratorsRequested: nova.RequestsAccelerators(flavorDetails.ExtraSpecs),
-		Flavor: compute.FlavorSpec{
+		RequestedCapabilities: schedulerdelegationapi.HypervisorTypeCapability(flavorDetails.ExtraSpecs, false),
+		AcceleratorsRequested: schedulerdelegationapi.RequestsAccelerators(flavorDetails.ExtraSpecs),
+		Flavor: schedulerdelegationapi.FlavorSpec{
 			VCPUs:    flavorDetails.VCPUs,
 			MemoryMB: flavorDetails.MemoryMB,
 		},

@@ -10,9 +10,8 @@ import (
 	"strings"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	knowledge "github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -80,13 +79,13 @@ func resolveVMSpecForScheduling(
 	ctx context.Context,
 	vm reservations.VM,
 	useFlavorGroupResources bool,
-	flavorGroups map[string]compute.FlavorGroupFeature,
+	flavorGroups map[string]knowledge.FlavorGroupFeature,
 ) resolvedReservationSpec {
 
 	logger := LoggerFromContext(ctx)
 
 	if useFlavorGroupResources && flavorGroups != nil {
-		groupName, _, err := accounting.FindFlavorInGroups(vm.FlavorName, flavorGroups)
+		groupName, _, err := knowledge.FindFlavorInGroups(vm.FlavorName, flavorGroups)
 		if err == nil {
 			fg := flavorGroups[groupName]
 			largest := fg.LargestFlavor

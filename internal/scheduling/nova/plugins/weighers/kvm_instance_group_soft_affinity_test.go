@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	"testing"
 
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -43,8 +44,8 @@ func newInstanceGroupRequest(policy string, members, hosts []string) compute.Pla
 		ProjectID:        "project-A",
 		InstanceUUID:     "new-instance-uuid",
 		NumInstances:     1,
-		HypervisorFamily: compute.HypervisorFamilyKVM,
-		Flavor: compute.FlavorSpec{
+		HypervisorFamily: api.HypervisorFamilyKVM,
+		Flavor: api.FlavorSpec{
 			VCPUs:    4,
 			MemoryMB: 8192,
 		},
@@ -53,7 +54,7 @@ func newInstanceGroupRequest(policy string, members, hosts []string) compute.Pla
 
 	// Only set InstanceGroup if policy is provided
 	if policy != "" {
-		req.InstanceGroup = &compute.InstanceGroupSpec{
+		req.InstanceGroup = &api.InstanceGroupSpec{
 			UUID:    "instance-group-uuid",
 			Policy:  policy,
 			Members: members,

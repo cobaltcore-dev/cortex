@@ -52,7 +52,7 @@ func makeQuotaEnforcementRequest(projectID, az, hwVersion string, memoryMB, numI
 		NumInstances:     numInstances,
 		Intent:           intentFromHint(hints),
 		HardwareVersion:  hwVersion,
-		Flavor: compute.FlavorSpec{
+		Flavor: api.FlavorSpec{
 			VCPUs:    4,
 			MemoryMB: memoryMB,
 		},
@@ -1007,7 +1007,13 @@ func TestFilterQuotaEnforcement_Run(t *testing.T) {
 			filter := &FilterQuotaEnforcement{}
 			filter.Client = fakeClient
 			filter.Options.Enforce = tt.enforce
-			filter.Options.CRStateFilter = tt.crStateFilter
+			// Production supplies the CR state filter via Helm; mirror that
+			// default here so cases that don't set one exercise confirmed-only.
+			crStateFilter := tt.crStateFilter
+			if crStateFilter == nil {
+				crStateFilter = []v1alpha1.CommitmentStatus{v1alpha1.CommitmentStatusConfirmed}
+			}
+			filter.Options.CRStateFilter = crStateFilter
 
 			result, err := filter.Run(logr.Discard(), tt.request)
 			if err != nil {

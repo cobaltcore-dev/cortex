@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"slices"
 
@@ -25,9 +24,6 @@ import (
 
 // Custom configuration for the Nova external scheduler api.
 type HTTPAPIConfig struct {
-	// Number of top hosts to shuffle for evacuation requests.
-	// Set to 0 or negative to disable shuffling.
-	EvacuationShuffleK int `json:"evacuationShuffleK,omitempty"`
 	// NovaLimitHostsToRequest, if true, will filter the Nova scheduler response
 	// to only include hosts that were in the original request.
 	NovaLimitHostsToRequest bool `json:"novaLimitHostsToRequest,omitempty"`
@@ -56,33 +52,51 @@ type runner interface {
 	Run(ctx context.Context, req compute.PlacementRequest, pre compute.PreHook, post compute.PostHook) (compute.PlacementResult, error)
 }
 
+// FailoverHostMatcher pins an evacuation's gang target to a failover host
+// reservation after the pipeline runs, marking the matching reservation InUse so
+// subsequent evacuations from the same source land on the same target. It is run
+// as a post-hook, under the scheduler lock. Implemented by
+// reservations/failoverhost.Matcher; an interface here so the handler can be
+// unit-tested and nova need not import failoverhost at the call site.
+type FailoverHostMatcher interface {
+	// ConfirmAndMarkInUse marks the failover host reservation selected for the
+	// request's source host InUse, but only when it is the pipeline's top
+	// candidate. It does not change the candidate list.
+	ConfirmAndMarkInUse(ctx context.Context, request api.ExternalSchedulerRequest, orderedHosts []string) error
+}
+
 type httpAPI struct {
-	monitor      scheduling.APIMonitor
-	scheduler    runner
-	vmHandler    *VirtualMachineHandler
-	crRecorder   crs.Recorder
-	featureGates FeatureGates
-	config       HTTPAPIConfig
+	monitor         scheduling.APIMonitor
+	scheduler       runner
+	vmHandler       *VirtualMachineHandler
+	crRecorder      crs.Recorder
+	featureGates    FeatureGates
+	config          HTTPAPIConfig
+	failoverMatcher FailoverHostMatcher
 }
 
 // NewAPI builds the Nova external-scheduler HTTP API. It calls the shared
-// compute.Placement directly; VM-resource creation and committed-resource
-// tracking run as post-hooks after the pipeline, under the scheduler's lock.
+// compute.Placement directly; VM-resource creation, committed-resource tracking
+// and failover-host pinning run as post-hooks after the pipeline, under the
+// scheduler's lock. failoverMatcher may be nil, in which case no failover-host
+// pinning is applied.
 func NewAPI(
 	config HTTPAPIConfig,
 	scheduler *compute.Placement,
 	vmHandler *VirtualMachineHandler,
 	crRecorder crs.Recorder,
 	featureGates FeatureGates,
+	failoverMatcher FailoverHostMatcher,
 ) HTTPAPI {
 
 	return &httpAPI{
-		monitor:      scheduling.NewSchedulerMonitor(),
-		scheduler:    scheduler,
-		vmHandler:    vmHandler,
-		crRecorder:   crRecorder,
-		featureGates: featureGates,
-		config:       config,
+		monitor:         scheduling.NewSchedulerMonitor(),
+		scheduler:       scheduler,
+		vmHandler:       vmHandler,
+		crRecorder:      crRecorder,
+		featureGates:    featureGates,
+		config:          config,
+		failoverMatcher: failoverMatcher,
 	}
 }
 
@@ -146,26 +160,6 @@ func (httpAPI *httpAPI) inferPipelineName(requestData api.ExternalSchedulerReque
 	default:
 		return "", fmt.Errorf("unsupported hypervisor_type: %s", hvType)
 	}
-}
-
-// shuffleTopHosts randomly reorders the first k hosts if the request
-// is an evacuation. This helps distribute evacuated VMs across multiple hosts
-// rather than concentrating them on the single "best" host.
-func shuffleTopHosts(hosts []string, k int) []string {
-	if k <= 0 {
-		return hosts
-	}
-	n := min(k, len(hosts))
-	if n <= 1 {
-		return hosts
-	}
-	result := make([]string, len(hosts))
-	copy(result, hosts)
-	rand.Shuffle(n, func(i, j int) { //nolint:gosec // non-crypto shuffle for load balancing
-		result[i], result[j] = result[j], result[i]
-	})
-	schedulerLog.V(1).Info("shuffled top hosts for evacuation", "k", n, "hosts", result[:n])
-	return result
 }
 
 // Limit the external scheduler response to the hosts provided in the  external
@@ -289,7 +283,7 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 			logger.V(1).Info("skipping virtual machine creation, feature gate disabled", "instanceUUID", requestData.Spec.Data.InstanceUUID)
 		case !slices.Contains(api.NovaIntents, intent):
 			logger.V(1).Info("skipping virtual machine creation, intent not triggered by Nova", "instanceUUID", requestData.Spec.Data.InstanceUUID, "intent", intent)
-		case schedReq.HypervisorFamily != compute.HypervisorFamilyKVM:
+		case schedReq.HypervisorFamily != api.HypervisorFamilyKVM:
 			logger.V(1).Info("skipping virtual machine creation, unsupported hypervisor type", "instanceUUID", requestData.Spec.Data.InstanceUUID)
 		default:
 			if upsertErr := httpAPI.vmHandler.Upsert(ctx, result, requestData, intent); upsertErr != nil {
@@ -308,6 +302,20 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 				httpAPI.crRecorder.RecordNoHostFound(ctx, intent, requestData)
 			}
 		}
+		// Failover-host pinning. Mark the failover host reservation selected for
+		// an evacuation InUse, pinning the source->target relationship for
+		// gang-evacuation. The candidate shaping (removing other reserved hosts,
+		// lifting the selected target to the front) is already done inside the
+		// pipeline by the filter_failover_host filter and weigher_failover_host
+		// weigher; this only performs the serialized InUse write. It runs under
+		// the scheduler lock (write runs only) so the write is visible to
+		// subsequent evacuations from the same source. Read-only runs (probes,
+		// capacity checks) never pin.
+		if httpAPI.failoverMatcher != nil && !requestData.Options.ReadOnly {
+			if mErr := httpAPI.failoverMatcher.ConfirmAndMarkInUse(ctx, requestData, result.OrderedHosts); mErr != nil {
+				return fmt.Errorf("failover host matcher failed: %w", mErr)
+			}
+		}
 		return nil
 	}
 
@@ -321,11 +329,6 @@ func (httpAPI *httpAPI) NovaExternalScheduler(w http.ResponseWriter, r *http.Req
 		hosts = limitHostsToRequest(requestData, hosts)
 		logger.V(1).Info("limited hosts to request",
 			"hosts", hosts, "originalHosts", result.OrderedHosts)
-	}
-	// This is a hack to address the problem that Nova only uses the first host in hosts for evacuation requests.
-	// Only for evacuation we shuffle the first k hosts to ensure that we do not get stuck on a single host
-	if intent == api.EvacuateIntent {
-		hosts = shuffleTopHosts(hosts, httpAPI.config.EvacuationShuffleK)
 	}
 	// Ensure we always return an array, never null. Nova's schema requires
 	// hosts to be an array, and a nil slice would serialize to null.

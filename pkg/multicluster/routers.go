@@ -21,6 +21,7 @@ var DefaultResourceRouters = map[schema.GroupVersionKind]ResourceRouter{
 	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "CommittedResource"}:   CommittedResourceRouter{},
 	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "ProjectQuota"}:        ProjectQuotaResourceRouter{},
 	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "FlavorGroupCapacity"}: FlavorGroupCapacityResourceRouter{},
+	{Group: "cortex.cloud", Version: "v1alpha1", Kind: "Rescheduling"}:        ReschedulingResourceRouter{},
 }
 
 // ResourceRouter determines which remote cluster a resource should be written to
@@ -222,6 +223,53 @@ func (f FlavorGroupCapacityResourceRouter) Match(obj any, labels map[string]stri
 		return false, errors.New("flavor group capacity does not have availability zone in spec")
 	}
 	return fgc.Spec.AvailabilityZone == availabilityZone, nil
+}
+
+// ReschedulingResourceRouter routes rescheduling requests to clusters based on availability zone.
+type ReschedulingResourceRouter struct{}
+
+func (r ReschedulingResourceRouter) ExtractClusterSelector(obj any) (string, error) {
+	switch v := obj.(type) {
+	case *v1alpha1.Rescheduling:
+		if v == nil {
+			return "", errors.New("object is nil")
+		}
+		if v.Spec.AvailabilityZone == "" {
+			return "", errors.New("rescheduling request does not have availability zone in spec")
+		}
+		return v.Spec.AvailabilityZone, nil
+	case v1alpha1.Rescheduling:
+		if v.Spec.AvailabilityZone == "" {
+			return "", errors.New("rescheduling request does not have availability zone in spec")
+		}
+		return v.Spec.AvailabilityZone, nil
+	default:
+		return "", errors.New("object is not a Rescheduling")
+	}
+}
+
+func (r ReschedulingResourceRouter) Match(obj any, labels map[string]string) (bool, error) {
+	var rr v1alpha1.Rescheduling
+
+	switch v := obj.(type) {
+	case *v1alpha1.Rescheduling:
+		if v == nil {
+			return false, errors.New("object is nil")
+		}
+		rr = *v
+	case v1alpha1.Rescheduling:
+		rr = v
+	default:
+		return false, errors.New("object is not a Rescheduling")
+	}
+	availabilityZone, ok := labels["availabilityZone"]
+	if !ok {
+		return false, errors.New("cluster does not have availabilityZone label")
+	}
+	if rr.Spec.AvailabilityZone == "" {
+		return false, errors.New("rescheduling request does not have availability zone in spec")
+	}
+	return rr.Spec.AvailabilityZone == availabilityZone, nil
 }
 
 // ProjectQuotaResourceRouter routes project quotas to clusters based on availability zone.

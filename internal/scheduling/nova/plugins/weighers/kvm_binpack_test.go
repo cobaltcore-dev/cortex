@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -49,8 +50,8 @@ func newBinpackRequest(memoryMB, vcpus, numInstances uint64, hosts []string) com
 		ProjectID:        "project-A",
 		InstanceUUID:     "instance-123",
 		NumInstances:     numInstances,
-		HypervisorFamily: compute.HypervisorFamilyKVM,
-		Flavor: compute.FlavorSpec{
+		HypervisorFamily: api.HypervisorFamilyKVM,
+		Flavor: api.FlavorSpec{
 			VCPUs:    vcpus,
 			MemoryMB: memoryMB,
 		},

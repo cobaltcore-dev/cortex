@@ -8,6 +8,7 @@ import (
 	"slices"
 	"testing"
 
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
@@ -626,73 +627,12 @@ func TestFailoverSchedulerFlavorConstraints(t *testing.T) {
 			c := buildMinimalController(t, scheduler)
 			_, _ = c.scheduleAndBuildNewFailoverReservation(context.Background(), vm, []string{"host-1", "host-2"}, nil, nil, resolved) //nolint:errcheck
 
-			wantCap := []sched.Capability{{Name: "hypervisor_type", Value: tt.wantHVType}}
+			wantCap := []api.Capability{{Name: "hypervisor_type", Value: tt.wantHVType}}
 			if len(capturedReq.RequestedCapabilities) != 1 || capturedReq.RequestedCapabilities[0] != wantCap[0] {
 				t.Errorf("RequestedCapabilities = %v, want %v", capturedReq.RequestedCapabilities, wantCap)
 			}
 			if !slices.Equal(capturedReq.RequiredTraits, tt.wantTraits) {
 				t.Errorf("RequiredTraits = %v, want %v", capturedReq.RequiredTraits, tt.wantTraits)
-			}
-		})
-	}
-}
-
-// ============================================================================
-// Test: imagePropertiesFromFlavor
-// ============================================================================
-
-func TestImagePropertiesFromFlavor(t *testing.T) {
-	tests := []struct {
-		name       string
-		extraSpecs map[string]string
-		want       map[string]any
-	}{
-		{
-			name:       "qemu (lowercase) -> kvm img_hv_type",
-			extraSpecs: map[string]string{"capabilities:hypervisor_type": "qemu"},
-			want:       map[string]any{"img_hv_type": "kvm"},
-		},
-		{
-			name:       "QEMU (uppercase) -> kvm img_hv_type",
-			extraSpecs: map[string]string{"capabilities:hypervisor_type": "QEMU"},
-			want:       map[string]any{"img_hv_type": "kvm"},
-		},
-		{
-			name:       "CH -> kvm img_hv_type",
-			extraSpecs: map[string]string{"capabilities:hypervisor_type": "CH"},
-			want:       map[string]any{"img_hv_type": "kvm"},
-		},
-		{
-			name:       "VMware -> hypervisor_type=vmware",
-			extraSpecs: map[string]string{"capabilities:hypervisor_type": "VMware vCenter Server"},
-			want:       map[string]any{"hypervisor_type": "vmware"},
-		},
-		{
-			name:       "Ironic -> hypervisor_type=baremetal",
-			extraSpecs: map[string]string{"capabilities:hypervisor_type": "Ironic"},
-			want:       map[string]any{"hypervisor_type": "baremetal"},
-		},
-		{
-			name:       "unspecified -> nil",
-			extraSpecs: map[string]string{},
-			want:       nil,
-		},
-		{
-			name:       "unknown value -> nil",
-			extraSpecs: map[string]string{"capabilities:hypervisor_type": "SomeFuturisticThing"},
-			want:       nil,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := imagePropertiesFromFlavor(tt.extraSpecs)
-			if len(got) != len(tt.want) {
-				t.Fatalf("length mismatch: got %v want %v", got, tt.want)
-			}
-			for k, v := range tt.want {
-				if got[k] != v {
-					t.Errorf("key %q: got %v want %v", k, got[k], v)
-				}
 			}
 		})
 	}

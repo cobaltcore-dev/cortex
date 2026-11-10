@@ -6,7 +6,6 @@ package lib
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -61,7 +60,15 @@ func (w *PipelineAdmissionWebhook) ValidateDelete(
 	return nil, nil // No validation needed on delete.
 }
 
-// validatePipeline performs the actual validation logic.
+// validatePipeline performs version-specific validation of the pipeline steps.
+//
+// It never returns an error: structural constraints (pipeline type, which step
+// lists are allowed) are enforced by the API server via CEL on the CRD, so the
+// webhook only checks whether the referenced steps exist in this controller and
+// whether their params are valid for this controller version. Those checks are
+// version-specific, so failures are surfaced as warnings rather than rejections
+// to avoid blocking rolling upgrades where an older controller sees a pipeline
+// written for a newer one (or vice versa).
 func (w *PipelineAdmissionWebhook) validatePipeline(
 	ctx context.Context,
 	pipeline *v1alpha1.Pipeline,
@@ -81,66 +88,25 @@ func (w *PipelineAdmissionWebhook) validatePipeline(
 
 	log.V(1).Info("validating pipeline", "pipelineName", pipeline.Name, "pipelineType", pipeline.Spec.Type)
 
-	var errMsgs []string
-
-	// We will use warnings whenever a pipeline step is referenced that
-	// doesn't exist in our indexes, in case cortex is updated with new
-	// filters/weighers/detectors, so we don't break our rollout.
 	var warnings []string
-
-	// Validate based on pipeline type
-	switch pipeline.Spec.Type {
-	case v1alpha1.PipelineTypeFilterWeigher:
-		// Check there are no detectors configured,
-		// as they are not allowed in a filter/weigher pipeline.
-		if len(pipeline.Spec.Detectors) > 0 {
-			errMsgs = append(errMsgs, "detectors are not allowed in a filter/weigher pipeline")
+	validate := func(kind, name string, index map[string]Validatable, params v1alpha1.Parameters) {
+		step, ok := index[name]
+		if !ok {
+			warnings = append(warnings, fmt.Sprintf("unknown %s %q: this step will be ignored", kind, name))
+			return
 		}
-		for _, filterSpec := range pipeline.Spec.Filters {
-			filter, ok := w.ValidatableFilters[filterSpec.Name]
-			if !ok {
-				warnings = append(warnings, fmt.Sprintf("unknown filter %q: this filter will be ignored", filterSpec.Name))
-				continue
-			}
-			if err := filter.Validate(ctx, filterSpec.Params); err != nil {
-				errMsgs = append(errMsgs, fmt.Sprintf("filter %q: %v", filterSpec.Name, err))
-			}
+		if err := step.Validate(ctx, params); err != nil {
+			warnings = append(warnings, fmt.Sprintf("%s %q: %v", kind, name, err))
 		}
-		for _, weigherSpec := range pipeline.Spec.Weighers {
-			weigher, ok := w.ValidatableWeighers[weigherSpec.Name]
-			if !ok {
-				warnings = append(warnings, fmt.Sprintf("unknown weigher %q: this weigher will be ignored", weigherSpec.Name))
-				continue
-			}
-			if err := weigher.Validate(ctx, weigherSpec.Params); err != nil {
-				errMsgs = append(errMsgs, fmt.Sprintf("weigher %q: %v", weigherSpec.Name, err))
-			}
-		}
-	case v1alpha1.PipelineTypeDetector:
-		// Check there are no filters or weighers configured,
-		// as they are not allowed in a detector pipeline.
-		if len(pipeline.Spec.Filters) > 0 {
-			errMsgs = append(errMsgs, "filters are not allowed in a detector pipeline")
-		}
-		if len(pipeline.Spec.Weighers) > 0 {
-			errMsgs = append(errMsgs, "weighers are not allowed in a detector pipeline")
-		}
-		for _, detectorSpec := range pipeline.Spec.Detectors {
-			detector, ok := w.ValidatableDetectors[detectorSpec.Name]
-			if !ok {
-				warnings = append(warnings, fmt.Sprintf("unknown detector %q: this detector will be ignored", detectorSpec.Name))
-				continue
-			}
-			if err := detector.Validate(ctx, detectorSpec.Params); err != nil {
-				errMsgs = append(errMsgs, fmt.Sprintf("detector %q: %v", detectorSpec.Name, err))
-			}
-		}
-	default:
-		errMsgs = append(errMsgs, fmt.Sprintf("unknown pipeline type: %s", pipeline.Spec.Type))
 	}
-
-	if len(errMsgs) > 0 {
-		return warnings, fmt.Errorf("pipeline is invalid: %s", strings.Join(errMsgs, "; "))
+	for _, filterSpec := range pipeline.Spec.Filters {
+		validate("filter", filterSpec.Name, w.ValidatableFilters, filterSpec.Params)
+	}
+	for _, weigherSpec := range pipeline.Spec.Weighers {
+		validate("weigher", weigherSpec.Name, w.ValidatableWeighers, weigherSpec.Params)
+	}
+	for _, detectorSpec := range pipeline.Spec.Detectors {
+		validate("detector", detectorSpec.Name, w.ValidatableDetectors, detectorSpec.Params)
 	}
 	return warnings, nil
 }
