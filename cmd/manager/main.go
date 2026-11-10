@@ -826,14 +826,23 @@ func main() {
 			"maxVMsToProcess", failoverConfig.MaxVMsToProcess,
 			"vmSelectionRotationInterval", failoverConfig.VMSelectionRotationInterval)
 	}
-	if slices.Contains(mainConfig.EnabledControllers, "failover-host-reservations-controller") {
-		setupLog.Info("enabling controller", "controller", "failover-host-reservations-controller")
-		failoverHostConfig := conf.GetConfigOrDie[failoverhost.Config]().Failover.Hosts
-		failoverHostMonitor := failoverhost.NewMonitor()
+	// The failover-host reservations controller and its drain controller share
+	// one Monitor: both export the same cortex_failover_host_* metric family, so
+	// registering two instances would clash on duplicate metric names (the second
+	// Register fails and silently drops that controller's metrics). Built once
+	// here and handed to whichever of the two controllers is enabled.
+	var failoverHostMonitor *failoverhost.Monitor
+	if slices.Contains(mainConfig.EnabledControllers, "failover-host-reservations-controller") ||
+		slices.Contains(mainConfig.EnabledControllers, "failover-host-drain-controller") {
+		failoverHostMonitor = failoverhost.NewMonitor()
 		if err := metrics.Registry.Register(failoverHostMonitor); err != nil {
 			setupLog.Error(err, "failed to register failover host monitor metrics, continuing without metrics")
 			failoverHostMonitor = nil
 		}
+	}
+	if slices.Contains(mainConfig.EnabledControllers, "failover-host-reservations-controller") {
+		setupLog.Info("enabling controller", "controller", "failover-host-reservations-controller")
+		failoverHostConfig := conf.GetConfigOrDie[failoverhost.Config]().Failover.Hosts
 		if novaScheduler == nil {
 			setupLog.Error(nil, "failover-host-reservations-controller requires nova-pipeline-controllers (in-process scheduler) to be enabled")
 			os.Exit(1)
@@ -862,15 +871,10 @@ func main() {
 		// enabled, so that when disabled no reservation is marked active and no
 		// draining happens.
 		if drainConfig.Enabled {
-			failoverHostDrainMonitor := failoverhost.NewMonitor()
-			if err := metrics.Registry.Register(failoverHostDrainMonitor); err != nil {
-				setupLog.Error(err, "failed to register failover host drain monitor metrics, continuing without metrics")
-				failoverHostDrainMonitor = nil
-			}
 			controller := &failoverhost.DrainController{
 				Client:  multiclusterClient,
 				Config:  drainConfig,
-				Monitor: failoverHostDrainMonitor,
+				Monitor: failoverHostMonitor,
 			}
 			if err := controller.SetupWithManager(ctx, mgr); err != nil {
 				setupLog.Error(err, "unable to create controller",

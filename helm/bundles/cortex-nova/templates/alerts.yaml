@@ -1097,5 +1097,64 @@ spec:
           the source hosts have no reserved failover target — check whether their partition
           reserves anything (a partition of fewer than two hosts reserves nothing) and the
           failover host calculation loop is healthy.
+    - alert: CortexNovaFailoverHostReoccupied
+      # The drain controller demotes an Active failover host back to draining
+      # whenever a virtual machine appears on it without an evacuation claiming it.
+      # The filter pipeline is supposed to keep ordinary workloads off reserved
+      # hosts, so any demotion is an invariant violation: a VM leaked onto a
+      # drained landing zone. The controller self-heals by re-draining, but a
+      # recurring signal means the filter is not blocking placement as intended.
+      expr: increase(cortex_failover_host_drain_host_reoccupied_total{service="cortex-nova-metrics"}[15m]) > 0
+      for: 5m
+      labels:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
+{{- end }}
+        context: failover-hosts
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: ""
+      annotations:
+        summary: "Virtual machines are landing on drained failover hosts"
+        description: >
+          The failover host drain controller has had to demote an already-drained,
+          Active failover host back to draining because a virtual machine appeared on
+          it. The failover-host filter is meant to keep ordinary workloads off reserved
+          hosts, so this means placement is leaking onto a reserved landing zone. The
+          controller re-drains automatically, but recurring demotions indicate the
+          filter_failover_host step is disabled, misconfigured, or not seeing the
+          reservation. Check the filter configuration and the drain controller logs.
+    - alert: CortexNovaFailoverHostDrainStuck
+      # reservations_draining counts failover host reservations that are present
+      # but not yet Active (still draining). A transient non-zero value is normal
+      # right after the generator designates a fresh host; min_over_time > 0 over a
+      # long window means at least one reservation never reached Active — its host
+      # cannot be emptied (a VM that will not migrate, a drain that keeps failing,
+      # or the single fleet-wide drain slot wedged). Such reservations are deleted
+      # at the TTL (default 24h), so a value that persists for hours means draining
+      # is not making progress.
+      expr: min_over_time(cortex_failover_host_reservations_draining{service="cortex-nova-metrics"}[3h]) > 0
+      for: 3h
+      labels:
+{{- if .Values.alerts.persesDashboardBaseURL }}
+        persesDashboard: "{{ .Values.alerts.persesDashboardBaseURL }}/cortex_status?var-service=cortex-nova-metrics"
+{{- end }}
+        context: failover-hosts
+        service: cortex
+        severity: warning
+        support_group: workload-management
+        playbook: ""
+      annotations:
+        summary: "Failover host reservations are stuck draining"
+        description: >
+          At least one failover host reservation has stayed in the draining state
+          (present but not FailoverHostActive) for the entire lookback window, never
+          reaching an empty, ready-to-evacuate state. Its reserved host cannot be
+          emptied — typically a virtual machine that will not live-migrate, a drain
+          rescheduling that keeps failing, or the fleet-wide single-drain slot being
+          held. Until it drains, that host provides no usable failover capacity and
+          the reservation will be deleted at its TTL. Check the drain controller logs
+          and the drain Reschedulings labelled reservations.cortex.cloud/failover-host-drain.
     {{- end }}
 {{- end }}

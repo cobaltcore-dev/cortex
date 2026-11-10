@@ -93,7 +93,9 @@ func TestComputeViolations(t *testing.T) {
 			},
 			slots: []v1alpha1.Reservation{{
 				Spec: v1alpha1.ReservationSpec{
-					// Full-host block, but FailoverHostReservation is not yet counted.
+					// A failover host reservation blocks the full host capacity, which
+					// equals the host here, so free lands at exactly zero — reserved but
+					// not oversubscribed.
 					Type:       v1alpha1.ReservationTypeFailoverHost,
 					TargetHost: "host-1",
 					Resources:  map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(512)},

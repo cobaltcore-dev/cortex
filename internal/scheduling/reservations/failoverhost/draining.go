@@ -38,6 +38,13 @@ const (
 	// reserved host is empty.
 	ReasonHostDrained = "HostDrained"
 
+	// ReasonHostReoccupied is the FailoverHostActive=False reason set when a
+	// virtual machine appears on an Active, not-yet-in-use failover host. The
+	// filter pipeline should keep ordinary workloads off the host, so this is an
+	// invariant violation: the controller demotes the reservation back to
+	// draining to evict the squatter and restore an empty landing zone.
+	ReasonHostReoccupied = "HostReoccupied"
+
 	// novaStatusDeleted is the Nova status of a deleted server, which no longer
 	// occupies its host.
 	novaStatusDeleted = "DELETED"
@@ -105,6 +112,7 @@ func (c *DrainController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 	host, az := res.Spec.TargetHost, res.Spec.AvailabilityZone
 	log := logf.FromContext(ctx).WithName("failoverhost-drain").WithValues("reservation", res.Name, "host", host)
+	c.recordDrainingGauge(ctx)
 
 	// A missing hypervisor can never be drained into a failover target. An
 	// unready one is deliberately not a trigger: the generator designates hosts
@@ -118,7 +126,42 @@ func (c *DrainController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, c.deleteReservation(ctx, res)
 	}
 
+	vms := &vmv1alpha1.VirtualMachineList{}
+	if err := c.List(ctx, vms); err != nil {
+		return ctrl.Result{}, fmt.Errorf("list virtual machines: %w", err)
+	}
+	hostEmpty := !slices.ContainsFunc(vms.Items, func(vm vmv1alpha1.VirtualMachine) bool {
+		return occupiedHost(&vm) == host
+	})
+
 	if meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive) {
+		// An Active reservation that is in use is legitimately receiving VMs from
+		// a gang evacuation, so leave it alone. An empty, not-in-use one is in its
+		// expected ready state. Only a not-in-use one that has gained a VM is an
+		// anomaly: the filter pipeline should keep ordinary workloads off the host,
+		// so demote it back to draining to evict the squatter and rebuild the empty
+		// landing zone.
+		inUse := meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse)
+		if inUse || hostEmpty {
+			return ctrl.Result{}, nil
+		}
+		log.Info("virtual machine appeared on active failover host, restarting drain")
+		base := res.DeepCopy()
+		meta.SetStatusCondition(&res.Status.Conditions, metav1.Condition{
+			Type:               v1alpha1.ConditionTypeFailoverHostActive,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: res.Generation,
+			Reason:             ReasonHostReoccupied,
+			Message:            "a virtual machine appeared on the reserved host, draining again",
+		})
+		if err := c.Status().Patch(ctx, res, client.MergeFrom(base)); err != nil {
+			c.Monitor.RecordReservationError("drain_demote")
+			return ctrl.Result{}, fmt.Errorf("demote reoccupied reservation %s: %w", res.Name, err)
+		}
+		c.Monitor.RecordDrainHostReoccupied()
+		// The status write re-triggers our own reservation watch, which drives the
+		// now-draining reservation forward, so no explicit requeue is needed (same
+		// as the mark-active path above).
 		return ctrl.Result{}, nil
 	}
 
@@ -131,13 +174,6 @@ func (c *DrainController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// watch event arrives.
 	waitUntilTTL := ctrl.Result{RequeueAfter: ttlLeft}
 
-	vms := &vmv1alpha1.VirtualMachineList{}
-	if err := c.List(ctx, vms); err != nil {
-		return ctrl.Result{}, fmt.Errorf("list virtual machines: %w", err)
-	}
-	hostEmpty := !slices.ContainsFunc(vms.Items, func(vm vmv1alpha1.VirtualMachine) bool {
-		return occupiedHost(&vm) == host
-	})
 	if hostEmpty {
 		log.Info("host is empty, marking failover host reservation active")
 		base := res.DeepCopy()
@@ -218,6 +254,7 @@ func (c *DrainController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			c.Monitor.RecordReservationError("drain_create")
 			return ctrl.Result{}, fmt.Errorf("create drain rescheduling for host %s: %w", host, err)
 		}
+		c.Monitor.RecordDrainCreated()
 		return ctrl.Result{}, nil
 	}
 
@@ -245,6 +282,30 @@ func (c *DrainController) deleteReservation(ctx context.Context, res *v1alpha1.R
 	}
 	c.Monitor.RecordReservationDeleted()
 	return nil
+}
+
+// recordDrainingGauge publishes how many failover host reservations are still
+// draining (present but not yet Active). Any reconcile trigger refreshes it, so
+// a backlog of stuck drains stays visible even between drain events. A list
+// error only skips this metric update, never fails the reconcile.
+func (c *DrainController) recordDrainingGauge(ctx context.Context) {
+	if c.Monitor == nil {
+		return
+	}
+	list := &v1alpha1.ReservationList{}
+	if err := c.List(ctx, list, client.MatchingLabels{
+		v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelFailoverHost,
+	}); err != nil {
+		logf.FromContext(ctx).V(1).Info("failed to list failover host reservations for draining gauge", "err", err)
+		return
+	}
+	draining := 0
+	for _, res := range list.Items {
+		if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive) {
+			draining++
+		}
+	}
+	c.Monitor.SetReservationsDraining(draining)
 }
 
 // SetupWithManager registers the controller. Besides failover host
