@@ -135,15 +135,15 @@ func HostFreeCapacity(hostReservations []v1alpha1.Reservation, hv hv1.Hypervisor
 //
 // FailoverReservations: always block the full Spec.Resources.
 //
-// FailoverHostReservations: block the full Spec.Resources, which the generator
-// sets to the whole host's capacity (base overlaid with effective). A failover
-// host reservation keeps an entire host empty as a gang-evacuation landing zone,
-// so for capacity accounting the host must report as fully reserved for its whole
-// lifetime — while draining (so the soon-to-be-empty host is not also offered to
-// ordinary placement) and while Active or InUse alike. This mirrors
-// FailoverReservations and keeps the capacity filter, capacity controller and
-// oversubscription controller consistent in one place.
+// FailoverHostReservations: block nothing. FailoverHostReservation is a new feature
+// that reserves an entire host, and is intentionally not yet counted as blocked capacity
+// by any consumer of this function (capacity filter, capacity controller, oversubscription
+// controller). Returning an empty block here keeps all of them consistent in one place.
 func UnusedReservationCapacity(res *v1alpha1.Reservation, ignoreAllocations bool) map[hv1.ResourceName]resource.Quantity {
+	if res.Spec.Type == v1alpha1.ReservationTypeFailoverHost {
+		// TODO: When failover reservations are in use, account for them.
+		return nil
+	}
 	if res.Spec.Type == v1alpha1.ReservationTypeCommittedResource &&
 		!ignoreAllocations &&
 		res.Spec.TargetHost == res.Status.Host &&
