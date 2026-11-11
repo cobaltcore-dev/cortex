@@ -235,8 +235,8 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 					"host", host)
 				continue
 			}
-			if cpu, ok := resourcesToBlock["cpu"]; ok {
-				if freeCPU, exists := freeResourcesByHost[host]["cpu"]; exists {
+			if cpu, ok := resourcesToBlock[hv1.ResourceCPU]; ok {
+				if freeCPU, exists := freeResourcesByHost[host][hv1.ResourceCPU]; exists {
 					freeCPU.Sub(cpu)
 					if freeCPU.Value() < 0 {
 						traceLog.V(1).Info("negative free CPU after blocking reservation",
@@ -247,11 +247,11 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 							"blocked", cpu.String())
 						freeCPU = resource.Quantity{}
 					}
-					freeResourcesByHost[host]["cpu"] = freeCPU
+					freeResourcesByHost[host][hv1.ResourceCPU] = freeCPU
 				}
 			}
-			if memory, ok := resourcesToBlock["memory"]; ok {
-				if freeMemory, exists := freeResourcesByHost[host]["memory"]; exists {
+			if memory, ok := resourcesToBlock[hv1.ResourceMemory]; ok {
+				if freeMemory, exists := freeResourcesByHost[host][hv1.ResourceMemory]; exists {
 					freeMemory.Sub(memory)
 					if freeMemory.Value() < 0 {
 						traceLog.V(1).Info("negative free memory after blocking reservation",
@@ -262,7 +262,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 							"blocked", memory.String())
 						freeMemory = resource.Quantity{}
 					}
-					freeResourcesByHost[host]["memory"] = freeMemory
+					freeResourcesByHost[host][hv1.ResourceMemory] = freeMemory
 				}
 			}
 		}
@@ -273,10 +273,12 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 		hostsEncountered[host] = struct{}{}
 
 		// Check cpu capacity.
-		if request.Flavor.VCPUs == 0 {
-			return nil, errors.New("flavor has 0 vcpus")
+		reqCPU := request.InstanceCapacity[hv1.ResourceCPU]
+		requestedCPU := reqCPU.Value()
+		if requestedCPU <= 0 {
+			return nil, errors.New("request has 0 cpu capacity")
 		}
-		freeCPU, ok := free["cpu"]
+		freeCPU, ok := free[hv1.ResourceCPU]
 		if !ok || freeCPU.Value() < 0 {
 			traceLog.V(1).Info(
 				"host with invalid CPU capacity",
@@ -287,23 +289,24 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 		}
 		// Calculate how many instances can fit on this host, based on cpu.
 		//nolint:gosec // We're checking for underflows above (< 0).
-		vcpuSlots := uint64(freeCPU.Value()) /
-			request.Flavor.VCPUs
+		vcpuSlots := uint64(freeCPU.Value()) / uint64(requestedCPU)
 		if vcpuSlots < request.NumInstances {
 			traceLog.V(1).Info(
 				"filtering host due to insufficient CPU capacity",
-				"host", host, "requested", request.Flavor.VCPUs,
+				"host", host, "requested", requestedCPU,
 				"available", freeCPU.String(),
 			)
 			delete(result.Activations, host)
 			continue
 		}
 
-		// Check memory capacity.
-		if request.Flavor.MemoryMB == 0 {
-			return nil, errors.New("flavor has 0 memory")
+		// Check memory capacity. InstanceCapacity memory is already in bytes.
+		reqMem := request.InstanceCapacity[hv1.ResourceMemory]
+		requestedMemoryBytes := reqMem.Value()
+		if requestedMemoryBytes <= 0 {
+			return nil, errors.New("request has 0 memory capacity")
 		}
-		freeMemory, ok := free["memory"]
+		freeMemory, ok := free[hv1.ResourceMemory]
 		if !ok || freeMemory.Value() < 0 {
 			traceLog.V(1).Info(
 				"host with invalid memory capacity",
@@ -313,25 +316,22 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 			continue
 		}
 		// Calculate how many instances can fit on this host, based on memory.
-		// Nova's memory_mb field is named "megabytes" in the API docs, but the values
-		// are in mebibytes (1 MiB = 2^20 bytes). Multiply by 1<<20 to convert to bytes.
 		//nolint:gosec // We're checking for underflows above (< 0).
-		memorySlots := uint64(freeMemory.Value()) /
-			(request.Flavor.MemoryMB * (1 << 20))
+		memorySlots := uint64(freeMemory.Value()) / uint64(requestedMemoryBytes)
 		if memorySlots < request.NumInstances {
 			traceLog.V(1).Info(
 				"filtering host due to insufficient RAM capacity",
-				"host", host, "requested_mb", request.Flavor.MemoryMB,
-				"available_mb", freeMemory.String(),
+				"host", host, "requested_bytes", requestedMemoryBytes,
+				"available_bytes", freeMemory.String(),
 			)
 			delete(result.Activations, host)
 			continue
 		}
 		traceLog.V(1).Info(
 			"host has enough capacity", "host", host,
-			"requested_cpus", request.Flavor.VCPUs,
+			"requested_cpus", requestedCPU,
 			"available_cpus", freeCPU.String(),
-			"requested_memory_mb", request.Flavor.MemoryMB,
+			"requested_memory_bytes", requestedMemoryBytes,
 			"available_memory", freeMemory.String(),
 		)
 	}
