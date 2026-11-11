@@ -84,6 +84,13 @@ func TestCompletionReconcile(t *testing.T) {
 		{name: "in use without source host skips", res: noSource(), wantRequeue: requeueNone},
 		{name: "source empty first time marks completed and requeues grace", res: inUseReservation(),
 			wantCompleted: ptrStatus(metav1.ConditionTrue), wantRequeue: requeueGrace},
+		{name: "evacuees scattered off the source complete regardless of where they landed", res: inUseReservation(),
+			// Evacuees from "peer" ended up on the failover target (hv1) and on an
+			// ordinary fallback host (hv9), never consolidated onto one designated
+			// spot. Completion keys only on the source host being empty, so this
+			// still completes.
+			objs:          []client.Object{buildVM("on-target", "hv1", "ACTIVE"), buildVM("on-fallback", "hv9", "ACTIVE")},
+			wantCompleted: ptrStatus(metav1.ConditionTrue), wantRequeue: requeueGrace},
 		{name: "source occupied does nothing", res: inUseReservation(),
 			objs: []client.Object{sourceOccupant()}, wantRequeue: requeueNone},
 		{name: "source re-occupied resets completed to false", res: withCompletedTrue(inUseReservation(), time.Hour),
