@@ -5,8 +5,6 @@ package filters
 
 import (
 	"context"
-	"errors"
-	"slices"
 
 	"github.com/go-logr/logr"
 
@@ -14,24 +12,13 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
-	resv "github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
+	"github.com/cobaltcore-dev/cortex/pkg/capacity"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 type FilterHasEnoughCapacityOpts struct {
 	// If reserved space should be locked even for matching requests.
 	LockReserved bool `json:"lockReserved"`
-
-	// IgnoredReservationTypes is a list of reservation types to ignore when calculating capacity.
-	// Valid values: "CommittedResourceReservation", "FailoverReservation"
-	// When a reservation type is in this list, its capacity is not blocked.
-	// Default: empty (all reservation types are considered)
-	IgnoredReservationTypes []v1alpha1.ReservationType `json:"ignoredReservationTypes,omitempty"`
-
-	// IgnoreAllocations skips subtracting current VM allocations from host capacity.
-	// When true, only raw hardware capacity is considered (empty datacenter scenario).
-	IgnoreAllocations bool `json:"ignoreAllocations,omitempty"`
 }
 
 func (FilterHasEnoughCapacityOpts) Validate() error { return nil }
@@ -68,285 +55,163 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 	opts := request.GetOptions()
 	result := s.IncludeAllHostsFromRequest(request)
 
-	// Merge call-time options with static step config.
-	ignoreAllocations := s.Options.IgnoreAllocations || opts.AssumeEmptyHosts
-	ignoredReservationTypes := slices.Concat(s.Options.IgnoredReservationTypes, opts.IgnoredReservationTypes)
+	// Call-time options plus static step config.
+	assumeEmptyHosts := opts.AssumeEmptyHosts
+	lockReserved := s.Options.LockReserved || opts.LockReservations
 
-	// This map holds the free resources per host.
-	freeResourcesByHost := make(map[string]map[hv1.ResourceName]resource.Quantity)
-
-	// The hypervisor resource auto-discovers its current utilization.
-	// We can use the hypervisor status to calculate the total capacity
-	// and then subtract the actual resource allocation from virtual machines.
 	hvs := &hv1.HypervisorList{}
 	if err := s.Client.List(context.Background(), hvs); err != nil {
 		traceLog.Error(err, "failed to list hypervisors")
 		return nil, err
 	}
-	for _, hv := range hvs.Items {
+
+	// Which reservations block capacity for THIS request. This is the only
+	// request-dependent, Nova-specific policy; pkg/capacity does the arithmetic once
+	// the active list is known. A reservation is dropped (its capacity handed to the
+	// request) when the request is entitled to it: a matching committed-resource slot,
+	// a failover slot being evacuated/reused by this very VM, or a failover-host
+	// reservation (handled by the dedicated filter_failover_host). Everything else blocks.
+	//
+	// The empty-datacenter view (assumeEmptyHosts) drops every reservation unconditionally:
+	// it asks how much a host could hold once fully cleared, so neither running workloads
+	// nor any reservation count. The reservation list is therefore left empty, and the fit
+	// check below runs against Total rather than Available.
+	var active []v1alpha1.Reservation
+	if !assumeEmptyHosts {
+		var reservations v1alpha1.ReservationList
+		if err := s.Client.List(context.Background(), &reservations); err != nil {
+			return nil, err
+		}
+		active = make([]v1alpha1.Reservation, 0, len(reservations.Items))
+		for _, reservation := range reservations.Items {
+			if s.reservationBlocks(traceLog, request, reservation, lockReserved) {
+				active = append(active, reservation)
+			}
+		}
+	}
+
+	for i := range hvs.Items {
+		hv := hvs.Items[i]
 		if _, ok := result.Activations[hv.Name]; !ok {
 			continue
 		}
-		var sourceMap map[hv1.ResourceName]resource.Quantity
-		if hv.Status.EffectiveCapacity == nil {
-			traceLog.V(1).Info("hypervisor with nil effective capacity, use capacity instead (overprovisioning not considered)", "host", hv.Name)
-			sourceMap = hv.Status.Capacity
-		} else {
-			// Start with the total effective capacity which is capacity * overcommit ratio.
-			sourceMap = hv.Status.EffectiveCapacity
-		}
-		// Deep-copy the map to avoid mutating the informer cache.
-		copied := make(map[hv1.ResourceName]resource.Quantity, len(sourceMap))
-		for k, v := range sourceMap {
-			copied[k] = v.DeepCopy()
-		}
-		freeResourcesByHost[hv.Name] = copied
-
-		// Subtract allocated resources (skip when ignoring allocations for empty-datacenter capacity queries).
-		if !ignoreAllocations {
-			for resourceName, allocated := range hv.Status.Allocation {
-				free, ok := freeResourcesByHost[hv.Name][resourceName]
-				if !ok {
-					traceLog.Error(
-						nil,
-						"hypervisor with allocation for unknown resource",
-						"host", hv.Name, "resource", resourceName,
-					)
-					continue
-				}
-				free.Sub(allocated)
-				freeResourcesByHost[hv.Name][resourceName] = free
-			}
-		}
-	}
-
-	// Subtract reserved resources by Reservations.
-	var reservations v1alpha1.ReservationList
-	if err := s.Client.List(context.Background(), &reservations); err != nil {
-		return nil, err
-	}
-	for _, reservation := range reservations.Items {
-		// Check if this reservation type should be ignored — applies regardless of ready state.
-		if slices.Contains(ignoredReservationTypes, reservation.Spec.Type) {
-			traceLog.V(1).Info("ignoring reservation type", "type", reservation.Spec.Type, "reservation", reservation.Name)
+		rep := capacity.NewHostUsageReport(hv, active)
+		if rep.Total == nil {
+			traceLog.V(1).Info("removing host with unknown capacity", "host", hv.Name)
+			delete(result.Activations, hv.Name)
 			continue
 		}
-
-		if !reservation.IsReady() {
-			if reservation.Spec.TargetHost == "" && reservation.Status.Host == "" {
-				continue // not placed yet, nothing to block
-			}
-			// TargetHost is set but Ready has not been synced yet: the reservation controller
-			// wrote the host in reconcile cycle 1 but hasn't completed cycle 2 (status sync).
-			// Block the full slot now to prevent a concurrent scheduling call from picking the
-			// same host. Unlock logic is intentionally skipped — an unconfirmed slot must not
-			// be unlocked for any VM or project.
-			traceLog.V(1).Info("reservation has target host set but is not yet ready — blocking host to prevent double-booking",
-				"reservation", reservation.Name,
-				"targetHost", reservation.Spec.TargetHost,
-				"statusHost", reservation.Status.Host,
-			)
-		} else {
-			// Ready reservation: apply type-specific unlock logic.
-			switch reservation.Spec.Type {
-			case v1alpha1.ReservationTypeCommittedResource, "": // Empty string for backward compatibility
-				// Skip if no CommittedResourceReservation spec or no resource group set.
-				if reservation.Spec.CommittedResourceReservation == nil || reservation.Spec.CommittedResourceReservation.ResourceGroup == "" {
-					continue // Not handled by us (no resource group set).
-				}
-
-				// Check if this is a CR reservation scheduling request.
-				// If so, we should NOT unlock any CR reservations to prevent overbooking.
-				// CR capacity should only be unlocked for actual VM scheduling.
-				switch {
-				case request.Intent == api.ReserveForCommittedResourceIntent:
-					traceLog.V(1).Info("keeping CR reservation locked for CR reservation scheduling",
-						"reservation", reservation.Name,
-						"intent", request.Intent)
-					// Don't continue - fall through to block the resources
-				case !s.Options.LockReserved && !opts.LockReservations &&
-					// For committed resource reservations: unlock resources only if:
-					// 1. Project ID matches
-					// 2. ResourceGroup matches the flavor's hw_version
-					reservation.Spec.CommittedResourceReservation.MatchesGroup(request.ProjectID, request.HardwareVersion):
-					traceLog.V(1).Info("unlocking resources reserved by matching committed resource reservation with allocation",
-						"reservation", reservation.Name,
-						"instanceUUID", request.InstanceUUID,
-						"projectID", request.ProjectID,
-						"resourceGroup", reservation.Spec.CommittedResourceReservation.ResourceGroup)
-					continue
-				}
-
-			case v1alpha1.ReservationTypeFailover:
-				// For failover reservations: if the requested VM is contained in the allocations map
-				// AND this is an evacuation request, unlock the resources.
-				// We only unlock during evacuations because:
-				// 1. Failover reservations are specifically for HA/evacuation scenarios.
-				// 2. During live migrations or other operations, we don't want to use failover capacity.
-				// Note: we cannot use failover reservations from other VMs, as that can invalidate our HA guarantees.
-				switch request.Intent {
-				case api.EvacuateIntent:
-					if reservation.Status.FailoverReservation != nil {
-						if _, contained := reservation.Status.FailoverReservation.Allocations[request.InstanceUUID]; contained {
-							traceLog.V(1).Info("unlocking resources reserved by failover reservation for VM in allocations (evacuation)",
-								"reservation", reservation.Name,
-								"instanceUUID", request.InstanceUUID)
-							continue
-						}
-					}
-				case api.ReuseFailoverReservationIntent:
-					// Reuse check: the reservation already pre-blocks the right capacity for this VM.
-					// Don't subtract it from free capacity to avoid double-counting.
-					traceLog.V(1).Info("skipping failover reservation block for reuse compatibility check",
-						"reservation", reservation.Name)
-					continue
-				}
-				traceLog.V(1).Info("processing failover reservation", "reservation", reservation.Name)
-			}
+		// Normal view fits against Available (Total − Used − Reserved). The empty-datacenter
+		// view asks what a host could hold once fully cleared, so it fits against Total,
+		// ignoring running workloads and reservations.
+		fitAgainst := rep.Available
+		if assumeEmptyHosts {
+			fitAgainst = rep.Total
 		}
-
-		// Block resources on BOTH Spec.TargetHost (desired) AND Status.Host (actual).
-		// This ensures capacity is blocked during the transition period when a reservation
-		// is being placed (TargetHost set) and after it's placed (Host set).
-		// If both are the same, we only subtract once.
-		hostsToBlock := make(map[string]struct{})
-		if reservation.Spec.TargetHost != "" {
-			hostsToBlock[reservation.Spec.TargetHost] = struct{}{}
-		}
-		if reservation.Status.Host != "" {
-			hostsToBlock[reservation.Status.Host] = struct{}{}
-		}
-		if len(hostsToBlock) == 0 {
-			traceLog.V(1).Info("skipping reservation with no host", "reservation", reservation.Name)
-			continue
-		}
-
-		// CommittedResourceReservations: block = max(slot − confirmed VM resources, 0).
-		// Confirmed VMs appear in hv.Status.Allocation; this subtracts only the unconfirmed remainder
-		// to avoid double-counting. FailoverReservations: block = Spec.Resources (always fully blocked).
-		resourcesToBlock := resv.UnusedReservationCapacity(&reservation, ignoreAllocations)
-
-		// Block the calculated resources on each host
-		for host := range hostsToBlock {
-			// Skip hosts that don't have a corresponding Hypervisor resource.
-			if _, hostExists := freeResourcesByHost[host]; !hostExists {
-				traceLog.V(1).Info("skipping reservation for unknown host",
-					"reservation", reservation.Name,
-					"host", host)
+		// Demand fits when every requested resource has at least that much available. A
+		// non-positive demand imposes no constraint; a resource missing from the host fails.
+		demand := request.TotalCapacityDemand()
+		fits := true
+		for name, need := range demand {
+			if need.Sign() <= 0 {
 				continue
 			}
-			if cpu, ok := resourcesToBlock[hv1.ResourceCPU]; ok {
-				if freeCPU, exists := freeResourcesByHost[host][hv1.ResourceCPU]; exists {
-					freeCPU.Sub(cpu)
-					if freeCPU.Value() < 0 {
-						traceLog.V(1).Info("negative free CPU after blocking reservation",
-							"host", host,
-							"reservation", reservation.Name,
-							"reservationType", reservation.Spec.Type,
-							"freeCPU", freeCPU.String(),
-							"blocked", cpu.String())
-						freeCPU = resource.Quantity{}
-					}
-					freeResourcesByHost[host][hv1.ResourceCPU] = freeCPU
-				}
-			}
-			if memory, ok := resourcesToBlock[hv1.ResourceMemory]; ok {
-				if freeMemory, exists := freeResourcesByHost[host][hv1.ResourceMemory]; exists {
-					freeMemory.Sub(memory)
-					if freeMemory.Value() < 0 {
-						traceLog.V(1).Info("negative free memory after blocking reservation",
-							"host", host,
-							"reservation", reservation.Name,
-							"reservationType", reservation.Spec.Type,
-							"freeMemory", freeMemory.String(),
-							"blocked", memory.String())
-						freeMemory = resource.Quantity{}
-					}
-					freeResourcesByHost[host][hv1.ResourceMemory] = freeMemory
-				}
+			have, ok := fitAgainst[name]
+			if !ok || have.Cmp(need) < 0 {
+				fits = false
+				break
 			}
 		}
-	}
-
-	hostsEncountered := make(map[string]struct{})
-	for host, free := range freeResourcesByHost {
-		hostsEncountered[host] = struct{}{}
-
-		// Check cpu capacity.
-		reqCPU := request.InstanceCapacity[hv1.ResourceCPU]
-		requestedCPU := reqCPU.Value()
-		if requestedCPU <= 0 {
-			return nil, errors.New("request has 0 cpu capacity")
-		}
-		freeCPU, ok := free[hv1.ResourceCPU]
-		if !ok || freeCPU.Value() < 0 {
-			traceLog.V(1).Info(
-				"host with invalid CPU capacity",
-				"host", host, "freeCPU", freeCPU.String(),
+		if !fits {
+			traceLog.V(1).Info("filtering host due to insufficient capacity",
+				"host", hv.Name,
+				"available", fitAgainst,
+				"requested", demand,
 			)
-			delete(result.Activations, host) // host is already overloaded, remove from activations
+			delete(result.Activations, hv.Name)
 			continue
 		}
-		// Calculate how many instances can fit on this host, based on cpu.
-		//nolint:gosec // We're checking for underflows above (< 0).
-		vcpuSlots := uint64(freeCPU.Value()) / uint64(requestedCPU)
-		if vcpuSlots < request.NumInstances {
-			traceLog.V(1).Info(
-				"filtering host due to insufficient CPU capacity",
-				"host", host, "requested", requestedCPU,
-				"available", freeCPU.String(),
-			)
-			delete(result.Activations, host)
-			continue
-		}
-
-		// Check memory capacity. InstanceCapacity memory is already in bytes.
-		reqMem := request.InstanceCapacity[hv1.ResourceMemory]
-		requestedMemoryBytes := reqMem.Value()
-		if requestedMemoryBytes <= 0 {
-			return nil, errors.New("request has 0 memory capacity")
-		}
-		freeMemory, ok := free[hv1.ResourceMemory]
-		if !ok || freeMemory.Value() < 0 {
-			traceLog.V(1).Info(
-				"host with invalid memory capacity",
-				"host", host, "freeMemory", freeMemory.String(),
-			)
-			delete(result.Activations, host) // host is already overloaded, remove from activations
-			continue
-		}
-		// Calculate how many instances can fit on this host, based on memory.
-		//nolint:gosec // We're checking for underflows above (< 0).
-		memorySlots := uint64(freeMemory.Value()) / uint64(requestedMemoryBytes)
-		if memorySlots < request.NumInstances {
-			traceLog.V(1).Info(
-				"filtering host due to insufficient RAM capacity",
-				"host", host, "requested_bytes", requestedMemoryBytes,
-				"available_bytes", freeMemory.String(),
-			)
-			delete(result.Activations, host)
-			continue
-		}
-		traceLog.V(1).Info(
-			"host has enough capacity", "host", host,
-			"requested_cpus", requestedCPU,
-			"available_cpus", freeCPU.String(),
-			"requested_memory_bytes", requestedMemoryBytes,
-			"available_memory", freeMemory.String(),
+		traceLog.V(1).Info("host has enough capacity",
+			"host", hv.Name,
+			"available", fitAgainst,
+			"requested", demand,
 		)
 	}
 
-	// Remove all hosts that weren't encountered.
+	// Remove any candidate for which we saw no hypervisor at all.
+	seen := make(map[string]struct{}, len(hvs.Items))
+	for i := range hvs.Items {
+		seen[hvs.Items[i].Name] = struct{}{}
+	}
 	for host := range result.Activations {
-		if _, ok := hostsEncountered[host]; !ok {
+		if _, ok := seen[host]; !ok {
+			traceLog.V(1).Info("removing host with unknown capacity", "host", host)
 			delete(result.Activations, host)
-			traceLog.V(1).Info(
-				"removing host with unknown capacity",
-				"host", host,
-			)
 		}
 	}
 	return result, nil
+}
+
+// reservationBlocks reports whether reservation should count against free capacity for
+// this request. It returns false (unlock) only when the request is specifically
+// entitled to the reservation's capacity; otherwise the reservation blocks.
+//
+// The decision mirrors the historical per-type logic:
+//   - An unconfirmed-but-placed reservation (TargetHost/Status.Host set, not Ready) always
+//     blocks — an unconfirmed slot must not be unlocked for anyone.
+//   - A committed-resource slot unlocks for a normal placement whose project and
+//     hardware version match the slot (slotting), unless LockReserved is set or the
+//     request is itself reserving committed-resource capacity (which must not overbook).
+//   - A failover slot unlocks only for the VM it holds, and only during an evacuation of
+//     that VM, or for a failover-reuse compatibility check.
+func (s *FilterHasEnoughCapacity) reservationBlocks(
+	traceLog logr.Logger,
+	request compute.PlacementRequest,
+	reservation v1alpha1.Reservation,
+	lockReserved bool,
+) bool {
+
+	// Not placed yet: nothing to block. Placed-but-not-ready: always block.
+	if !reservation.IsReady() {
+		return reservation.Spec.TargetHost != "" || reservation.Status.Host != ""
+	}
+
+	switch reservation.Spec.Type {
+	case v1alpha1.ReservationTypeCommittedResource, "": // "" kept for backward compatibility
+		if reservation.Spec.CommittedResourceReservation == nil || reservation.Spec.CommittedResourceReservation.ResourceGroup == "" {
+			return false // not handled by us (no resource group set)
+		}
+		if request.Intent == api.ReserveForCommittedResourceIntent {
+			// Reserving CR capacity must not unlock other CR slots (would overbook).
+			return true
+		}
+		if !lockReserved && reservation.Spec.CommittedResourceReservation.MatchesGroup(request.ProjectID, request.HardwareVersion) {
+			traceLog.V(1).Info("unlocking committed resource reservation for matching project and flavor group",
+				"reservation", reservation.Name, "projectID", request.ProjectID)
+			return false
+		}
+		return true
+
+	case v1alpha1.ReservationTypeFailover:
+		switch request.Intent {
+		case api.EvacuateIntent:
+			if reservation.Status.FailoverReservation != nil {
+				if _, contained := reservation.Status.FailoverReservation.Allocations[request.InstanceUUID]; contained {
+					traceLog.V(1).Info("unlocking failover reservation for VM being evacuated",
+						"reservation", reservation.Name, "instanceUUID", request.InstanceUUID)
+					return false
+				}
+			}
+		case api.ReuseFailoverReservationIntent:
+			// The reservation already pre-blocks this VM's capacity; don't double-count.
+			return false
+		}
+		return true
+	case v1alpha1.ReservationTypeFailoverHost:
+		// Failover-host reservations are handled by the dedicated filter, so this filter does not block them.
+		return false
+	}
+	return true
 }
 
 func init() {

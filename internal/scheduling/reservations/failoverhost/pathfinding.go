@@ -13,7 +13,6 @@ import (
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/scheduling"
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -223,29 +222,26 @@ func hvCapacity(hv hv1.Hypervisor) map[hv1.ResourceName]resource.Quantity {
 // The request is shaped to mirror a real evacuation as closely as possible: it
 // carries the seed's availability zone, flavor and a KVM image hypervisor type so
 // the same filters apply, and offers every known host as a candidate (Hosts) so
-// the scheduler has a host set to filter over. Four options matter:
+// the scheduler has a host set to filter over. Three options matter:
 //
 //   - ReadOnly, so probing placements never mutate shared scheduling state.
 //   - SkipInflight and SkipCommittedResourceTracking, which ReadOnly runs must
 //     set (scheduling.Options.Validate rejects a ReadOnly run otherwise, and the
 //     scheduler calls Validate) so this probe neither creates in-flight
 //     reservations nor writes CR allocations.
-//   - IgnoredReservationTypes = every reservation type, so no existing
-//     reservation blocks the hosts we are reasoning about. Failover host
-//     reservations would otherwise hide a reserved host from its own partition
-//     and fragment the clustering; committed-resource, failover and in-flight
-//     reservations would understate capacity, which is wrong under the
-//     empty-host reasoning below.
-//   - AssumeEmptyHosts, so candidates are judged by their total capacity rather
-//     than their current free capacity. A failover target is reserved *empty*, so
-//     what matters for partitioning is whether a host could hold the workload once
-//     cleared, not whether it has room right now. Without this a busy host never
-//     accepts anyone, gets no inbound links, forms no mutual edge, and stays
-//     orphaned — even though reserving it would drain it. Compatibility (flavors,
-//     traits, AZ) is thus occupancy-independent; which host is actually cheapest
-//     to empty is left to the planner's candidate ordering. The hard whole-host
-//     fit check in FindPaths still compares *total* capacities, so an undersized
-//     target is dropped regardless of this option.
+//   - AssumeEmptyHosts, the empty-datacenter view: candidates are judged by their
+//     total capacity rather than their current free capacity, ignoring both the
+//     running workloads on a host and every reservation. A failover target is
+//     reserved *empty*, so what matters for partitioning is whether a host could
+//     hold the workload once fully cleared, not whether it has room right now.
+//     Without this a busy host never accepts anyone, gets no inbound links, forms
+//     no mutual edge, and stays orphaned — even though reserving it would drain it;
+//     and failover-host reservations would hide the very hosts we are reasoning
+//     about and fragment the clustering. Compatibility (flavors, traits, AZ) is
+//     thus occupancy-independent; which host is actually cheapest to empty is left
+//     to the planner's candidate ordering. The hard whole-host fit check in
+//     FindPaths still compares *total* capacities, so an undersized target is
+//     dropped regardless of this option.
 //
 // We probe with evacuation intent (the "evacuate" _nova_check_type, which maps to
 // EvacuateIntent in GetIntent) and set no source_host: a failover evacuates (cold
@@ -315,25 +311,14 @@ func (f *evacuationPathFinder) fetchSeedCandidates(ctx context.Context, seed See
 			ReadOnly:                      true,
 			SkipInflight:                  true,
 			SkipCommittedResourceTracking: true,
-			// Judge candidates by total capacity, not current free capacity: a
-			// failover target is reserved empty, so a busy host that would fit the
-			// workload once cleared must still be a valid candidate. Without this,
-			// occupied hosts never accept anyone and stay orphaned.
+			// Assume an empty datacenter: judge candidates by total capacity, not
+			// current free capacity, and let no reservation block them. A failover
+			// target is reserved empty, so what matters is whether a host could hold
+			// the workload once fully cleared — of both running workloads and every
+			// reservation. Without this, occupied hosts never accept anyone and stay
+			// orphaned, and failover-host reservations would hide the very hosts we are
+			// reasoning about and fragment the clustering.
 			AssumeEmptyHosts: true,
-			// Ignore every existing reservation while probing. We reason about
-			// whether a host *could* hold the evacuated workload once it is cleared
-			// (AssumeEmptyHosts), not about its current free space, so any reservation
-			// — failover host, committed resource, failover or in-flight — that would
-			// otherwise block these hosts must be ignored. Failover host reservations
-			// in particular would hide the very hosts we are reasoning about and
-			// fragment the clustering; the others would understate capacity for the
-			// same empty-host reasoning.
-			IgnoredReservationTypes: []v1alpha1.ReservationType{
-				v1alpha1.ReservationTypeFailoverHost,
-				v1alpha1.ReservationTypeCommittedResource,
-				v1alpha1.ReservationTypeFailover,
-				v1alpha1.ReservationTypeInFlight,
-			},
 		},
 	}
 	log.V(1).Info("scheduler probe prepared", "request", req)

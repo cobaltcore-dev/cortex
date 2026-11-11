@@ -854,7 +854,7 @@ func TestProbeScheduler_SubtractsAllocationsWhenNotIgnored(t *testing.T) {
 	hvByName := map[string]hv1.Hypervisor{"host-1": *hv}
 	flavor := compute.FlavorInGroup{Name: "test-flavor", MemoryMB: memMB}
 
-	// Total probe (ignoreAllocations=true): raw capacity → 2 slots.
+	// Total probe (assumeEmptyHosts=true): raw capacity → 2 slots.
 	totalCap, _, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "total-pipeline", hvByName, true, nil)
 	if err != nil {
 		t.Fatalf("probeScheduler (total) failed: %v", err)
@@ -863,7 +863,7 @@ func TestProbeScheduler_SubtractsAllocationsWhenNotIgnored(t *testing.T) {
 		t.Errorf("total capacity = %d, want 2 (raw slots)", totalCap)
 	}
 
-	// Placeable probe (ignoreAllocations=false): capacity − allocation → 1 slot.
+	// Placeable probe (assumeEmptyHosts=false): capacity − allocation → 1 slot.
 	placeableCap, _, _, err := c.probeScheduler(context.Background(), flavor, "az-a", "placeable-pipeline", hvByName, false, nil)
 	if err != nil {
 		t.Fatalf("probeScheduler (placeable) failed: %v", err)
