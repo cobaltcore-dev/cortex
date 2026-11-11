@@ -30,6 +30,11 @@ type VM struct {
 	FlavorName string
 	// ProjectID is the OpenStack project ID that owns the VM.
 	ProjectID string
+	// DomainName is the OpenStack domain name that owns the VM, resolved from the
+	// VM's project. Used by domain-based scheduling filters (external customer
+	// isolation and domain pinning) when creating/validating failover reservations.
+	// Empty if the domain could not be resolved.
+	DomainName string
 	// CurrentHypervisor is the hypervisor where the VM is currently running.
 	CurrentHypervisor string
 	// AvailabilityZone is the availability zone where the VM is located.
@@ -114,6 +119,11 @@ func (s *DBVMSource) ListVMs(ctx context.Context) ([]VM, error) {
 		flavorByName[f.Name] = flavorData{VCPUs: f.VCPUs, RAM: f.RAM, Disk: f.Disk, ExtraSpecs: f.ExtraSpecs}
 	}
 
+	domainByProject, err := s.NovaReader.GetProjectDomainNames(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project domain names: %w", err)
+	}
+
 	var skippedNoHost, skippedUnknownFlavor int
 	unknownFlavors := make(map[string]int)
 
@@ -139,6 +149,7 @@ func (s *DBVMSource) ListVMs(ctx context.Context) ([]VM, error) {
 			Status:            server.Status,
 			FlavorName:        server.FlavorName,
 			ProjectID:         server.TenantID,
+			DomainName:        domainByProject[server.TenantID],
 			CurrentHypervisor: server.OSEXTSRVATTRHost,
 			AvailabilityZone:  server.OSEXTAvailabilityZone,
 			CreatedAt:         server.Created,
@@ -184,6 +195,11 @@ func (s *DBVMSource) ListVMsByProject(ctx context.Context, projectID string) ([]
 		flavorByName[f.Name] = flavorData{VCPUs: f.VCPUs, RAM: f.RAM, Disk: f.Disk, ExtraSpecs: f.ExtraSpecs}
 	}
 
+	domainByProject, err := s.NovaReader.GetProjectDomainNames(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project domain names: %w", err)
+	}
+
 	vms := make([]VM, 0, len(servers))
 	for _, server := range servers {
 		if server.OSEXTSRVATTRHost == "" {
@@ -203,6 +219,7 @@ func (s *DBVMSource) ListVMsByProject(ctx context.Context, projectID string) ([]
 			Status:            server.Status,
 			FlavorName:        server.FlavorName,
 			ProjectID:         server.TenantID,
+			DomainName:        domainByProject[server.TenantID],
 			CurrentHypervisor: server.OSEXTSRVATTRHost,
 			AvailabilityZone:  server.OSEXTAvailabilityZone,
 			CreatedAt:         server.Created,
@@ -239,12 +256,18 @@ func (s *DBVMSource) GetVM(ctx context.Context, vmUUID string) (*VM, error) {
 		string(hv1.ResourceMemory): *resource.NewQuantity(int64(flavor.RAM)*1024*1024, resource.BinarySI), //nolint:gosec
 	}
 
+	domainByProject, err := s.NovaReader.GetProjectDomainNames(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project domain names: %w", err)
+	}
+
 	return &VM{
 		UUID:              server.ID,
 		Name:              server.Name,
 		Status:            server.Status,
 		FlavorName:        server.FlavorName,
 		ProjectID:         server.TenantID,
+		DomainName:        domainByProject[server.TenantID],
 		CurrentHypervisor: server.OSEXTSRVATTRHost,
 		AvailabilityZone:  server.OSEXTAvailabilityZone,
 		CreatedAt:         server.Created,
@@ -392,6 +415,7 @@ func buildVMsFromHypervisors(hypervisorList *hv1.HypervisorList, postgresVMs []V
 				Status:            pgVM.Status,
 				FlavorName:        pgVM.FlavorName,
 				ProjectID:         pgVM.ProjectID,
+				DomainName:        pgVM.DomainName,
 				CurrentHypervisor: hv.Name,
 				AvailabilityZone:  pgVM.AvailabilityZone,
 				CreatedAt:         pgVM.CreatedAt,

@@ -418,10 +418,11 @@ func TestFilterVMsOnKnownHypervisors(t *testing.T) {
 
 // mockNovaReader implements NovaReaderInterface for testing.
 type mockNovaReader struct {
-	getAllServersFunc   func(ctx context.Context) ([]nova.Server, error)
-	getAllFlavorsFunc   func(ctx context.Context) ([]nova.Flavor, error)
-	getServerByIDFunc   func(ctx context.Context, serverID string) (*nova.Server, error)
-	getFlavorByNameFunc func(ctx context.Context, flavorName string) (*nova.Flavor, error)
+	getAllServersFunc         func(ctx context.Context) ([]nova.Server, error)
+	getAllFlavorsFunc         func(ctx context.Context) ([]nova.Flavor, error)
+	getServerByIDFunc         func(ctx context.Context, serverID string) (*nova.Server, error)
+	getFlavorByNameFunc       func(ctx context.Context, flavorName string) (*nova.Flavor, error)
+	getProjectDomainNamesFunc func(ctx context.Context) (map[string]string, error)
 }
 
 func (m *mockNovaReader) GetAllServers(ctx context.Context) ([]nova.Server, error) {
@@ -454,6 +455,13 @@ func (m *mockNovaReader) GetFlavorByName(ctx context.Context, flavorName string)
 
 func (m *mockNovaReader) GetDeletedServerByID(_ context.Context, _ string) (*nova.DeletedServer, error) {
 	return nil, nil
+}
+
+func (m *mockNovaReader) GetProjectDomainNames(ctx context.Context) (map[string]string, error) {
+	if m.getProjectDomainNamesFunc != nil {
+		return m.getProjectDomainNamesFunc(ctx)
+	}
+	return map[string]string{}, nil
 }
 
 func (m *mockNovaReader) GetServersByProject(_ context.Context, _ string) ([]nova.Server, error) {

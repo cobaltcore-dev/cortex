@@ -55,12 +55,22 @@ spec:
         This step prefix-matches the domain name for external customer domains and
         filters out hosts that are not intended for external customers. It considers
         the `CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE` trait on hosts as well as the
-        `domain_name` scheduler hint from the nova request spec.
+        `domain_name` scheduler hint from the nova request spec. Only domains on the
+        `allowedDomainNames` allow-list may be scheduled on the exclusive hosts (the
+        filter is fail-closed), and regular domains are kept off those hosts.
       params:
         - {key: domainNamePrefixes, stringListValue: {{ .Values.kvm.filterExternalCustomer.domainNamePrefixes | toJson }}}
+        - {key: allowedDomainNames, stringListValue: {{ .Values.kvm.filterExternalCustomer.allowedDomainNames | default list | toJson }}}
         {{- with .Values.kvm.filterExternalCustomer.ignoredDomainNames }}
         - {key: ignoredDomainNames, stringListValue: {{ . | toJson }}}
         {{- end }}
+    - name: filter_domain_pinning
+      description: |
+        This step pins specific domains to a dedicated set of hypervisors and keeps
+        those hypervisors isolated from all other domains. With an empty
+        domainHypervisors mapping the step is a noop.
+      params:
+        - {key: domainHypervisors, stringListMapValue: {{ .Values.kvm.filterDomainPinning.domainHypervisors | default dict | toJson }}}
     - name: filter_has_accelerators
       description: |
         This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
@@ -258,12 +268,22 @@ spec:
         This step prefix-matches the domain name for external customer domains and
         filters out hosts that are not intended for external customers. It considers
         the `CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE` trait on hosts as well as the
-        `domain_name` scheduler hint from the nova request spec.
+        `domain_name` scheduler hint from the nova request spec. Only domains on the
+        `allowedDomainNames` allow-list may be scheduled on the exclusive hosts (the
+        filter is fail-closed), and regular domains are kept off those hosts.
       params:
         - {key: domainNamePrefixes, stringListValue: {{ .Values.kvm.filterExternalCustomer.domainNamePrefixes | toJson }}}
+        - {key: allowedDomainNames, stringListValue: {{ .Values.kvm.filterExternalCustomer.allowedDomainNames | default list | toJson }}}
         {{- with .Values.kvm.filterExternalCustomer.ignoredDomainNames }}
         - {key: ignoredDomainNames, stringListValue: {{ . | toJson }}}
         {{- end }}
+    - name: filter_domain_pinning
+      description: |
+        This step pins specific domains to a dedicated set of hypervisors and keeps
+        those hypervisors isolated from all other domains. With an empty
+        domainHypervisors mapping the step is a noop.
+      params:
+        - {key: domainHypervisors, stringListMapValue: {{ .Values.kvm.filterDomainPinning.domainHypervisors | default dict | toJson }}}
     - name: filter_has_accelerators
       description: |
         This step will filter out hosts without the trait `COMPUTE_ACCELERATORS` if
