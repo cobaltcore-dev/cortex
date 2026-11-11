@@ -31,6 +31,19 @@ func TestIsForcedDestination(t *testing.T) {
 	}
 }
 
+func TestApplyDefaults(t *testing.T) {
+	r := PlacementRequest{}
+	r.ApplyDefaults()
+	if r.NumInstances != 1 {
+		t.Errorf("ApplyDefaults() NumInstances = %d, want 1", r.NumInstances)
+	}
+	r = PlacementRequest{NumInstances: 3}
+	r.ApplyDefaults()
+	if r.NumInstances != 3 {
+		t.Errorf("ApplyDefaults() must not override NumInstances, got %d, want 3", r.NumInstances)
+	}
+}
+
 func TestForcedHosts(t *testing.T) {
 	hosts := []Host{
 		{ComputeHost: "Host-A", HypervisorHostname: "node-a"},
