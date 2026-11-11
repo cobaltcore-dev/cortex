@@ -661,7 +661,7 @@ workload present on the host.
 
 ## Configuration
 
-Enable the controller and configure it under the nested `failover.hosts` key:
+Enable the controllers and configure them under the nested `failoverhost` key, one sub-key per concern:
 
 ```yaml
 enabledControllers:
@@ -669,19 +669,18 @@ enabledControllers:
   - failover-host-drain-controller        # optional: drains designated hosts to Active
   - failover-host-completion-controller    # optional: releases in-use hosts once evacuation completes
 # ...
-failover:
-  hosts:
+failoverhost:
+  partitioning:
     ratio: 0.1                 # fraction of each partition to reserve (0, 1]
     minimum: 1                 # floor per partition, > 0
     generationInterval: 5m     # how often to recompute, ≥ 1m
-    externalSchedulerURL: "http://localhost:8080/scheduler/nova/external"
-    drain:
-      enabled: false           # gates the whole drain controller (off by default)
-      ttl: 24h                 # delete a reservation stuck non-Active this long
-      retryBackoff: 1m         # wait before retrying after a failed drain
-    completion:
-      enabled: false           # gates the whole completion controller (off by default)
-      gracePeriod: 24h         # source must stay empty this long before deletion
+  drain:
+    enabled: false             # gates the whole drain controller (off by default)
+    ttl: 24h                   # delete a reservation stuck non-Active this long
+    retryBackoff: 1m           # wait before retrying after a failed drain
+  completion:
+    enabled: false             # gates the whole completion controller (off by default)
+    gracePeriod: 24h           # source must stay empty this long before deletion
 ```
 
 The flavors the partitioning is seeded from (see [Step 1](#step-1--discover-who-can-rescue-whom)) are read
@@ -690,23 +689,23 @@ needs no OpenStack credentials of its own to enumerate them.
 
 The **drain controller** that advances designated reservations to Active (see
 [Draining a host to Active](#draining-a-host-to-active)) is a separate `enabledControllers` entry,
-`failover-host-drain-controller`, and reads its settings from `failover.hosts.drain`. It is off by default
+`failover-host-drain-controller`, and reads its settings from `failoverhost.drain`. It is off by default
 (`enabled: false`): draining live-migrates workloads, so it is deliberately opt-in. When disabled the
 controller is not started and no reservation is marked Active. The `ttl` bounds how long a reservation may stay
 non-Active before it is deleted and regenerated, and is intentionally conservative.
 
 The **completion controller** that releases In Use reservations once their evacuation finishes (see
 [Completing an evacuation](#completing-an-evacuation-inuse--used)) is a third `enabledControllers` entry,
-`failover-host-completion-controller`, and reads its settings from `failover.hosts.completion`. It too is off by
+`failover-host-completion-controller`, and reads its settings from `failoverhost.completion`. It too is off by
 default (`enabled: false`): completing a reservation deletes it, which returns the reserved host to regular
 capacity. The `gracePeriod` (default `24h`) is how long the source host must stay empty before deletion,
 guarding against rapid evacuate ↔ reserve loops.
 
 > [!NOTE]
-> The settings live under `failover.hosts` as a deliberate example of grouping a controller's config under its
-> own key rather than adding more flat top-level keys. This is independent of the (deprecated) slot-based
-> failover controller configured alongside it. Bad values for `ratio`, `minimum`, or the interval are rejected
-> at startup.
+> The settings live under `failoverhost`, with one sub-key per concern (`partitioning`, `drain`, `completion`),
+> as a deliberate example of grouping a controller's config under its own key rather than adding more flat
+> top-level keys. This is independent of the (deprecated) slot-based failover controller configured alongside
+> it. Bad values for `ratio`, `minimum`, or the interval are rejected at startup.
 
 Like the other reservation kinds, failover host reservations make a host look fuller to the pipeline than its
 raw capacity suggests — here by reserving the host **entirely**. The next page turns from the *kinds* of
