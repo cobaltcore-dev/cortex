@@ -124,11 +124,8 @@ func newNovaRequest(instanceUUID string, evacuation bool, hosts []string) comput
 		InstanceUUID:     instanceUUID,
 		NumInstances:     1,
 		HypervisorFamily: api.HypervisorFamilyKVM,
-		Flavor: api.FlavorSpec{
-			VCPUs:    4,
-			MemoryMB: parseMemoryToMB("8Gi"),
-		},
-		Hosts: hostList,
+		InstanceCapacity: api.CapacityFromVCPUsMemoryMB(4, parseMemoryToMB("8Gi")),
+		Hosts:            hostList,
 	}
 	if evacuation {
 		req.Intent = api.EvacuateIntent

@@ -89,10 +89,6 @@ spec:
         This step will filter out hosts that do not have enough available capacity
         to host the requested flavor. Reservation unlocking behavior is controlled
         by the call-time Options.LockReservations flag, not by a step param.
-      params:
-        # FailoverHostReservation is a new feature and is not yet counted as
-        # reserved capacity during scheduling.
-        - {key: ignoredReservationTypes, stringListValue: ["FailoverHostReservation"]}
     - name: filter_failover_host
       description: |
         This step keeps new virtual machines off hosts that have a failover host
@@ -102,7 +98,7 @@ spec:
         zone, while ordinary candidates are retained so Nova can retry on failure.
         The weigher_failover_host weigher then lifts the selected host to the
         front. The filter is purely subtractive, so its position does not matter.
-        It honors the call-time ignoredReservationTypes option so the failover
+        It honors the call-time assume_empty_hosts option so the failover
         host path finder probe still discovers reserved hosts.
       params:
         - {key: enabled, boolValue: {{ .Values.kvm.failoverHostMatching.enabled }}}
@@ -302,10 +298,6 @@ spec:
         This step will filter out hosts that do not have enough available capacity
         to host the requested flavor. Reservation unlocking behavior is controlled
         by the call-time Options.LockReservations flag, not by a step param.
-      params:
-        # FailoverHostReservation is a new feature and is not yet counted as
-        # reserved capacity during scheduling.
-        - {key: ignoredReservationTypes, stringListValue: ["FailoverHostReservation"]}
     - name: filter_failover_host
       description: |
         This step keeps new virtual machines off hosts that have a failover host
@@ -315,7 +307,7 @@ spec:
         zone, while ordinary candidates are retained so Nova can retry on failure.
         The weigher_failover_host weigher then lifts the selected host to the
         front. The filter is purely subtractive, so its position does not matter.
-        It honors the call-time ignoredReservationTypes option so the failover
+        It honors the call-time assume_empty_hosts option so the failover
         host path finder probe still discovers reserved hosts.
       params:
         - {key: enabled, boolValue: {{ .Values.kvm.failoverHostMatching.enabled }}}

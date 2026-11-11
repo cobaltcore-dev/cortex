@@ -266,12 +266,9 @@ func newNovaRequestWithIntent(instanceUUID, projectID, flavorGroup string, vcpus
 		Intent:           intent,
 		HardwareVersion:  flavorGroup,
 		HypervisorFamily: api.HypervisorFamilyKVM,
-		Flavor: api.FlavorSpec{
-			VCPUs:    uint64(vcpus), //nolint:gosec // test code
-			MemoryMB: memoryMB,
-		},
-		Hosts:   hostList,
-		Weights: weights,
+		InstanceCapacity: api.CapacityFromVCPUsMemoryMB(uint64(vcpus), memoryMB), //nolint:gosec // test code
+		Hosts:            hostList,
+		Weights:          weights,
 	}
 }
 
@@ -713,335 +710,47 @@ func TestFilterHasEnoughCapacity_LockReservations(t *testing.T) {
 	}
 }
 
-func TestFilterHasEnoughCapacity_IgnoredReservationTypes(t *testing.T) {
-	scheme := buildTestScheme(t)
-
-	// Two-host scenario: CR on host1 (4cpu/8Gi, project-X), Failover on host2 (4cpu/8Gi).
-	// Each host: 8 CPU free after base allocation → after reservation: 4 CPU free each.
-	twoHostHVs := []*hv1.Hypervisor{
-		newHypervisor("host1", "16", "8", "32Gi", "16Gi"),
-		newHypervisor("host2", "16", "8", "32Gi", "16Gi"),
-	}
-	twoHostRes := []*v1alpha1.Reservation{
-		newCommittedReservation("cr-res", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil),
-		newFailoverReservation("failover-res", "host2", "4", "8Gi", map[string]string{"other-vm": "host3"}),
-	}
-
-	// Single-host scenario: both CR (4cpu/8Gi) and Failover (2cpu/4Gi) on host1.
-	// host1: 12 CPU free → after both reservations: 6 CPU free.
-	singleHostHVs := []*hv1.Hypervisor{
-		newHypervisor("host1", "12", "0", "24Gi", "0"),
-	}
-	singleHostRes := []*v1alpha1.Reservation{
-		newCommittedReservation("cr-res", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil),
-		newFailoverReservation("failover-res", "host1", "2", "4Gi", map[string]string{"other-vm": "host3"}),
-	}
-
-	tests := []struct {
-		name                    string
-		hypervisors             []*hv1.Hypervisor
-		reservations            []*v1alpha1.Reservation
-		request                 compute.PlacementRequest
-		ignoredReservationTypes []v1alpha1.ReservationType
-		expectedHosts           []string
-		filteredHosts           []string
-	}{
-		// Two-host scenario tests (CR on host1, Failover on host2)
-		// host1: 8 CPU free, host2: 8 CPU free, CR blocks 4 on host1, Failover blocks 4 on host2
-		{
-			name:                    "Two hosts: No ignore - both hosts blocked by reservations",
-			hypervisors:             twoHostHVs,
-			reservations:            twoHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
-			ignoredReservationTypes: nil,
-			expectedHosts:           []string{},
-			filteredHosts:           []string{"host1", "host2"},
-		},
-		{
-			name:                    "Two hosts: Ignore CR only - host1 passes, host2 blocked by failover",
-			hypervisors:             twoHostHVs,
-			reservations:            twoHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
-			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
-			expectedHosts:           []string{"host1"},
-			filteredHosts:           []string{"host2"},
-		},
-		{
-			name:                    "Two hosts: Ignore Failover only - host2 passes, host1 blocked by CR",
-			hypervisors:             twoHostHVs,
-			reservations:            twoHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
-			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
-			expectedHosts:           []string{"host2"},
-			filteredHosts:           []string{"host1"},
-		},
-		{
-			name:                    "Two hosts: Ignore both - both hosts pass",
-			hypervisors:             twoHostHVs,
-			reservations:            twoHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1", "host2"}),
-			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
-			expectedHosts:           []string{"host1", "host2"},
-			filteredHosts:           []string{},
-		},
-
-		// Single-host scenario tests (both CR and Failover on host1)
-		// host1: 12 CPU free, CR blocks 4, Failover blocks 2 → 6 free when both active
-		// Large VM (12 CPU) - only fits if BOTH reservations are ignored
-		{
-			name:                    "Single host, Large VM (12 CPU): No ignore - blocked (6 free < 12 needed)",
-			hypervisors:             singleHostHVs,
-			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 12, "24Gi", false, []string{"host1"}),
-			ignoredReservationTypes: nil,
-			expectedHosts:           []string{},
-			filteredHosts:           []string{"host1"},
-		},
-		{
-			name:                    "Single host, Large VM (12 CPU): Ignore CR - blocked (10 free < 12 needed)",
-			hypervisors:             singleHostHVs,
-			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 12, "24Gi", false, []string{"host1"}),
-			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
-			expectedHosts:           []string{},
-			filteredHosts:           []string{"host1"},
-		},
-		{
-			name:                    "Single host, Large VM (12 CPU): Ignore Failover - blocked (8 free < 12 needed)",
-			hypervisors:             singleHostHVs,
-			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 12, "24Gi", false, []string{"host1"}),
-			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
-			expectedHosts:           []string{},
-			filteredHosts:           []string{"host1"},
-		},
-		{
-			name:                    "Single host, Large VM (12 CPU): Ignore both - passes (12 free = 12 needed)",
-			hypervisors:             singleHostHVs,
-			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 12, "24Gi", false, []string{"host1"}),
-			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
-			expectedHosts:           []string{"host1"},
-			filteredHosts:           []string{},
-		},
-
-		// Failover-size VM (10 CPU) - fits if CR is ignored (10 free = 10 needed)
-		{
-			name:                    "Single host, Failover-size VM (10 CPU): No ignore - blocked (6 free < 10 needed)",
-			hypervisors:             singleHostHVs,
-			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 10, "20Gi", false, []string{"host1"}),
-			ignoredReservationTypes: nil,
-			expectedHosts:           []string{},
-			filteredHosts:           []string{"host1"},
-		},
-		{
-			name:                    "Single host, Failover-size VM (10 CPU): Ignore CR - passes (10 free = 10 needed)",
-			hypervisors:             singleHostHVs,
-			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 10, "20Gi", false, []string{"host1"}),
-			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
-			expectedHosts:           []string{"host1"},
-			filteredHosts:           []string{},
-		},
-		{
-			name:                    "Single host, Failover-size VM (10 CPU): Ignore Failover - blocked (8 free < 10 needed)",
-			hypervisors:             singleHostHVs,
-			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 10, "20Gi", false, []string{"host1"}),
-			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
-			expectedHosts:           []string{},
-			filteredHosts:           []string{"host1"},
-		},
-		{
-			name:                    "Single host, Failover-size VM (10 CPU): Ignore both - passes (12 free > 10 needed)",
-			hypervisors:             singleHostHVs,
-			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 10, "20Gi", false, []string{"host1"}),
-			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
-			expectedHosts:           []string{"host1"},
-			filteredHosts:           []string{},
-		},
-
-		// CR-size VM (8 CPU) - fits if Failover is ignored (8 free = 8 needed)
-		{
-			name:                    "Single host, CR-size VM (8 CPU): No ignore - blocked (6 free < 8 needed)",
-			hypervisors:             singleHostHVs,
-			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1"}),
-			ignoredReservationTypes: nil,
-			expectedHosts:           []string{},
-			filteredHosts:           []string{"host1"},
-		},
-		{
-			name:                    "Single host, CR-size VM (8 CPU): Ignore CR - passes (10 free > 8 needed)",
-			hypervisors:             singleHostHVs,
-			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1"}),
-			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
-			expectedHosts:           []string{"host1"},
-			filteredHosts:           []string{},
-		},
-		{
-			name:                    "Single host, CR-size VM (8 CPU): Ignore Failover - passes (8 free = 8 needed)",
-			hypervisors:             singleHostHVs,
-			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1"}),
-			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
-			expectedHosts:           []string{"host1"},
-			filteredHosts:           []string{},
-		},
-		{
-			name:                    "Single host, CR-size VM (8 CPU): Ignore both - passes (12 free > 8 needed)",
-			hypervisors:             singleHostHVs,
-			reservations:            singleHostRes,
-			request:                 newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1"}),
-			ignoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource, v1alpha1.ReservationTypeFailover},
-			expectedHosts:           []string{"host1"},
-			filteredHosts:           []string{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			objects := make([]client.Object, 0, len(tt.hypervisors)+len(tt.reservations))
-			for _, h := range tt.hypervisors {
-				objects = append(objects, h.DeepCopy())
-			}
-			for _, r := range tt.reservations {
-				objects = append(objects, r.DeepCopy())
-			}
-
-			step := &FilterHasEnoughCapacity{}
-			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
-			step.Options = FilterHasEnoughCapacityOpts{
-				LockReserved:            true,
-				IgnoredReservationTypes: tt.ignoredReservationTypes,
-			}
-
-			result, err := step.Run(logr.Discard(), tt.request)
-			if err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
-			assertActivations(t, result.Activations, tt.expectedHosts, tt.filteredHosts)
-		})
-	}
-}
-
 func TestFilterHasEnoughCapacity_AssumeEmptyHosts(t *testing.T) {
 	scheme := buildTestScheme(t)
 
 	// host1: 8 CPU total, 6 CPU allocated to running VMs → 2 free; request needs 4 → fails normally.
-	// With AssumeEmptyHosts: allocations ignored → 8 free → passes.
+	// A CR reservation on host1 blocks a further 6 CPU, so even with allocations ignored (8 free)
+	// the host would fail (8 − 6 = 2 < 4) if reservations still counted. AssumeEmptyHosts ignores
+	// BOTH allocations and the reservation → 8 free → passes.
 	hypervisors := []*hv1.Hypervisor{
 		newHypervisor("host1", "8", "6", "32Gi", "0"),
 	}
+	reservations := []*v1alpha1.Reservation{
+		newCommittedReservation("cr-res", "host1", "project-X", "m1.large", "gp-other", "6", "8Gi", nil),
+	}
 	request := newNovaRequest("vm", "proj", "gp", 4, "1Gi", false, []string{"host1"})
 
-	objects := make([]client.Object, 0, len(hypervisors))
+	objects := make([]client.Object, 0, len(hypervisors)+len(reservations))
 	for _, h := range hypervisors {
 		objects = append(objects, h.DeepCopy())
+	}
+	for _, r := range reservations {
+		objects = append(objects, r.DeepCopy())
 	}
 
 	step := &FilterHasEnoughCapacity{}
 	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 	step.Options = FilterHasEnoughCapacityOpts{}
 
-	// Without AssumeEmptyHosts: host1 filtered (only 2 CPU free).
+	// Without AssumeEmptyHosts: host1 filtered (allocations + reservation leave too little).
 	resultWithout, err := step.Run(logr.Discard(), request)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	assertActivations(t, resultWithout.Activations, []string{}, []string{"host1"})
 
-	// With AssumeEmptyHosts via call-time options: allocations ignored → host1 passes.
+	// With AssumeEmptyHosts via call-time options: allocations AND reservation ignored → host1 passes.
 	request.Options = scheduling.Options{AssumeEmptyHosts: true}
 	resultWith, err := step.Run(logr.Discard(), request)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	assertActivations(t, resultWith.Activations, []string{"host1"}, []string{})
-}
-
-func TestFilterHasEnoughCapacity_IgnoredReservationTypes_CallTime(t *testing.T) {
-	scheme := buildTestScheme(t)
-
-	// Same two-host setup as the YAML-path test: CR on host1, Failover on host2.
-	// Each blocks 4 CPU, leaving 4 free; request needs 8 CPU so both hosts fail without ignoring.
-	hypervisors := []*hv1.Hypervisor{
-		newHypervisor("host1", "16", "8", "32Gi", "16Gi"),
-		newHypervisor("host2", "16", "8", "32Gi", "16Gi"),
-	}
-	reservations := []*v1alpha1.Reservation{
-		newCommittedReservation("cr-res", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil),
-		newFailoverReservation("failover-res", "host2", "4", "8Gi", map[string]string{"other-vm": "host3"}),
-	}
-	request := newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1", "host2"})
-
-	objects := make([]client.Object, 0, len(hypervisors)+len(reservations))
-	for _, h := range hypervisors {
-		objects = append(objects, h.DeepCopy())
-	}
-	for _, r := range reservations {
-		objects = append(objects, r.DeepCopy())
-	}
-
-	step := &FilterHasEnoughCapacity{}
-	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
-	// Ignore CR reservations via YAML step opts (static, configured per pipeline step).
-	step.Options = FilterHasEnoughCapacityOpts{
-		LockReserved:            true,
-		IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
-	}
-
-	result, err := step.Run(logr.Discard(), request)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	assertActivations(t, result.Activations, []string{"host1"}, []string{"host2"})
-}
-
-func TestFilterHasEnoughCapacity_IgnoredReservationTypes_CallTimeMerge(t *testing.T) {
-	scheme := buildTestScheme(t)
-
-	// Same two-host setup: CR on host1, Failover on host2.
-	// Each blocks 4 CPU, leaving 4 free; request needs 8 CPU so both hosts fail without ignoring.
-	// Verify that call-time opts.IgnoredReservationTypes is merged with (not instead of) YAML opts.
-	hypervisors := []*hv1.Hypervisor{
-		newHypervisor("host1", "16", "8", "32Gi", "16Gi"),
-		newHypervisor("host2", "16", "8", "32Gi", "16Gi"),
-	}
-	reservations := []*v1alpha1.Reservation{
-		newCommittedReservation("cr-res", "host1", "project-X", "m1.large", "gp-1", "4", "8Gi", nil),
-		newFailoverReservation("failover-res", "host2", "4", "8Gi", map[string]string{"other-vm": "host3"}),
-	}
-	request := newNovaRequest("instance-123", "project-A", "gp-1", 8, "16Gi", false, []string{"host1", "host2"})
-
-	objects := make([]client.Object, 0, len(hypervisors)+len(reservations))
-	for _, h := range hypervisors {
-		objects = append(objects, h.DeepCopy())
-	}
-	for _, r := range reservations {
-		objects = append(objects, r.DeepCopy())
-	}
-
-	step := &FilterHasEnoughCapacity{}
-	step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
-	// YAML opts ignore CR; call-time opts ignore Failover — both must be respected.
-	step.Options = FilterHasEnoughCapacityOpts{
-		LockReserved:            true,
-		IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
-	}
-	request.Options = scheduling.Options{
-		IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailover},
-	}
-
-	result, err := step.Run(logr.Discard(), request)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	// Both CR (host1) and Failover (host2) reservations ignored → both hosts pass.
-	assertActivations(t, result.Activations, []string{"host1", "host2"}, []string{})
 }
 
 func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T) {
@@ -1142,44 +851,6 @@ func TestFilterHasEnoughCapacity_ReserveForCommittedResourceIntent(t *testing.T)
 			request:       newNovaRequest("vm-instance-123", "project-A", "gp-1", 10, "20Gi", false, []string{"host1"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
 			expectedHosts: []string{"host1"}, // All reservations unlocked, enough capacity
-			filteredHosts: []string{},
-		},
-		{
-			name: "CR reservation scheduling: IgnoredReservationTypes config DOES bypass intent protection (safety override)",
-			hypervisors: []*hv1.Hypervisor{
-				newHypervisor("host1", "16", "8", "32Gi", "16Gi"), // 8 CPU free
-			},
-			reservations: []*v1alpha1.Reservation{
-				// Existing CR reservation on host1 blocks all 8 free CPU
-				newCommittedReservation("existing-cr", "host1", "project-A", "m1.large", "gp-1", "8", "16Gi", nil),
-			},
-			// Request with reserve_for_committed_resource intent.
-			// IgnoredReservationTypes is a YAML-level safety override that bypasses the intent check.
-			request: newNovaRequestWithIntent("new-reservation-uuid", "project-A", "gp-1", 4, "8Gi", "reserve_for_committed_resource", false, []string{"host1"}),
-			opts: FilterHasEnoughCapacityOpts{
-				LockReserved:            false,
-				IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
-			},
-			expectedHosts: []string{"host1"}, // CR reservation is ignored via IgnoredReservationTypes (safety override)
-			filteredHosts: []string{},
-		},
-		{
-			name: "Normal VM scheduling: IgnoredReservationTypes config DOES work for normal VMs",
-			hypervisors: []*hv1.Hypervisor{
-				newHypervisor("host1", "16", "8", "32Gi", "16Gi"), // 8 CPU free
-			},
-			reservations: []*v1alpha1.Reservation{
-				// Existing CR reservation on host1 blocks all 8 free CPU
-				newCommittedReservation("existing-cr", "host1", "project-B", "m1.large", "gp-1", "8", "16Gi", nil),
-			},
-			// Normal VM create request (different project, so unlocking via project match won't work)
-			// But IgnoredReservationTypes should make it work
-			request: newNovaRequest("vm-instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1"}),
-			opts: FilterHasEnoughCapacityOpts{
-				LockReserved:            false,
-				IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeCommittedResource},
-			},
-			expectedHosts: []string{"host1"}, // CR reservation ignored via IgnoredReservationTypes
 			filteredHosts: []string{},
 		},
 	}

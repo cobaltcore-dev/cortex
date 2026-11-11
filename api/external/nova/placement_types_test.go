@@ -7,7 +7,22 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
+
+func TestCapacityFromVCPUsMemoryMB(t *testing.T) {
+	capacity := CapacityFromVCPUsMemoryMB(4, 2048)
+	cpu := capacity[hv1.ResourceCPU]
+	if cpu.Value() != 4 || cpu.Format != resource.DecimalSI {
+		t.Errorf("cpu = %d (%s), want 4 (DecimalSI)", cpu.Value(), cpu.Format)
+	}
+	mem := capacity[hv1.ResourceMemory]
+	if want := int64(2048) * 1024 * 1024; mem.Value() != want || mem.Format != resource.BinarySI {
+		t.Errorf("memory = %d (%s), want %d (BinarySI)", mem.Value(), mem.Format, want)
+	}
+}
 
 func TestSplitTraits(t *testing.T) {
 	required, forbidden := SplitTraits(map[string]string{
