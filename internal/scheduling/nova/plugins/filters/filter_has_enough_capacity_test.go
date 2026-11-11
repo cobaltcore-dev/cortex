@@ -188,6 +188,21 @@ func newMigratingReservation(
 	return res
 }
 
+func newInFlightReservation(name, vmID, cpu, memory string) *v1alpha1.Reservation {
+	return &v1alpha1.Reservation{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec: v1alpha1.ReservationSpec{
+			Type:       v1alpha1.ReservationTypeInFlight,
+			TargetHost: "host1",
+			Resources: map[hv1.ResourceName]resource.Quantity{
+				hv1.ResourceCPU:    resource.MustParse(cpu),
+				hv1.ResourceMemory: resource.MustParse(memory),
+			},
+			InFlightReservation: &v1alpha1.InFlightReservationSpec{VMID: vmID},
+		},
+	}
+}
+
 func newFailoverReservation(name, targetHost, cpu, memory string, allocations map[string]string) *v1alpha1.Reservation {
 	res := &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{
@@ -609,6 +624,29 @@ func TestFilterHasEnoughCapacity_ReservationTypes(t *testing.T) {
 			},
 			request:       newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
 			opts:          FilterHasEnoughCapacityOpts{LockReserved: false},
+			expectedHosts: []string{"host2", "host3"},
+			filteredHosts: []string{"host1", "host4"},
+		},
+		{
+			name:          "In-flight reservation of another VM blocks its target host",
+			reservations:  []*v1alpha1.Reservation{newInFlightReservation("inflight-1", "other-vm", "8", "16Gi")},
+			request:       newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			expectedHosts: []string{"host2", "host3"},
+			filteredHosts: []string{"host1", "host4"},
+		},
+		{
+			// Nova serializes operations per VM: the request owns the VM's in-flight holds and skips them.
+			name:          "In-flight reservation of the requested VM is ignored for Nova requests",
+			reservations:  []*v1alpha1.Reservation{newInFlightReservation("inflight-1", "instance-123", "8", "16Gi")},
+			request:       newNovaRequest("instance-123", "project-A", "gp-1", 4, "8Gi", false, []string{"host1", "host2", "host3", "host4"}),
+			expectedHosts: []string{"host1", "host2", "host3"},
+			filteredHosts: []string{"host4"},
+		},
+		{
+			// Failover scheduling carries the VM uuid but is not serialized by Nova.
+			name:          "In-flight reservation of the requested VM still blocks Cortex-internal requests",
+			reservations:  []*v1alpha1.Reservation{newInFlightReservation("inflight-1", "instance-123", "8", "16Gi")},
+			request:       newNovaRequestWithIntent("instance-123", "project-A", "gp-1", 4, "8Gi", "reserve_for_failover", false, []string{"host1", "host2", "host3", "host4"}),
 			expectedHosts: []string{"host2", "host3"},
 			filteredHosts: []string{"host1", "host4"},
 		},
@@ -1633,6 +1671,170 @@ func TestFilterHasEnoughCapacity_VMInterReservationMigration(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			assertActivations(t, result.Activations, tt.expectedHosts, tt.filteredHosts)
+		})
+	}
+}
+
+// TestFilterHasEnoughCapacity_InFlightDoubleCount verifies the per-(VM, host)
+// in-flight rule (ADR 8, UC2): once a VM is Active on a host, that host's
+// Allocation already includes it, so its smallest in-flight hold there must not
+// be subtracted again. The larger target hold of a resize is still counted.
+func TestFilterHasEnoughCapacity_InFlightDoubleCount(t *testing.T) {
+	scheme := buildTestScheme(t)
+	// host1: 16 CPU effective, 8 CPU allocated (vm-landed uses 8) -> 8 CPU free.
+	landedHost := newHypervisor("host1", "16", "8", "32Gi", "16Gi")
+	landedHost.Status.Instances = []hv1.Instance{{ID: "vm-landed", Active: true}}
+	otherHost := newHypervisor("host2", "16", "0", "32Gi", "0")
+
+	tests := []struct {
+		name          string
+		reservations  []*v1alpha1.Reservation
+		expectedHosts []string
+		filteredHosts []string
+	}{
+		{
+			// vm-landed's single in-flight hold (8 CPU) is already in Allocation;
+			// skipping it leaves 8 CPU free, enough for the 4-CPU request.
+			name:          "landed VM in-flight hold is not double-counted",
+			reservations:  []*v1alpha1.Reservation{newInFlightReservation("inflight-landed", "vm-landed", "8", "16Gi")},
+			expectedHosts: []string{"host1", "host2"},
+		},
+		{
+			// Resize of vm-landed on host1: source hold 8 CPU (old, in Allocation,
+			// skipped) and target hold 12 CPU (new, still counted) -> host1 filtered.
+			name: "resize target hold on landed host is still counted",
+			reservations: []*v1alpha1.Reservation{
+				newInFlightReservation("inflight-source", "vm-landed", "8", "16Gi"),
+				newInFlightReservation("inflight-target", "vm-landed", "12", "24Gi"),
+			},
+			expectedHosts: []string{"host2"},
+			filteredHosts: []string{"host1"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objects := []client.Object{landedHost.DeepCopy(), otherHost.DeepCopy()}
+			for _, r := range tt.reservations {
+				objects = append(objects, r.DeepCopy())
+			}
+			step := &FilterHasEnoughCapacity{}
+			step.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+			request := newNovaRequest("instance-new", "project-A", "gp-1", 4, "8Gi", false, []string{"host1", "host2"})
+			result, err := step.Run(logr.Discard(), request)
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			assertActivations(t, result.Activations, tt.expectedHosts, tt.filteredHosts)
+		})
+	}
+}
+
+// TestInFlightHoldsToSkip covers the per-(VM, host) in-flight skip rule directly.
+func TestInFlightHoldsToSkip(t *testing.T) {
+	cpu := func(n int64) resource.Quantity { return *resource.NewQuantity(n, resource.DecimalSI) }
+	inflight := func(name, vmID, host string, cpus int64) v1alpha1.Reservation {
+		return v1alpha1.Reservation{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Spec: v1alpha1.ReservationSpec{
+				Type:                v1alpha1.ReservationTypeInFlight,
+				TargetHost:          host,
+				Resources:           map[hv1.ResourceName]resource.Quantity{hv1.ResourceCPU: cpu(cpus)},
+				InFlightReservation: &v1alpha1.InFlightReservationSpec{VMID: vmID},
+			},
+		}
+	}
+	host := func(name string, active bool, vmIDs ...string) hv1.Hypervisor {
+		hv := hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: name}}
+		for _, id := range vmIDs {
+			hv.Status.Instances = append(hv.Status.Instances, hv1.Instance{ID: id, Active: active})
+		}
+		return hv
+	}
+	tests := []struct {
+		name     string
+		res      []v1alpha1.Reservation
+		hv       hv1.Hypervisor
+		wantSkip []string
+	}{
+		{name: "VM not active: nothing skipped", res: []v1alpha1.Reservation{inflight("t", "vm-1", "host-a", 4)}, hv: host("host-a", false, "vm-1")},
+		{name: "create landed: single hold skipped", res: []v1alpha1.Reservation{inflight("t", "vm-1", "host-a", 4)}, hv: host("host-a", true, "vm-1"), wantSkip: []string{"t"}},
+		{
+			name:     "same-host resize running: smaller of the two holds skipped",
+			res:      []v1alpha1.Reservation{inflight("target", "vm-1", "host-a", 4), inflight("source", "vm-1", "host-a", 2)},
+			hv:       host("host-a", true, "vm-1"),
+			wantSkip: []string{"source"},
+		},
+		{
+			name:     "different-host resize source still active: source hold skipped",
+			res:      []v1alpha1.Reservation{inflight("target", "vm-1", "host-b", 4), inflight("source", "vm-1", "host-a", 2)},
+			hv:       host("host-a", true, "vm-1"),
+			wantSkip: []string{"source"},
+		},
+		{
+			name: "different-host resize target side not active: nothing skipped",
+			res:  []v1alpha1.Reservation{inflight("target", "vm-1", "host-b", 4), inflight("source", "vm-1", "host-a", 2)},
+			hv:   host("host-b", false, "vm-1"),
+		},
+		{
+			// A committed-resource (non-in-flight) reservation on the host is not
+			// an in-flight hold and must never be part of the skip set.
+			name: "non-in-flight reservation ignored",
+			res: []v1alpha1.Reservation{{
+				ObjectMeta: metav1.ObjectMeta{Name: "cr"},
+				Spec: v1alpha1.ReservationSpec{
+					Type:       v1alpha1.ReservationTypeCommittedResource,
+					TargetHost: "host-a",
+					Resources:  map[hv1.ResourceName]resource.Quantity{hv1.ResourceCPU: cpu(4)},
+				},
+			}},
+			hv: host("host-a", true, "vm-1"),
+		},
+		{
+			// The active VM is vm-1; vm-2's hold on the same host must not be
+			// skipped because vm-2 is not in the host inventory.
+			name:     "only the active VM's hold is skipped",
+			res:      []v1alpha1.Reservation{inflight("vm1-hold", "vm-1", "host-a", 4), inflight("vm2-hold", "vm-2", "host-a", 2)},
+			hv:       host("host-a", true, "vm-1"),
+			wantSkip: []string{"vm1-hold"},
+		},
+		{
+			// Two active VMs each drop their own smallest hold independently.
+			name: "two active VMs each skip their smallest hold",
+			res: []v1alpha1.Reservation{
+				inflight("vm1-big", "vm-1", "host-a", 4), inflight("vm1-small", "vm-1", "host-a", 2),
+				inflight("vm2-big", "vm-2", "host-a", 8), inflight("vm2-small", "vm-2", "host-a", 6),
+			},
+			hv:       host("host-a", true, "vm-1", "vm-2"),
+			wantSkip: []string{"vm1-small", "vm2-small"},
+		},
+		{
+			// A hold confirmed on the host via Status.Host (TargetHost empty) is
+			// still considered for the skip rule.
+			name: "hold matched via Status.Host",
+			res: []v1alpha1.Reservation{{
+				ObjectMeta: metav1.ObjectMeta{Name: "landed"},
+				Spec: v1alpha1.ReservationSpec{
+					Type:                v1alpha1.ReservationTypeInFlight,
+					Resources:           map[hv1.ResourceName]resource.Quantity{hv1.ResourceCPU: cpu(4)},
+					InFlightReservation: &v1alpha1.InFlightReservationSpec{VMID: "vm-1"},
+				},
+				Status: v1alpha1.ReservationStatus{Host: "host-a"},
+			}},
+			hv:       host("host-a", true, "vm-1"),
+			wantSkip: []string{"landed"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := inFlightHoldsToSkip(tt.res, tt.hv)
+			if len(got) != len(tt.wantSkip) {
+				t.Fatalf("skip set = %v, want %v", got, tt.wantSkip)
+			}
+			for _, name := range tt.wantSkip {
+				if _, ok := got[reservationKey(&v1alpha1.Reservation{ObjectMeta: metav1.ObjectMeta{Name: name}})]; !ok {
+					t.Errorf("expected %q in skip set %v", name, got)
+				}
+			}
 		})
 	}
 }
