@@ -107,8 +107,26 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		return r.reconcileEvicted(ctx, logger, &res)
 	}
 
-	// Slot is placed and confirmed — verify allocations and keep ObservedGeneration current.
+	// Slot is placed and confirmed.
+	// If the spec changed since last confirmed placement (ObservedGeneration behind), clear
+	// TargetHost to trigger re-placement via reconcileEvicted → reconcileUnplaced on the next
+	// two cycles. This handles both benign changes (same host re-confirmed, new ObservedGeneration
+	// stamped) and significant changes (resources/flavorGroup — new host may be selected).
 	if res.Spec.TargetHost != "" && res.Status.Host == res.Spec.TargetHost {
+		cond := meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ReservationConditionReady)
+		if cond != nil && cond.ObservedGeneration < res.Generation {
+			logger.Info("spec changed since last placement, clearing target host to trigger re-placement",
+				"host", res.Spec.TargetHost,
+				"lastObservedGen", cond.ObservedGeneration,
+				"currentGen", res.Generation,
+			)
+			old := res.DeepCopy()
+			res.Spec.TargetHost = ""
+			if err := r.Patch(ctx, &res, client.MergeFrom(old)); client.IgnoreNotFound(err) != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
 		return r.reconcilePlaced(ctx, logger, &res)
 	}
 
@@ -202,9 +220,6 @@ func (r *CommitmentReservationController) reconcilePlaced(ctx context.Context, l
 
 	// Refresh ObservedGeneration if the spec changed since the last reconcile
 	// (e.g. endTime extension or metadata update via syncReservationMetadata).
-	// TODO (#784) IsReady short-circuit: when cond.ObservedGeneration < res.Generation and the spec
-	// change is significant (resource or flavor group change), skip this path and fall through to
-	// full re-placement rather than just refreshing ObservedGeneration.
 	cond := meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ReservationConditionReady)
 	if cond == nil || cond.ObservedGeneration < res.Generation {
 		old := res.DeepCopy()
@@ -420,7 +435,6 @@ func (r *CommitmentReservationController) reconcileUnplaced(ctx context.Context,
 //     status.allocation when it is confirmed active on the expected host.
 //
 // TODO (#778) replace HV-CRD VMSource with VM CRD once available
-// TODO (#784) implement multi-VM partial allocation model (see parking lot in ticket drafts)
 func (r *CommitmentReservationController) reconcileAllocations(ctx context.Context, res *v1alpha1.Reservation) error {
 	logger := LoggerFromContext(ctx)
 

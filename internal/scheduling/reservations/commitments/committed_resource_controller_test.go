@@ -1152,10 +1152,9 @@ func TestCommittedResourceController_BadSpec(t *testing.T) {
 // Tests: checkChildReservationStatus generation guard
 // ============================================================================
 
-// TestCommittedResourceController_NudgeDelay verifies that the echo-nudge is not sent on
-// the first reconcile cycle (when the condition is not yet Reserving for this generation),
-// but is sent on the second cycle — and that the condition message reflects the cycle.
-func TestCommittedResourceController_NudgeDelay(t *testing.T) {
+// TestCommittedResourceController_ReservingMessage verifies that successive reconcile cycles
+// both show "waiting for reservation placement" (no echo-nudge annotation is ever written).
+func TestCommittedResourceController_ReservingMessage(t *testing.T) {
 	scheme := newCRTestScheme(t)
 	cr := newTestCommittedResource("test-cr", v1alpha1.CommitmentStatusPending)
 	cr.Spec.AllowRejection = false
@@ -1170,7 +1169,7 @@ func TestCommittedResourceController_NudgeDelay(t *testing.T) {
 		}
 		return updated
 	}
-	getChildAnnotation := func() string {
+	hasNudgeAnnotation := func() bool {
 		t.Helper()
 		var list v1alpha1.ReservationList
 		if err := k8sClient.List(context.Background(), &list, client.MatchingLabels{
@@ -1181,42 +1180,27 @@ func TestCommittedResourceController_NudgeDelay(t *testing.T) {
 		for _, res := range list.Items {
 			if res.Spec.CommittedResourceReservation != nil &&
 				res.Spec.CommittedResourceReservation.CommitmentUUID == cr.Spec.CommitmentUUID {
-				return res.Annotations["cortex.cloud/echo-nudge"]
+				_, ok := res.Annotations["cortex.cloud/echo-nudge"]
+				return ok
 			}
 		}
-		return ""
+		return false
 	}
 
-	// Cycle 1: no Reserving condition exists yet → isAlreadyReserving=false → no nudge,
-	// condition message = "waiting for reservation placement".
-	if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
-		t.Fatalf("reconcile 1: %v", err)
-	}
-	cond1 := meta.FindStatusCondition(getCR().Status.Conditions, v1alpha1.CommittedResourceConditionReady)
-	if cond1 == nil || cond1.Reason != v1alpha1.CommittedResourceReasonReserving {
-		t.Fatalf("cycle 1: expected Reserving condition, got %+v", cond1)
-	}
-	if cond1.Message != "waiting for reservation placement" {
-		t.Errorf("cycle 1: message want %q, got %q", "waiting for reservation placement", cond1.Message)
-	}
-	if got := getChildAnnotation(); got != "" {
-		t.Errorf("cycle 1: echo-nudge annotation should not be set, got %q", got)
-	}
-
-	// Cycle 2: Reserving condition is now set for this generation → isAlreadyReserving=true →
-	// nudge fires, condition message = "still waiting for reservation placement".
-	if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
-		t.Fatalf("reconcile 2: %v", err)
-	}
-	cond2 := meta.FindStatusCondition(getCR().Status.Conditions, v1alpha1.CommittedResourceConditionReady)
-	if cond2 == nil || cond2.Reason != v1alpha1.CommittedResourceReasonReserving {
-		t.Fatalf("cycle 2: expected Reserving condition, got %+v", cond2)
-	}
-	if cond2.Message != "still waiting for reservation placement" {
-		t.Errorf("cycle 2: message want %q, got %q", "still waiting for reservation placement", cond2.Message)
-	}
-	if got := getChildAnnotation(); got == "" {
-		t.Errorf("cycle 2: echo-nudge annotation should be set")
+	for cycle := 1; cycle <= 2; cycle++ {
+		if _, err := controller.Reconcile(context.Background(), reconcileReq(cr.Name)); err != nil {
+			t.Fatalf("reconcile %d: %v", cycle, err)
+		}
+		cond := meta.FindStatusCondition(getCR().Status.Conditions, v1alpha1.CommittedResourceConditionReady)
+		if cond == nil || cond.Reason != v1alpha1.CommittedResourceReasonReserving {
+			t.Fatalf("cycle %d: expected Reserving condition, got %+v", cycle, cond)
+		}
+		if cond.Message != "waiting for reservation placement" {
+			t.Errorf("cycle %d: message want %q, got %q", cycle, "waiting for reservation placement", cond.Message)
+		}
+		if hasNudgeAnnotation() {
+			t.Errorf("cycle %d: echo-nudge annotation must not be set", cycle)
+		}
 	}
 }
 
@@ -1228,42 +1212,26 @@ func TestCheckChildReservationStatus_GenerationGuard(t *testing.T) {
 		obsGen          int64
 		condStatus      metav1.ConditionStatus // "" = no condition set
 		condMessage     string
-		shouldNudge     bool
 		wantAllReady    bool
 		wantAnyFailed   bool
 		wantReadySlots  int
 		wantReason      string
 		wantFailedSlots []string
-		wantNudge       bool
 	}{
 		{
 			name:           "Ready=False at stale generation: treated as pending",
 			obsGen:         1,
 			condStatus:     metav1.ConditionFalse,
 			condMessage:    "no hosts available",
-			shouldNudge:    true,
 			wantAllReady:   false,
 			wantAnyFailed:  false,
 			wantReadySlots: 0,
-			wantNudge:      true,
-		},
-		{
-			name:           "Ready=False at stale generation: no nudge on first cycle",
-			obsGen:         1,
-			condStatus:     metav1.ConditionFalse,
-			condMessage:    "no hosts available",
-			shouldNudge:    false,
-			wantAllReady:   false,
-			wantAnyFailed:  false,
-			wantReadySlots: 0,
-			wantNudge:      false,
 		},
 		{
 			name:            "Ready=False at current generation: is a current failure",
 			obsGen:          2,
 			condStatus:      metav1.ConditionFalse,
 			condMessage:     "no hosts available",
-			shouldNudge:     true,
 			wantAllReady:    false,
 			wantAnyFailed:   true,
 			wantReadySlots:  0,
@@ -1274,29 +1242,24 @@ func TestCheckChildReservationStatus_GenerationGuard(t *testing.T) {
 			name:           "Ready=True at current generation: allReady",
 			obsGen:         2,
 			condStatus:     metav1.ConditionTrue,
-			shouldNudge:    true,
 			wantAllReady:   true,
 			wantReadySlots: 1,
 		},
 		{
-			name:           "no condition yet at current generation: still pending",
+			name:           "no condition yet: still pending",
 			obsGen:         2,
 			condStatus:     "", // no condition
-			shouldNudge:    true,
 			wantAllReady:   false,
 			wantAnyFailed:  false,
 			wantReadySlots: 0,
-			wantNudge:      true,
 		},
 		{
-			name:           "parentGen written to spec but echo not yet in status: nudge annotation set",
-			obsGen:         1, // obs behind cr.Generation=2; spec.parentGeneration already set to cr.Generation
+			name:           "condition ObservedGeneration behind reservation generation: still pending",
+			obsGen:         1, // obs behind cr.Generation=2
 			condStatus:     metav1.ConditionTrue,
-			shouldNudge:    true,
 			wantAllReady:   false,
 			wantAnyFailed:  false,
 			wantReadySlots: 0,
-			wantNudge:      true,
 		},
 	}
 
@@ -1338,7 +1301,7 @@ func TestCheckChildReservationStatus_GenerationGuard(t *testing.T) {
 			}
 
 			controller := &CommittedResourceController{Client: k8sClient, Scheme: scheme}
-			allReady, anyFailed, readySlots, reason, _, failedSlots, err := controller.checkChildReservationStatus(context.Background(), cr, 1, tt.shouldNudge)
+			allReady, anyFailed, readySlots, reason, _, failedSlots, err := controller.checkChildReservationStatus(context.Background(), cr, 1)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -1356,14 +1319,6 @@ func TestCheckChildReservationStatus_GenerationGuard(t *testing.T) {
 			}
 			if !slices.Equal(failedSlots, tt.wantFailedSlots) {
 				t.Errorf("failedSlots: want %v, got %v", tt.wantFailedSlots, failedSlots)
-			}
-			var updated v1alpha1.Reservation
-			if err := k8sClient.Get(context.Background(), client.ObjectKey{Name: child.Name}, &updated); err != nil {
-				t.Fatalf("get updated reservation: %v", err)
-			}
-			_, hasNudge := updated.Annotations["cortex.cloud/echo-nudge"]
-			if hasNudge != tt.wantNudge {
-				t.Errorf("echo-nudge annotation: want %v, got %v", tt.wantNudge, hasNudge)
 			}
 		})
 	}
