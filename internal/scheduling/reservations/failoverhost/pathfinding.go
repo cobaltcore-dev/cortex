@@ -274,7 +274,7 @@ func (f *evacuationPathFinder) fetchSeedCandidates(ctx context.Context, seed See
 	}
 	pipeline := "kvm-general-purpose-load-balancing"
 	if flavorType == api.FlavorTypeHANA {
-		pipeline = "kvm-hana-load-balancing"
+		pipeline = "kvm-hana-bin-packing"
 	}
 	req := compute.PlacementRequest{
 		Pipeline: pipeline,
