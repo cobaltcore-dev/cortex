@@ -60,6 +60,9 @@ func TestFailoverHostLifecycleKPI_Collect(t *testing.T) {
 	reoccupied := setActive(ptr(failoverHostReservation("failover-host-r", "r", "peer")))
 	// activeInUse: Active AND in use with a VM -> legitimate evacuee, not flagged.
 	activeInUse := setInUse(setActive(ptr(failoverHostReservation("failover-host-u", "u", "peer"))))
+	// evacuating: in use with a recorded source host that still has a VM on it.
+	evacuating := setInUse(setActive(ptr(failoverHostReservation("failover-host-ev", "ev", "src"))))
+	evacuating.Status.FailoverHostReservation = &v1alpha1.FailoverHostReservationStatus{SourceHost: "src"}
 	// A non-failover reservation must be ignored entirely.
 	other := v1alpha1.Reservation{
 		ObjectMeta: v1.ObjectMeta{Name: "r-other"},
@@ -68,9 +71,10 @@ func TestFailoverHostLifecycleKPI_Collect(t *testing.T) {
 
 	vmOnR := virtualMachine("vm-r", "r")
 	vmOnU := virtualMachine("vm-u", "u")
+	vmOnSrc := virtualMachine("vm-src", "src")
 
 	client := fake.NewClientBuilder().WithScheme(scheme).
-		WithObjects(&draining, activeEmpty, reoccupied, activeInUse, &other, &vmOnR, &vmOnU).Build()
+		WithObjects(&draining, activeEmpty, reoccupied, activeInUse, evacuating, &other, &vmOnR, &vmOnU, &vmOnSrc).Build()
 
 	kpi := &FailoverHostLifecycleKPI{}
 	if err := kpi.Init(nil, client, conf.NewRawOpts("{}")); err != nil {
@@ -91,6 +95,8 @@ func TestFailoverHostLifecycleKPI_Collect(t *testing.T) {
 			got["draining"] = metric.GetGauge().GetValue()
 		case kpi.reoccupied.String():
 			got["reoccupied"] = metric.GetGauge().GetValue()
+		case kpi.evacuating.String():
+			got["evacuating"] = metric.GetGauge().GetValue()
 		default:
 			t.Errorf("unexpected metric %s", m.Desc().String())
 		}
@@ -100,6 +106,9 @@ func TestFailoverHostLifecycleKPI_Collect(t *testing.T) {
 	}
 	if got["reoccupied"] != 1 {
 		t.Errorf("reoccupied = %v, want 1", got["reoccupied"])
+	}
+	if got["evacuating"] != 1 {
+		t.Errorf("evacuating = %v, want 1", got["evacuating"])
 	}
 }
 

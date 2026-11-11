@@ -35,12 +35,15 @@ spec:
   schedulingDomain: nova
   impl: failover_host_lifecycle_kpi
   description: |
-    This KPI exposes the lifecycle state of failover host reservations as two
+    This KPI exposes the lifecycle state of failover host reservations as three
     gauges: cortex_failover_host_reservations_draining (reservations present but
-    not yet FailoverHostActive, i.e. their reserved host is still being emptied)
-    and cortex_failover_host_reservations_reoccupied (active, not-in-use
-    reservations whose host nonetheless has a virtual machine on it — a filter
-    leak the drain controller does not auto-correct).
+    not yet FailoverHostActive, i.e. their reserved host is still being emptied),
+    cortex_failover_host_reservations_reoccupied (active, not-in-use reservations
+    whose host nonetheless has a virtual machine on it — a filter leak the drain
+    controller does not auto-correct) and
+    cortex_failover_host_reservations_evacuating (in-use reservations whose source
+    host still has a virtual machine on it — a gang evacuation not draining its
+    source, which keeps the completion controller from releasing the reservation).
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI

@@ -25,7 +25,7 @@ var failoverHostLifecycleKPILogger = ctrl.Log.WithName("failover-host-lifecycle-
 const novaStatusDeleted = "DELETED"
 
 // FailoverHostLifecycleKPI exposes the lifecycle state of failover host
-// reservations as two fleet-wide gauges, derived from the reservations and
+// reservations as three fleet-wide gauges, derived from the reservations and
 // virtual machines present in the cluster:
 //
 //   - cortex_failover_host_reservations_draining — reservations present but not
@@ -36,15 +36,20 @@ const novaStatusDeleted = "DELETED"
 //     invariant violation that the drain controller deliberately does not
 //     auto-correct; the gauge is the signal an alert escalates on. In-use hosts
 //     are excluded, as a gang evacuation legitimately holds VMs there.
+//   - cortex_failover_host_reservations_evacuating — in-use reservations whose
+//     source host still has a virtual machine on it. A persistently non-zero
+//     value means a gang evacuation is not draining its source host, so the
+//     completion controller never gets to release the reservation.
 //
-// Both are pure reads over k8s resources, so they live here rather than in the
-// drain controller's reconcile loop, where they would add a list per reconcile
-// and couple the metric to informer timing.
+// All are pure reads over k8s resources, so they live here rather than in the
+// controllers' reconcile loops, where they would add a list per reconcile and
+// couple the metric to informer timing.
 type FailoverHostLifecycleKPI struct {
 	plugins.BaseKPI[struct{}]
 
 	draining   *prometheus.Desc
 	reoccupied *prometheus.Desc
+	evacuating *prometheus.Desc
 }
 
 func (FailoverHostLifecycleKPI) GetName() string { return "failover_host_lifecycle_kpi" }
@@ -63,12 +68,18 @@ func (k *FailoverHostLifecycleKPI) Init(db *db.DB, client client.Client, opts co
 		"Number of active, not-in-use failover host reservations whose host has a virtual machine on it; a filter-pipeline leak the drain controller does not auto-correct",
 		nil, nil,
 	)
+	k.evacuating = prometheus.NewDesc(
+		"cortex_failover_host_reservations_evacuating",
+		"Number of in-use failover host reservations whose source host still has a virtual machine on it; a persistently non-zero value means a gang evacuation is not draining its source host",
+		nil, nil,
+	)
 	return nil
 }
 
 func (k *FailoverHostLifecycleKPI) Describe(ch chan<- *prometheus.Desc) {
 	ch <- k.draining
 	ch <- k.reoccupied
+	ch <- k.evacuating
 }
 
 func (k *FailoverHostLifecycleKPI) Collect(ch chan<- prometheus.Metric) {
@@ -93,10 +104,18 @@ func (k *FailoverHostLifecycleKPI) Collect(ch chan<- prometheus.Metric) {
 			occupied[h] = true
 		}
 	}
-	var draining, reoccupied float64
+	var draining, reoccupied, evacuating float64
 	for _, res := range reservations.Items {
 		if res.Spec.Type != v1alpha1.ReservationTypeFailoverHost {
 			continue
+		}
+		// In use with a still-occupied source host: the evacuation is not
+		// draining its source, so completion cannot release the reservation.
+		if meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) &&
+			res.Status.FailoverHostReservation != nil &&
+			res.Status.FailoverHostReservation.SourceHost != "" &&
+			occupied[res.Status.FailoverHostReservation.SourceHost] {
+			evacuating++
 		}
 		if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive) {
 			draining++
@@ -110,6 +129,7 @@ func (k *FailoverHostLifecycleKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 	ch <- prometheus.MustNewConstMetric(k.draining, prometheus.GaugeValue, draining)
 	ch <- prometheus.MustNewConstMetric(k.reoccupied, prometheus.GaugeValue, reoccupied)
+	ch <- prometheus.MustNewConstMetric(k.evacuating, prometheus.GaugeValue, evacuating)
 }
 
 // occupiedHost returns the host a VM keeps from being empty: the host Nova

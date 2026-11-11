@@ -532,6 +532,41 @@ When enabled, it reconciles each failover host reservation like so:
   unschedulable host instead stops being designated, and the TTL cleans up anything left stuck. A waiting
   reservation is requeued for its TTL deadline, so the TTL fires even if nothing else changes in the meantime.
 
+### Completing an evacuation (InUse → Used)
+
+Once a gang evacuation lands on an Active reservation the Matcher marks it **In Use** and records the failed
+host in `status.failoverHostReservation.sourceHost`. From there the drain controller deliberately stops
+touching it, so evacuated VMs pile onto the reserved host and stay. Releasing the reservation once the
+evacuation has served its purpose is the job of the **completion controller**, a third watch-driven controller
+alongside the partitioning and drain controllers. It owns the `FailoverHostCompleted` condition and the final
+deletion of In Use reservations.
+
+Like the drain controller, completion is **opt-in and off by default** (it deletes reservations, which changes
+fleet capacity): when the feature flag is disabled the controller is not started. When enabled, it reconciles
+each In Use failover host reservation like so:
+
+- **Is the source host empty?** Emptiness is read from the same `VirtualMachine` resources the drain controller
+  uses — but here for the *source* host (`status.failoverHostReservation.sourceHost`), not the reserved host. A
+  host counts as occupied only if Nova reports a VM on it that is neither being pruned nor already deleted. The
+  controller watches the VMs, so a VM leaving (or returning to) the source host re-evaluates the reservation
+  right away. A source host whose hypervisor has disappeared has no VMs, so it simply counts as empty.
+- **When it first goes empty, start a grace period.** The controller sets `FailoverHostCompleted=True` (reason
+  `EvacuationComplete`) and requeues at the grace deadline. The grace period (default `24h`) is measured from
+  that condition's `lastTransitionTime`, which survives controller restarts. It exists to avoid rapid
+  evacuate ↔ reserve-new-host loops when workloads flap: a host that empties only briefly does not immediately
+  lose its reservation.
+- **If the source is re-occupied before grace elapses, reset the timer.** The controller flips the condition to
+  `FailoverHostCompleted=False` (reason `SourceReoccupied`); the next time the source empties the condition goes
+  True again with a fresh timestamp, restarting the clock.
+- **When the grace period elapses with the source still empty, delete the reservation.** The reserved host
+  becomes a regular host again, continuing to host the once-failed-over workload. The partitioning generator
+  designates a fresh failover host on its next pass to restore the partition's headroom.
+
+A gang evacuation that never drains its source host — a VM that will not live-migrate, no capacity on the
+reserved host, or a wedged source — leaves the reservation stuck In Use and never completes. The
+`cortex_failover_host_reservations_evacuating` gauge counts such reservations (In Use with a still-occupied
+source host), and the `CortexNovaFailoverHostEvacuationStuck` alert escalates when the count stays non-zero.
+
 ## How failover host reservations affect scheduling
 
 Creating a reservation is only half the story — the scheduler has to *honor* it. Three cooperating pieces
@@ -631,7 +666,8 @@ Enable the controller and configure it under the nested `failover.hosts` key:
 ```yaml
 enabledControllers:
   - failover-host-reservations-controller
-  - failover-host-drain-controller   # optional: drains designated hosts to Active
+  - failover-host-drain-controller        # optional: drains designated hosts to Active
+  - failover-host-completion-controller    # optional: releases in-use hosts once evacuation completes
 # ...
 failover:
   hosts:
@@ -643,6 +679,9 @@ failover:
       enabled: false           # gates the whole drain controller (off by default)
       ttl: 24h                 # delete a reservation stuck non-Active this long
       retryBackoff: 1m         # wait before retrying after a failed drain
+    completion:
+      enabled: false           # gates the whole completion controller (off by default)
+      gracePeriod: 24h         # source must stay empty this long before deletion
 ```
 
 The flavors the partitioning is seeded from (see [Step 1](#step-1--discover-who-can-rescue-whom)) are read
@@ -655,6 +694,13 @@ The **drain controller** that advances designated reservations to Active (see
 (`enabled: false`): draining live-migrates workloads, so it is deliberately opt-in. When disabled the
 controller is not started and no reservation is marked Active. The `ttl` bounds how long a reservation may stay
 non-Active before it is deleted and regenerated, and is intentionally conservative.
+
+The **completion controller** that releases In Use reservations once their evacuation finishes (see
+[Completing an evacuation](#completing-an-evacuation-inuse--used)) is a third `enabledControllers` entry,
+`failover-host-completion-controller`, and reads its settings from `failover.hosts.completion`. It too is off by
+default (`enabled: false`): completing a reservation deletes it, which returns the reserved host to regular
+capacity. The `gracePeriod` (default `24h`) is how long the source host must stay empty before deletion,
+guarding against rapid evacuate ↔ reserve loops.
 
 > [!NOTE]
 > The settings live under `failover.hosts` as a deliberate example of grouping a controller's config under its

@@ -354,6 +354,17 @@ const (
 	// status=False: The failover host is not currently in use.
 	// status=True: The failover host is currently in use.
 	ConditionTypeFailoverHostInUse ReservationConditionType = "FailoverHostInUse"
+
+	// ConditionTypeFailoverHostCompleted indicates the gang evacuation onto this
+	// InUse failover host reservation has finished: no virtual machine remains on
+	// the source host (Status.FailoverHostReservation.SourceHost). The completion
+	// controller sets it True when the source first goes empty and uses its
+	// lastTransitionTime as the grace-period anchor before deleting the reservation.
+	//
+	// status=True: The source host is empty; the grace timer runs toward deletion.
+	// status=False: The source host was re-occupied before the grace period
+	// elapsed; the timer is reset.
+	ConditionTypeFailoverHostCompleted ReservationConditionType = "FailoverHostCompleted"
 )
 
 const (
@@ -361,6 +372,15 @@ const (
 	// drain controller once the reserved host is empty and ready to accept
 	// evacuations.
 	ReasonFailoverHostDrained = "HostDrained"
+
+	// ReasonFailoverHostEvacuationComplete is the FailoverHostCompleted=True
+	// reason set by the completion controller once the source host is empty.
+	ReasonFailoverHostEvacuationComplete = "EvacuationComplete"
+
+	// ReasonFailoverHostSourceReoccupied is the FailoverHostCompleted=False reason
+	// set when the source host gained a virtual machine again before the grace
+	// period elapsed.
+	ReasonFailoverHostSourceReoccupied = "SourceReoccupied"
 )
 
 // ReservationStatus defines the observed state of Reservation.
