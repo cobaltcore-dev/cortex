@@ -23,7 +23,6 @@ type Config struct {
 	MinReconcileInterval metav1.Duration `json:"capacityMinReconcileInterval"`
 
 	// TotalPipeline is the scheduler pipeline used for the empty-state probe.
-	// This pipeline should ignore current VM allocations (e.g. kvm-report-capacity).
 	TotalPipeline string `json:"capacityTotalPipeline"`
 
 	// PlaceablePipeline is the scheduler pipeline used for the current-state probe.
