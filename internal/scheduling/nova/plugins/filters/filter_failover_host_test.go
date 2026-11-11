@@ -128,6 +128,15 @@ func TestFilterFailoverHost_Run(t *testing.T) {
 			expectedHosts: []string{"host1", "host2", "host3"},
 		},
 		{
+			name: "non-evacuation - blocks the in-use source host as well as the target",
+			opts: FilterFailoverHostOpts{Enabled: true},
+			// h1 is reserved (target) and in use by source source1; both the reserved
+			// host and the source it is draining are kept free of new VMs.
+			reservations:  []client.Object{inUseBy(failoverHostReservation("h1", "", "source1"), "source1")},
+			request:       requestWithHosts("", "", "h1", "source1", "host3"),
+			expectedHosts: []string{"host3"},
+		},
+		{
 			name: "evacuation - keeps the selected target and prunes other failover targets",
 			opts: FilterFailoverHostOpts{Enabled: true},
 			// h1 and h2 are both reachable from source1; only the name-first (h1)

@@ -32,7 +32,8 @@ func (FilterFailoverHostOpts) Validate() error { return nil }
 //
 // For a non-evacuation request it removes every failover host, so no new virtual
 // machine lands on a host being drained or kept empty as a gang-evacuation
-// landing zone.
+// landing zone. It also removes the source host of any in-use reservation, so a
+// host a gang evacuation is draining does not fill back up while it empties.
 //
 // For an evacuation request it removes every failover host except the one
 // deterministically selected for the request's source host. Keeping only the
@@ -92,7 +93,16 @@ func (s *FilterFailoverHost) Run(traceLog logr.Logger, request compute.Placement
 		// blocks from creation onward (the controller deletes Revoked/Used ones),
 		// so its presence is enough to keep new virtual machines off the host,
 		// whether or not it is Active yet.
-		for _, host := range []string{reservation.Spec.TargetHost, reservation.Status.Host} {
+		blocked := []string{reservation.Spec.TargetHost, reservation.Status.Host}
+		// Also block the source host of an in-use reservation: while a gang
+		// evacuation drains it, no new virtual machine should land there, or the
+		// source never empties and the completion controller cannot release the
+		// reservation. The evacuation itself is unaffected — its candidates are
+		// destinations, never the source. SourceHost is only set once InUse.
+		if reservation.Status.FailoverHostReservation != nil {
+			blocked = append(blocked, reservation.Status.FailoverHostReservation.SourceHost)
+		}
+		for _, host := range blocked {
 			if host == "" || host == keep {
 				continue
 			}

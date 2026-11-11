@@ -608,7 +608,11 @@ toggled by the `kvm.failoverHostMatching.enabled` Helm value (default `false`) a
 removes depends on the request:
 
 - **Ordinary (non-evacuation) requests:** it removes *every* failover host, so no new VM is placed on a host
-  being drained or kept empty as a landing zone.
+  being drained or kept empty as a landing zone. It also removes the **source host of any in-use reservation**
+  (`status.failoverHostReservation.sourceHost`): while a gang evacuation is draining a failed host, no new
+  workload should land on it, or it never empties and the completion controller can never release the
+  reservation. (An evacuation's own candidates are destinations, never the source, so this does not interfere
+  with the evacuation itself.)
 - **Evacuations:** it removes every failover host *except* the one selected by the rule above. The ordinary,
   non-reserved candidates are left untouched.
 
