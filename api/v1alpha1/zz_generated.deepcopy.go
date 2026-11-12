@@ -231,10 +231,6 @@ func (in *CommittedResourceChangeStatus) DeepCopyInto(out *CommittedResourceChan
 		*out = make([]v1.ObjectReference, len(*in))
 		copy(*out, *in)
 	}
-	if in.RollbackStartedAt != nil {
-		in, out := &in.RollbackStartedAt, &out.RollbackStartedAt
-		*out = (*in).DeepCopy()
-	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make([]metav1.Condition, len(*in))

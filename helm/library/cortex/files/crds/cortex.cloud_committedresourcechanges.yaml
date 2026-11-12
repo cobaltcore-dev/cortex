@@ -195,7 +195,8 @@ spec:
               of a CommittedResourceChange.
             properties:
               conditions:
-                description: Conditions holds Progressing and Finished conditions.
+                description: Conditions holds Progressing, Finished and Restoring
+                  conditions.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -262,13 +263,6 @@ spec:
                 - message: phase cannot transition out of a terminal state
                   rule: oldSelf == '' || !['Accepted','Rejected','Superseded'].exists(t,
                     t == oldSelf) || self == oldSelf
-              rollbackStartedAt:
-                description: |-
-                  RollbackStartedAt is the time the CRC entered RollingBack or DryRunCleanup.
-                  Used to measure RollbackTimeout from the correct starting point rather than relying on
-                  the Progressing condition's LastTransitionTime, which is only updated on Status changes.
-                format: date-time
-                type: string
               snapshotBefore:
                 additionalProperties:
                   description: CommittedResourceSpec defines the desired state of
