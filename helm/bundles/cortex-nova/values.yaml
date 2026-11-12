@@ -109,6 +109,21 @@ kvm:
     # Domain names that are explicitly treated as non-external-customer domains and
     # skipped by the filter, even if they match one of the prefixes above.
     ignoredDomainNames: []
+    # Allow-list of external customer domain names permitted on the exclusive hosts.
+    # Each entry is a glob pattern (path.Match), so exact names, "iaas-foo-*", or "*"
+    # are supported. The filter is fail-closed: when this list is empty, all external
+    # customer domains are blocked. Regular (non-matching) domains are always kept
+    # off the CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE hosts.
+    allowedDomainNames: []
+  # Options for the filter_domain_pinning pipeline step, which pins specific domains
+  # to a dedicated set of hypervisors and isolates those hypervisors from all other
+  # domains. The step is always in the pipeline; an empty mapping makes it a noop.
+  filterDomainPinning:
+    # Maps a domain name to the hypervisors (by Hypervisor CRD name, which equals the
+    # compute host name) that the domain may be scheduled on. Domains listed here are
+    # restricted to exactly these hypervisors, and the hypervisors are isolated from
+    # every other domain. Leave empty to make the step a noop.
+    domainHypervisors: {}
   # Options for the failover host matching scheduling steps. The
   # filter_failover_host filter keeps new VMs off hosts with a failover host
   # reservation (and, for evacuations, prunes all but the deterministically
