@@ -47,12 +47,9 @@ func newPreferSmallerHostsRequest(hosts []string) compute.PlacementRequest {
 		InstanceUUID:     "instance-123",
 		NumInstances:     1,
 		HypervisorFamily: api.HypervisorFamilyKVM,
-		Flavor: api.FlavorSpec{
-			VCPUs:    4,
-			MemoryMB: 8192,
-		},
-		Hosts:   hostList,
-		Weights: weights,
+		InstanceCapacity: api.CapacityFromVCPUsMemoryMB(4, 8192),
+		Hosts:            hostList,
+		Weights:          weights,
 	}
 }
 

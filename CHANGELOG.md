@@ -1,5 +1,26 @@
 # Changelog
 
+## Release PR [#1501](https://github.com/cobaltcore-dev/cortex/pull/1501) — 2026-11-09
+
+### Bumped Versions
+
+| Package | Previous | New |
+|---|---|---|
+| cortex | 0.8.1 | 0.8.2 |
+| bundles | 0.0.112 | 0.0.113 |
+
+### Bug Fixes
+
+- **Fix wrong pipeline name in failover host pathfinding** ([#1500](https://github.com/cobaltcore-dev/cortex/pull/1500)) — Corrected the scheduling pipeline name used for HANA-type flavors during evacuation seed candidate fetching from `kvm-hana-load-balancing` to `kvm-hana-bin-packing`. HANA workloads require the bin-packing placement strategy when computing failover evacuation paths; the incorrect pipeline name would have caused HANA failover placements to use the wrong scheduling algorithm, potentially leading to suboptimal or failed VM evacuations.
+
+### Operational Notes
+
+1. **No schema or RBAC changes:** This is a single-line configuration fix with no CRD, Helm, or RBAC changes. A rolling upgrade is sufficient.
+
+**Contributors:** @PhilippMatthes
+
+**PR:** [#1501](https://github.com/cobaltcore-dev/cortex/pull/1501) | **Commits:** 1 | **Files changed:** 1 | **+1 / −1**
+
 ## Release PR [#1495](https://github.com/cobaltcore-dev/cortex/pull/1495) — 2026-11-09
 
 ### Bumped Versions

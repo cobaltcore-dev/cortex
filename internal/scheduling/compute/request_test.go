@@ -7,7 +7,10 @@ import (
 	"slices"
 	"testing"
 
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 func TestIsForcedDestination(t *testing.T) {
@@ -57,6 +60,36 @@ func TestForcedHosts(t *testing.T) {
 				t.Errorf("ForcedHosts() = %v, want %v", got, c.want)
 			}
 		})
+	}
+}
+
+func TestTotalCapacity(t *testing.T) {
+	// Per-instance capacity built via the shared helper (memory in bytes).
+	req := PlacementRequest{
+		NumInstances:     3,
+		InstanceCapacity: api.CapacityFromVCPUsMemoryMB(2, 1024),
+	}
+	total := req.TotalCapacityDemand()
+	wantCPU := int64(2 * 3)
+	wantMemBytes := int64(1024) * 1024 * 1024 * 3
+	if got := total[hv1.ResourceCPU]; got.Value() != wantCPU {
+		t.Errorf("cpu total = %d, want %d", got.Value(), wantCPU)
+	}
+	if got := total[hv1.ResourceCPU]; got.Format != resource.DecimalSI {
+		t.Errorf("cpu format = %q, want %q", got.Format, resource.DecimalSI)
+	}
+	if got := total[hv1.ResourceMemory]; got.Value() != wantMemBytes {
+		t.Errorf("memory total = %d, want %d", got.Value(), wantMemBytes)
+	}
+	if got := total[hv1.ResourceMemory]; got.Format != resource.BinarySI {
+		t.Errorf("memory format = %q, want %q", got.Format, resource.BinarySI)
+	}
+}
+
+func TestTotalCapacityNilMap(t *testing.T) {
+	req := PlacementRequest{NumInstances: 5}
+	if total := req.TotalCapacityDemand(); len(total) != 0 {
+		t.Errorf("nil InstanceCapacity yielded %v, want empty map", total)
 	}
 }
 

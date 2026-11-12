@@ -51,11 +51,8 @@ func ToSchedulerRequest(
 		GlobalRequestID: derefString(wire.Context.GlobalRequestID),
 	}
 
-	// Flavor sizing.
-	req.Flavor = api.FlavorSpec{
-		VCPUs:    spec.Flavor.Data.VCPUs,
-		MemoryMB: spec.Flavor.Data.MemoryMB,
-	}
+	// Per-instance capacity (resolved from the flavor's vCPUs/memory).
+	req.InstanceCapacity = api.CapacityFromVCPUsMemoryMB(spec.Flavor.Data.VCPUs, spec.Flavor.Data.MemoryMB)
 
 	// Hypervisor family.
 	req.HypervisorFamily = toHypervisorFamily(wire)

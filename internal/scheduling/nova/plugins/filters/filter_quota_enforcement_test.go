@@ -52,10 +52,7 @@ func makeQuotaEnforcementRequest(projectID, az, hwVersion string, memoryMB, numI
 		NumInstances:     numInstances,
 		Intent:           intentFromHint(hints),
 		HardwareVersion:  hwVersion,
-		Flavor: api.FlavorSpec{
-			VCPUs:    4,
-			MemoryMB: memoryMB,
-		},
+		InstanceCapacity: api.CapacityFromVCPUsMemoryMB(4, memoryMB),
 		Hosts: []compute.Host{
 			{ComputeHost: "host1"},
 			{ComputeHost: "host2"},

@@ -40,7 +40,7 @@ alerts:
     # CortexNovaCacheOverlayNotDraining fires. The overlay is expected to drain
     # back to zero within milliseconds, so any sustained non-zero watermark
     # indicates eviction is not keeping up.
-    cacheOverlayMaxEntries: 50
+    cacheOverlayMaxEntries: 1000
     # Lookback window for CortexNovaFailoverReservationsMissing. The alert fires
     # only if the count of VMs missing their required failover reservations never
     # returned to zero (min_over_time > 0) across this window. A new VM transiently
