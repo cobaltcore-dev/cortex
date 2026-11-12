@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-logr/logr"
 
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -85,10 +86,12 @@ func (s *FilterExternalCustomerStep) isAllowed(domainName string) bool {
 func (s *FilterExternalCustomerStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
-	// TODO: a capacity probe is a synthetic request with no real domain. Until it
-	// carries the domain it probes for, treat it as a non-external-customer request
-	// so it conservatively excludes the exclusive hosts (handled below via the
-	// empty domain name). A proper implementation would probe per-domain capacity.
+	// Capacity probes are synthetic requests with no real domain, so they must
+	// not be subjected to external customer isolation: a probe measures the whole
+	// fleet, including hosts exclusively reserved for external customers.
+	if request.Intent == api.CapacityProbeIntent {
+		return result, nil
+	}
 
 	isExternalCustomer := s.matchesExternalCustomerPrefix(request.DomainName)
 

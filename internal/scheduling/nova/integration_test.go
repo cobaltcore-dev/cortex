@@ -686,11 +686,11 @@ func TestIntegration_ExternalCustomerAndDomainPinning(t *testing.T) {
 			expectedHosts: []string{"excl-shared-1", "excl-shared-2"},
 		},
 		{
-			name:          "capacity probe (no domain) excludes all exclusive hosts",
+			name:          "capacity probe (no domain) skips domain filters and sees all hosts",
 			allowed:       defaultAllowed,
 			pinning:       defaultPinning,
 			request:       newDomainNovaRequest("vm8", "", "capacity_probe", allHosts),
-			expectedHosts: []string{"regular"},
+			expectedHosts: []string{"excl-shared-1", "excl-shared-2", "excl-pinned-a", "excl-pinned-b", "regular"},
 		},
 		{
 			name:          "fail-closed with pinning disabled blocks iaas domains",

@@ -71,9 +71,9 @@ func TestFilterDomainPinningStep_Run(t *testing.T) {
 			expectedHosts: []string{"host1", "host2"},
 		},
 		{
-			name:          "Capacity probe (no domain) excludes all pinned hypervisors",
+			name:          "Capacity probe skips pinning and keeps all hosts",
 			request:       compute.PlacementRequest{Intent: api.CapacityProbeIntent, Hosts: allHosts},
-			expectedHosts: []string{"host4"},
+			expectedHosts: []string{"host1", "host2", "host3", "host4"},
 		},
 	}
 

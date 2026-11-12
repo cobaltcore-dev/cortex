@@ -121,7 +121,8 @@ func (s *DBVMSource) ListVMs(ctx context.Context) ([]VM, error) {
 
 	domainByProject, err := s.NovaReader.GetProjectDomainNames(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get project domain names: %w", err)
+		vmSourceLog.Error(err, "failed to get project domain names, VMs will be treated as regular tenants")
+		domainByProject = map[string]string{}
 	}
 
 	var skippedNoHost, skippedUnknownFlavor int
@@ -197,7 +198,8 @@ func (s *DBVMSource) ListVMsByProject(ctx context.Context, projectID string) ([]
 
 	domainByProject, err := s.NovaReader.GetProjectDomainNames(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get project domain names: %w", err)
+		vmSourceLog.Error(err, "failed to get project domain names, VMs will be treated as regular tenants")
+		domainByProject = map[string]string{}
 	}
 
 	vms := make([]VM, 0, len(servers))
@@ -258,7 +260,8 @@ func (s *DBVMSource) GetVM(ctx context.Context, vmUUID string) (*VM, error) {
 
 	domainByProject, err := s.NovaReader.GetProjectDomainNames(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get project domain names: %w", err)
+		vmSourceLog.Error(err, "failed to get project domain names, VM will be treated as a regular tenant")
+		domainByProject = map[string]string{}
 	}
 
 	return &VM{

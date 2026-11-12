@@ -457,7 +457,7 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 			filteredHosts: []string{"host1", "host3"},
 		},
 		{
-			name: "CapacityProbeIntent (no domain) - excludes exclusive hosts",
+			name: "CapacityProbeIntent (no domain) - skips filter, keeps all hosts",
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 			},
@@ -468,11 +468,11 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 					{ComputeHost: "host3"},
 				},
 			},
-			expectedHosts: []string{"host3"},
-			filteredHosts: []string{"host1"},
+			expectedHosts: []string{"host1", "host3"},
+			filteredHosts: []string{},
 		},
 		{
-			name: "CapacityProbeIntent (no domain, with allow-list) - allow-list irrelevant, excludes exclusive hosts",
+			name: "CapacityProbeIntent (no domain, with allow-list) - skips filter, keeps all hosts",
 			opts: FilterExternalCustomerStepOpts{
 				CustomerDomainNamePrefixes: []string{"ext-"},
 				CustomerAllowedDomainNames: []string{"ext-*"},
@@ -484,8 +484,8 @@ func TestFilterExternalCustomerStep_Run(t *testing.T) {
 					{ComputeHost: "host3"},
 				},
 			},
-			expectedHosts: []string{"host3"},
-			filteredHosts: []string{"host1"},
+			expectedHosts: []string{"host1", "host3"},
+			filteredHosts: []string{},
 		},
 		{
 			name: "ReserveForCommittedResourceIntent - domain filter applies (no domain_name hint → only non-exclusive hosts pass)",

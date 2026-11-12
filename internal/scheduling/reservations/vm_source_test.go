@@ -416,7 +416,35 @@ func TestFilterVMsOnKnownHypervisors(t *testing.T) {
 	}
 }
 
-// mockNovaReader implements NovaReaderInterface for testing.
+// TestDBVMSource_ListVMs_DomainLookupFailOpen verifies that a failing project
+// domain lookup does not abort ListVMs: VMs are still returned and treated as
+// regular tenants (empty DomainName).
+func TestDBVMSource_ListVMs_DomainLookupFailOpen(t *testing.T) {
+	mock := &mockNovaReader{
+		getAllServersFunc: func(ctx context.Context) ([]nova.Server, error) {
+			return []nova.Server{
+				{ID: "vm-1", FlavorName: "m1.large", OSEXTSRVATTRHost: "host1", TenantID: "project-1"},
+			}, nil
+		},
+		getAllFlavorsFunc: func(ctx context.Context) ([]nova.Flavor, error) {
+			return []nova.Flavor{{Name: "m1.large", VCPUs: 4, RAM: 8192}}, nil
+		},
+		getProjectDomainNamesFunc: func(ctx context.Context) (map[string]string, error) {
+			return nil, errors.New("identity tables not synced")
+		},
+	}
+	vms, err := NewDBVMSource(mock).ListVMs(context.Background())
+	if err != nil {
+		t.Fatalf("expected no error on domain lookup failure, got: %v", err)
+	}
+	if len(vms) != 1 {
+		t.Fatalf("expected 1 VM, got %d", len(vms))
+	}
+	if vms[0].DomainName != "" {
+		t.Errorf("expected empty DomainName when lookup fails, got %q", vms[0].DomainName)
+	}
+}
+
 type mockNovaReader struct {
 	getAllServersFunc         func(ctx context.Context) ([]nova.Server, error)
 	getAllFlavorsFunc         func(ctx context.Context) ([]nova.Flavor, error)

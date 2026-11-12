@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-logr/logr"
 
+	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 )
@@ -45,10 +46,12 @@ type FilterDomainPinningStep struct {
 func (s *FilterDomainPinningStep) Run(traceLog logr.Logger, request compute.PlacementRequest) (*lib.FilterWeigherPipelineStepResult, error) {
 	result := s.IncludeAllHostsFromRequest(request)
 
-	// TODO: a capacity probe is a synthetic request with no real domain. Until it
-	// carries the domain it probes for, it is treated as an unpinned domain and
-	// thus conservatively excludes all pinned hypervisors. A proper implementation
-	// would probe per-domain capacity.
+	// Capacity probes are synthetic requests with no real domain, so they must
+	// not be subjected to domain pinning: a probe measures the whole fleet,
+	// including pinned hypervisors.
+	if request.Intent == api.CapacityProbeIntent {
+		return result, nil
+	}
 
 	pinnedHosts, isPinnedDomain := s.Options.DomainHypervisors[request.DomainName]
 	if isPinnedDomain {
