@@ -441,7 +441,7 @@ cortex-scheduling-controllers:
         # deleted, measured from when the source first reported evicted. Guards
         # against rapid evacuate<->reserve loops when virtual machines flap.
         # Deliberately conservative.
-        gracePeriod: 24h
+        gracePeriod: 7d
 
 cortex-knowledge-controllers:
   <<: *cortex
