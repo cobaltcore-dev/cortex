@@ -17,18 +17,14 @@ import (
 
 var changeMonitorLog = ctrl.Log.WithName("committed-resource-change-monitor").WithValues("module", "committed-resources")
 
-// ChangeReconcilerMonitor exposes metrics for the CommittedResourceChange reconciler:
-//   - cortex_committed_resource_change_stuck: non-terminal change requests that have stayed in
-//     their current phase longer than StuckThreshold, grouped by phase and AZ. These are the
-//     ones to alert on — they are never garbage-collected. The metric is absent for a label set
-//     when no change requests match; absence means zero.
-//   - cortex_committed_resource_change_gc_deletions_total: terminal change requests deleted by GC,
-//     grouped by phase.
+// ChangeReconcilerMonitor exposes the cortex_committed_resource_change_stuck metric: non-terminal
+// change requests that have stayed in their current phase longer than StuckThreshold, grouped by
+// phase and AZ. These are the ones to alert on — they are never garbage-collected. The metric is
+// absent for a label set when no change requests match; absence means zero.
 type ChangeReconcilerMonitor struct {
 	client         client.Client
 	stuckThreshold time.Duration
 	stuck          *prometheus.Desc
-	gcDeletions    *prometheus.CounterVec
 }
 
 func NewChangeReconcilerMonitor(c client.Client, stuckThreshold time.Duration) ChangeReconcilerMonitor {
@@ -41,22 +37,12 @@ func NewChangeReconcilerMonitor(c client.Client, stuckThreshold time.Duration) C
 			[]string{"phase", "availability_zone"},
 			nil,
 		),
-		gcDeletions: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "cortex_committed_resource_change_gc_deletions_total",
-			Help: "Number of terminal CommittedResourceChanges deleted by retention garbage collection.",
-		}, []string{"phase"}),
 	}
-}
-
-// RecordGC increments the GC deletion counter for the given terminal phase.
-func (m *ChangeReconcilerMonitor) RecordGC(phase string) {
-	m.gcDeletions.WithLabelValues(phase).Inc()
 }
 
 // Describe implements prometheus.Collector.
 func (m *ChangeReconcilerMonitor) Describe(ch chan<- *prometheus.Desc) {
 	ch <- m.stuck
-	m.gcDeletions.Describe(ch)
 }
 
 // Collect implements prometheus.Collector. Lists all CommittedResourceChanges and counts
@@ -87,7 +73,6 @@ func (m *ChangeReconcilerMonitor) Collect(ch chan<- prometheus.Metric) {
 	for k, count := range counts {
 		ch <- prometheus.MustNewConstMetric(m.stuck, prometheus.GaugeValue, float64(count), k.phase, k.az)
 	}
-	m.gcDeletions.Collect(ch)
 }
 
 // phaseSince returns how long the change request has been in its current phase, derived from the

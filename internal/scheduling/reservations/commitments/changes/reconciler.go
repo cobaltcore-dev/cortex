@@ -37,8 +37,6 @@ type CommittedResourceChangeReconciler struct {
 	AwaitingSchedulingTimeout time.Duration
 	// Conf holds terminal-GC retention windows and the stuck-detection threshold.
 	Conf commitments.ChangeReconcilerConfig
-	// Monitor records GC deletions. Optional; nil disables metric recording.
-	Monitor *ChangeReconcilerMonitor
 }
 
 func (r *CommittedResourceChangeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -96,9 +94,6 @@ func (r *CommittedResourceChangeReconciler) reconcileTerminal(ctx context.Contex
 	}
 	if err := r.Delete(ctx, tx); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-	if r.Monitor != nil {
-		r.Monitor.RecordGC(string(tx.Status.Phase))
 	}
 	logger.Info("garbage-collected terminal change request", "phase", tx.Status.Phase, "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "age", age)
 	return ctrl.Result{}, nil
