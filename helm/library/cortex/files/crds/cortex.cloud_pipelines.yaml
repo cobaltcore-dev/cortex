@@ -107,6 +107,12 @@ spec:
                           key:
                             description: The key of the parameter.
                             type: string
+                          stringListMapValue:
+                            additionalProperties:
+                              items:
+                                type: string
+                              type: array
+                            type: object
                           stringListValue:
                             items:
                               type: string
@@ -166,6 +172,12 @@ spec:
                           key:
                             description: The key of the parameter.
                             type: string
+                          stringListMapValue:
+                            additionalProperties:
+                              items:
+                                type: string
+                              type: array
+                            type: object
                           stringListValue:
                             items:
                               type: string
@@ -248,6 +260,12 @@ spec:
                           key:
                             description: The key of the parameter.
                             type: string
+                          stringListMapValue:
+                            additionalProperties:
+                              items:
+                                type: string
+                              type: array
+                            type: object
                           stringListValue:
                             items:
                               type: string

@@ -146,6 +146,30 @@ func TestUnmarshalParams_StringListValue(t *testing.T) {
 	}
 }
 
+func TestUnmarshalParams_StringListMapValue(t *testing.T) {
+	type TestStruct struct {
+		DomainHypervisors map[string][]string `json:"domainHypervisors"`
+	}
+
+	params := v1alpha1.Parameters{
+		{Key: "domainHypervisors", StringListMapValue: new(map[string][]string{
+			"ext-a": {"host1", "host2"},
+			"ext-b": {"host3"},
+		})},
+	}
+
+	var result TestStruct
+	if err := UnmarshalParams(&params, &result); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.DomainHypervisors["ext-a"]) != 2 {
+		t.Errorf("expected 2 hypervisors for ext-a, got %d", len(result.DomainHypervisors["ext-a"]))
+	}
+	if len(result.DomainHypervisors["ext-b"]) != 1 {
+		t.Errorf("expected 1 hypervisor for ext-b, got %d", len(result.DomainHypervisors["ext-b"]))
+	}
+}
+
 func TestUnmarshalParams_MultipleValues(t *testing.T) {
 	type TestStruct struct {
 		Name      string              `json:"name"`

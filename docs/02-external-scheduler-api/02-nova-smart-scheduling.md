@@ -71,6 +71,7 @@ sequentially and each removes hosts that fail its rule:
 | `filter_aggregate_metadata` | fail host-aggregate metadata matching |
 | `filter_allowed_projects` | are not allowed for the request's project |
 | `filter_external_customer` | violate external-customer isolation rules |
+| `filter_domain_pinning` | are not among a pinned domain's dedicated hypervisors |
 | `filter_instance_group_affinity` | break a required instance-group affinity |
 | `filter_instance_group_anti_affinity` | break a required instance-group anti-affinity |
 | `filter_live_migratable` | cannot accept a live-migratable instance |

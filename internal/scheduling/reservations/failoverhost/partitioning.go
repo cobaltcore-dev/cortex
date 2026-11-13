@@ -72,8 +72,11 @@ type cliquePartitionBuilder struct{}
 //     flavor is enough to forge a mutual edge but not to prove this. Bron-Kerbosch
 //     recursively grows a candidate clique R by trying each still-eligible vertex
 //     in P, intersecting P and the already-seen set X with that vertex's
-//     neighbours; a clique is maximal when both P and X are empty. Non-empty hosts
-//     with no mutual edge are emitted as their own single-host partitions.
+//     neighbours; a clique is maximal when both P and X are empty. A pivot prunes
+//     the branching so the dense, near-complete subgraphs typical of a homogeneous
+//     fleet don't blow up exponentially (see the pivot note at the call site).
+//     Non-empty hosts with no mutual edge are emitted as their own single-host
+//     partitions.
 //  3. Recruit each empty host into the first partition all of whose members can
 //     reach it (member→empty for every member). An empty host that no partition
 //     fully reaches stays on its own.
@@ -137,7 +140,15 @@ func (cliquePartitionBuilder) BuildPartitions(paths []Path) []Partition {
 	}
 
 	// Find all maximal cliques in the undirected mutual graph using the
-	// Bron-Kerbosch algorithm. These are our failover partitions.
+	// Bron-Kerbosch algorithm with pivoting. These are our failover partitions.
+	//
+	// Pivoting is essential at fleet scale, not a micro-optimisation: hosts of the
+	// same shape and flavour set are all pairwise mutually evacuable, so they form
+	// near-complete subgraphs — a pool of identical general-purpose hosts is one
+	// clique of potentially a hundred-plus members. The pivot-free variant explores
+	// a complete subgraph of size k through an exponential number of vertex
+	// orderings (Moon-Moser 3^(n/3)), re-deriving its single maximal clique over and
+	// over, and effectively never returns. Pivoting collapses that to one discovery.
 	cliques := [][]string{}
 	all := map[string]bool{}
 	for a := range mutual {
@@ -156,10 +167,32 @@ func (cliquePartitionBuilder) BuildPartitions(paths []Path) []Partition {
 			cliques = append(cliques, clique)
 			return
 		}
-		// Iterate over a copy of p, as p is mutated inside the loop.
+		// Choose a pivot u from P∪X maximising |P ∩ N(u)|. Any maximal clique
+		// contains u or one of its non-neighbours, so we only need to branch on
+		// P \ N(u): every vertex skipped here (a neighbour of u) is reached via u's
+		// own branch. On a complete subgraph the pivot's neighbourhood is all of P,
+		// leaving a single branch — turning exponential re-exploration into one pass.
+		var pivot string
+		best := -1
+		for _, set := range []map[string]bool{p, x} {
+			for u := range set {
+				count := 0
+				for n := range p {
+					if mutual[u][n] {
+						count++
+					}
+				}
+				if count > best {
+					best, pivot = count, u
+				}
+			}
+		}
+		// Branch only on P \ N(pivot). Iterate over a snapshot, as p is mutated below.
 		candidates := make([]string, 0, len(p))
 		for v := range p {
-			candidates = append(candidates, v)
+			if !mutual[pivot][v] {
+				candidates = append(candidates, v)
+			}
 		}
 		for _, v := range candidates {
 			if !p[v] {

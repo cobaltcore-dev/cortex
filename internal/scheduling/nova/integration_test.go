@@ -62,6 +62,14 @@ func newHypervisor(name, cpuCap, cpuAlloc, memCap, memAlloc string) *hv1.Hypervi
 	}
 }
 
+// newHypervisorWithTraits is like newHypervisor but additionally sets the
+// hypervisor's status traits (e.g. CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE).
+func newHypervisorWithTraits(name, cpuCap, cpuAlloc, memCap, memAlloc string, traits []string) *hv1.Hypervisor { //nolint:unparam // capacity args vary in real usage
+	hv := newHypervisor(name, cpuCap, cpuAlloc, memCap, memAlloc)
+	hv.Status.Traits = traits
+	return hv
+}
+
 func newCommittedReservation(name, targetHost, observedHost, projectID, flavorName, flavorGroup, cpu, memory string) *v1alpha1.Reservation {
 	return &v1alpha1.Reservation{
 		ObjectMeta: metav1.ObjectMeta{
@@ -186,6 +194,50 @@ func newNovaRequest(instanceUUID, projectID, flavorName, flavorGroup string, vcp
 	}
 
 	return req
+}
+
+// newDomainNovaRequest builds a minimal Nova request carrying a domain_name
+// scheduler hint (and optionally a _nova_check_type hint to drive the request
+// intent), used to exercise the domain-based filters. All hosts are offered with
+// equal weight.
+func newDomainNovaRequest(instanceUUID, domainName, checkType string, hosts []string) novaapi.ExternalSchedulerRequest {
+	hostList := make([]novaapi.ExternalSchedulerHost, len(hosts))
+	weights := make(map[string]float64, len(hosts))
+	for i, h := range hosts {
+		hostList[i] = novaapi.ExternalSchedulerHost{ComputeHost: h}
+		weights[h] = 1.0
+	}
+
+	schedulerHints := map[string]any{}
+	if domainName != "" {
+		schedulerHints["domain_name"] = domainName
+	}
+	if checkType != "" {
+		schedulerHints["_nova_check_type"] = []any{checkType}
+	}
+
+	spec := novaapi.NovaSpec{
+		ProjectID:      "project-A",
+		InstanceUUID:   instanceUUID,
+		NumInstances:   1,
+		SchedulerHints: schedulerHints,
+		Flavor: novaapi.NovaObject[novaapi.NovaFlavor]{
+			Data: novaapi.NovaFlavor{
+				Name:     "m1.small",
+				VCPUs:    1,
+				MemoryMB: 512,
+				ExtraSpecs: map[string]string{
+					"capabilities:hypervisor_type": "qemu",
+				},
+			},
+		},
+	}
+
+	return novaapi.ExternalSchedulerRequest{
+		Spec:    novaapi.NovaObject[novaapi.NovaSpec]{Data: spec},
+		Hosts:   hostList,
+		Weights: weights,
+	}
 }
 
 // ============================================================================
@@ -528,6 +580,144 @@ func TestIntegration_SchedulingWithReservations(t *testing.T) {
 			for _, filteredHost := range tt.filteredHosts {
 				if slices.Contains(response.Hosts, filteredHost) {
 					t.Errorf("Expected host %s to be filtered out, but it was in response: %v", filteredHost, response.Hosts)
+				}
+			}
+		})
+	}
+}
+
+// TestIntegration_ExternalCustomerAndDomainPinning exercises the interplay of
+// filter_external_customer and filter_domain_pinning through the full scheduler
+// HTTP flow (hint parsing, request-type parsing, param decoding and filter
+// order). filter_has_enough_capacity is included to mirror production; every
+// host carries ample free capacity so it never removes a host.
+func TestIntegration_ExternalCustomerAndDomainPinning(t *testing.T) {
+	const exclusive = "CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE"
+	// Topology (all hosts have plenty of free capacity):
+	//   excl-shared-1/2: exclusive, shared external-customer pool
+	//   excl-pinned-a:   exclusive, pinned to iaas-pinned-a
+	//   excl-pinned-b:   exclusive, pinned to iaas-pinned-b
+	//   regular:         no exclusive trait
+	hypervisors := []*hv1.Hypervisor{
+		newHypervisorWithTraits("excl-shared-1", "64", "0", "128Gi", "0", []string{exclusive}),
+		newHypervisorWithTraits("excl-shared-2", "64", "0", "128Gi", "0", []string{exclusive}),
+		newHypervisorWithTraits("excl-pinned-a", "64", "0", "128Gi", "0", []string{exclusive}),
+		newHypervisorWithTraits("excl-pinned-b", "64", "0", "128Gi", "0", []string{exclusive}),
+		newHypervisor("regular", "64", "0", "128Gi", "0"),
+	}
+	allHosts := []string{"excl-shared-1", "excl-shared-2", "excl-pinned-a", "excl-pinned-b", "regular"}
+
+	allowListPipeline := func(allowed []string, pinning map[string][]string) PipelineConfig {
+		return PipelineConfig{
+			Name: "kvm-general-purpose-load-balancing",
+			Filters: []v1alpha1.FilterSpec{
+				{Name: "filter_external_customer", Params: v1alpha1.Parameters{
+					{Key: "domainNamePrefixes", StringListValue: new([]string{"iaas-"})},
+					{Key: "allowedDomainNames", StringListValue: new(allowed)},
+				}},
+				{Name: "filter_domain_pinning", Params: v1alpha1.Parameters{
+					{Key: "domainHypervisors", StringListMapValue: new(pinning)},
+				}},
+				{Name: "filter_has_enough_capacity"},
+			},
+		}
+	}
+
+	defaultAllowed := []string{"iaas-pinned-a", "iaas-pinned-b", "iaas-shared-*"}
+	defaultPinning := map[string][]string{
+		"iaas-pinned-a": {"excl-pinned-a"},
+		"iaas-pinned-b": {"excl-pinned-b"},
+	}
+
+	tests := []struct {
+		name          string
+		allowed       []string
+		pinning       map[string][]string
+		request       novaapi.ExternalSchedulerRequest
+		expectedHosts []string // exact set of hosts expected back
+	}{
+		{
+			name:          "allow-listed unpinned domain uses shared exclusive pool",
+			allowed:       defaultAllowed,
+			pinning:       defaultPinning,
+			request:       newDomainNovaRequest("vm1", "iaas-shared-cust", "", allHosts),
+			expectedHosts: []string{"excl-shared-1", "excl-shared-2"},
+		},
+		{
+			name:          "pinned domain a lands only on its dedicated hypervisor",
+			allowed:       defaultAllowed,
+			pinning:       defaultPinning,
+			request:       newDomainNovaRequest("vm2", "iaas-pinned-a", "", allHosts),
+			expectedHosts: []string{"excl-pinned-a"},
+		},
+		{
+			name:          "pinned domain b lands only on its dedicated hypervisor",
+			allowed:       defaultAllowed,
+			pinning:       defaultPinning,
+			request:       newDomainNovaRequest("vm3", "iaas-pinned-b", "", allHosts),
+			expectedHosts: []string{"excl-pinned-b"},
+		},
+		{
+			name:          "iaas domain absent from allow-list gets no hosts",
+			allowed:       defaultAllowed,
+			pinning:       defaultPinning,
+			request:       newDomainNovaRequest("vm4", "iaas-rogue", "", allHosts),
+			expectedHosts: []string{},
+		},
+		{
+			name:          "regular tenant kept off all exclusive hosts",
+			allowed:       defaultAllowed,
+			pinning:       defaultPinning,
+			request:       newDomainNovaRequest("vm5", "internal-corp", "", allHosts),
+			expectedHosts: []string{"regular"},
+		},
+		{
+			name:          "failover reservation for pinned domain confined to its hypervisor",
+			allowed:       defaultAllowed,
+			pinning:       defaultPinning,
+			request:       newDomainNovaRequest("vm6", "iaas-pinned-a", "reserve_for_failover", allHosts),
+			expectedHosts: []string{"excl-pinned-a"},
+		},
+		{
+			name:          "failover reuse for unpinned allow-listed domain uses shared pool",
+			allowed:       defaultAllowed,
+			pinning:       defaultPinning,
+			request:       newDomainNovaRequest("vm7", "iaas-shared-cust", "reuse_failover_reservation", allHosts),
+			expectedHosts: []string{"excl-shared-1", "excl-shared-2"},
+		},
+		{
+			name:          "capacity probe (no domain) skips domain filters and sees all hosts",
+			allowed:       defaultAllowed,
+			pinning:       defaultPinning,
+			request:       newDomainNovaRequest("vm8", "", "capacity_probe", allHosts),
+			expectedHosts: []string{"excl-shared-1", "excl-shared-2", "excl-pinned-a", "excl-pinned-b", "regular"},
+		},
+		{
+			name:          "fail-closed with pinning disabled blocks iaas domains",
+			allowed:       nil,
+			pinning:       map[string][]string{},
+			request:       newDomainNovaRequest("vm9", "iaas-shared-cust", "", allHosts),
+			expectedHosts: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objects := make([]client.Object, 0, len(hypervisors))
+			for _, hv := range hypervisors {
+				objects = append(objects, hv)
+			}
+			server := NewIntegrationTestServer(t, allowListPipeline(tt.allowed, tt.pinning), objects...)
+			defer server.Close()
+
+			response := server.SendPlacementRequest(t, tt.request)
+
+			if len(response.Hosts) != len(tt.expectedHosts) {
+				t.Fatalf("expected hosts %v, got %v", tt.expectedHosts, response.Hosts)
+			}
+			for _, h := range tt.expectedHosts {
+				if !slices.Contains(response.Hosts, h) {
+					t.Errorf("expected host %s in response, got %v", h, response.Hosts)
 				}
 			}
 		})

@@ -87,6 +87,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		InstanceUUID:          vm.UUID,
 		NumInstances:          1, // one reservation per VM; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
 		ProjectID:             vm.ProjectID,
+		DomainName:            vm.DomainName,
 		AvailabilityZone:      vm.AvailabilityZone,
 		IgnoreHosts:           ignoreHypervisors,
 		ResourceGroup:         resSpec.ResourceGroup(vm.FlavorName),
@@ -242,6 +243,7 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		InstanceUUID:          vm.UUID,
 		NumInstances:          1, // validating one VM; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
 		ProjectID:             vm.ProjectID,
+		DomainName:            vm.DomainName,
 		AvailabilityZone:      vm.AvailabilityZone,
 		IgnoreHosts:           []string{vm.CurrentHypervisor},
 		RequiredTraits:        requiredTraits,
