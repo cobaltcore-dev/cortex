@@ -224,6 +224,7 @@ cortex-scheduling-controllers:
       - committed-resource-reservations-controller
       - failover-reservations-controller
       - failover-host-reservations-controller
+      - failover-host-drain-controller
       - quota-controller
       - capacity-controller
     enabledTasks:
@@ -401,11 +402,14 @@ cortex-scheduling-controllers:
     # flavor-based failover controller configured above (schedulerURL,
     # reconcileInterval, flavorFailoverRequirements, ...).
     #
-    # Nested under `failover.hosts` as a deliberate role model for grouping a
-    # controller's settings under its own key, rather than adding yet more flat
-    # top-level keys. Other controller configs should be refactored toward this.
-    failover:
-      hosts:
+    # Nested under `failoverhost` with one sub-key per concern: `partitioning`
+    # (this controller) and `drain` (the drain controller). The third concern,
+    # filtering, is configured separately on the filter_failover_host /
+    # weigher_failover_host pipeline steps (see kvm.failoverHostMatching), not
+    # here. Grouping a subsystem's settings under its own key is a deliberate role
+    # model; other controller configs should be refactored toward this.
+    failoverhost:
+      partitioning:
         # Fraction of each partition's hosts to keep reserved as failover
         # targets, rounded down (e.g. 0.1 of a 10-host partition reserves 1
         # host). Must be within (0, 1]. Combined with `minimum` below, which
@@ -419,6 +423,23 @@ cortex-scheduling-controllers:
         # How often the failover partitions are recalculated and the reservations
         # updated to match. Must be at least 1m.
         generationInterval: 5m
+      # The drain controller brings freshly designated failover host
+      # reservations into an Active state by ensuring the reserved host is
+      # empty of virtual machines (live-migrating them away via a drain
+      # Rescheduling if needed). It is opt-in: draining moves workloads around
+      # the datacenter, so it is off by default and the controller is not even
+      # started unless enabled here.
+      drain:
+        # Gates the entire drain controller. When false (default) no reservation
+        # is marked Active and no draining happens.
+        enabled: false
+        # Maximum time a reservation may stay non-Active (since creation) before
+        # it is deleted so the partitioning generator can designate a fresh one.
+        # Deliberately conservative to avoid causing drains all over the fleet.
+        ttl: 24h
+        # Requeue delay while waiting for the rescheduler to prune a failed drain
+        # Rescheduling before a fresh attempt.
+        retryBackoff: 1m
 
 cortex-knowledge-controllers:
   <<: *cortex

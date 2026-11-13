@@ -380,6 +380,13 @@ const (
 	ConditionTypeFailoverHostInUse ReservationConditionType = "FailoverHostInUse"
 )
 
+const (
+	// ReasonFailoverHostDrained is the FailoverHostActive=True reason set by the
+	// drain controller once the reserved host is empty and ready to accept
+	// evacuations.
+	ReasonFailoverHostDrained = "HostDrained"
+)
+
 // ReservationStatus defines the observed state of Reservation.
 type ReservationStatus struct {
 	// The current status conditions of the reservation.

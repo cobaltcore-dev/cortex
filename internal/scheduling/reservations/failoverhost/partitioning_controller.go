@@ -80,17 +80,21 @@ import (
 )
 
 // Config is the top-level config section this controller reads from the shared
-// cortex conf.json. The controller's own settings are nested under failover.hosts
-// so they sit alongside the (flavor-based) failover controller's settings without
-// colliding with the flat, top-level keys read from the same file.
+// cortex conf.json. The failover host subsystem groups its settings under a
+// single failoverhost key with one sub-key per concern: partitioning (this
+// controller) and drain (the drain controller, see DrainControllerConfig). The
+// third concern, filtering, is configured separately as options on the
+// filter_failover_host / weigher_failover_host pipeline steps (part of the
+// Pipeline CRD), not here.
 type Config struct {
-	Failover struct {
-		Hosts ControllerConfig `json:"hosts"`
-	} `json:"failover"`
+	FailoverHost struct {
+		Partitioning PartitioningConfig `json:"partitioning"`
+	} `json:"failoverhost"`
 }
 
-// ControllerConfig contains configuration for failover host reservations.
-type ControllerConfig struct {
+// PartitioningConfig contains configuration for the failover host partitioning
+// and reservation-generation loop.
+type PartitioningConfig struct {
 	// Ratio is a global ratio that determines how many failover hosts inside
 	// a partition are created. For example, a ratio of 0.1 means that
 	// if a partition consists of 10 hosts, 1 failover host will be created.
@@ -109,7 +113,7 @@ type ControllerConfig struct {
 	GenerationInterval metav1.Duration `json:"generationInterval"`
 }
 
-// Controller keeps the cluster's failover host reservations in sync with the
+// PartitioningController keeps the cluster's failover host reservations in sync with the
 // current cluster state. It has two cooperating halves (see the package doc for
 // the bigger picture):
 //
@@ -120,10 +124,10 @@ type ControllerConfig struct {
 //
 // The loop is the single writer of desiredReservations and Reconcile the single
 // reader, both synchronised by desiredReservationsMu.
-type Controller struct {
+type PartitioningController struct {
 	client.Client // k8s client
 
-	Config ControllerConfig
+	Config PartitioningConfig
 
 	// Scheduler is the shared in-process scheduler the path finder probes for
 	// placement candidates. Required (the controller cannot compute failover
@@ -172,7 +176,7 @@ type Controller struct {
 // It is level-triggered and idempotent: it reads the current actual and desired
 // state on every call and makes at most one write, so redundant events and
 // retries are harmless.
-func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (c *PartitioningController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx).WithName("failoverhost-controller-reconcile").
 		WithValues("reservationName", req.Name)
 
@@ -289,7 +293,7 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 // one pass immediately (so reservations exist without waiting a full interval)
 // and re-runs loop on every tick. On shutdown it closes reconcileCh so the
 // reconciler's event source drains cleanly.
-func (c *Controller) Start(ctx context.Context) error {
+func (c *PartitioningController) Start(ctx context.Context) error {
 	log := logf.FromContext(ctx).WithName("failoverhost-controller-startup")
 	log.Info("starting failover host controller")
 
@@ -322,7 +326,7 @@ func (c *Controller) Start(ctx context.Context) error {
 
 // SetupWithManager wires both halves of the controller into the manager:
 //
-//   - It registers the Controller as a Runnable (mgr.Add) so the manager starts
+//   - It registers the PartitioningController as a Runnable (mgr.Add) so the manager starts
 //     and stops the periodic calculation loop (Start) alongside the controller.
 //   - It registers the reconciler with a channel event source, so the loop can
 //     enqueue reconcile requests by sending on reconcileCh.
@@ -330,7 +334,7 @@ func (c *Controller) Start(ctx context.Context) error {
 // It also defaults the generator to the production pipelineGenerator. Tests may
 // set it beforehand to substitute a fake (e.g. a path finder pointed at a stub
 // scheduler); it is only defaulted here when nil.
-func (c *Controller) SetupWithManager(mgr ctrl.Manager) error {
+func (c *PartitioningController) SetupWithManager(mgr ctrl.Manager) error {
 	if mgr == nil {
 		return errors.New("manager cannot be nil")
 	}
@@ -381,7 +385,7 @@ func (c *Controller) SetupWithManager(mgr ctrl.Manager) error {
 // A generator that returns ok=false aborts the pass without touching the desired
 // state: a partial recalculation is worse than a slightly stale one, as it could
 // drop reservations that are still valid.
-func (c *Controller) loop(ctx context.Context) {
+func (c *PartitioningController) loop(ctx context.Context) {
 	desired, topo, ok := c.generator.Generate(ctx)
 	if !ok {
 		return // the generator already logged the reason and recorded the abort.
@@ -399,7 +403,7 @@ func (c *Controller) loop(ctx context.Context) {
 // reconciler re-reads the desired state itself — so the event payload only needs
 // to identify the reservation. Sends block on reconcileCh; a cancelled ctx (the
 // manager shutting down) unblocks and returns.
-func (c *Controller) publish(ctx context.Context, topo topology, desired map[corev1.ObjectReference]v1alpha1.Reservation) {
+func (c *PartitioningController) publish(ctx context.Context, topo topology, desired map[corev1.ObjectReference]v1alpha1.Reservation) {
 	toReconcile := make(map[corev1.ObjectReference]v1alpha1.Reservation)
 	for k, v := range topo.existing {
 		toReconcile[k] = v

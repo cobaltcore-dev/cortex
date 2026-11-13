@@ -825,19 +825,28 @@ func main() {
 			"maxVMsToProcess", failoverConfig.MaxVMsToProcess,
 			"vmSelectionRotationInterval", failoverConfig.VMSelectionRotationInterval)
 	}
-	if slices.Contains(mainConfig.EnabledControllers, "failover-host-reservations-controller") {
-		setupLog.Info("enabling controller", "controller", "failover-host-reservations-controller")
-		failoverHostConfig := conf.GetConfigOrDie[failoverhost.Config]().Failover.Hosts
-		failoverHostMonitor := failoverhost.NewMonitor()
+	// The failover-host reservations controller and its drain controller share
+	// one Monitor: both export the same cortex_failover_host_* metric family, so
+	// registering two instances would clash on duplicate metric names (the second
+	// Register fails and silently drops that controller's metrics). Built once
+	// here and handed to whichever of the two controllers is enabled.
+	var failoverHostMonitor *failoverhost.Monitor
+	if slices.Contains(mainConfig.EnabledControllers, "failover-host-reservations-controller") ||
+		slices.Contains(mainConfig.EnabledControllers, "failover-host-drain-controller") {
+		failoverHostMonitor = failoverhost.NewMonitor()
 		if err := metrics.Registry.Register(failoverHostMonitor); err != nil {
 			setupLog.Error(err, "failed to register failover host monitor metrics, continuing without metrics")
 			failoverHostMonitor = nil
 		}
+	}
+	if slices.Contains(mainConfig.EnabledControllers, "failover-host-reservations-controller") {
+		setupLog.Info("enabling controller", "controller", "failover-host-reservations-controller")
+		failoverHostConfig := conf.GetConfigOrDie[failoverhost.Config]().FailoverHost.Partitioning
 		if novaScheduler == nil {
 			setupLog.Error(nil, "failover-host-reservations-controller requires nova-pipeline-controllers (in-process scheduler) to be enabled")
 			os.Exit(1)
 		}
-		controller := &failoverhost.Controller{
+		controller := &failoverhost.PartitioningController{
 			Client:    multiclusterClient,
 			Config:    failoverHostConfig,
 			Scheduler: novaScheduler,
@@ -852,6 +861,30 @@ func main() {
 			"ratio", failoverHostConfig.Ratio,
 			"minimum", failoverHostConfig.Minimum,
 			"generationInterval", failoverHostConfig.GenerationInterval)
+	}
+	if slices.Contains(mainConfig.EnabledControllers, "failover-host-drain-controller") {
+		setupLog.Info("enabling controller", "controller", "failover-host-drain-controller")
+		drainConfig := conf.GetConfigOrDie[failoverhost.DrainControllerConfig]().FailoverHost.Drain
+		drainConfig.ApplyDefaults()
+		// The feature is opt-in: only start the controller when draining is
+		// enabled, so that when disabled no reservation is marked active and no
+		// draining happens.
+		if drainConfig.Enabled {
+			controller := &failoverhost.DrainController{
+				Client:  multiclusterClient,
+				Config:  drainConfig,
+				Monitor: failoverHostMonitor,
+			}
+			if err := controller.SetupWithManager(ctx, mgr); err != nil {
+				setupLog.Error(err, "unable to create controller",
+					"controller", "failover-host-drain-controller")
+				os.Exit(1)
+			}
+			setupLog.Info("failover-host-drain-controller registered",
+				"ttl", drainConfig.TTL, "retryBackoff", drainConfig.RetryBackoff)
+		} else {
+			setupLog.Info("failover-host-drain-controller disabled by feature flag, not starting")
+		}
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "capacity-controller") {
 		setupLog.Info("enabling controller", "controller", "capacity-controller")
