@@ -35,6 +35,10 @@ type CommittedResourceChangeReconciler struct {
 	// AwaitingSchedulingTimeout is how long to wait in AwaitingScheduling before rolling back.
 	// Zero (default) means no timeout.
 	AwaitingSchedulingTimeout time.Duration
+	// RollbackTimeout is how long to attempt snapshot restore in RollingBack/DryRunCleanup
+	// before giving up and terminating with RollbackFailed.
+	// Zero (default) means no timeout.
+	RollbackTimeout time.Duration
 }
 
 func (r *CommittedResourceChangeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -61,9 +65,9 @@ func (r *CommittedResourceChangeReconciler) Reconcile(ctx context.Context, req c
 	case v1alpha1.ChangePhaseAwaitingScheduling:
 		return r.reconcileAwaitingScheduling(ctx, logger, &tx)
 	case v1alpha1.ChangePhaseRollingBack:
-		return r.reconcileRollingBack(ctx, logger, &tx)
+		return r.reconcileRestore(ctx, logger, &tx, v1alpha1.ChangePhaseRejected)
 	case v1alpha1.ChangePhaseDryRunCleanup:
-		return r.reconcileDryRunCleanup(ctx, logger, &tx)
+		return r.reconcileRestore(ctx, logger, &tx, v1alpha1.ChangePhaseAccepted)
 	case v1alpha1.ChangePhaseAccepted, v1alpha1.ChangePhaseRejected, v1alpha1.ChangePhaseSuperseded:
 		return ctrl.Result{}, nil
 	default:
@@ -74,10 +78,19 @@ func (r *CommittedResourceChangeReconciler) Reconcile(ctx context.Context, req c
 // commitmentName returns the CommittedResource name for a given commitment UUID.
 func commitmentName(uuid string) string { return "commitment-" + uuid }
 
-// reconcilePreparing snapshots pre-change CR specs and advances to Allocating.
+// reconcilePreparing validates the spec, snapshots pre-change CR specs, and advances to Allocating.
 // Always snapshots regardless of AllowRejection — syncer-mode CRTs never roll back but the
 // snapshot is cheap and keeps this method free of branching.
 func (r *CommittedResourceChangeReconciler) reconcilePreparing(ctx context.Context, logger logr.Logger, tx *v1alpha1.CommittedResourceChange) (ctrl.Result, error) {
+	// Guard: a dry run must be rejectable, otherwise Allocating advances straight to Accepted
+	// and the probe would silently commit.
+	if tx.Spec.DryRun && !tx.Spec.AllowRejection {
+		logger.Info("rejecting change: dryRun requires allowRejection", "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID)
+		return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseRejected, v1alpha1.ChangeReasonInvalidSpec, func(s *v1alpha1.CommittedResourceChangeStatus) {
+			s.Message = "dryRun requires allowRejection"
+		})
+	}
+
 	// Snapshot current CR specs for all keys in NewState so rollback can restore them.
 	// nil entry = CR did not exist before = delete it on rollback.
 	snapshot := make(map[string]*v1alpha1.CommittedResourceSpec, len(tx.Spec.NewState))
@@ -95,8 +108,22 @@ func (r *CommittedResourceChangeReconciler) reconcilePreparing(ctx context.Conte
 		snapshot[uuid] = cr.Spec.DeepCopy()
 	}
 
+	// Guard: a dry run must only probe new commitments. A non-nil snapshot entry means an
+	// existing CR would be mutated, which a dry run must never do.
+	if tx.Spec.DryRun {
+		for uuid, snapSpec := range snapshot {
+			if snapSpec != nil {
+				msg := "dryRun must not modify existing commitment " + uuid
+				logger.Info("rejecting change: "+msg, "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID)
+				return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseRejected, v1alpha1.ChangeReasonInvalidSpec, func(s *v1alpha1.CommittedResourceChangeStatus) {
+					s.Message = msg
+				})
+			}
+		}
+	}
+
 	logger.Info("starting transaction", "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "newStateSize", len(tx.Spec.NewState), "allowRejection", tx.Spec.AllowRejection)
-	return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseAllocating, func(s *v1alpha1.CommittedResourceChangeStatus) {
+	return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseAllocating, "", func(s *v1alpha1.CommittedResourceChangeStatus) {
 		s.SnapshotBefore = snapshot
 	})
 }
@@ -144,7 +171,7 @@ func (r *CommittedResourceChangeReconciler) reconcileAllocating(ctx context.Cont
 	if !tx.Spec.AllowRejection {
 		nextPhase = v1alpha1.ChangePhaseAccepted
 	}
-	return r.advanceTo(ctx, tx, nextPhase, func(s *v1alpha1.CommittedResourceChangeStatus) {
+	return r.advanceTo(ctx, tx, nextPhase, "", func(s *v1alpha1.CommittedResourceChangeStatus) {
 		s.UpsertedCommitments = upserted
 	})
 }
@@ -185,7 +212,7 @@ func (r *CommittedResourceChangeReconciler) reconcileAwaitingScheduling(ctx cont
 			// Fail-fast: start rollback immediately on first rejection rather than waiting for all CRs
 			// to settle — this unblocks the AZ sooner and the first rejection message is sufficient for diagnosis.
 			logger.Info("CR rejected, rolling back", "cr", ref.Name, "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "message", cond.Message)
-			return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseRollingBack, func(s *v1alpha1.CommittedResourceChangeStatus) {
+			return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseRollingBack, "", func(s *v1alpha1.CommittedResourceChangeStatus) {
 				s.Message = fmt.Sprintf("CR %s rejected: %s", ref.Name, cond.Message)
 			})
 		default:
@@ -200,7 +227,7 @@ func (r *CommittedResourceChangeReconciler) reconcileAwaitingScheduling(ctx cont
 			progressingCond := meta.FindStatusCondition(tx.Status.Conditions, v1alpha1.ChangeConditionProgressing)
 			if progressingCond != nil && time.Since(progressingCond.LastTransitionTime.Time) > r.AwaitingSchedulingTimeout {
 				logger.Info("timed out waiting for scheduling, rolling back", "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "timeout", r.AwaitingSchedulingTimeout)
-				return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseRollingBack, func(s *v1alpha1.CommittedResourceChangeStatus) {
+				return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseRollingBack, "", func(s *v1alpha1.CommittedResourceChangeStatus) {
 					s.Message = "timed out waiting for scheduling"
 					meta.SetStatusCondition(&s.Conditions, metav1.Condition{
 						Type:               v1alpha1.ChangeConditionProgressing,
@@ -218,33 +245,81 @@ func (r *CommittedResourceChangeReconciler) reconcileAwaitingScheduling(ctx cont
 	}
 
 	if tx.Spec.DryRun {
-		return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseDryRunCleanup, nil)
+		return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseDryRunCleanup, "", nil)
 	}
-	return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseAccepted, nil)
+	return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseAccepted, "", nil)
 }
 
-// reconcileRollingBack converges affected CR specs back to the pre-change SnapshotBefore state.
-// On restore complete: advances to Rejected.
-// On permanent cleanup failure: advances to Rejected with reason RollbackFailed.
-func (r *CommittedResourceChangeReconciler) reconcileRollingBack(ctx context.Context, logger logr.Logger, tx *v1alpha1.CommittedResourceChange) (ctrl.Result, error) {
-	// TODO (#780): for each entry in SnapshotBefore, converge CR spec back to snapshot value
-	//   using SSA with fieldManager=txFieldManager.
-	//   nil snapshot entry → CR did not exist before → delete it.
-	//   Gate terminal transition on each CR confirming its spec reverted (check observedGeneration).
-	return ctrl.Result{}, nil
+// reconcileRestore converges affected CR specs back to the pre-change SnapshotBefore state and
+// advances to terminalPhase (Rejected for a rollback, Accepted for a dry-run cleanup).
+// On a persistent restore failure past RollbackTimeout it terminates at terminalPhase with the
+// Finished reason RollbackFailed; the Restoring condition's LastTransitionTime marks the start and
+// its Message carries the last error.
+func (r *CommittedResourceChangeReconciler) reconcileRestore(ctx context.Context, logger logr.Logger, tx *v1alpha1.CommittedResourceChange, terminalPhase v1alpha1.ChangePhase) (ctrl.Result, error) {
+	if err := r.restoreFromSnapshot(ctx, logger, tx); err != nil {
+		if r.RollbackTimeout > 0 {
+			if c := meta.FindStatusCondition(tx.Status.Conditions, v1alpha1.ChangeConditionRestoring); c != nil && time.Since(c.LastTransitionTime.Time) > r.RollbackTimeout {
+				logger.Info("restore timed out, terminalizing", "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "timeout", r.RollbackTimeout, "terminalPhase", terminalPhase)
+				msg := fmt.Sprintf("timed out restoring pre-change state: %v", err)
+				return r.advanceTo(ctx, tx, terminalPhase, v1alpha1.ChangeReasonRollbackFailed, func(s *v1alpha1.CommittedResourceChangeStatus) {
+					s.Message = msg
+				})
+			}
+		}
+		// Record the last restore error on the Restoring condition (Status stays True so its
+		// LastTransitionTime remains the restore-start marker) and requeue with backoff.
+		meta.SetStatusCondition(&tx.Status.Conditions, metav1.Condition{
+			Type:               v1alpha1.ChangeConditionRestoring,
+			Status:             metav1.ConditionTrue,
+			Reason:             v1alpha1.ChangeReasonError,
+			Message:            err.Error(),
+			ObservedGeneration: tx.Generation,
+		})
+		if updErr := r.Status().Update(ctx, tx); updErr != nil {
+			return ctrl.Result{}, updErr
+		}
+		return ctrl.Result{}, err
+	}
+	return r.advanceTo(ctx, tx, terminalPhase, "", nil)
 }
 
-// reconcileDryRunCleanup restores pre-change state after a dry-run would-accept outcome.
-// Re-uses snapshot rollback logic; terminal phase is Accepted (not Rejected).
-func (r *CommittedResourceChangeReconciler) reconcileDryRunCleanup(ctx context.Context, logger logr.Logger, tx *v1alpha1.CommittedResourceChange) (ctrl.Result, error) {
-	// TODO (#780): same convergence as reconcileRollingBack; terminal → advanceTo(Accepted, nil).
-	return ctrl.Result{}, nil
+// restoreFromSnapshot converges CommittedResources back to their pre-change state recorded in
+// tx.Status.SnapshotBefore. It is idempotent and safe to call on every requeue.
+//
+// For each snapshot entry it deletes the CR (nil entry = CR was new) or restores its spec via
+// CreateOrUpdate (non-nil entry = CR existed before). Once the spec is written back the CR is in
+// sync with the pre-change state, which is all rollback can guarantee: whether the CR controller
+// then re-places reservations is outside this reconciler's control, so there is nothing to wait for.
+//
+// Returns nil once all specs are written, or the API error (which should cause a requeue).
+func (r *CommittedResourceChangeReconciler) restoreFromSnapshot(ctx context.Context, logger logr.Logger, tx *v1alpha1.CommittedResourceChange) error {
+	for uuid, snapSpec := range tx.Status.SnapshotBefore {
+		name := commitmentName(uuid)
+		if snapSpec == nil {
+			toDelete := &v1alpha1.CommittedResource{ObjectMeta: metav1.ObjectMeta{Name: name}}
+			if err := r.Delete(ctx, toDelete); client.IgnoreNotFound(err) != nil {
+				logger.Error(err, "rollback: failed to delete CR", "name", name, "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID)
+				return err
+			}
+			continue
+		}
+		cr := &v1alpha1.CommittedResource{ObjectMeta: metav1.ObjectMeta{Name: name}}
+		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, cr, func() error {
+			cr.Spec = *snapSpec
+			return nil
+		}); err != nil {
+			logger.Error(err, "rollback: failed to restore CR spec", "name", name, "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID)
+			return err
+		}
+	}
+	return nil
 }
 
 // advanceTo updates the transaction status to the given phase.
-// mutate is called (when non-nil) to allow phase advance and other status mutations
-// (e.g. UpsertedCommitments, SnapshotBefore) to be persisted atomically in one Update call.
-// Progressing is set to False on terminal phases to reflect that no further work is expected.
+// reason overrides the Finished/Progressing reason on terminal phases (e.g. RollbackFailed,
+// InvalidSpec); when empty, string(phase) is used. mutate is called (when non-nil) to allow
+// phase advance and other status mutations (e.g. UpsertedCommitments, SnapshotBefore, Message)
+// to be persisted atomically in one Update call.
 //
 // Status().Update is used (not Patch) so that nil map values in SnapshotBefore and similar
 // fields are preserved — JSON merge patch semantics treat null map values as deletions.
@@ -252,6 +327,7 @@ func (r *CommittedResourceChangeReconciler) advanceTo(
 	ctx context.Context,
 	tx *v1alpha1.CommittedResourceChange,
 	phase v1alpha1.ChangePhase,
+	reason string,
 	mutate func(*v1alpha1.CommittedResourceChangeStatus),
 ) (ctrl.Result, error) {
 
@@ -259,18 +335,34 @@ func (r *CommittedResourceChangeReconciler) advanceTo(
 	if mutate != nil {
 		mutate(&tx.Status)
 	}
+	// Stamp Restoring=True on entry to a restore phase. Its Status stays True for the duration,
+	// so LastTransitionTime is a stable "restore started" marker used to measure RollbackTimeout.
+	if phase == v1alpha1.ChangePhaseRollingBack || phase == v1alpha1.ChangePhaseDryRunCleanup {
+		meta.SetStatusCondition(&tx.Status.Conditions, metav1.Condition{
+			Type:               v1alpha1.ChangeConditionRestoring,
+			Status:             metav1.ConditionTrue,
+			Reason:             "Restoring",
+			Message:            tx.Status.Message,
+			ObservedGeneration: tx.Generation,
+		})
+	}
 	progressingStatus, progressingReason := metav1.ConditionTrue, "Advancing"
 	if tx.IsTerminal() {
-		progressingStatus, progressingReason = metav1.ConditionFalse, string(phase)
+		finishedReason := reason
+		if finishedReason == "" {
+			finishedReason = string(phase)
+		}
+		progressingStatus, progressingReason = metav1.ConditionFalse, finishedReason
 		meta.SetStatusCondition(&tx.Status.Conditions, metav1.Condition{
 			Type:               v1alpha1.ChangeConditionFinished,
 			Status:             metav1.ConditionTrue,
-			Reason:             string(phase),
+			Reason:             finishedReason,
+			Message:            tx.Status.Message,
 			ObservedGeneration: tx.Generation,
 		})
 	}
 	// Preserve a Progressing=False condition already stamped by the mutate func (e.g. TimedOut).
-	// Terminal phases always overwrite to ensure Progressing=False/<terminal-phase>.
+	// Terminal phases always overwrite to ensure Progressing=False/<reason>.
 	existingProgressing := meta.FindStatusCondition(tx.Status.Conditions, v1alpha1.ChangeConditionProgressing)
 	if tx.IsTerminal() || existingProgressing == nil || existingProgressing.Status != metav1.ConditionFalse {
 		meta.SetStatusCondition(&tx.Status.Conditions, metav1.Condition{
