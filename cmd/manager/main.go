@@ -832,7 +832,8 @@ func main() {
 	// here and handed to whichever of the two controllers is enabled.
 	var failoverHostMonitor *failoverhost.Monitor
 	if slices.Contains(mainConfig.EnabledControllers, "failover-host-reservations-controller") ||
-		slices.Contains(mainConfig.EnabledControllers, "failover-host-drain-controller") {
+		slices.Contains(mainConfig.EnabledControllers, "failover-host-drain-controller") ||
+		slices.Contains(mainConfig.EnabledControllers, "failover-host-completion-controller") {
 		failoverHostMonitor = failoverhost.NewMonitor()
 		if err := metrics.Registry.Register(failoverHostMonitor); err != nil {
 			setupLog.Error(err, "failed to register failover host monitor metrics, continuing without metrics")
@@ -884,6 +885,29 @@ func main() {
 				"ttl", drainConfig.TTL, "retryBackoff", drainConfig.RetryBackoff)
 		} else {
 			setupLog.Info("failover-host-drain-controller disabled by feature flag, not starting")
+		}
+	}
+	if slices.Contains(mainConfig.EnabledControllers, "failover-host-completion-controller") {
+		setupLog.Info("enabling controller", "controller", "failover-host-completion-controller")
+		completionConfig := conf.GetConfigOrDie[failoverhost.CompletionControllerConfig]().FailoverHost.Completion
+		completionConfig.ApplyDefaults()
+		// Opt-in: completing a reservation deletes it (the reserved host becomes a
+		// regular host again), so only start the controller when enabled.
+		if completionConfig.Enabled {
+			controller := &failoverhost.CompletionController{
+				Client:  multiclusterClient,
+				Config:  completionConfig,
+				Monitor: failoverHostMonitor,
+			}
+			if err := controller.SetupWithManager(ctx, mgr); err != nil {
+				setupLog.Error(err, "unable to create controller",
+					"controller", "failover-host-completion-controller")
+				os.Exit(1)
+			}
+			setupLog.Info("failover-host-completion-controller registered",
+				"gracePeriod", completionConfig.GracePeriod)
+		} else {
+			setupLog.Info("failover-host-completion-controller disabled by feature flag, not starting")
 		}
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "capacity-controller") {
