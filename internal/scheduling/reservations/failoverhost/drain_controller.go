@@ -30,6 +30,9 @@ import (
 )
 
 const (
+	// Link drains to reservations without cross-cluster owner references.
+	labelDrainReservationUID = "reservations.cortex.cloud/drain-reservation-uid"
+
 	// novaStatusDeleted is the Nova status of a deleted server, which no longer
 	// occupies its host.
 	novaStatusDeleted = "DELETED"
@@ -53,8 +56,8 @@ type DrainConfig struct {
 	// TTL is how long a reservation may stay non-Active (since creation) before
 	// it is deleted so the generator can designate a fresh one. Defaults to 24h.
 	TTL metav1.Duration `json:"ttl,omitempty"`
-	// RetryBackoff is the requeue delay while waiting for the rescheduler to
-	// prune a Failed/Rejected drain. Defaults to 1m.
+	// RetryBackoff is the requeue delay while waiting for a Failed/Rejected
+	// drain or a conflicting drain to be removed. Defaults to 1m.
 	RetryBackoff metav1.Duration `json:"retryBackoff,omitempty"`
 }
 
@@ -92,6 +95,9 @@ func (c *DrainController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	if res.Spec.Type != v1alpha1.ReservationTypeFailoverHost || res.Spec.FailoverHostReservation == nil || res.Spec.TargetHost == "" {
+		return ctrl.Result{}, nil
+	}
+	if !res.DeletionTimestamp.IsZero() {
 		return ctrl.Result{}, nil
 	}
 	host, az := res.Spec.TargetHost, res.Spec.AvailabilityZone
@@ -155,32 +161,30 @@ func (c *DrainController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, nil
 	}
 
-	// The host is occupied: find its drain and whether another host's drain
-	// holds the fleet-wide single-drain slot. Several drains may exist for one
-	// host (Succeeded ones are never pruned), so prefer the one in progress.
-	// Failed drains hold the slot until the rescheduler prunes them, as they may
-	// carry partial state.
+	// Each reservation has at most one drain. Other reservations' drains hold
+	// the fleet-wide slot until success or rejection; failed drains may carry
+	// partial state and keep holding it until removed after cleanup.
 	drains := &v1alpha1.ReschedulingList{}
 	if err := c.List(ctx, drains, client.MatchingLabels{v1alpha1.LabelFailoverHostDrain: "true"}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("list drain reschedulings: %w", err)
 	}
 	var own *v1alpha1.Rescheduling
+	var stale *v1alpha1.Rescheduling
 	slotTaken := false
 	for i := range drains.Items {
 		rr := &drains.Items[i]
+		if rr.Name == res.Name && rr.Spec.AvailabilityZone == az && rr.Labels[labelDrainReservationUID] != "" {
+			if rr.Labels[labelDrainReservationUID] == string(res.UID) {
+				own = rr
+				continue
+			}
+			stale = rr
+		}
 		if rr.Spec.Drain == nil {
 			continue
 		}
 		state := rr.Status.State
-		holdsSlot := state != v1alpha1.ReschedulingStateSucceeded && state != v1alpha1.ReschedulingStateRejected
-		inProgress := holdsSlot && state != v1alpha1.ReschedulingStateFailed
-		targetsHost := slices.ContainsFunc(rr.Spec.Drain.Target.Hosts, func(h v1alpha1.DrainTargetHost) bool {
-			return h.Host.Name == host
-		})
-		switch {
-		case targetsHost && (own == nil || inProgress):
-			own = rr
-		case !targetsHost && holdsSlot:
+		if state != v1alpha1.ReschedulingStateSucceeded && state != v1alpha1.ReschedulingStateRejected {
 			slotTaken = true
 		}
 	}
@@ -190,23 +194,31 @@ func (c *DrainController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			log.V(1).Info("another failover host drain is in flight, waiting")
 			return waitUntilTTL, nil
 		}
-		// The generated name avoids clashing with lingering Succeeded drains.
-		// Reserve is false because the failover host reservation already blocks
-		// the host.
+		if stale != nil && (stale.Status.State == v1alpha1.ReschedulingStateSucceeded || stale.Status.State == v1alpha1.ReschedulingStateRejected) {
+			// Terminal drains leave no partial state. Remove the old reservation's
+			// drain before reusing its name; failed drains must await cleanup.
+			if err := client.IgnoreNotFound(c.Delete(ctx, stale, client.Preconditions{UID: &stale.UID})); err != nil {
+				return ctrl.Result{}, fmt.Errorf("delete stale drain %s: %w", stale.Name, err)
+			}
+			return ctrl.Result{RequeueAfter: min(c.Config.RetryBackoff.Duration, ttlLeft)}, nil
+		}
+		// A stable name prevents duplicate drains even before cache updates arrive.
+		// Reserve protects freed capacity from new workloads during draining.
 		log.Info("host not empty, creating drain rescheduling")
 		drain := &v1alpha1.Rescheduling{
 			ObjectMeta: metav1.ObjectMeta{
-				GenerateName: "drain-failover-host-" + host + "-",
+				Name: res.Name,
 				Labels: map[string]string{
 					v1alpha1.LabelFailoverHostDrain: "true",
 					v1alpha1.LabelReservationType:   v1alpha1.ReservationTypeLabelFailoverHost,
+					labelDrainReservationUID:        string(res.UID),
 				},
 			},
 			Spec: v1alpha1.ReschedulingSpec{
 				Action:           v1alpha1.ReschedulingActionDrain,
 				AvailabilityZone: az,
 				Drain: &v1alpha1.DrainActionSpec{
-					Reserve: false,
+					Reserve: true,
 					Target: v1alpha1.DrainTarget{Hosts: []v1alpha1.DrainTargetHost{{
 						Host: v1alpha1.HostRef{Name: host, AvailabilityZone: az},
 					}}},
@@ -215,11 +227,20 @@ func (c *DrainController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			},
 		}
 		if err := c.Create(ctx, drain); err != nil {
+			if apierrors.IsAlreadyExists(err) {
+				// Never adopt a drain belonging to an older reservation with the
+				// same name, or an unrelated resource. Wait for its removal.
+				log.V(1).Info("drain name already exists, waiting")
+				return ctrl.Result{RequeueAfter: min(c.Config.RetryBackoff.Duration, ttlLeft)}, nil
+			}
 			c.Monitor.RecordReservationError("drain_create")
 			return ctrl.Result{}, fmt.Errorf("create drain rescheduling for host %s: %w", host, err)
 		}
 		c.Monitor.RecordDrainCreated()
 		return ctrl.Result{}, nil
+	}
+	if !own.DeletionTimestamp.IsZero() {
+		return ctrl.Result{RequeueAfter: min(c.Config.RetryBackoff.Duration, ttlLeft)}, nil
 	}
 
 	switch own.Status.State {
@@ -230,7 +251,7 @@ func (c *DrainController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		log.Info("drain reported success but host still has virtual machines, leaving reservation designated")
 		return waitUntilTTL, nil
 	case v1alpha1.ReschedulingStateFailed, v1alpha1.ReschedulingStateRejected:
-		// The rescheduler prunes failed drains; a fresh one is created afterwards.
+		// Retry only after the previous drain is removed, never alongside it.
 		log.V(1).Info("drain rescheduling failed, backing off", "state", own.Status.State)
 		return ctrl.Result{RequeueAfter: min(c.Config.RetryBackoff.Duration, ttlLeft)}, nil
 	default:

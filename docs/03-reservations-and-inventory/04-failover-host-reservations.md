@@ -512,14 +512,20 @@ When enabled, it reconciles each failover host reservation like so:
   controller's cache. Instead it counts the host in the `cortex_failover_host_reservations_reoccupied` gauge
   (in-use hosts excluded, as they legitimately hold evacuees), which an alert escalates for manual intervention:
   move the squatting VM off and investigate why the filter let it land.
-- **If not, drain it.** The controller creates a `Rescheduling` with the `drain` action targeting the host; the
-  rescheduler live-migrates the workloads away. Only the *inbound* reservation already blocks the host, so the
-  drain does not take a second, independent host-block (`reserve: false`). **At most one failover host drain
+- **If not, drain it.** The controller creates a `Rescheduling` with the `drain` action targeting the host and
+  `reserve: true`, protecting freed capacity from new workloads during draining. The drain uses the reservation's
+  name and records its UID in a label: each reservation has at most one drain at a time. Owner references are
+  deliberately avoided because reservations and reschedulings may live in different clusters; deleting a
+  reservation does not automatically garbage-collect its drain. **At most one failover host drain
   runs at a time across the whole fleet** — other designated hosts wait their turn, so the controller can never
   trigger drains everywhere at once. Every change to a drain wakes all not-yet-Active reservations, so the next
-  host starts draining as soon as the slot frees up. A `Failed` drain keeps holding the slot until the
-  rescheduler prunes it (it may carry partial state); the drained host's reservation retries after
-  `retryBackoff`.
+  host starts draining as soon as the slot frees up. A reservation-specific drain watch would not wake other
+  waiting reservations. A `Failed` drain keeps holding the slot until it is removed after cleanup (it may carry
+  partial state). Failed or rejected drains are checked
+  again after `retryBackoff`; a replacement is created only after the previous drain is removed. The current
+  rescheduler's failed-drain cleanup is a stub, and it does not automatically prune failed or rejected drains.
+  When a reservation is recreated with the same name, a stale succeeded or rejected drain is removed before
+  creating its replacement; an in-progress or failed drain is left untouched until cleanup.
 - **When the drain reports success, verify before trusting it.** A `Succeeded` drain is treated as a hint, not
   proof: the controller independently re-checks the host is empty (via the VM resources) before marking the
   reservation Active. A drain that succeeded but left workload behind leaves the reservation Designated; it is

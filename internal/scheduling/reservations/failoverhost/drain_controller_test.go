@@ -50,12 +50,13 @@ func drainRescheduling(name, host string, state v1alpha1.ReschedulingState) *v1a
 	return &v1alpha1.Rescheduling{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   name,
-			Labels: map[string]string{v1alpha1.LabelFailoverHostDrain: "true", v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelFailoverHost},
+			Labels: map[string]string{v1alpha1.LabelFailoverHostDrain: "true", v1alpha1.LabelReservationType: v1alpha1.ReservationTypeLabelFailoverHost, labelDrainReservationUID: "uid-" + host},
 		},
 		Spec: v1alpha1.ReschedulingSpec{
 			Action: v1alpha1.ReschedulingActionDrain,
 			Drain: &v1alpha1.DrainActionSpec{
-				Target: v1alpha1.DrainTarget{Hosts: []v1alpha1.DrainTargetHost{{Host: v1alpha1.HostRef{Name: host}}}},
+				Reserve: true,
+				Target:  v1alpha1.DrainTarget{Hosts: []v1alpha1.DrainTargetHost{{Host: v1alpha1.HostRef{Name: host}}}},
 			},
 		},
 		Status: v1alpha1.ReschedulingStatus{State: state},
@@ -66,6 +67,7 @@ func drainRescheduling(name, host string, state v1alpha1.ReschedulingState) *v1a
 // created just now, so the TTL does not fire.
 func freshReservation() *v1alpha1.Reservation {
 	r := failoverReservation("hv1")
+	r.UID = "uid-hv1"
 	r.Spec.FailoverHostReservation = &v1alpha1.FailoverHostReservationSpec{SourceHosts: []string{"peer"}}
 	r.CreationTimestamp = metav1.Now()
 	return &r
@@ -95,6 +97,12 @@ func TestDrainReconcile(t *testing.T) {
 	terminating.Status.DeletionTime = &now
 	expired := freshReservation()
 	expired.CreationTimestamp = metav1.NewTime(time.Now().Add(-25 * time.Hour))
+	deleting := freshReservation()
+	deleting.DeletionTimestamp = &now
+	deleting.Finalizers = []string{"test.io/hold"}
+	deletingDrain := drainRescheduling("failover-host-hv1", "hv1", v1alpha1.ReschedulingStateProcessing)
+	deletingDrain.DeletionTimestamp = &now
+	deletingDrain.Finalizers = []string{"test.io/hold"}
 	active := freshReservation()
 	meta.SetStatusCondition(&active.Status.Conditions, metav1.Condition{
 		Type: v1alpha1.ConditionTypeFailoverHostActive, Status: metav1.ConditionTrue, Reason: v1alpha1.ReasonFailoverHostDrained,
@@ -112,7 +120,7 @@ func TestDrainReconcile(t *testing.T) {
 	}
 	occupant := func() client.Object { return buildVM("vm1", "hv1", "ACTIVE") }
 	drain := func(host string, state v1alpha1.ReschedulingState) client.Object {
-		return drainRescheduling("drain-"+host, host, state)
+		return drainRescheduling("failover-host-"+host, host, state)
 	}
 
 	const (
@@ -153,8 +161,20 @@ func TestDrainReconcile(t *testing.T) {
 		{name: "failed drain backs off", res: freshReservation(),
 			objs:          []client.Object{readyHV(), occupant(), drain("hv1", v1alpha1.ReschedulingStateFailed)},
 			wantHV1Drains: 1, wantRequeue: requeueBackoff},
+		{name: "rejected drain backs off", res: freshReservation(),
+			objs:          []client.Object{readyHV(), occupant(), drain("hv1", v1alpha1.ReschedulingStateRejected)},
+			wantHV1Drains: 1, wantRequeue: requeueBackoff},
+		{name: "another failed drain holds the slot", res: freshReservation(),
+			objs:        []client.Object{readyHV(), occupant(), drain("hv2", v1alpha1.ReschedulingStateFailed)},
+			wantRequeue: requeueTTL},
+		{name: "another succeeded drain frees the slot", res: freshReservation(),
+			objs: []client.Object{readyHV(), occupant(), drain("hv2", v1alpha1.ReschedulingStateSucceeded)}, wantHV1Drains: 1},
 		{name: "TTL expiry deletes", res: expired,
 			objs: []client.Object{readyHV(), occupant()}, wantDeleted: true},
+		{name: "deleting reservation does not create a drain", res: deleting,
+			objs: []client.Object{readyHV(), occupant()}},
+		{name: "deleting drain is not replaced until removed", res: freshReservation(),
+			objs: []client.Object{readyHV(), occupant(), deletingDrain}, wantHV1Drains: 1, wantRequeue: requeueBackoff},
 		{name: "active with empty host stays active", res: active,
 			objs: []client.Object{readyHV()}, wantActive: true},
 		{name: "active but reoccupied stays active (no re-drain)", res: active,
@@ -227,14 +247,115 @@ func TestDrainCreatesRescheduling(t *testing.T) {
 	switch {
 	case d.Spec.Action != v1alpha1.ReschedulingActionDrain || d.Spec.Drain == nil:
 		t.Fatalf("expected a drain-action rescheduling")
-	case d.Spec.Drain.Reserve:
-		t.Fatalf("expected Reserve=false")
+	case !d.Spec.Drain.Reserve:
+		t.Fatalf("expected Reserve=true")
 	case d.Spec.Drain.Constraints.Mode != v1alpha1.DrainConstraintModeAll:
 		t.Fatalf("expected Mode=all, got %q", d.Spec.Drain.Constraints.Mode)
 	case d.Labels[v1alpha1.LabelFailoverHostDrain] != "true":
 		t.Fatalf("expected drain label, got %v", d.Labels)
 	case d.Spec.Drain.Target.Hosts[0].Host.Name != "hv1":
 		t.Fatalf("expected drain to target hv1")
+	}
+	res := getDrainReservation(t, c, "failover-host-hv1")
+	if d.Name != res.Name || d.GenerateName != "" {
+		t.Fatalf("expected reservation name %q without GenerateName, got %q / %q", res.Name, d.Name, d.GenerateName)
+	}
+	if d.Labels[labelDrainReservationUID] != string(res.UID) {
+		t.Fatalf("expected reservation UID label %q, got %v", res.UID, d.Labels)
+	}
+	if len(d.OwnerReferences) != 0 {
+		t.Fatalf("expected no cross-cluster owner references, got %v", d.OwnerReferences)
+	}
+	if _, err := c.Reconcile(context.Background(), reconcileReq(res.Name)); err != nil {
+		t.Fatalf("repeat reconcile: %v", err)
+	}
+	if drains := listDrains(t, c); len(drains) != 1 {
+		t.Fatalf("expected one drain after repeat reconcile, got %d", len(drains))
+	}
+}
+
+func TestDrainRetriesAfterRemoval(t *testing.T) {
+	for _, state := range []v1alpha1.ReschedulingState{v1alpha1.ReschedulingStateFailed, v1alpha1.ReschedulingStateRejected} {
+		t.Run(string(state), func(t *testing.T) {
+			ctx := context.Background()
+			res := freshReservation()
+			drain := drainRescheduling(res.Name, "hv1", state)
+			c := &DrainController{Client: newTestClient(t, readyHV(), res, buildVM("vm1", "hv1", "ACTIVE"), drain), Config: drainConfig()}
+			if _, err := c.Reconcile(ctx, reconcileReq(res.Name)); err != nil {
+				t.Fatalf("reconcile: %v", err)
+			}
+			if drains := listDrains(t, c); len(drains) != 1 || drains[0].Status.State != state {
+				t.Fatalf("expected original drain to remain, got %+v", drains)
+			}
+			if err := c.Delete(ctx, drain); err != nil {
+				t.Fatalf("delete drain: %v", err)
+			}
+			if _, err := c.Reconcile(ctx, reconcileReq(res.Name)); err != nil {
+				t.Fatalf("retry: %v", err)
+			}
+			drains := listDrains(t, c)
+			if len(drains) != 1 || drains[0].Name != res.Name || drains[0].Status.State != "" || drains[0].Labels[labelDrainReservationUID] != string(res.UID) {
+				t.Fatalf("expected one fresh drain for reservation, got %+v", drains)
+			}
+		})
+	}
+}
+
+func TestDrainDoesNotAdoptOldReservationDrain(t *testing.T) {
+	for _, state := range []v1alpha1.ReschedulingState{v1alpha1.ReschedulingStateProcessing, v1alpha1.ReschedulingStateFailed, v1alpha1.ReschedulingStateSucceeded, v1alpha1.ReschedulingStateRejected} {
+		t.Run(string(state), func(t *testing.T) {
+			ctx := context.Background()
+			res := freshReservation()
+			drain := drainRescheduling(res.Name, "hv1", state)
+			drain.Labels[labelDrainReservationUID] = "old-reservation"
+			c := &DrainController{Client: newTestClient(t, readyHV(), res, buildVM("vm1", "hv1", "ACTIVE"), drain), Config: drainConfig()}
+			result, err := c.Reconcile(ctx, reconcileReq(res.Name))
+			if err != nil {
+				t.Fatalf("reconcile: %v", err)
+			}
+			if result.RequeueAfter <= 0 {
+				t.Fatal("expected requeue while old drain exists")
+			}
+			drains := listDrains(t, c)
+			if state == v1alpha1.ReschedulingStateSucceeded || state == v1alpha1.ReschedulingStateRejected {
+				if len(drains) != 0 {
+					t.Fatalf("expected stale terminal drain removed, got %+v", drains)
+				}
+			} else {
+				if len(drains) != 1 || drains[0].Labels[labelDrainReservationUID] != "old-reservation" || drains[0].Status.State != state {
+					t.Fatalf("expected old drain unchanged until cleanup, got %+v", drains)
+				}
+				if err := c.Delete(ctx, drain); err != nil {
+					t.Fatalf("delete old drain after cleanup: %v", err)
+				}
+			}
+			if _, err := c.Reconcile(ctx, reconcileReq(res.Name)); err != nil {
+				t.Fatalf("reconcile after old drain removal: %v", err)
+			}
+			drains = listDrains(t, c)
+			if len(drains) != 1 || drains[0].Labels[labelDrainReservationUID] != string(res.UID) {
+				t.Fatalf("expected one drain for new reservation, got %+v", drains)
+			}
+		})
+	}
+}
+
+func TestDrainNameConflict(t *testing.T) {
+	ctx := context.Background()
+	res := freshReservation()
+	drain := drainRescheduling(res.Name, "hv2", v1alpha1.ReschedulingStateSucceeded)
+	drain.Labels = map[string]string{v1alpha1.LabelFailoverHostDrain: "true"}
+	c := &DrainController{Client: newTestClient(t, readyHV(), res, buildVM("vm1", "hv1", "ACTIVE"), drain), Config: drainConfig()}
+	result, err := c.Reconcile(ctx, reconcileReq(res.Name))
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if result.RequeueAfter != c.Config.RetryBackoff.Duration {
+		t.Fatalf("expected backoff for name conflict, got %v", result.RequeueAfter)
+	}
+	drains := listDrains(t, c)
+	if len(drains) != 1 || drains[0].Spec.Drain.Target.Hosts[0].Host.Name != "hv2" || drains[0].Labels[labelDrainReservationUID] != "" {
+		t.Fatalf("expected unrelated rescheduling unchanged, got %+v", drains)
 	}
 }
 
