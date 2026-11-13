@@ -134,12 +134,16 @@ func NewHostUsageReport(hv hv1.Hypervisor, reservations []v1alpha1.Reservation) 
 		}
 	}
 
+	skipHold := redundantInFlightHolds(reservations, hv)
 	for i := range reservations {
 		res := reservations[i]
 		if res.Spec.TargetHost == "" {
 			continue // unplaced/evicted; status may lag until the next reconcile
 		}
 		if res.Spec.TargetHost != hv.Name && res.Status.Host != hv.Name {
+			continue
+		}
+		if skipHold[i] {
 			continue
 		}
 		byRes := rep.Reserved[res.Spec.Type]
@@ -174,6 +178,64 @@ func NewHostUsageReport(hv hv1.Hypervisor, reservations []v1alpha1.Reservation) 
 	return rep
 }
 
+// redundantInFlightHolds returns, as a set of indices into reservations, the in-flight
+// holds on hv that must not be counted because the host already accounts for them.
+//
+// Once a VM lands on a host, hv.Status.Allocation reflects it at its current size, so
+// exactly one of its in-flight holds there double-counts it. For each VM active on hv,
+// its smallest in-flight hold (the current size already in Allocation) is marked. Any
+// larger hold — e.g. the target slot of a same-host resize — is left counted at its FULL
+// size, not just the delta: that conservatively over-reserves by the current size
+// (counted in both Used and the kept hold) for the one reconcile cycle until the hold
+// releases, which keeps the Used+Reserved+Available stack summing to Total while erring
+// toward reserving too much rather than too little.
+//
+// Only in-flight holds targeting hv (Spec.TargetHost or Status.Host) and belonging to a
+// VM active on hv count. Holds are ordered by memory, then CPU, with name as a stable
+// tiebreak, so the marked hold is deterministic.
+func redundantInFlightHolds(reservations []v1alpha1.Reservation, hv hv1.Hypervisor) map[int]bool {
+	activeOnHost := make(map[string]bool)
+	for _, inst := range hv.Status.Instances {
+		if inst.Active {
+			activeOnHost[inst.ID] = true
+		}
+	}
+	smallestPerVM := make(map[string]int) // VM uuid -> index of its smallest in-flight hold on hv
+	for i := range reservations {
+		res := &reservations[i]
+		spec := res.Spec.InFlightReservation
+		if res.Spec.Type != v1alpha1.ReservationTypeInFlight || spec == nil || !activeOnHost[spec.VMID] {
+			continue
+		}
+		if res.Spec.TargetHost != hv.Name && res.Status.Host != hv.Name {
+			continue
+		}
+		if cur, seen := smallestPerVM[spec.VMID]; !seen || inFlightHoldSmaller(res, &reservations[cur]) {
+			smallestPerVM[spec.VMID] = i
+		}
+	}
+	skip := make(map[int]bool, len(smallestPerVM))
+	for _, i := range smallestPerVM {
+		skip[i] = true
+	}
+	return skip
+}
+
+// inFlightHoldSmaller orders two in-flight holds by memory, then CPU, with name as a
+// stable final tiebreak, so the smallest hold a landed VM holds on a host — the one
+// already reflected in hv.Status.Allocation — is picked deterministically.
+func inFlightHoldSmaller(a, b *v1alpha1.Reservation) bool {
+	am, bm := a.Spec.Resources[hv1.ResourceMemory], b.Spec.Resources[hv1.ResourceMemory]
+	if c := am.Cmp(bm); c != 0 {
+		return c < 0
+	}
+	ac, bc := a.Spec.Resources[hv1.ResourceCPU], b.Spec.Resources[hv1.ResourceCPU]
+	if c := ac.Cmp(bc); c != 0 {
+		return c < 0
+	}
+	return a.Name < b.Name
+}
+
 // ReservationEffectivelyBlockedCapacity returns, per resource, the capacity a single
 // reservation effectively blocks on its host right now: its reserved slot minus the
 // workloads already running against it.
@@ -184,6 +246,9 @@ func NewHostUsageReport(hv hv1.Hypervisor, reservations []v1alpha1.Reservation) 
 //     per resource, so workloads already in the hypervisor allocation are not
 //     double-counted. The full slot while mid-migration or before any allocation.
 //   - Failover / InFlight: the full Spec.Resources (nothing is allocated against them).
+//     When a VM has already landed on the host, NewHostUsageReport skips that VM's
+//     smallest in-flight hold here (its current size is in hv.Status.Allocation); that
+//     per-host netting needs the host's live instance list, so it is done by the caller.
 //   - FailoverHost: the planner writes the full host capacity into Spec.Resources (it
 //     reserves an entire host), and this blocks that whole capacity regardless of
 //     lifecycle stage. New placements onto a draining failover host are kept off by
@@ -213,7 +278,10 @@ func ReservationEffectivelyBlockedCapacity(res v1alpha1.Reservation) ResourceMap
 			result[rn] = remaining
 		}
 		return result
-	// Failover and InFlight reservations always block their full Spec.Resources.
+	// Failover and InFlight reservations block their full Spec.Resources. When a VM has
+	// landed on the host, NewHostUsageReport drops that VM's smallest in-flight hold
+	// here (its current size is in hv.Status.Allocation); that per-host netting needs
+	// the hypervisor's live instance list, which this per-reservation helper does not have.
 	case v1alpha1.ReservationTypeFailover, v1alpha1.ReservationTypeInFlight, v1alpha1.ReservationTypeFailoverHost:
 		return result
 	default:

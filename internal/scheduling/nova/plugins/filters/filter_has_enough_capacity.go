@@ -5,6 +5,7 @@ package filters
 
 import (
 	"context"
+	"slices"
 
 	"github.com/go-logr/logr"
 
@@ -76,16 +77,16 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 	// it asks how much a host could hold once fully cleared, so neither running workloads
 	// nor any reservation count. The reservation list is therefore left empty, and the fit
 	// check below runs against Total rather than Available.
-	var active []v1alpha1.Reservation
+	var blockingReservations []v1alpha1.Reservation
 	if !assumeEmptyHosts {
 		var reservations v1alpha1.ReservationList
 		if err := s.Client.List(context.Background(), &reservations); err != nil {
 			return nil, err
 		}
-		active = make([]v1alpha1.Reservation, 0, len(reservations.Items))
+		blockingReservations = make([]v1alpha1.Reservation, 0, len(reservations.Items))
 		for _, reservation := range reservations.Items {
 			if s.reservationBlocks(traceLog, request, reservation, lockReserved) {
-				active = append(active, reservation)
+				blockingReservations = append(blockingReservations, reservation)
 			}
 		}
 	}
@@ -95,7 +96,7 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 		if _, ok := result.Activations[hv.Name]; !ok {
 			continue
 		}
-		rep := capacity.NewHostUsageReport(hv, active)
+		rep := capacity.NewHostUsageReport(hv, blockingReservations)
 		if rep.Total == nil {
 			traceLog.V(1).Info("removing host with unknown capacity", "host", hv.Name)
 			delete(result.Activations, hv.Name)
@@ -156,14 +157,18 @@ func (s *FilterHasEnoughCapacity) Run(traceLog logr.Logger, request compute.Plac
 // this request. It returns false (unlock) only when the request is specifically
 // entitled to the reservation's capacity; otherwise the reservation blocks.
 //
-// The decision mirrors the historical per-type logic:
-//   - An unconfirmed-but-placed reservation (TargetHost/Status.Host set, not Ready) always
-//     blocks — an unconfirmed slot must not be unlocked for anyone.
-//   - A committed-resource slot unlocks for a normal placement whose project and
-//     hardware version match the slot (slotting), unless LockReserved is set or the
-//     request is itself reserving committed-resource capacity (which must not overbook).
-//   - A failover slot unlocks only for the VM it holds, and only during an evacuation of
-//     that VM, or for a failover-reuse compatibility check.
+//   - In-flight holds have no confirmation milestone — they exist only while the VM is
+//     building up and are deleted on completion, so the readiness rule does not apply.
+//     Such a hold blocks, except one for the very VM this request is placing on a Nova
+//     lifecycle request: Nova serializes operations per VM, so that hold belongs to the
+//     same, now-superseded scheduling and may be skipped.
+//   - Any other unconfirmed-but-placed reservation (TargetHost/Status.Host set, not Ready)
+//     always blocks — an unconfirmed slot must not be unlocked for anyone.
+//   - A committed-resource slot unlocks for a normal placement whose project and hardware
+//     version match the slot (slotting), unless LockReserved is set or the request is
+//     itself reserving committed-resource capacity (which must not overbook).
+//   - A failover slot unlocks only for the VM it holds, during an evacuation of that VM or
+//     a failover-reuse compatibility check.
 func (s *FilterHasEnoughCapacity) reservationBlocks(
 	traceLog logr.Logger,
 	request compute.PlacementRequest,
@@ -171,11 +176,27 @@ func (s *FilterHasEnoughCapacity) reservationBlocks(
 	lockReserved bool,
 ) bool {
 
+	// In-flight holds never reach Ready, so the placement/readiness rule below does not
+	// apply to them. A Nova lifecycle request (unset intent = initial placement, or any
+	// NovaIntent) may skip its own VM's hold; every other request — other VMs, or
+	// Cortex-internal requests that carry the VM uuid but aren't serialized by Nova — blocks.
+	if reservation.Spec.Type == v1alpha1.ReservationTypeInFlight {
+		spec := reservation.Spec.InFlightReservation
+		ownedByRequest := spec != nil && spec.VMID == request.InstanceUUID &&
+			(request.Intent == "" || slices.Contains(api.NovaIntents, request.Intent))
+		if ownedByRequest {
+			traceLog.V(1).Info("ignoring the request's own in-flight reservation", "reservation", reservation.Name)
+		}
+		return !ownedByRequest
+	}
+
 	// Not placed yet: nothing to block. Placed-but-not-ready: always block.
 	if !reservation.IsReady() {
 		return reservation.Spec.TargetHost != "" || reservation.Status.Host != ""
 	}
 
+	// Only confirmed (Ready) slots reach here; decide per type whether this request is
+	// entitled to the reserved capacity.
 	switch reservation.Spec.Type {
 	case v1alpha1.ReservationTypeCommittedResource, "": // "" kept for backward compatibility
 		if reservation.Spec.CommittedResourceReservation == nil || reservation.Spec.CommittedResourceReservation.ResourceGroup == "" {

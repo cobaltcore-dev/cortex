@@ -100,6 +100,78 @@ func TestNewHostUsageReport(t *testing.T) {
 		}
 	})
 
+	t.Run("in-flight hold blocks until its VM lands on the host", func(t *testing.T) {
+		// The VM is not yet in hv.Status.Instances, so the hold blocks its full
+		// Spec.Resources on the target host.
+		inflight := v1alpha1.Reservation{
+			ObjectMeta: metav1.ObjectMeta{Name: "inflight-1"},
+			Spec: v1alpha1.ReservationSpec{
+				Type:                v1alpha1.ReservationTypeInFlight,
+				TargetHost:          "host",
+				Resources:           ResourceMap{hv1.ResourceMemory: gib(512), hv1.ResourceCPU: cpu(128)},
+				InFlightReservation: &v1alpha1.InFlightReservationSpec{VMID: "vm-1"},
+			},
+			Status: v1alpha1.ReservationStatus{Host: "host"},
+		}
+		rep := report(hvWithCap(1024, 256), inflight)
+		if memGiB(rep.Available) != 512 || memGiB(rep.ReservedTotal(v1alpha1.ReservationTypeInFlight)) != 512 {
+			t.Errorf("available=%d in-flight reserved=%d, want 512/512",
+				memGiB(rep.Available), memGiB(rep.ReservedTotal(v1alpha1.ReservationTypeInFlight)))
+		}
+	})
+
+	t.Run("in-flight hold is skipped once its VM has landed on the host", func(t *testing.T) {
+		// vm-1 is Active on the host, so its usage is already in Allocation (Used).
+		// Counting the hold too would double-count it, so it is dropped entirely.
+		hv := hvWithCap(1024, 256)
+		hv.Status.Allocation = ResourceMap{hv1.ResourceMemory: gib(512), hv1.ResourceCPU: cpu(128)}
+		hv.Status.Instances = []hv1.Instance{{ID: "vm-1", Active: true}}
+		inflight := v1alpha1.Reservation{
+			ObjectMeta: metav1.ObjectMeta{Name: "inflight-1"},
+			Spec: v1alpha1.ReservationSpec{
+				Type:                v1alpha1.ReservationTypeInFlight,
+				TargetHost:          "host",
+				Resources:           ResourceMap{hv1.ResourceMemory: gib(512), hv1.ResourceCPU: cpu(128)},
+				InFlightReservation: &v1alpha1.InFlightReservationSpec{VMID: "vm-1"},
+			},
+			Status: v1alpha1.ReservationStatus{Host: "host"},
+		}
+		rep := report(hv, inflight)
+		// Only the 512 GiB Allocation is subtracted; the hold adds nothing.
+		if memGiB(rep.Available) != 512 || memGiB(rep.ReservedTotal(v1alpha1.ReservationTypeInFlight)) != 0 {
+			t.Errorf("available=%d in-flight reserved=%d, want 512/0",
+				memGiB(rep.Available), memGiB(rep.ReservedTotal(v1alpha1.ReservationTypeInFlight)))
+		}
+	})
+
+	t.Run("same-host resize: smallest hold skipped, larger target hold kept whole", func(t *testing.T) {
+		// vm-1 is Active at its old size (256 GiB, in Allocation). Its two holds on the
+		// host are the old size (256, skipped) and the resize target (512, kept whole).
+		// The target is counted in full, not just the 256 delta, so the host is
+		// conservatively over-reserved by the old size until the holds release.
+		hv := hvWithCap(1024, 256)
+		hv.Status.Allocation = ResourceMap{hv1.ResourceMemory: gib(256), hv1.ResourceCPU: cpu(64)}
+		hv.Status.Instances = []hv1.Instance{{ID: "vm-1", Active: true}}
+		hold := func(name string, memGiBVal, cpuVal int64) v1alpha1.Reservation {
+			return v1alpha1.Reservation{
+				ObjectMeta: metav1.ObjectMeta{Name: name},
+				Spec: v1alpha1.ReservationSpec{
+					Type:                v1alpha1.ReservationTypeInFlight,
+					TargetHost:          "host",
+					Resources:           ResourceMap{hv1.ResourceMemory: gib(memGiBVal), hv1.ResourceCPU: cpu(cpuVal)},
+					InFlightReservation: &v1alpha1.InFlightReservationSpec{VMID: "vm-1"},
+				},
+				Status: v1alpha1.ReservationStatus{Host: "host"},
+			}
+		}
+		rep := report(hv, hold("source", 256, 64), hold("target", 512, 128))
+		// Used 256 (Allocation) + kept target hold 512 = 768 -> 256 GiB available.
+		if memGiB(rep.Available) != 256 || memGiB(rep.ReservedTotal(v1alpha1.ReservationTypeInFlight)) != 512 {
+			t.Errorf("available=%d in-flight reserved=%d, want 256/512",
+				memGiB(rep.Available), memGiB(rep.ReservedTotal(v1alpha1.ReservationTypeInFlight)))
+		}
+	})
+
 	t.Run("reservation on another host ignored", func(t *testing.T) {
 		rep := report(hvWithCap(1024, 256), crSlot("other", "other-host", 1024, 256))
 		if memGiB(rep.Available) != 1024 {
