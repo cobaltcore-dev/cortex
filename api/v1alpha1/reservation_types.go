@@ -356,14 +356,15 @@ const (
 	ConditionTypeFailoverHostInUse ReservationConditionType = "FailoverHostInUse"
 
 	// ConditionTypeFailoverHostCompleted indicates the gang evacuation onto this
-	// InUse failover host reservation has finished: no virtual machine remains on
-	// the source host (Status.FailoverHostReservation.SourceHost). The completion
-	// controller sets it True when the source first goes empty and uses its
-	// lastTransitionTime as the grace-period anchor before deleting the reservation.
+	// InUse failover host reservation has finished: the source host
+	// (Status.FailoverHostReservation.SourceHost) reports itself evicted (no
+	// instances left under active maintenance mode). The completion controller sets
+	// it True when the source first reports evicted and uses its lastTransitionTime
+	// as the grace-period anchor before deleting the reservation.
 	//
-	// status=True: The source host is empty; the grace timer runs toward deletion.
-	// status=False: The source host was re-occupied before the grace period
-	// elapsed; the timer is reset.
+	// status=True: The source host is evicted; the grace timer runs toward deletion.
+	// status=False: The source host stopped reporting evicted before the grace
+	// period elapsed; the timer is reset.
 	ConditionTypeFailoverHostCompleted ReservationConditionType = "FailoverHostCompleted"
 )
 
@@ -374,11 +375,12 @@ const (
 	ReasonFailoverHostDrained = "HostDrained"
 
 	// ReasonFailoverHostEvacuationComplete is the FailoverHostCompleted=True
-	// reason set by the completion controller once the source host is empty.
+	// reason set by the completion controller once the source host reports itself
+	// evicted.
 	ReasonFailoverHostEvacuationComplete = "EvacuationComplete"
 
 	// ReasonFailoverHostSourceReoccupied is the FailoverHostCompleted=False reason
-	// set when the source host gained a virtual machine again before the grace
+	// set when the source host stopped reporting itself evicted before the grace
 	// period elapsed.
 	ReasonFailoverHostSourceReoccupied = "SourceReoccupied"
 )

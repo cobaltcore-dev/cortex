@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,6 +37,25 @@ func inUseReservation() *v1alpha1.Reservation {
 	})
 	r.Status.FailoverHostReservation = &v1alpha1.FailoverHostReservationStatus{SourceHost: sourceHost}
 	return &r
+}
+
+// sourceHV builds the source hypervisor "peer" with the given evicted status.
+func sourceHV(evicted bool) *hv1.Hypervisor {
+	return &hv1.Hypervisor{
+		ObjectMeta: metav1.ObjectMeta{Name: "peer"},
+		Status:     hv1.HypervisorStatus{Evicted: evicted},
+	}
+}
+
+// setEvicted flips the source hypervisor "peer" to the given evicted status.
+func setEvicted(ctx context.Context, c *CompletionController, evicted bool) error {
+	hv := &hv1.Hypervisor{}
+	if err := c.Get(ctx, client.ObjectKey{Name: "peer"}, hv); err != nil {
+		return err
+	}
+	base := hv.DeepCopy()
+	hv.Status.Evicted = evicted
+	return c.Status().Patch(ctx, hv, client.MergeFrom(base))
 }
 
 // withCompletedTrue stamps a FailoverHostCompleted=True condition at the given age.
@@ -66,7 +86,6 @@ func TestCompletionReconcile(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "in-flight-1"},
 		Spec:       v1alpha1.ReservationSpec{Type: v1alpha1.ReservationTypeInFlight, TargetHost: "hv1"},
 	}
-	sourceOccupant := func() client.Object { return buildVM("evacuee", "peer", "ACTIVE") }
 
 	const (
 		requeueNone  = "none"
@@ -82,22 +101,19 @@ func TestCompletionReconcile(t *testing.T) {
 	}{
 		{name: "not in use is ignored", res: notInUse(), wantRequeue: requeueNone},
 		{name: "in use without source host skips", res: noSource(), wantRequeue: requeueNone},
-		{name: "source empty first time marks completed and requeues grace", res: inUseReservation(),
+		{name: "missing source hypervisor skips", res: inUseReservation(), wantRequeue: requeueNone},
+		{name: "source evicted first time marks completed and requeues grace", res: inUseReservation(),
+			objs:          []client.Object{sourceHV(true)},
 			wantCompleted: ptrStatus(metav1.ConditionTrue), wantRequeue: requeueGrace},
-		{name: "evacuees scattered off the source complete regardless of where they landed", res: inUseReservation(),
-			// Evacuees from "peer" ended up on the failover target (hv1) and on an
-			// ordinary fallback host (hv9), never consolidated onto one designated
-			// spot. Completion keys only on the source host being empty, so this
-			// still completes.
-			objs:          []client.Object{buildVM("on-target", "hv1", "ACTIVE"), buildVM("on-fallback", "hv9", "ACTIVE")},
-			wantCompleted: ptrStatus(metav1.ConditionTrue), wantRequeue: requeueGrace},
-		{name: "source occupied does nothing", res: inUseReservation(),
-			objs: []client.Object{sourceOccupant()}, wantRequeue: requeueNone},
-		{name: "source re-occupied resets completed to false", res: withCompletedTrue(inUseReservation(), time.Hour),
-			objs: []client.Object{sourceOccupant()}, wantCompleted: ptrStatus(metav1.ConditionFalse), wantRequeue: requeueNone},
+		{name: "source not evicted does nothing", res: inUseReservation(),
+			objs: []client.Object{sourceHV(false)}, wantRequeue: requeueNone},
+		{name: "source no longer evicted resets completed to false", res: withCompletedTrue(inUseReservation(), time.Hour),
+			objs: []client.Object{sourceHV(false)}, wantCompleted: ptrStatus(metav1.ConditionFalse), wantRequeue: requeueNone},
 		{name: "grace not elapsed waits", res: withCompletedTrue(inUseReservation(), time.Hour),
+			objs:          []client.Object{sourceHV(true)},
 			wantCompleted: ptrStatus(metav1.ConditionTrue), wantRequeue: requeueGrace},
 		{name: "grace elapsed deletes", res: withCompletedTrue(inUseReservation(), 25*time.Hour),
+			objs:        []client.Object{sourceHV(true)},
 			wantDeleted: true},
 		{name: "non failover host reservation is ignored", res: inFlight, wantRequeue: requeueNone},
 	}
@@ -146,12 +162,12 @@ func TestCompletionEndToEnd(t *testing.T) {
 	ctx := context.Background()
 	res := inUseReservation()
 	c := &CompletionController{
-		Client: newTestClient(t, res, buildVM("evacuee", "peer", "ACTIVE")),
+		Client: newTestClient(t, res, sourceHV(false)),
 		Config: completionConfig(),
 	}
 	req := reconcileReq(res.Name)
 
-	// Pass 1: VM still on the source host, nothing happens.
+	// Pass 1: source host not yet evicted, nothing happens.
 	if _, err := c.Reconcile(ctx, req); err != nil {
 		t.Fatalf("reconcile 1: %v", err)
 	}
@@ -160,12 +176,12 @@ func TestCompletionEndToEnd(t *testing.T) {
 		t.Fatalf("get after pass 1: %v", err)
 	}
 	if meta.FindStatusCondition(got.Status.Conditions, v1alpha1.ConditionTypeFailoverHostCompleted) != nil {
-		t.Fatalf("did not expect a completed condition while source is occupied")
+		t.Fatalf("did not expect a completed condition while source is not evicted")
 	}
 
-	// Source VM leaves; pass 2 marks the reservation completed and starts the clock.
-	if err := c.Delete(ctx, buildVM("evacuee", "peer", "ACTIVE")); err != nil {
-		t.Fatalf("delete evacuee: %v", err)
+	// Source host becomes evicted; pass 2 marks the reservation completed and starts the clock.
+	if err := setEvicted(ctx, c, true); err != nil {
+		t.Fatalf("mark source evicted: %v", err)
 	}
 	result, err := c.Reconcile(ctx, req)
 	if err != nil {
@@ -178,7 +194,7 @@ func TestCompletionEndToEnd(t *testing.T) {
 		t.Fatalf("get after pass 2: %v", err)
 	}
 	if !meta.IsStatusConditionTrue(got.Status.Conditions, v1alpha1.ConditionTypeFailoverHostCompleted) {
-		t.Fatalf("expected completed=true after source emptied")
+		t.Fatalf("expected completed=true after source evicted")
 	}
 
 	// Back-date the condition beyond the grace period; pass 3 deletes.
@@ -201,12 +217,12 @@ func TestCompletionResetTimerOnReoccupation(t *testing.T) {
 	res := withCompletedTrue(inUseReservation(), time.Hour)
 	original := meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostCompleted).LastTransitionTime
 	c := &CompletionController{
-		Client: newTestClient(t, res, buildVM("returned", "peer", "ACTIVE")),
+		Client: newTestClient(t, res, sourceHV(false)),
 		Config: completionConfig(),
 	}
 	req := reconcileReq(res.Name)
 
-	// Source re-occupied: completed flips to False, reservation not deleted.
+	// Source no longer evicted: completed flips to False, reservation not deleted.
 	if _, err := c.Reconcile(ctx, req); err != nil {
 		t.Fatalf("reconcile reoccupied: %v", err)
 	}
@@ -219,19 +235,19 @@ func TestCompletionResetTimerOnReoccupation(t *testing.T) {
 		t.Fatalf("expected completed=false reason SourceReoccupied, got %+v", cond)
 	}
 
-	// VM leaves again: completed flips back to True with a later timestamp.
-	if err := c.Delete(ctx, buildVM("returned", "peer", "ACTIVE")); err != nil {
-		t.Fatalf("delete returned vm: %v", err)
+	// Source evicted again: completed flips back to True with a later timestamp.
+	if err := setEvicted(ctx, c, true); err != nil {
+		t.Fatalf("mark source evicted: %v", err)
 	}
 	if _, err := c.Reconcile(ctx, req); err != nil {
-		t.Fatalf("reconcile after re-empty: %v", err)
+		t.Fatalf("reconcile after re-evicted: %v", err)
 	}
 	if err := c.Get(ctx, req.NamespacedName, got); err != nil {
-		t.Fatalf("get after re-empty: %v", err)
+		t.Fatalf("get after re-evicted: %v", err)
 	}
 	cond = meta.FindStatusCondition(got.Status.Conditions, v1alpha1.ConditionTypeFailoverHostCompleted)
 	if cond == nil || cond.Status != metav1.ConditionTrue {
-		t.Fatalf("expected completed=true after re-empty, got %+v", cond)
+		t.Fatalf("expected completed=true after re-evicted, got %+v", cond)
 	}
 	if !cond.LastTransitionTime.After(original.Time) {
 		t.Errorf("expected grace clock to restart (lastTransitionTime after %v), got %v", original.Time, cond.LastTransitionTime.Time)

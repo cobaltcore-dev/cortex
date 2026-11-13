@@ -545,27 +545,29 @@ Like the drain controller, completion is **opt-in and off by default** (it delet
 fleet capacity): when the feature flag is disabled the controller is not started. When enabled, it reconciles
 each In Use failover host reservation like so:
 
-- **Is the source host empty?** Emptiness is read from the same `VirtualMachine` resources the drain controller
-  uses — but here for the *source* host (`status.failoverHostReservation.sourceHost`), not the reserved host. A
-  host counts as occupied only if Nova reports a VM on it that is neither being pruned nor already deleted. The
-  controller watches the VMs, so a VM leaving (or returning to) the source host re-evaluates the reservation
-  right away. A source host whose hypervisor has disappeared has no VMs, so it simply counts as empty.
-- **When it first goes empty, start a grace period.** The controller sets `FailoverHostCompleted=True` (reason
+- **Is the source host evicted?** Completion reads `status.evicted` on the source host's
+  `Hypervisor` resource (`status.failoverHostReservation.sourceHost`), not the reserved host. The hypervisor
+  operator sets `evicted` once no instances remain under active maintenance mode — the authoritative "the
+  evacuation is done" signal. The controller watches the `Hypervisor`, so the source flipping its evicted status
+  re-evaluates the reservation right away. If the source `Hypervisor` object cannot be found, the controller
+  cannot tell and simply skips rather than assuming the evacuation is complete.
+- **When it first goes evicted, start a grace period.** The controller sets `FailoverHostCompleted=True` (reason
   `EvacuationComplete`) and requeues at the grace deadline. The grace period (default `24h`) is measured from
   that condition's `lastTransitionTime`, which survives controller restarts. It exists to avoid rapid
   evacuate ↔ reserve-new-host loops when workloads flap: a host that empties only briefly does not immediately
   lose its reservation.
 - **If the source is re-occupied before grace elapses, reset the timer.** The controller flips the condition to
-  `FailoverHostCompleted=False` (reason `SourceReoccupied`); the next time the source empties the condition goes
-  True again with a fresh timestamp, restarting the clock.
-- **When the grace period elapses with the source still empty, delete the reservation.** The reserved host
+  `FailoverHostCompleted=False` (reason `SourceReoccupied`) when the source is no longer evicted; the next time
+  it reports evicted the condition goes True again with a fresh timestamp, restarting the clock.
+- **When the grace period elapses with the source still evicted, delete the reservation.** The reserved host
   becomes a regular host again, continuing to host the once-failed-over workload. The partitioning generator
   designates a fresh failover host on its next pass to restore the partition's headroom.
 
 A gang evacuation that never drains its source host — a VM that will not live-migrate, no capacity on the
 reserved host, or a wedged source — leaves the reservation stuck In Use and never completes. The
-`cortex_failover_host_reservations_evacuating` gauge counts such reservations (In Use with a still-occupied
-source host), and the `CortexNovaFailoverHostEvacuationStuck` alert escalates when the count stays non-zero.
+`cortex_failover_host_reservations_evacuating` gauge counts such reservations (In Use with a source host that
+does not yet report itself evicted), and the `CortexNovaFailoverHostEvacuationStuck` alert escalates when the
+count stays non-zero.
 
 ## How failover host reservations affect scheduling
 

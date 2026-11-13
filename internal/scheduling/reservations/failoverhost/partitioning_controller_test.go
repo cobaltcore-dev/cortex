@@ -42,7 +42,7 @@ func newTestClient(t *testing.T, objs ...client.Object) client.Client {
 	return fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(objs...).
-		WithStatusSubresource(&v1alpha1.Reservation{}, &v1alpha1.Rescheduling{}).
+		WithStatusSubresource(&v1alpha1.Reservation{}, &v1alpha1.Rescheduling{}, &hv1.Hypervisor{}).
 		WithIndex(&v1alpha1.Reservation{}, reservations.IdxReservationByHost, reservations.ReservationHosts).
 		Build()
 }

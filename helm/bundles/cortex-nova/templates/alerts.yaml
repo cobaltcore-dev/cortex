@@ -1164,13 +1164,13 @@ spec:
           and the drain Reschedulings labelled reservations.cortex.cloud/failover-host-drain.
     - alert: CortexNovaFailoverHostEvacuationStuck
       # reservations_evacuating counts in-use failover host reservations whose
-      # source host still has a virtual machine on it. A transient non-zero value
-      # is normal mid-evacuation; min_over_time > 0 over a long window means VMs on
-      # the source host are not finding a new home (a live-migration that will not
-      # complete, no capacity on the reserved host, or the source host wedged), so
-      # the gang evacuation never completes and the completion controller never
-      # releases the reservation. The gauge cannot express duration, so the
-      # lookback window and `for:` carry it.
+      # source host does not yet report itself evicted. A transient non-zero value
+      # is normal mid-evacuation; min_over_time > 0 over a long window means the
+      # source host is not finding a new home for its instances (a live-migration
+      # that will not complete, no capacity on the reserved host, or the source
+      # host wedged), so the gang evacuation never completes and the completion
+      # controller never releases the reservation. The gauge cannot express
+      # duration, so the lookback window and `for:` carry it.
       expr: min_over_time(cortex_failover_host_reservations_evacuating{service="cortex-nova-metrics"}[3h]) > 0
       for: 3h
       labels:
@@ -1185,8 +1185,8 @@ spec:
       annotations:
         summary: "Failover host gang evacuation is stuck"
         description: >
-          At least one in-use failover host reservation has had virtual machines
-          remaining on its source host for the entire lookback window. The gang
+          At least one in-use failover host reservation has had a source host that
+          never reported itself evicted for the entire lookback window. The gang
           evacuation onto the reserved host is not draining the failed source host,
           so it never completes and the reservation is never released back into
           regular capacity. Typically a virtual machine that will not live-migrate,

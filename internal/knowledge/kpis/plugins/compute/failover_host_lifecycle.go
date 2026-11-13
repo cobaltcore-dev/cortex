@@ -11,6 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	vmv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -37,7 +38,7 @@ const novaStatusDeleted = "DELETED"
 //     auto-correct; the gauge is the signal an alert escalates on. In-use hosts
 //     are excluded, as a gang evacuation legitimately holds VMs there.
 //   - cortex_failover_host_reservations_evacuating — in-use reservations whose
-//     source host still has a virtual machine on it. A persistently non-zero
+//     source host does not yet report itself evicted. A persistently non-zero
 //     value means a gang evacuation is not draining its source host, so the
 //     completion controller never gets to release the reservation.
 //
@@ -70,7 +71,7 @@ func (k *FailoverHostLifecycleKPI) Init(db *db.DB, client client.Client, opts co
 	)
 	k.evacuating = prometheus.NewDesc(
 		"cortex_failover_host_reservations_evacuating",
-		"Number of in-use failover host reservations whose source host still has a virtual machine on it; a persistently non-zero value means a gang evacuation is not draining its source host",
+		"Number of in-use failover host reservations whose source host does not yet report itself evicted; a persistently non-zero value means a gang evacuation is not draining its source host",
 		nil, nil,
 	)
 	return nil
@@ -98,23 +99,34 @@ func (k *FailoverHostLifecycleKPI) Collect(ch chan<- prometheus.Metric) {
 		failoverHostLifecycleKPILogger.Error(err, "Failed to list virtual machines")
 		return
 	}
+	hvs := &hv1.HypervisorList{}
+	if err := k.Client.List(ctx, hvs); err != nil {
+		failoverHostLifecycleKPILogger.Error(err, "Failed to list hypervisors")
+		return
+	}
 	occupied := map[string]bool{}
 	for i := range vms.Items {
 		if h := occupiedHost(&vms.Items[i]); h != "" {
 			occupied[h] = true
 		}
 	}
+	// A source host counts as evacuated once its hypervisor reports status.evicted;
+	// an absent hypervisor is unknown, so it is left out and does not count as done.
+	evicted := map[string]bool{}
+	for i := range hvs.Items {
+		evicted[hvs.Items[i].Name] = hvs.Items[i].Status.Evicted
+	}
 	var draining, reoccupied, evacuating float64
 	for _, res := range reservations.Items {
 		if res.Spec.Type != v1alpha1.ReservationTypeFailoverHost {
 			continue
 		}
-		// In use with a still-occupied source host: the evacuation is not
-		// draining its source, so completion cannot release the reservation.
+		// In use with a source host not yet evicted: the evacuation is not draining
+		// its source, so completion cannot release the reservation.
 		if meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostInUse) &&
 			res.Status.FailoverHostReservation != nil &&
 			res.Status.FailoverHostReservation.SourceHost != "" &&
-			occupied[res.Status.FailoverHostReservation.SourceHost] {
+			!evicted[res.Status.FailoverHostReservation.SourceHost] {
 			evacuating++
 		}
 		if !meta.IsStatusConditionTrue(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostActive) {

@@ -7,14 +7,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
-	vmv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -43,7 +43,7 @@ type CompletionConfig struct {
 	// (turning the reserved host back into a regular host), so it is opt-in:
 	// when false the controller is not started at all.
 	Enabled bool `json:"enabled,omitempty"`
-	// GracePeriod is how long the source host must stay empty (measured from the
+	// GracePeriod is how long the source host must stay evicted (measured from the
 	// FailoverHostCompleted condition's lastTransitionTime) before the InUse
 	// reservation is deleted. It guards against rapid evacuate<->reserve loops
 	// when virtual machines flap. Defaults to 24h.
@@ -59,10 +59,10 @@ func (c *CompletionConfig) ApplyDefaults() {
 }
 
 // CompletionController finishes the failover host lifecycle. It watches InUse
-// failover host reservations and, once the evacuated source host is empty, waits
-// out a grace period before deleting the reservation. The deletion turns the
-// reserved host back into a regular host, which keeps hosting the failed-over
-// workload.
+// failover host reservations and, once the evacuated source host reports itself
+// evicted (no instances left), waits out a grace period before deleting the
+// reservation. The deletion turns the reserved host back into a regular host,
+// which keeps hosting the failed-over workload.
 //
 // Ownership: the Matcher writes the FailoverHostInUse condition and SourceHost;
 // the drain controller owns FailoverHostActive and deliberately leaves Active and
@@ -77,8 +77,8 @@ type CompletionController struct {
 
 // Reconcile drives one InUse failover host reservation toward completion. It acts
 // only on reservations the Matcher has marked InUse: once the source host they
-// rescued is empty it marks them FailoverHostCompleted and, after the grace
-// period, deletes them.
+// rescued reports itself evicted it marks them FailoverHostCompleted and, after
+// the grace period, deletes them.
 func (c *CompletionController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	res := &v1alpha1.Reservation{}
 	if err := c.Get(ctx, req.NamespacedName, res); err != nil {
@@ -102,37 +102,40 @@ func (c *CompletionController) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	vms := &vmv1alpha1.VirtualMachineList{}
-	if err := c.List(ctx, vms); err != nil {
-		return ctrl.Result{}, fmt.Errorf("list virtual machines: %w", err)
+	// The source host reports itself evicted once its last instance has left: the
+	// hypervisor operator sets status.evicted when no instances remain under active
+	// maintenance mode. If the Hypervisor object is missing we cannot tell, so we
+	// skip rather than assume the evacuation is done.
+	hv := &hv1.Hypervisor{}
+	if err := c.Get(ctx, client.ObjectKey{Name: sourceHost}, hv); err != nil {
+		if apierrors.IsNotFound(err) {
+			log.V(1).Info("source hypervisor not found, skipping until its status is known", "sourceHost", sourceHost)
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, fmt.Errorf("get source hypervisor %s: %w", sourceHost, err)
 	}
-	// The evacuation is complete once no virtual machine remains on the source
-	// host: every one has found a new home. A missing source hypervisor has no
-	// VMs either, so it counts as empty and completes normally.
-	sourceEmpty := !slices.ContainsFunc(vms.Items, func(vm vmv1alpha1.VirtualMachine) bool {
-		return occupiedHost(&vm) == sourceHost
-	})
+	sourceEvicted := hv.Status.Evicted
 	completed := meta.FindStatusCondition(res.Status.Conditions, v1alpha1.ConditionTypeFailoverHostCompleted)
 
-	if !sourceEmpty {
-		// Source still occupied: the evacuation is not done, or VMs came back. If
-		// we had already started the grace timer, reset it by flipping the
+	if !sourceEvicted {
+		// Source not yet evicted: the evacuation is not done, or instances came
+		// back. If we had already started the grace timer, reset it by flipping the
 		// condition to False (which re-stamps lastTransitionTime).
 		if completed != nil && completed.Status == metav1.ConditionTrue {
 			log.Info("source host re-occupied before grace elapsed, resetting completion timer", "sourceHost", sourceHost)
 			return ctrl.Result{}, c.setCompleted(ctx, res, metav1.ConditionFalse,
 				v1alpha1.ReasonFailoverHostSourceReoccupied,
-				"virtual machines are present on the source host "+sourceHost+" again")
+				"source host "+sourceHost+" is no longer evicted")
 		}
 		return ctrl.Result{}, nil
 	}
 
 	if completed == nil || completed.Status != metav1.ConditionTrue {
-		log.Info("source host empty, marking evacuation complete and starting grace period",
+		log.Info("source host evicted, marking evacuation complete and starting grace period",
 			"sourceHost", sourceHost, "gracePeriod", c.Config.GracePeriod.Duration)
 		if err := c.setCompleted(ctx, res, metav1.ConditionTrue,
 			v1alpha1.ReasonFailoverHostEvacuationComplete,
-			"no virtual machines remain on the source host "+sourceHost); err != nil {
+			"source host "+sourceHost+" reports itself evicted"); err != nil {
 			return ctrl.Result{}, err
 		}
 		// Requeue at the deadline so deletion fires even without a watch event.
@@ -177,8 +180,8 @@ func (c *CompletionController) deleteReservation(ctx context.Context, res *v1alp
 }
 
 // SetupWithManager registers the controller. Besides failover host reservations
-// it watches VirtualMachines so that a VM leaving (or re-entering) a reservation's
-// source host re-evaluates that reservation. Reconciles run one at a time.
+// it watches Hypervisors so that a source host flipping its evicted status
+// re-evaluates the reservation that rescued it. Reconciles run one at a time.
 func (c *CompletionController) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	mcl, ok := c.Client.(*multicluster.Client)
 	if !ok {
@@ -202,27 +205,22 @@ func (c *CompletionController) SetupWithManager(ctx context.Context, mgr ctrl.Ma
 		return fmt.Errorf("watch reservations: %w", err)
 	}
 
-	// Only a change of the host a VM occupies affects source-host emptiness. On
-	// update both the old and new object are mapped, so the vacated host is woken
-	// too.
-	bldr, err = bldr.WatchesMulticluster(&vmv1alpha1.VirtualMachine{},
+	// Only a change of the source host's evicted status affects completion, so
+	// wake the InUse reservations that rescued the hypervisor when it flips.
+	bldr, err = bldr.WatchesMulticluster(&hv1.Hypervisor{},
 		handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-			vm, ok := obj.(*vmv1alpha1.VirtualMachine)
-			if !ok {
-				return nil
-			}
-			return c.inUseReservationsForSourceHost(ctx, occupiedHost(vm))
+			return c.inUseReservationsForSourceHost(ctx, obj.GetName())
 		}),
 		predicate.Funcs{
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				oldVM, okOld := e.ObjectOld.(*vmv1alpha1.VirtualMachine)
-				newVM, okNew := e.ObjectNew.(*vmv1alpha1.VirtualMachine)
-				return okOld && okNew && occupiedHost(oldVM) != occupiedHost(newVM)
+				oldHV, okOld := e.ObjectOld.(*hv1.Hypervisor)
+				newHV, okNew := e.ObjectNew.(*hv1.Hypervisor)
+				return okOld && okNew && oldHV.Status.Evicted != newHV.Status.Evicted
 			},
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("watch virtual machines: %w", err)
+		return fmt.Errorf("watch hypervisors: %w", err)
 	}
 
 	return bldr.Named("failoverhost-completion-controller").

@@ -42,7 +42,7 @@ spec:
     whose host nonetheless has a virtual machine on it — a filter leak the drain
     controller does not auto-correct) and
     cortex_failover_host_reservations_evacuating (in-use reservations whose source
-    host still has a virtual machine on it — a gang evacuation not draining its
+    host does not yet report itself evicted — a gang evacuation not draining its
     source, which keeps the completion controller from releasing the reservation).
 ---
 apiVersion: cortex.cloud/v1alpha1

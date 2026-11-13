@@ -428,7 +428,7 @@ cortex-scheduling-controllers:
         retryBackoff: 1m
       # The completion controller closes out the failover host lifecycle. Once a
       # reservation is in use (a gang evacuation landed on it) and its source host
-      # has been fully emptied, it waits a grace period and then deletes the
+      # reports itself evicted, it waits a grace period and then deletes the
       # reservation, turning the reserved host back into a regular host that keeps
       # hosting the failed-over workload. It is opt-in: deleting a reservation
       # changes fleet capacity, so it is off by default and the controller is not
@@ -437,10 +437,10 @@ cortex-scheduling-controllers:
         # Gates the entire completion controller. When false (default) no in-use
         # reservation is ever completed or deleted by it.
         enabled: false
-        # How long the source host must stay empty before the reservation is
-        # deleted, measured from when the source first became empty. Guards against
-        # rapid evacuate<->reserve loops when virtual machines flap. Deliberately
-        # conservative.
+        # How long the source host must stay evicted before the reservation is
+        # deleted, measured from when the source first reported evicted. Guards
+        # against rapid evacuate<->reserve loops when virtual machines flap.
+        # Deliberately conservative.
         gracePeriod: 24h
 
 cortex-knowledge-controllers:

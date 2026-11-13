@@ -60,7 +60,8 @@ func TestFailoverHostLifecycleKPI_Collect(t *testing.T) {
 	reoccupied := setActive(ptr(failoverHostReservation("failover-host-r", "r", "peer")))
 	// activeInUse: Active AND in use with a VM -> legitimate evacuee, not flagged.
 	activeInUse := setInUse(setActive(ptr(failoverHostReservation("failover-host-u", "u", "peer"))))
-	// evacuating: in use with a recorded source host that still has a VM on it.
+	// evacuating: in use with a recorded source host whose hypervisor is not yet
+	// evicted.
 	evacuating := setInUse(setActive(ptr(failoverHostReservation("failover-host-ev", "ev", "src"))))
 	evacuating.Status.FailoverHostReservation = &v1alpha1.FailoverHostReservationStatus{SourceHost: "src"}
 	// A non-failover reservation must be ignored entirely.
@@ -71,10 +72,11 @@ func TestFailoverHostLifecycleKPI_Collect(t *testing.T) {
 
 	vmOnR := virtualMachine("vm-r", "r")
 	vmOnU := virtualMachine("vm-u", "u")
-	vmOnSrc := virtualMachine("vm-src", "src")
+	// The source hypervisor exists but is not evicted yet, so evacuating counts.
+	srcHV := hv1.Hypervisor{ObjectMeta: v1.ObjectMeta{Name: "src"}, Status: hv1.HypervisorStatus{Evicted: false}}
 
 	client := fake.NewClientBuilder().WithScheme(scheme).
-		WithObjects(&draining, activeEmpty, reoccupied, activeInUse, evacuating, &other, &vmOnR, &vmOnU, &vmOnSrc).Build()
+		WithObjects(&draining, activeEmpty, reoccupied, activeInUse, evacuating, &other, &vmOnR, &vmOnU, &srcHV).Build()
 
 	kpi := &FailoverHostLifecycleKPI{}
 	if err := kpi.Init(nil, client, conf.NewRawOpts("{}")); err != nil {
