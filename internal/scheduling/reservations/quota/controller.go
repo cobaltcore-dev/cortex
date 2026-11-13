@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -678,9 +679,13 @@ func (c *QuotaController) SetupHVWatcher(mgr ctrl.Manager) error {
 		WatchesRawSource(source.Kind(
 			mgr.GetCache(),
 			&hv1.Hypervisor{},
-			&reservations.HypervisorDiffHandler{
-				OnUpdate: func(ctx context.Context, oldHV, newHV *hv1.Hypervisor) error {
-					return c.ReconcileHVDiff(ctx, oldHV, newHV)
+			// Typed handler calling ReconcileHVDiff on HV Update events only.
+			// Create and Delete events are no-ops; the periodic full reconcile corrects any drift.
+			handler.TypedFuncs[*hv1.Hypervisor, reconcile.Request]{
+				UpdateFunc: func(ctx context.Context, e event.TypedUpdateEvent[*hv1.Hypervisor], _ workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+					if err := c.ReconcileHVDiff(ctx, e.ObjectOld, e.ObjectNew); err != nil {
+						log.Error(err, "failed to process HV diff", "hypervisor", e.ObjectNew.Name)
+					}
 				},
 			},
 			hvInstanceChangePredicate(),

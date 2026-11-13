@@ -3,7 +3,12 @@
 
 package api
 
-import "strings"
+import (
+	"strings"
+
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+)
 
 // HypervisorFamily is the coarse hypervisor family a request targets. It is the
 // distinction the pipeline and request routing care about. The adapter resolves
@@ -45,16 +50,18 @@ type Capability struct {
 	Value string
 }
 
-// FlavorSpec is the typed, Nova-agnostic description of the requested flavor.
-// It carries no extra-spec map: the adapter resolves every extra spec the
-// pipeline needs into the typed fields on this struct and on PlacementRequest.
-type FlavorSpec struct {
-	// MemoryMB is the requested memory per instance. 0 means a zero-memory
-	// instance to capacity/bin-pack steps (fits anywhere), so the adapter sets it.
-	MemoryMB uint64
-	// VCPUs is the requested vCPUs per instance. 0 means a zero-CPU instance to
-	// capacity/bin-pack steps (fits anywhere), so the adapter sets it.
-	VCPUs uint64
+// CapacityFromVCPUsMemoryMB builds the per-instance capacity map the scheduling
+// pipeline consumes (PlacementRequest.InstanceCapacity) from a
+// flavor's vCPU count and memory in MiB. Memory is stored in bytes (BinarySI) to
+// match what hypervisors advertise and what reservation slots use; cpu is a plain
+// count (DecimalSI). Every caller that resolves a Nova/OpenStack flavor into a
+// placement request funnels through here so the MiB->bytes conversion lives in
+// one place.
+func CapacityFromVCPUsMemoryMB(vcpus, memoryMB uint64) map[hv1.ResourceName]resource.Quantity {
+	return map[hv1.ResourceName]resource.Quantity{
+		hv1.ResourceCPU:    *resource.NewQuantity(int64(vcpus), resource.DecimalSI),             //nolint:gosec // vCPU count bounded by flavor specs
+		hv1.ResourceMemory: *resource.NewQuantity(int64(memoryMB)*1024*1024, resource.BinarySI), //nolint:gosec // memory bounded by flavor specs
+	}
 }
 
 // RequestedDestination mirrors the subset of Nova's requested_destination that

@@ -1,5 +1,70 @@
 # Changelog
 
+## cortex 0.9.0
+
+### Features
+
+- **New Special IaaS Pinning** ([#1515](https://github.com/cobaltcore-dev/cortex/pull/1515)): Introduces `filter_external_customer` and `filter_domain_pinning` filter steps to the `kvm-general-purpose-load-balancing` and `kvm-hana-bin-packing` pipelines. Hosts with the `CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE` trait are now reserved exclusively for allowed `iaas-*` domains, and specific `iaas-*` domains can be pinned to dedicated hypervisors for deterministic host placement. Failover slots respect the same pinning and exclusivity rules. Configurable via Helm values (`filterExternalCustomer`, `filterDomainPinning`) or live-editable via `kubectl edit pipeline`.
+- **Inflight Controller Update** ([#1471](https://github.com/cobaltcore-dev/cortex/pull/1471)): Reworks the in-flight reservation controller with updated logic and metrics.
+- **Generic Quantity Map for Request Spec** ([#1498](https://github.com/cobaltcore-dev/cortex/pull/1498)): Refactors the flavor spec in the scheduling request into a generic quantity map, making the pipeline request spec extensible beyond flavor-based capacity.
+- **Unified Available Capacity Calculation** ([#1504](https://github.com/cobaltcore-dev/cortex/pull/1504)): Moves available capacity calculation into a shared `pkg/capacity` package, providing a single reusable implementation across scheduling plugins.
+
+### Fixes
+
+- **Cache overlay tuning** ([#1509](https://github.com/cobaltcore-dev/cortex/pull/1509)): Increased `cacheOverlayMaxEntries` and reduced `defaultTTL` for the overlay cache to improve cache hit rates and reduce stale data.
+
+### Housekeeping
+
+- **Remove unused scheduling pipelines** ([#1510](https://github.com/cobaltcore-dev/cortex/pull/1510)): Deletes four dead Pipeline CRs (`kvm-new-failover-reservation`, `kvm-valid-host-reuse-failover-reservation`, `kvm-acknowledge-failover-reservation`, `kvm-report-capacity`) superseded by the unified pipeline and `SchedulingIntent` field approach.
+- **Inline `HypervisorDiffHandler`** ([#1516](https://github.com/cobaltcore-dev/cortex/pull/1516)): Removes a standalone typed-event handler used only in the quota controller's `SetupHVWatcher`, inlining it as a simple `handler.TypedFuncs`. No behavior change.
+
+### Dependency Updates
+
+| Dependency | Change |
+|---|---|
+| `kube-prometheus-stack` | `92.22.0` → `93.2.0` |
+| `peter-evans/create-pull-request` | `v8.1.2` → `v8.1.3` |
+| Other external Go dependencies | Updated |
+
+### Rollout Notes
+
+- **IaaS Pinning is fail-closed.** Deploying with an empty `allowedDomainNames` list will immediately block all `iaas-*` domain placements. Ensure the allow-list is populated before rollout.
+- Existing failover slots may churn — slots violating the new pinning/exclusivity rules will be removed by the periodic check and recreated on valid hosts.
+- Pinned hypervisors must also carry the `CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE` trait, and pinned domains must also be on the allow-list.
+- At least 2 hypervisors are needed per pool for failover slots to be created.
+
+## cortex-shim 0.1.38
+
+- Bump to align with cortex 0.9.0 release.
+
+## cortex-cinder 0.0.114
+
+- Bump to align with cortex 0.9.0 release.
+
+## cortex-crds 0.0.114
+
+- Bump to align with cortex 0.9.0 release.
+
+## cortex-ironcore 0.0.114
+
+- Bump to align with cortex 0.9.0 release.
+
+## cortex-manila 0.0.114
+
+- Bump to align with cortex 0.9.0 release.
+
+## cortex-nova 0.0.114
+
+- Bump to align with cortex 0.9.0 release.
+
+## cortex-pods 0.0.114
+
+- Bump to align with cortex 0.9.0 release.
+
+## cortex-placement-shim 0.1.38
+
+- Bump to align with cortex 0.9.0 release.
+
 ## Release PR [#1501](https://github.com/cobaltcore-dev/cortex/pull/1501) — 2026-11-09
 
 ### Bumped Versions

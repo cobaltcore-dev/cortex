@@ -31,7 +31,7 @@ import (
 	knowledge "github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
+	capacitypkg "github.com/cobaltcore-dev/cortex/pkg/capacity"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"github.com/go-logr/logr"
 )
@@ -781,13 +781,15 @@ func (c *Reconciler) markCRDNotReady(ctx context.Context, groupName, az string) 
 }
 
 // probeScheduler calls the scheduler and returns slot count, host count, and candidate host names.
-// ignoreAllocations=true (total probe) uses raw effective capacity; false (placeable probe) subtracts allocations.
+// assumeEmptyHosts=true (total probe) assumes empty hosts: raw effective capacity, ignoring both
+// running instances and all reservations. false (placeable probe) subtracts workloads and lets
+// reservations block.
 func (c *Reconciler) probeScheduler(
 	ctx context.Context,
 	flavor knowledge.FlavorInGroup,
 	az, pipeline string,
 	hvByName map[string]hv1.Hypervisor,
-	ignoreAllocations bool,
+	assumeEmptyHosts bool,
 	blockedByReservations map[string]map[string]int64,
 ) (capacity, hosts int64, candidateHosts []string, err error) {
 
@@ -805,16 +807,8 @@ func (c *Reconciler) probeScheduler(
 		eligibleHosts = append(eligibleHosts, schedulerapi.ExternalSchedulerHost{ComputeHost: name})
 	}
 
-	// Total probe ignores all reservation blocks (raw hardware capacity).
-	// Placeable probe counts reservations as capacity blocks.
-	var ignoredReservationTypes []v1alpha1.ReservationType
-	if ignoreAllocations {
-		ignoredReservationTypes = []v1alpha1.ReservationType{
-			v1alpha1.ReservationTypeCommittedResource,
-			v1alpha1.ReservationTypeFailover,
-		}
-	}
-
+	// Total probe assumes empty hosts (raw hardware capacity, no workloads or
+	// reservations). Placeable probe counts workloads and reservations as capacity blocks.
 	probeHosts := make([]sched.Host, 0, len(eligibleHosts))
 	probeWeights := make(map[string]float64, len(eligibleHosts))
 	for _, h := range eligibleHosts {
@@ -842,14 +836,10 @@ func (c *Reconciler) probeScheduler(
 		ForbiddenTraits:       forbiddenTraits,
 		RequestedCapabilities: schedulerapi.HypervisorTypeCapability(flavor.ExtraSpecs, false),
 		AcceleratorsRequested: schedulerapi.RequestsAccelerators(flavor.ExtraSpecs),
-		Flavor: schedulerapi.FlavorSpec{
-			VCPUs:    flavor.VCPUs,
-			MemoryMB: flavor.MemoryMB,
-		},
+		InstanceCapacity:      schedulerapi.CapacityFromVCPUsMemoryMB(flavor.VCPUs, flavor.MemoryMB),
 		Options: scheduling.Options{
 			ReadOnly:                      true,
-			AssumeEmptyHosts:              ignoreAllocations,
-			IgnoredReservationTypes:       ignoredReservationTypes,
+			AssumeEmptyHosts:              assumeEmptyHosts,
 			SkipInflight:                  true,
 			SkipCommittedResourceTracking: true,
 		},
@@ -864,7 +854,7 @@ func (c *Reconciler) probeScheduler(
 			continue
 		}
 		var resources map[string]int64
-		if ignoreAllocations {
+		if assumeEmptyHosts {
 			effCap := hv.Status.EffectiveCapacity
 			if effCap == nil {
 				effCap = hv.Status.Capacity
@@ -919,7 +909,7 @@ func (c *Reconciler) blockedResourcesByHost(ctx context.Context) (map[string]map
 			continue
 		}
 
-		resourcesToBlock := accounting.UnusedReservationCapacity(res, false)
+		resourcesToBlock := capacitypkg.ReservationEffectivelyBlockedCapacity(*res)
 		for host := range hostsToBlock {
 			if blocked[host] == nil {
 				blocked[host] = make(map[string]int64)
@@ -990,7 +980,7 @@ func (c *Reconciler) reservedResourcesByGroupAZ(
 				"reservation", res.Name, "type", res.Spec.Type, "az", az)
 			continue
 		}
-		blockedRes := accounting.UnusedReservationCapacity(res, false)
+		blockedRes := capacitypkg.ReservationEffectivelyBlockedCapacity(*res)
 		// Route each reservation to exactly one bucket by type; the two are disjoint.
 		bucket := committed
 		if res.Spec.Type == v1alpha1.ReservationTypeFailover {

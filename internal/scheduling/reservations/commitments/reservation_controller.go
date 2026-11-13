@@ -331,10 +331,7 @@ func (r *CommitmentReservationController) Reconcile(ctx context.Context, req ctr
 		ForbiddenTraits:       forbiddenTraits,
 		RequestedCapabilities: schedulerdelegationapi.HypervisorTypeCapability(flavorDetails.ExtraSpecs, false),
 		AcceleratorsRequested: schedulerdelegationapi.RequestsAccelerators(flavorDetails.ExtraSpecs),
-		Flavor: schedulerdelegationapi.FlavorSpec{
-			VCPUs:    flavorDetails.VCPUs,
-			MemoryMB: flavorDetails.MemoryMB,
-		},
+		InstanceCapacity:      schedulerdelegationapi.CapacityFromVCPUsMemoryMB(flavorDetails.VCPUs, flavorDetails.MemoryMB),
 		Options: scheduling.Options{
 			ReadOnly:                      false, // mutates state (reservation placement)
 			LockReservations:              true,  // don't unlock CR reservations; finding a slot, not placing a VM

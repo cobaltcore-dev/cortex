@@ -12,7 +12,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -153,36 +152,6 @@ func (h kvmHost) getHostLabels() []string {
 		status,
 		strconv.FormatBool(ready),
 	}
-}
-
-// getResourceCapacity attempts to retrieve the effective capacity for the specified resource from the hypervisor status, falling back to the physical capacity if effective capacity is not available. It returns the capacity quantity and a boolean indicating whether any capacity information was found.
-func (k kvmHost) getResourceCapacity(resourceName hv1.ResourceName) (capacity resource.Quantity, ok bool) {
-	if k.Status.EffectiveCapacity != nil {
-		qty, exists := k.Status.EffectiveCapacity[resourceName]
-		if exists && !qty.IsZero() {
-			return qty, true
-		}
-	}
-	if k.Status.Capacity == nil {
-		return resource.Quantity{}, false
-	}
-	qty, exists := k.Status.Capacity[resourceName]
-	if !exists || qty.IsZero() {
-		return resource.Quantity{}, false
-	}
-	return qty, true
-}
-
-func (k kvmHost) getResourceAllocation(resourceName hv1.ResourceName) (allocation resource.Quantity) {
-	if k.Status.Allocation == nil {
-		return resource.MustParse("0")
-	}
-
-	qty, exists := k.Status.Allocation[resourceName]
-	if !exists {
-		return resource.MustParse("0")
-	}
-	return qty
 }
 
 var fqNameRe = regexp.MustCompile(`fqName: "([^"]+)"`)

@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 
+	identity "github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
 	nova "github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
 )
 
@@ -22,6 +23,10 @@ type NovaReaderInterface interface {
 	// GetDeletedServerByID returns a deleted server by its ID from the deleted_servers table.
 	// Returns nil, nil if the server is not found in the deleted_servers table.
 	GetDeletedServerByID(ctx context.Context, serverID string) (*nova.DeletedServer, error)
+	// GetProjectDomainNames returns a map of project ID to its domain name, joining
+	// the identity projects and domains tables. Projects whose domain cannot be
+	// resolved are omitted.
+	GetProjectDomainNames(ctx context.Context) (map[string]string, error)
 }
 
 // NovaReader provides read access to Nova data stored in the database.
@@ -135,4 +140,26 @@ func (r *NovaReader) GetDeletedServerByID(ctx context.Context, serverID string) 
 		return nil, nil
 	}
 	return &servers[0], nil
+}
+
+// GetProjectDomainNames returns a map of project ID to its domain name by joining
+// the identity projects and domains tables. Projects whose domain cannot be
+// resolved are omitted from the map.
+func (r *NovaReader) GetProjectDomainNames(ctx context.Context) (map[string]string, error) {
+	type row struct {
+		ProjectID  string `db:"project_id"`
+		DomainName string `db:"domain_name"`
+	}
+	var rows []row
+	query := "SELECT p.id AS project_id, d.name AS domain_name FROM " +
+		identity.Project{}.TableName() + " p JOIN " +
+		identity.Domain{}.TableName() + " d ON p.domain_id = d.id"
+	if err := r.Select(ctx, &rows, query); err != nil {
+		return nil, fmt.Errorf("failed to query project domain names: %w", err)
+	}
+	result := make(map[string]string, len(rows))
+	for _, row := range rows {
+		result[row.ProjectID] = row.DomainName
+	}
+	return result, nil
 }

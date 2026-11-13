@@ -22,7 +22,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
+	"github.com/cobaltcore-dev/cortex/pkg/capacity"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 )
@@ -268,16 +268,13 @@ func (r *HostOversubscriptionController) SetupWithManager(mgr ctrl.Manager, mcl 
 // computeViolations returns the per-resource excess (positive quantity) for any resource where
 // the host is over-subscribed. Returns nil if capacity data is unavailable, empty map if no violation.
 func computeViolations(allReservations []v1alpha1.Reservation, hv hv1.Hypervisor) map[hv1.ResourceName]resource.Quantity {
-	free := accounting.HostFreeCapacity(allReservations, hv)
-	if free == nil {
-		return nil
+	rep := capacity.NewHostUsageReport(hv, allReservations)
+	if rep.Oversubscribed == nil {
+		return nil // no capacity data
 	}
-	zero := resource.MustParse("0")
 	violations := make(map[hv1.ResourceName]resource.Quantity)
-	for rn, f := range free {
-		if f.Cmp(zero) < 0 {
-			excess := f.DeepCopy()
-			excess.Neg()
+	for rn, excess := range rep.Oversubscribed {
+		if excess.Sign() > 0 {
 			violations[rn] = excess
 		}
 	}
@@ -334,7 +331,7 @@ func selectEvictionTarget(
 		}
 		entries := make([]allocatedEntry, len(allocated))
 		for i, res := range allocated {
-			unusedCap := accounting.UnusedReservationCapacity(res, false)
+			unusedCap := capacity.ReservationEffectivelyBlockedCapacity(*res)
 			buckets := make(map[hv1.ResourceName]int64)
 			for rn, total := range res.Spec.Resources {
 				if t := total.Value(); t != 0 {
@@ -382,7 +379,7 @@ func evictReservation(
 
 	logger := LoggerFromContext(ctx).WithValues("component", "host-oversubscription", "reservation", res.Name)
 
-	freed := accounting.UnusedReservationCapacity(res, false)
+	freed := capacity.ReservationEffectivelyBlockedCapacity(*res)
 
 	old := res.DeepCopy()
 	res.Spec.TargetHost = ""
