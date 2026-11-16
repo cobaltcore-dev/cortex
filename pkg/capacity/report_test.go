@@ -136,12 +136,12 @@ func TestNewHostUsageReport(t *testing.T) {
 		}
 	})
 
-	t.Run("per-resource fallback when effective reports a resource as zero", func(t *testing.T) {
+	t.Run("per-resource fallback when effective omits a resource", func(t *testing.T) {
 		hv := hv1.Hypervisor{
 			ObjectMeta: metav1.ObjectMeta{Name: "host"},
 			Status: hv1.HypervisorStatus{
-				// memory effective is zero but raw capacity has it -> fall back for memory only.
-				EffectiveCapacity: ResourceMap{hv1.ResourceMemory: resource.MustParse("0"), hv1.ResourceCPU: cpu(256)},
+				// memory not in effective map, but raw capacity has it -> fall back for memory only.
+				EffectiveCapacity: ResourceMap{hv1.ResourceCPU: cpu(256)},
 				Capacity:          ResourceMap{hv1.ResourceMemory: gib(512), hv1.ResourceCPU: cpu(128)},
 			},
 		}
@@ -150,6 +150,27 @@ func TestNewHostUsageReport(t *testing.T) {
 			t.Errorf("memory Total=%d, want 512 (per-resource fallback)", memGiB(rep.Total))
 		}
 		// cpu effective is non-zero, so it is NOT overridden by raw capacity.
+		if c := rep.Total[hv1.ResourceCPU]; c.Value() != 256 {
+			t.Errorf("cpu Total=%d, want 256 (effective kept)", c.Value())
+		}
+	})
+
+	t.Run("zero EffectiveCapacity is honored, not treated as absent", func(t *testing.T) {
+		hv := hv1.Hypervisor{
+			ObjectMeta: metav1.ObjectMeta{Name: "host"},
+			Status: hv1.HypervisorStatus{
+				// memory effective is explicitly zero (drained host) — must NOT fall back to raw Capacity.
+				EffectiveCapacity: ResourceMap{hv1.ResourceMemory: resource.MustParse("0"), hv1.ResourceCPU: cpu(256)},
+				Capacity:          ResourceMap{hv1.ResourceMemory: gib(512), hv1.ResourceCPU: cpu(128)},
+			},
+		}
+		rep := report(hv)
+		// Memory is explicitly zero in EffectiveCapacity: the resource should be
+		// dropped from Total (zero after the second IsZero guard), NOT fall back to 512 GiB.
+		if _, ok := rep.Total[hv1.ResourceMemory]; ok {
+			t.Errorf("memory should be absent from Total (zero effective means drained), got %v", rep.Total[hv1.ResourceMemory])
+		}
+		// cpu effective is non-zero, so it is kept as-is.
 		if c := rep.Total[hv1.ResourceCPU]; c.Value() != 256 {
 			t.Errorf("cpu Total=%d, want 256 (effective kept)", c.Value())
 		}
