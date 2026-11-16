@@ -92,7 +92,7 @@ func TestFlavorGroupExtractor_Extract(t *testing.T) {
 			Ephemeral:  5,
 			ExtraSpecs: `{"capabilities:hypervisor_type":"CH","quota:hw_version":"ch"}`,
 		},
-		// Corner case: Same memory as gp_c8_m32_v2 but MORE VCPUs (should come first)
+		// Corner case: Same memory as gp_c8_m32_v2 but MORE VCPUs (should come last, after fewer-VCPUs flavor)
 		&nova.Flavor{
 			ID:         "8",
 			Name:       "gp_c12_m32_v2",
@@ -178,15 +178,17 @@ func TestFlavorGroupExtractor_Extract(t *testing.T) {
 		t.Errorf("expected largest flavor to have quota:hw_version=v2, got %s", v2Group.LargestFlavor.ExtraSpecs["quota:hw_version"])
 	}
 
-	// Verify smallest flavor in v2 group should be gp_c4_m16_ch is NOT in v2, so it's gp_c8_m32_v2 (lowest memory among v2 flavors)
-	if v2Group.SmallestFlavor.Name != "gp_c8_m32_v2" {
-		t.Errorf("expected smallest flavor to be gp_c8_m32_v2, got %s", v2Group.SmallestFlavor.Name)
+	// Verify smallest flavor in v2 group: at 32768 MB we have gp_c8_m32_v2 (8 VCPUs),
+	// gp_c12_m32_alt (12 VCPUs), and gp_c12_m32_v2 (12 VCPUs). With fewest-VCPUs-first
+	// tiebreak, gp_c8_m32_v2 sorts first and gp_c12_m32_v2 sorts last → smallest.
+	if v2Group.SmallestFlavor.Name != "gp_c12_m32_v2" {
+		t.Errorf("expected smallest flavor to be gp_c12_m32_v2, got %s", v2Group.SmallestFlavor.Name)
 	}
 	if v2Group.SmallestFlavor.MemoryMB != 32768 {
 		t.Errorf("expected smallest flavor memory to be 32768 MB, got %d", v2Group.SmallestFlavor.MemoryMB)
 	}
-	if v2Group.SmallestFlavor.VCPUs != 8 {
-		t.Errorf("expected smallest flavor VCPUs to be 8, got %d", v2Group.SmallestFlavor.VCPUs)
+	if v2Group.SmallestFlavor.VCPUs != 12 {
+		t.Errorf("expected smallest flavor VCPUs to be 12, got %d", v2Group.SmallestFlavor.VCPUs)
 	}
 
 	// Verify Cloud-Hypervisor group
@@ -224,8 +226,8 @@ func TestFlavorGroupExtractor_Extract(t *testing.T) {
 					fg.Name, current.Name, current.MemoryMB, next.Name, next.MemoryMB)
 			}
 
-			// Secondary sort: if memory equal, VCPUs descending
-			if current.MemoryMB == next.MemoryMB && current.VCPUs < next.VCPUs {
+			// Secondary sort: if memory equal, VCPUs ascending (fewest VCPUs first)
+			if current.MemoryMB == next.MemoryMB && current.VCPUs > next.VCPUs {
 				t.Errorf("Flavors in group %s with equal memory not sorted by VCPUs: %s (%d VCPUs) should come after %s (%d VCPUs)",
 					fg.Name, current.Name, current.VCPUs, next.Name, next.VCPUs)
 			}
