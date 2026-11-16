@@ -8,7 +8,7 @@ require (
 	github.com/go-gorp/gorp v2.2.0+incompatible
 	github.com/go-logr/logr v1.4.4
 	github.com/google/uuid v1.6.0
-	github.com/gophercloud/gophercloud/v2 v2.15.0
+	github.com/gophercloud/gophercloud/v2 v2.16.0
 	github.com/ironcore-dev/ironcore v0.9.0
 	github.com/lib/pq v1.12.3
 	github.com/mattn/go-sqlite3 v1.14.53
@@ -16,7 +16,7 @@ require (
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
 	github.com/sapcc/go-api-declarations v1.25.1
-	github.com/sapcc/go-bits v0.0.0-20261105181628-13886743d3a7
+	github.com/sapcc/go-bits v0.0.0-20261112131659-2726a2c437f4
 	go.uber.org/zap v1.28.0
 	go.xyrillian.de/gg v1.21.0
 	golang.org/x/sync v0.25.0
@@ -114,7 +114,7 @@ require (
 	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
-	golang.org/x/text v0.43.0 // indirect
+	golang.org/x/text v0.44.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 // indirect
