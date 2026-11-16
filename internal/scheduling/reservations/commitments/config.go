@@ -19,6 +19,7 @@ type Config struct {
 	ReservationController       ReservationControllerConfig       `json:"committedResourceReservationController"`
 	CommittedResourceController CommittedResourceControllerConfig `json:"committedResourceController"`
 	UsageReconciler             UsageReconcilerConfig             `json:"committedResourceUsageReconciler"`
+	RepairReconciler            RepairReconcilerConfig            `json:"committedResourceRepairReconciler"`
 	API                         APIConfig                         `json:"committedResourceAPI"`
 
 	// DatasourceName is the name of the Datasource CRD that provides database
@@ -46,6 +47,40 @@ func (c *UsageReconcilerConfig) ApplyDefaults() {
 	d := DefaultUsageReconcilerConfig()
 	if c.CooldownInterval.Duration == 0 {
 		c.CooldownInterval = d.CooldownInterval
+	}
+}
+
+// RepairReconcilerConfig holds tuning knobs for the repair reconciler.
+type RepairReconcilerConfig struct {
+	// Enabled controls whether the repair reconciler is started.
+	// Defaults to false; set to true to activate automatic repair of reservation slot drift.
+	Enabled bool `json:"enabled,omitempty"`
+	// MinInterval is the minimum time between repair runs for the same CommittedResource.
+	// If a repair ran within this window, the next trigger is deferred until the window expires.
+	// Defaults to 1 hour.
+	MinInterval metav1.Duration `json:"minInterval"`
+	// MaxInterval is the maximum time between repair runs for the same CommittedResource.
+	// Every successful repair schedules the next run after this duration so that slot drift
+	// is eventually corrected even without watch events.
+	// Defaults to 24 hours.
+	MaxInterval metav1.Duration `json:"maxInterval"`
+}
+
+func DefaultRepairReconcilerConfig() RepairReconcilerConfig {
+	return RepairReconcilerConfig{
+		MinInterval: metav1.Duration{Duration: 1 * time.Hour},
+		MaxInterval: metav1.Duration{Duration: 24 * time.Hour},
+	}
+}
+
+// ApplyDefaults fills in zero-value fields from the defaults, leaving explicitly configured values intact.
+func (c *RepairReconcilerConfig) ApplyDefaults() {
+	d := DefaultRepairReconcilerConfig()
+	if c.MinInterval.Duration == 0 {
+		c.MinInterval = d.MinInterval
+	}
+	if c.MaxInterval.Duration == 0 {
+		c.MaxInterval = d.MaxInterval
 	}
 }
 
