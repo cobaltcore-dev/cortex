@@ -1177,9 +1177,10 @@ func variableRatioFlavorGroup() compute.FlavorGroupFeature {
 	}
 }
 
-func TestNewReservation_VariableRatioGroup_SelectsLargestByMemory(t *testing.T) {
+func TestNewReservation_VariableRatioGroup_SelectsLargestByMemoryFewestCPU(t *testing.T) {
 	// For GP (variable CPU:RAM ratio) groups, flavor selection is driven by memory
-	// descending, not by ratio. The largest flavor fitting the delta is always chosen.
+	// descending. Among flavors at the same memory level, the one with fewest vCPUs
+	// is preferred to minimize CPU blocking on the host.
 	manager := &ReservationManager{}
 	fg := variableRatioFlavorGroup()
 
@@ -1208,7 +1209,7 @@ func TestNewReservation_VariableRatioGroup_SelectsLargestByMemory(t *testing.T) 
 			wantCores:     8,
 		},
 		{
-			name:          "delta equals c8_m16: picks c8_m16 (more vCPUs than c4_m8 at same memory)",
+			name:          "delta equals c8_m16: picks c8_m16 (only 16 GiB flavor)",
 			deltaMemoryMB: 16384,
 			wantFlavor:    "c8_m16",
 			wantCores:     8,
@@ -1242,6 +1243,39 @@ func TestNewReservation_VariableRatioGroup_SelectsLargestByMemory(t *testing.T) 
 				t.Errorf("cores: want %d, got %d", tt.wantCores, got)
 			}
 		})
+	}
+}
+
+// sameMemotyFlavorGroup returns a flavor group where two flavors share the same memory
+// but differ in vCPU count, to exercise the fewest-vCPU tiebreak in selectFlavor.
+func sameMemoryFlavorGroup() compute.FlavorGroupFeature {
+	minRatio := uint64(2048) // MiB/vCPU
+	maxRatio := uint64(4096) // MiB/vCPU
+	return compute.FlavorGroupFeature{
+		Name: "gp-same-mem",
+		Flavors: []compute.FlavorInGroup{
+			{Name: "c4_m16", VCPUs: 4, MemoryMB: 16384, DiskGB: 50}, // fewest vCPUs at 16 GiB
+			{Name: "c8_m16", VCPUs: 8, MemoryMB: 16384, DiskGB: 50}, // more vCPUs at 16 GiB
+			{Name: "c4_m8", VCPUs: 4, MemoryMB: 8192, DiskGB: 25},
+		},
+		SmallestFlavor:  compute.FlavorInGroup{Name: "c4_m8", VCPUs: 4, MemoryMB: 8192, DiskGB: 25},
+		LargestFlavor:   compute.FlavorInGroup{Name: "c4_m16", VCPUs: 4, MemoryMB: 16384, DiskGB: 50},
+		RamCoreRatioMin: &minRatio,
+		RamCoreRatioMax: &maxRatio,
+	}
+}
+
+func TestSelectFlavor_SameMemory_PrefersFewestCPU(t *testing.T) {
+	// When two flavors share the same memory, selectFlavor must pick the one with
+	// fewer vCPUs to avoid over-blocking CPU capacity on the host.
+	fg := sameMemoryFlavorGroup()
+
+	flavorInGroup, _ := selectFlavor(int64(16384)*1024*1024, fg)
+	if got := flavorInGroup.Name; got != "c4_m16" {
+		t.Errorf("want c4_m16 (fewest vCPUs at 16 GiB), got %s", got)
+	}
+	if got := flavorInGroup.VCPUs; got != 4 {
+		t.Errorf("want 4 vCPUs, got %d", got)
 	}
 }
 

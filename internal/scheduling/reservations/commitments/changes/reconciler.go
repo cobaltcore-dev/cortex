@@ -301,6 +301,10 @@ func (r *CommittedResourceChangeReconciler) markError(ctx context.Context, tx *v
 	}
 }
 
+// TODO (#781): add a TTL/GC controller that deletes terminal CommittedResourceChanges after their
+// retention window (Accepted ~1h, Rejected ~5d). Non-terminal CRCs must never be GC'd — deleting
+// one loses the rollback journal and the #783 AZ active-marker.
+
 // SetupWithManager registers the controller and configures watches.
 // TODO (#783): set MaxConcurrentReconciles: 1 via WithOptions(controller.Options{MaxConcurrentReconciles: 1}).
 // TODO (#783): add predicate on WatchesMulticluster() to re-trigger same-AZ non-terminal siblings on terminal transition.
