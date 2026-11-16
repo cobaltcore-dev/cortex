@@ -84,6 +84,8 @@ func ScanAZForPaygCandidates(
 // buildAllocatedVMSet lists CR Reservations in az and returns the set of VM UUIDs present
 // in any Status.Allocation (confirmed placements). Filtering by AZ keeps the set small —
 // only slots relevant to the current scan are included. One cache scan shared across all HV filters.
+// TODO (#790): replace full List scan with the idxReservationByAllocationVMUUID field index
+// (field_index.go) for O(1) reverse lookup instead of scanning all reservations.
 func buildAllocatedVMSet(ctx context.Context, k8sClient client.Client, az string) (map[string]struct{}, error) {
 	var resList v1alpha1.ReservationList
 	if err := k8sClient.List(ctx, &resList,

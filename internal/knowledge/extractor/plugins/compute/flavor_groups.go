@@ -180,13 +180,14 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 			continue
 		}
 
-		// Sort flavors by size descending (largest first), tie break by name for consistent ordering
+		// Sort flavors by memory descending (largest first); tie-break by fewest vCPUs to
+		// minimize CPU blocking when multiple flavors share the same memory size.
 		sort.Slice(flavors, func(i, j int) bool {
 			if flavors[i].MemoryMB != flavors[j].MemoryMB {
 				return flavors[i].MemoryMB > flavors[j].MemoryMB
 			}
 			if flavors[i].VCPUs != flavors[j].VCPUs {
-				return flavors[i].VCPUs > flavors[j].VCPUs
+				return flavors[i].VCPUs < flavors[j].VCPUs
 			}
 			return flavors[i].Name < flavors[j].Name
 		})
