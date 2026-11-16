@@ -1,5 +1,103 @@
 # Changelog
 
+## cortex 0.9.1
+
+### Refactoring
+
+- **CR & Reservation controller decomposition** ([#1535](https://github.com/cobaltcore-dev/cortex/pull/1535)): The monolithic `Reconcile()` methods in both `CommittedResourceController` and `CommitmentReservationController` have been split into focused sub-functions (`handleRejectedGeneration()`, `reconcileEvicted()`, `reconcilePlaced()`, `reconcileUnplaced()`) for improved readability, testability, and maintainability. The echo-nudge mechanism (`isAlreadyReserving()` helper and `cortex.cloud/echo-nudge` annotation) has been removed — the controller now relies on the Reservation watch plus a 3 s fallback requeue. Spec-change re-placement now clears `Spec.TargetHost` to force re-placement through the eviction → unplaced flow instead of silently stamping a new `ObservedGeneration`. Roadmap TODOs (`#778`, `#781`, `#783`, `#785`–`#790`) are documented inline.
+
+### Fixes
+
+- **Flavor sort order: prefer fewest CPUs on memory tie** ([#1535](https://github.com/cobaltcore-dev/cortex/pull/1535)): The secondary sort for flavors within a group has been changed from VCPUs descending to VCPUs ascending when memory is equal. This minimizes CPU blocking on hosts when multiple flavors share the same memory tier. New test `TestSelectFlavor_SameMemory_PrefersFewestCPU` validates the tiebreak.
+
+### Housekeeping
+
+- **Tiltfile: stale Helm chart cleanup** ([#1535](https://github.com/cobaltcore-dev/cortex/pull/1535)): Added a `find … -delete` step that removes stale packaged Helm chart `.tgz` files before copying the new package, preventing version collisions during local development.
+
+### Dependency Updates
+
+| Dependency | Change | Note |
+|---|---|---|
+| PostgreSQL 18 | `18.6-1.pgdg13+2` → `18.7-1.pgdg13+2` | Dockerfile bump |
+| `go.opentelemetry.io/otel/trace` | → `v1.47.0` | ⚠️ Security |
+| `go.opentelemetry.io/otel/sdk` | → `v1.47.0` | ⚠️ Security |
+| `github.com/sapcc/go-bits` | `13886743d3a7` → `2726a2c437f4` | |
+| `kube-prometheus-stack` | `v93.2.2` → `v93.3.0` | Helm chart |
+| `github.com/gophercloud/gophercloud/v2` | `v2.15.0` → `v2.16.0` | |
+| `sigs.k8s.io/controller-runtime` | `v0.25.2` → `v0.25.3` | |
+
+### Rollout Notes
+
+- **Echo-nudge removal:** Stale reservations may take up to 3 s (requeue interval) to recover instead of being poked immediately via annotation patch. The Reservation watch plus fallback requeue covers this path; the nudge was a secondary mechanism.
+- **Spec-change re-placement:** Clearing `TargetHost` on generation mismatch now triggers a two-cycle eviction → re-place flow. This reuses the existing eviction codepath and is covered by integration tests.
+- **Flavor sort reversal:** Only affects *new* reservations; existing placements are unaffected.
+- **Security dependencies — prioritize rollout:** OpenTelemetry `v1.47.0` patches security vulnerabilities.
+
+## cortex-postgres 0.6.33
+
+- PostgreSQL `18.6-1.pgdg13+2` → `18.7-1.pgdg13+2`.
+- Bump to align with cortex 0.9.1 release.
+
+## cortex-shim 0.1.39
+
+- Bump to align with cortex 0.9.1 release.
+
+## bundles 0.0.115
+
+- Bump to align with cortex 0.9.1 release.
+
+## cortex-placement-shim 0.1.39
+
+- Bump to align with cortex 0.9.1 release.
+
+## Release PR [#1535](https://github.com/cobaltcore-dev/cortex/pull/1535) — 2026-11-16
+
+### Bumped Versions
+
+| Package | Previous | New |
+|---|---|---|
+| cortex | 0.9.0 | 0.9.1 |
+| cortex-postgres | 0.6.32 | 0.6.33 |
+| cortex-shim | 0.1.38 | 0.1.39 |
+| bundles | 0.0.114 | 0.0.115 |
+| cortex-placement-shim | 0.1.38 | 0.1.39 |
+
+### Refactoring
+
+- **CR & Reservation controller decomposition** — The monolithic `Reconcile()` methods in `CommittedResourceController` and `CommitmentReservationController` have been split into focused sub-functions (`handleRejectedGeneration()`, `reconcileEvicted()`, `reconcilePlaced()`, `reconcileUnplaced()`). The echo-nudge mechanism (`isAlreadyReserving()` + `cortex.cloud/echo-nudge` annotation) has been removed in favor of Reservation watch + 3 s fallback requeue. Spec-change re-placement now clears `Spec.TargetHost` to force eviction → re-place instead of in-place `ObservedGeneration` stamping.
+
+### Bug Fixes
+
+- **Flavor sort order: prefer fewest CPUs on memory tie** — The secondary sort for flavors within a group changed from VCPUs descending to VCPUs ascending when memory is equal, minimizing CPU blocking on hosts. New test `TestSelectFlavor_SameMemory_PrefersFewestCPU` validates the behavior.
+
+### Chores
+
+- **Tiltfile: stale Helm chart cleanup** — Added `find … -delete` to remove stale `.tgz` chart files before copying the new package.
+
+### Dependency Updates
+
+| Dependency | Old | New | Note |
+|---|---|---|---|
+| PostgreSQL 18 | `18.6-1.pgdg13+2` | `18.7-1.pgdg13+2` | Dockerfile |
+| `go.opentelemetry.io/otel/trace` | — | `v1.47.0` | ⚠️ Security |
+| `go.opentelemetry.io/otel/sdk` | — | `v1.47.0` | ⚠️ Security |
+| `github.com/sapcc/go-bits` | digest `13886743d3a7` | digest `2726a2c437f4` | |
+| `kube-prometheus-stack` | `v93.2.2` | `v93.3.0` | Helm chart |
+| `github.com/gophercloud/gophercloud/v2` | `v2.15.0` | `v2.16.0` | |
+| `sigs.k8s.io/controller-runtime` | `v0.25.2` | `v0.25.3` | |
+
+### ⚠️ Operational Notes
+
+1. **No schema or RBAC changes:** This is a purely internal restructuring with zero new CRDs or API surface changes. A rolling upgrade is sufficient.
+2. **Echo-nudge removal:** Stale reservations may take up to 3 s (requeue interval) to recover instead of the immediate annotation poke. The Reservation watch + fallback requeue covers the path.
+3. **Spec-change re-placement:** When a placed reservation's `ObservedGeneration` falls behind `res.Generation`, `Spec.TargetHost` is now cleared to force re-placement through the eviction → unplaced flow. This matches the existing eviction codepath and is covered by integration tests.
+4. **Flavor sort reversal:** The scheduler now prefers the flavor with fewest CPU cores when memory ties. Only affects new reservations; existing placements are unaffected.
+5. **Security dependencies — prioritize rollout:** OpenTelemetry trace/SDK `v1.47.0` patches security vulnerabilities.
+
+**Contributors:** @mblos, @renovate[bot]
+
+**PR:** [#1535](https://github.com/cobaltcore-dev/cortex/pull/1535) | **Commits:** 7 | **Files changed:** 18 | **+314 / −308**
+
 ## cortex 0.9.0
 
 ### Features
