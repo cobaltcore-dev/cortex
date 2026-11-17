@@ -1,5 +1,76 @@
 # Changelog
 
+## cortex 0.9.2
+
+### Fixes
+
+- **More stable E2E tests** ([#1538](https://github.com/cobaltcore-dev/cortex/pull/1538)): E2E subcommands now get a default zap logger initialized early in `main()`, preventing log output from being silently discarded before the flag-configured logger is set up. Flavor-group extraction now logs skip counters (`skippedParseErr`, `skippedNoHWVersion`, `skippedInvalidGroup`) and a summary line at extraction completion for easier diagnosis of data-quality issues in CI. Key success-path log lines in commitment E2E checks have been promoted from `V(1)` (debug) to `Info` level so they appear in standard CI output. A new panic on internal dry-run errors (`"internal error processing dry-run request"`) catches controller timeouts and misconfigurations immediately instead of falling through to the generic rejection handler.
+
+### Documentation
+
+- **Add missing plugin entries & fix stale option reference** ([#1533](https://github.com/cobaltcore-dev/cortex/pull/1533)): Added 3 missing plugin entries to nova smart-scheduling docs (`filter_failover_host`, `weigher_failover_host`, `kvm_cr_migration_slot`) and updated the filter count from "seventeen" to "nineteen". Fixed stale reference to `ignoredReservationTypes` → `AssumeEmptyHosts: true` in failover host reservations docs.
+
+### Dependency Updates
+
+| Dependency | Old | New | Note |
+|---|---|---|---|
+| `kube-prometheus-stack` | `v93.3.0` | `v93.3.1` | Helm chart |
+
+## cortex-postgres 0.6.34
+
+- Bump to align with cortex 0.9.2 release.
+
+## cortex-shim 0.1.40
+
+- Bump to align with cortex 0.9.2 release.
+
+## bundles 0.0.116
+
+- Bump to align with cortex 0.9.2 release.
+
+## cortex-placement-shim 0.1.40
+
+- Bump to align with cortex 0.9.2 release.
+
+## Release PR [#1540](https://github.com/cobaltcore-dev/cortex/pull/1540) — 2026-11-17
+
+### Bumped Versions
+
+| Package | Previous | New |
+|---|---|---|
+| cortex | 0.9.1 | 0.9.2 |
+| cortex-postgres | 0.6.33 | 0.6.34 |
+| cortex-shim | 0.1.39 | 0.1.40 |
+| bundles | 0.0.115 | 0.0.116 |
+| cortex-placement-shim | 0.1.39 | 0.1.40 |
+
+### Bug Fixes
+
+- **More stable E2E tests** — Default zap logger for E2E subcommands prevents silently discarded log output. Flavor-group extraction now logs skip counters and a summary line. Commitment E2E check success-path logs promoted to `Info` level. New panic on internal dry-run errors catches controller timeouts immediately.
+
+### Documentation
+
+- **Missing plugin entries & stale option reference** — Added `filter_failover_host`, `weigher_failover_host`, `kvm_cr_migration_slot` to nova smart-scheduling docs (filter count "seventeen" → "nineteen"). Fixed `ignoredReservationTypes` → `AssumeEmptyHosts: true` in failover host reservations docs.
+
+### Chores
+
+- **Bump app version** — `sha-bac55e3a` → `sha-cdb4dfaa` in `helm/library/cortex/Chart.yaml`.
+
+### Dependency Updates
+
+| Dependency | Old | New | Note |
+|---|---|---|---|
+| `kube-prometheus-stack` | `v93.3.0` | `v93.3.1` | Helm chart |
+
+### ⚠️ Operational Notes
+
+1. **No schema or RBAC changes:** Rolling upgrade is sufficient.
+2. **Dry-run panic:** E2E tests will now panic immediately on internal dry-run errors that were previously silently swallowed. If CI failures surface from this path, investigate controller timeouts or misconfigurations rather than reverting.
+
+**Contributors:** @mblos, @cortex-ai-agents[bot], @renovate[bot], @SoWieMarkus
+
+**PR:** [#1540](https://github.com/cobaltcore-dev/cortex/pull/1540) | **Commits:** 4 | **Files changed:** 7 | **+35 / −12**
+
 ## cortex 0.9.1
 
 ### Refactoring
