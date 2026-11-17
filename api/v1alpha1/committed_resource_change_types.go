@@ -48,6 +48,11 @@ const (
 	// ChangeConditionFinished is True once the change request has reached a terminal phase.
 	ChangeConditionFinished = "Finished"
 
+	// ChangeConditionRestoring is True while the change request is restoring pre-change state
+	// (RollingBack or DryRunCleanup). Its LastTransitionTime marks when restore began and its
+	// Message carries the last restore error (e.g. a transient k8s API error).
+	ChangeConditionRestoring = "Restoring"
+
 	// Reasons for ChangeConditionProgressing=False (non-terminal problems).
 	ChangeReasonStalled        = "Stalled"
 	ChangeReasonTimedOut       = "TimedOut"
@@ -58,6 +63,11 @@ const (
 	ChangeRequestReasonAccepted   = "Accepted"
 	ChangeRequestReasonRejected   = "Rejected"
 	ChangeRequestReasonSuperseded = "Superseded"
+	// ChangeReasonRollbackFailed is the Finished reason when rollback exhausted its timeout.
+	ChangeReasonRollbackFailed = "RollbackFailed"
+	// ChangeReasonInvalidSpec is the Finished reason when a change request is rejected for a
+	// malformed spec (e.g. a dry run that would commit or mutate existing commitments).
+	ChangeReasonInvalidSpec = "InvalidSpec"
 )
 
 // CommittedResourceChangeSpec defines the desired change for a CommittedResourceChange.
@@ -110,7 +120,7 @@ type CommittedResourceChangeStatus struct {
 	// +kubebuilder:validation:Optional
 	UpsertedCommitments []corev1.ObjectReference `json:"upsertedCommitments,omitempty"`
 
-	// Conditions holds Progressing and Finished conditions.
+	// Conditions holds Progressing, Finished and Restoring conditions.
 	// +kubebuilder:validation:Optional
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 
