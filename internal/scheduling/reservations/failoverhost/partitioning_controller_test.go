@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	vmv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -41,7 +42,8 @@ func newTestClient(t *testing.T, objs ...client.Object) client.Client {
 	return fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(objs...).
-		WithStatusSubresource(&v1alpha1.Reservation{}).
+		WithStatusSubresource(&v1alpha1.Reservation{}, &v1alpha1.Rescheduling{}).
+		WithIndex(&v1alpha1.Reservation{}, reservations.IdxReservationByHost, reservations.ReservationHosts).
 		Build()
 }
 
@@ -76,7 +78,7 @@ func reconcileReq(name string) ctrl.Request {
 // cluster independently, then asserting the resulting cluster state.
 
 func TestReconcileCreatesDesiredReservation(t *testing.T) {
-	c := &Controller{Client: newTestClient(t, buildHV("hv1", 64, 32))}
+	c := &PartitioningController{Client: newTestClient(t, buildHV("hv1", 64, 32))}
 	desired := failoverReservation("hv1")
 	c.desiredReservations = map[corev1.ObjectReference]v1alpha1.Reservation{
 		{Name: desired.Name}: desired,
@@ -96,7 +98,7 @@ func TestReconcileCreatesDesiredReservation(t *testing.T) {
 
 func TestReconcileDeletesStaleReservation(t *testing.T) {
 	stale := failoverReservation("hvX")
-	c := &Controller{Client: newTestClient(t, &stale)}
+	c := &PartitioningController{Client: newTestClient(t, &stale)}
 	c.desiredReservations = map[corev1.ObjectReference]v1alpha1.Reservation{}
 	req := reconcileReq(stale.Name)
 	if _, err := c.Reconcile(context.Background(), req); err != nil {
@@ -111,7 +113,7 @@ func TestReconcileDeletesStaleReservation(t *testing.T) {
 func TestReconcileUpdatesDriftedReservation(t *testing.T) {
 	actual := failoverReservation("hv1")
 	actual.Spec.AvailabilityZone = "az-old"
-	c := &Controller{Client: newTestClient(t, &actual, buildHV("hv1", 64, 32))}
+	c := &PartitioningController{Client: newTestClient(t, &actual, buildHV("hv1", 64, 32))}
 	desired := failoverReservation("hv1")
 	desired.Spec.AvailabilityZone = "az-new"
 	c.desiredReservations = map[corev1.ObjectReference]v1alpha1.Reservation{
@@ -132,7 +134,7 @@ func TestReconcileUpdatesDriftedReservation(t *testing.T) {
 
 func TestReconcileNoopWhenInSync(t *testing.T) {
 	actual := failoverReservation("hv1")
-	c := &Controller{Client: newTestClient(t, &actual, buildHV("hv1", 64, 32))}
+	c := &PartitioningController{Client: newTestClient(t, &actual, buildHV("hv1", 64, 32))}
 	desired := failoverReservation("hv1")
 	c.desiredReservations = map[corev1.ObjectReference]v1alpha1.Reservation{
 		{Name: desired.Name}: desired,
@@ -156,7 +158,7 @@ func TestReconcileNoopWhenInSync(t *testing.T) {
 }
 
 func TestReconcileErrorsWhenHypervisorMissing(t *testing.T) {
-	c := &Controller{Client: newTestClient(t)}
+	c := &PartitioningController{Client: newTestClient(t)}
 	desired := failoverReservation("hv1")
 	c.desiredReservations = map[corev1.ObjectReference]v1alpha1.Reservation{
 		{Name: desired.Name}: desired,
@@ -168,7 +170,7 @@ func TestReconcileErrorsWhenHypervisorMissing(t *testing.T) {
 
 func TestReconcileErrorsWhenHypervisorSizeMismatches(t *testing.T) {
 	// The hypervisor reports 32Gi but the reservation reserves 64Gi.
-	c := &Controller{Client: newTestClient(t, buildHV("hv1", 32, 32))}
+	c := &PartitioningController{Client: newTestClient(t, buildHV("hv1", 32, 32))}
 	desired := failoverReservation("hv1")
 	c.desiredReservations = map[corev1.ObjectReference]v1alpha1.Reservation{
 		{Name: desired.Name}: desired,
@@ -180,7 +182,7 @@ func TestReconcileErrorsWhenHypervisorSizeMismatches(t *testing.T) {
 
 func TestReconcileErrorsWhenHypervisorCPUMismatches(t *testing.T) {
 	// Memory matches but the hypervisor reports 16 CPUs against the reserved 32.
-	c := &Controller{Client: newTestClient(t, buildHV("hv1", 64, 16))}
+	c := &PartitioningController{Client: newTestClient(t, buildHV("hv1", 64, 16))}
 	desired := failoverReservation("hv1")
 	c.desiredReservations = map[corev1.ObjectReference]v1alpha1.Reservation{
 		{Name: desired.Name}: desired,
@@ -225,7 +227,7 @@ func (f fakeGenerator) Generate(context.Context) (map[corev1.ObjectReference]v1a
 // generator's desired reservations in as the new desired state.
 func TestLoopPublishesGeneratorOutput(t *testing.T) {
 	desired := failoverReservation("hvA")
-	c := &Controller{
+	c := &PartitioningController{
 		Client:      newTestClient(t),
 		reconcileCh: make(chan event.GenericEvent, 16),
 		generator: fakeGenerator{
@@ -247,7 +249,7 @@ func TestLoopPublishesGeneratorOutput(t *testing.T) {
 // partial recalculation never drops still-valid reservations.
 func TestLoopKeepsDesiredStateWhenGeneratorAborts(t *testing.T) {
 	kept := failoverReservation("hvKept")
-	c := &Controller{
+	c := &PartitioningController{
 		Client:              newTestClient(t),
 		reconcileCh:         make(chan event.GenericEvent, 16),
 		desiredReservations: map[corev1.ObjectReference]v1alpha1.Reservation{{Name: kept.Name}: kept},

@@ -34,6 +34,8 @@ type Monitor struct {
 	reservationsUpdated prometheus.Counter
 	reservationsDeleted prometheus.Counter
 	reservationsErrors  *prometheus.CounterVec
+
+	drainsCreated prometheus.Counter
 }
 
 // calculationSummary holds the statistics of a single calculation-loop pass,
@@ -98,6 +100,10 @@ func NewMonitor() *Monitor {
 			Name: "cortex_failover_host_reservations_errors_total",
 			Help: "Total number of failed failover host reservation writes since pod restart, by operation",
 		}, []string{"op"}),
+		drainsCreated: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "cortex_failover_host_drains_created_total",
+			Help: "Total number of drain reschedulings created by the failover host drain controller since pod restart",
+		}),
 	}
 	// Pre-initialize the labelled series so they appear at zero before the first
 	// event, which lets rate()/increase() alerts behave from pod startup.
@@ -107,6 +113,9 @@ func NewMonitor() *Monitor {
 	m.reservationsErrors.WithLabelValues("create")
 	m.reservationsErrors.WithLabelValues("update")
 	m.reservationsErrors.WithLabelValues("delete")
+	m.reservationsErrors.WithLabelValues("drain_create")
+	m.reservationsErrors.WithLabelValues("drain_delete")
+	m.reservationsErrors.WithLabelValues("drain_mark_active")
 	return m
 }
 
@@ -174,6 +183,14 @@ func (m *Monitor) RecordReservationError(op string) {
 	m.reservationsErrors.WithLabelValues(op).Inc()
 }
 
+// RecordDrainCreated records a drain rescheduling created by the drain controller.
+func (m *Monitor) RecordDrainCreated() {
+	if m == nil {
+		return
+	}
+	m.drainsCreated.Inc()
+}
+
 // Describe implements prometheus.Collector.
 func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
 	m.calculationRuns.Describe(ch)
@@ -188,6 +205,7 @@ func (m *Monitor) Describe(ch chan<- *prometheus.Desc) {
 	m.reservationsUpdated.Describe(ch)
 	m.reservationsDeleted.Describe(ch)
 	m.reservationsErrors.Describe(ch)
+	m.drainsCreated.Describe(ch)
 }
 
 // Collect implements prometheus.Collector.
@@ -204,4 +222,5 @@ func (m *Monitor) Collect(ch chan<- prometheus.Metric) {
 	m.reservationsUpdated.Collect(ch)
 	m.reservationsDeleted.Collect(ch)
 	m.reservationsErrors.Collect(ch)
+	m.drainsCreated.Collect(ch)
 }

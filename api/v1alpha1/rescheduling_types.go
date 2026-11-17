@@ -7,6 +7,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// Label keys for Rescheduling metadata.
+// Labels follow Kubernetes naming conventions using reverse-DNS notation.
+const (
+	// LabelFailoverHostDrain marks the Rescheduling objects created by the
+	// failover host drain controller, so it can list its own drains and enforce
+	// the fleet-wide single-drain slot. Set to "true" on those objects.
+	LabelFailoverHostDrain = "reservations.cortex.cloud/failover-host-drain"
+)
+
 // ReschedulingAction defines the action a rescheduling request asks the
 // Rescheduler to perform. The action names an action-specific sub-spec that
 // carries its target and constraints.
