@@ -630,8 +630,8 @@ kubectl --context kind-cortex-remote-az-b get virtualmachines 2>/dev/null || ech
 ```
 
 You should see the `VirtualMachine` named `cortex-test-instance-001` only in `kind-cortex-remote-az-b`.
-Describe it to see the full scheduling result — the target host under `spec.targetHost`, the ranked
-`spec.cortex.hostCandidates`, and `spec.cortex.explanation`, the human-readable summary of why that host
+Describe it to see the full scheduling result — the ranked `spec.cortex.hostCandidates` (the first entry is
+the selected host), and `spec.cortex.explanation`, the human-readable summary of why that host
 won:
 
 ```bash

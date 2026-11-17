@@ -135,7 +135,7 @@ local('kubectl wait --namespace cert-manager --for=condition=available deploymen
 # Pinned SHAs must match the versions in go.mod.
 url = 'https://raw.githubusercontent.com/cobaltcore-dev/openstack-hypervisor-operator/df757ad112ea027f47c198266cb3a323d52ee2fe/charts/openstack-hypervisor-operator/crds/kvm.cloud.sap_hypervisors.yaml'
 local('curl -L ' + url + ' | kubectl apply -f -')
-url = 'https://raw.githubusercontent.com/cobaltcore-dev/vm-operator/66e5e459efeb01bfc599a1cda5921528ab47be19/dist/files/crds/cobaltcore.cloud_virtualmachines.yaml'
+url = 'https://raw.githubusercontent.com/cobaltcore-dev/vm-operator/f859ba2eb3bf/dist/files/crds/cobaltcore.cloud_virtualmachines.yaml'
 local('curl -L ' + url + ' | kubectl apply -f -')
 
 ########### Cortex Manager & CRDs

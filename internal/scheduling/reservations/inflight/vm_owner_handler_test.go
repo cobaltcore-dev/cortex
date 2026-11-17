@@ -128,19 +128,26 @@ func TestVMHandler_TerminalState(t *testing.T) {
 	tests := []tc{
 		// UC1 initial placement.
 		{name: "create: building -> wait", intent: novaapi.CreateIntent,
-			vm: newVM("vm-1", "host-9", cond(vmv1alpha1.ConditionTypeScheduled, metav1.ConditionUnknown, "InitialPlacement"))},
+			vm: newVM("vm-1", "host-9")},
 		{name: "create: Running=True -> done", intent: novaapi.CreateIntent, wantDone: true,
-			vm: newVM("vm-1", "host-9", cond(vmv1alpha1.ConditionTypeRunning, metav1.ConditionTrue, "Running"))},
+			vm: newVM("vm-1", "host-9", cond(vmv1alpha1.ConditionTypeRunning, metav1.ConditionTrue, vmv1alpha1.ConditionReasonRunningOK))},
 		{name: "create: nova ACTIVE -> done", intent: novaapi.CreateIntent, wantDone: true, vm: withNovaStatus(newVM("vm-1", "host-9"), "ACTIVE")},
 		{name: "create: no live signal -> wait", intent: novaapi.CreateIntent, vm: withNovaStatus(newVM("vm-1", "host-9"), "BUILD")},
-		{name: "create: scheduled false alone -> wait", intent: novaapi.CreateIntent,
-			vm: newVM("vm-1", "", cond(vmv1alpha1.ConditionTypeScheduled, metav1.ConditionFalse, "NoHostFound"))},
+		{name: "create: placed but no live signal -> wait", intent: novaapi.CreateIntent,
+			vm: newVM("vm-1", "host-9", cond(vmv1alpha1.ConditionTypeRunning, metav1.ConditionFalse, vmv1alpha1.ConditionReasonRunningShutoff))},
 		{name: "create: nova error -> done", intent: novaapi.CreateIntent, wantDone: true, vm: withNovaStatus(newVM("vm-1", ""), "ERROR")},
-		// UC2 resize / UC3 live migration ongoing.
-		{name: "resize: ongoing -> wait", intent: novaapi.ResizeIntent,
-			vm: newVM("vm-1", "host-1", cond(vmv1alpha1.ConditionTypeResizing, metav1.ConditionTrue, vmv1alpha1.ConditionReasonResizingOngoing))},
-		{name: "live migration: ongoing -> wait", intent: novaapi.LiveMigrationIntent,
-			vm: newVM("vm-1", "host-1", cond(vmv1alpha1.ConditionTypeMigrating, metav1.ConditionTrue, vmv1alpha1.ConditionReasonMigratingOngoing))},
+		// UC2 resize / UC3 live migration in progress (status=True).
+		{name: "resize: in progress -> wait", intent: novaapi.ResizeIntent,
+			vm: newVM("vm-1", "host-1", cond(vmv1alpha1.ConditionTypeResizing, metav1.ConditionTrue, vmv1alpha1.ConditionReasonResizingInProgress))},
+		{name: "live migration: in progress -> wait", intent: novaapi.LiveMigrationIntent,
+			vm: newVM("vm-1", "host-1", cond(vmv1alpha1.ConditionTypeMigrating, metav1.ConditionTrue, vmv1alpha1.ConditionReasonMigratingLiveInProgress))},
+		{name: "evacuate: in progress -> wait", intent: novaapi.EvacuateIntent,
+			vm: newVM("vm-1", "host-1", cond(vmv1alpha1.ConditionTypeMigrating, metav1.ConditionTrue, vmv1alpha1.ConditionReasonMigratingColdInProgress))},
+		// Unknown status reflects conflicting observations -> keep waiting.
+		{name: "resize: unknown -> wait", intent: novaapi.ResizeIntent,
+			vm: newVM("vm-1", "host-1", cond(vmv1alpha1.ConditionTypeResizing, metav1.ConditionUnknown, ""))},
+		{name: "live migration: unknown -> wait", intent: novaapi.LiveMigrationIntent,
+			vm: newVM("vm-1", "host-1", cond(vmv1alpha1.ConditionTypeMigrating, metav1.ConditionUnknown, ""))},
 		// No VM CRD -> no terminal signal, keep waiting for the VM CRD
 		// (regardless of intent).
 		{name: "no VM CRD: create -> wait", intent: novaapi.CreateIntent},
@@ -153,7 +160,7 @@ func TestVMHandler_TerminalState(t *testing.T) {
 	unmanaged := map[string]string{LabelInFlightSource: LabelInFlightSourceUnmanaged}
 	tests = append(tests,
 		tc{name: "unmanaged resize: landed and running -> done", intent: novaapi.ResizeIntent, labels: unmanaged, wantDone: true,
-			vm: newVM("vm-1", "host-1", cond(vmv1alpha1.ConditionTypeRunning, metav1.ConditionTrue, "Running"))},
+			vm: newVM("vm-1", "host-1", cond(vmv1alpha1.ConditionTypeRunning, metav1.ConditionTrue, vmv1alpha1.ConditionReasonRunningOK))},
 		tc{name: "unmanaged resize: landed and nova ACTIVE -> done", intent: novaapi.ResizeIntent, labels: unmanaged, wantDone: true,
 			vm: withNovaStatus(newVM("vm-1", "host-1"), "ACTIVE")},
 		tc{name: "unmanaged resize: placed but not running -> wait", intent: novaapi.ResizeIntent, labels: unmanaged,
@@ -161,24 +168,30 @@ func TestVMHandler_TerminalState(t *testing.T) {
 		tc{name: "unmanaged resize: nova ERROR -> wait", intent: novaapi.ResizeIntent, labels: unmanaged,
 			vm: withNovaStatus(newVM("vm-1", "host-1"), "ERROR")},
 	)
-	for _, r := range []string{vmv1alpha1.ConditionReasonResizingCompleted, vmv1alpha1.ConditionReasonResizingReverted, vmv1alpha1.ConditionReasonResizingFailed} {
-		tests = append(tests, tc{name: "resize: terminal " + r, intent: novaapi.ResizeIntent, wantDone: true,
-			vm: newVM("vm-1", "host-1", cond(vmv1alpha1.ConditionTypeResizing, metav1.ConditionFalse, r))})
-	}
-	for _, r := range []string{vmv1alpha1.ConditionReasonMigratingCompleted, vmv1alpha1.ConditionReasonMigratingRolledBack,
-		vmv1alpha1.ConditionReasonMigratingAborting, vmv1alpha1.ConditionReasonMigratingFailed} {
-		tests = append(tests, tc{name: "live migration: terminal " + r, intent: novaapi.LiveMigrationIntent, wantDone: true,
-			vm: newVM("vm-1", "host-1", cond(vmv1alpha1.ConditionTypeMigrating, metav1.ConditionFalse, r))})
-	}
-	// A terminal condition left over from a previous operation (transition before
-	// the reservation was created, or unknown) must not release fresh holds.
+	// A freshly settled operation condition (status=False transitioned at/after
+	// the reservation was created) releases the holds.
 	for _, op := range []struct {
 		name             string
 		intent           v1alpha1.SchedulingIntent
 		condType, reason string
 	}{
-		{"resize", novaapi.ResizeIntent, vmv1alpha1.ConditionTypeResizing, vmv1alpha1.ConditionReasonResizingCompleted},
-		{"live_migration", novaapi.LiveMigrationIntent, vmv1alpha1.ConditionTypeMigrating, vmv1alpha1.ConditionReasonMigratingCompleted},
+		{"resize", novaapi.ResizeIntent, vmv1alpha1.ConditionTypeResizing, vmv1alpha1.ConditionReasonResizingInProgress},
+		{"live migration", novaapi.LiveMigrationIntent, vmv1alpha1.ConditionTypeMigrating, vmv1alpha1.ConditionReasonMigratingLiveInProgress},
+		{"evacuate", novaapi.EvacuateIntent, vmv1alpha1.ConditionTypeMigrating, vmv1alpha1.ConditionReasonMigratingColdInProgress},
+	} {
+		tests = append(tests, tc{name: op.name + ": settled -> done", intent: op.intent, wantDone: true,
+			vm: newVM("vm-1", "host-1", cond(op.condType, metav1.ConditionFalse, op.reason))})
+	}
+	// A settled (status=False) condition left over from a previous operation
+	// (transition before the reservation was created, or with no transition
+	// time) describes an idle VM and must not release fresh holds.
+	for _, op := range []struct {
+		name             string
+		intent           v1alpha1.SchedulingIntent
+		condType, reason string
+	}{
+		{"resize", novaapi.ResizeIntent, vmv1alpha1.ConditionTypeResizing, vmv1alpha1.ConditionReasonResizingInProgress},
+		{"live_migration", novaapi.LiveMigrationIntent, vmv1alpha1.ConditionTypeMigrating, vmv1alpha1.ConditionReasonMigratingLiveInProgress},
 	} {
 		tests = append(tests,
 			tc{name: "stale " + op.name + " -> wait", intent: op.intent, created: &created, vm: withCond(op.condType, op.reason, stale)},
