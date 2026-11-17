@@ -378,6 +378,18 @@ const (
 	// status=False: The failover host is not currently in use.
 	// status=True: The failover host is currently in use.
 	ConditionTypeFailoverHostInUse ReservationConditionType = "FailoverHostInUse"
+
+	// ConditionTypeFailoverHostCompleted indicates the gang evacuation onto this
+	// InUse failover host reservation has finished: the source host
+	// (Status.FailoverHostReservation.SourceHost) reports itself evicted (no
+	// instances left under active maintenance mode). The completion controller sets
+	// it True when the source first reports evicted and uses its lastTransitionTime
+	// as the grace-period anchor before deleting the reservation.
+	//
+	// status=True: The source host is evicted; the grace timer runs toward deletion.
+	// status=False: The source host stopped reporting evicted before the grace
+	// period elapsed; the timer is reset.
+	ConditionTypeFailoverHostCompleted ReservationConditionType = "FailoverHostCompleted"
 )
 
 const (
@@ -385,6 +397,16 @@ const (
 	// drain controller once the reserved host is empty and ready to accept
 	// evacuations.
 	ReasonFailoverHostDrained = "HostDrained"
+
+	// ReasonFailoverHostEvacuationComplete is the FailoverHostCompleted=True
+	// reason set by the completion controller once the source host reports itself
+	// evicted.
+	ReasonFailoverHostEvacuationComplete = "EvacuationComplete"
+
+	// ReasonFailoverHostSourceReoccupied is the FailoverHostCompleted=False reason
+	// set when the source host stopped reporting itself evicted before the grace
+	// period elapsed.
+	ReasonFailoverHostSourceReoccupied = "SourceReoccupied"
 )
 
 // ReservationStatus defines the observed state of Reservation.
