@@ -1,5 +1,25 @@
 # Changelog
 
+## Changelog — cortex 0.9.3
+
+**Release PR:** [#1545](https://github.com/cobaltcore-dev/cortex/pull/1545)
+**Date:** 2026-11-17
+**App Version:** `sha-67c88600`
+
+### Bumped Versions
+
+| Package | Previous | New |
+|---|---|---|
+| cortex | 0.9.2 | 0.9.3 |
+| cortex-postgres | 0.6.34 | 0.6.35 |
+| cortex-shim | 0.1.40 | 0.1.41 |
+| bundles | 0.0.116 | 0.0.117 |
+| cortex-placement-shim | 0.1.40 | 0.1.41 |
+
+### Bug Fixes
+
+- **Fixed false host oversubscription alerts after capacity refactoring** ([#1543](https://github.com/cobaltcore-dev/cortex/pull/1543)) — After the unified capacity calculation refactoring (#1504), the `computeViolations` function in `HostOversubscriptionController` incorrectly counted `FailoverHost` reservations at full `Spec.Resources` (i.e., entire host capacity). This caused every host with committed-resource reservations **and** running VMs to be falsely reported as oversubscribed. The fix rewrites the violation computation to explicitly select only reservation types that represent real demand on a host's capacity (`CommittedResource`, `Failover`, `InFlight`), excluding `FailoverHost` reservations which block full host capacity for evacuation and are already policed by a dedicated filter. Violations are now computed as `Used + Reserved − Total` per resource, only flagging positive excess. A regression test was added to verify that a failover host reservation with running VMs does not trigger false oversubscription.
+
 ## cortex 0.9.2
 
 ### Fixes
