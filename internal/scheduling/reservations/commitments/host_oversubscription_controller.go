@@ -269,13 +269,25 @@ func (r *HostOversubscriptionController) SetupWithManager(mgr ctrl.Manager, mcl 
 // the host is over-subscribed. Returns nil if capacity data is unavailable, empty map if no violation.
 func computeViolations(allReservations []v1alpha1.Reservation, hv hv1.Hypervisor) map[hv1.ResourceName]resource.Quantity {
 	rep := capacity.NewHostUsageReport(hv, allReservations)
-	if rep.Oversubscribed == nil {
+	if rep.Total == nil {
 		return nil // no capacity data
 	}
+	// Only count types that represent real demand on this host's capacity.
+	// ReservationTypeFailoverHost is excluded: it blocks Spec.Resources = full host capacity
+	// for evacuation and is policed by a dedicated filter — counting it here would make every
+	// host with running VMs appear oversubscribed.
+	reserved := rep.ReservedTotal(
+		v1alpha1.ReservationTypeCommittedResource,
+		v1alpha1.ReservationTypeFailover,
+		v1alpha1.ReservationTypeInFlight,
+	)
 	violations := make(map[hv1.ResourceName]resource.Quantity)
-	for rn, excess := range rep.Oversubscribed {
-		if excess.Sign() > 0 {
-			violations[rn] = excess
+	for rn, total := range rep.Total {
+		demand := rep.Used[rn].DeepCopy()
+		demand.Add(reserved[rn])
+		if demand.Cmp(total) > 0 {
+			demand.Sub(total)
+			violations[rn] = demand
 		}
 	}
 	return violations
