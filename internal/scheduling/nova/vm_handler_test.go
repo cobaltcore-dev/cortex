@@ -94,8 +94,8 @@ func TestVirtualMachineHandlerCreate(t *testing.T) {
 	if vm.Spec.Region != "region-1" || vm.Spec.AZ != "az-1" {
 		t.Errorf("region/az = %q/%q, want region-1/az-1", vm.Spec.Region, vm.Spec.AZ)
 	}
-	if len(vm.Spec.Cortex.HostCandidates) != 1 || vm.Spec.Cortex.HostCandidates[0].Name != "compute-1" {
-		t.Errorf("host candidates = %+v, want name compute-1", vm.Spec.Cortex.HostCandidates)
+	if len(vm.Spec.Cortex.SchedulingCandidates) != 1 || vm.Spec.Cortex.SchedulingCandidates[0].Name != "compute-1" {
+		t.Errorf("scheduling candidates = %+v, want name compute-1", vm.Spec.Cortex.SchedulingCandidates)
 	}
 	if cpu := vm.Spec.Resources[vmopv1alpha1.ResourceCPU]; cpu.Value() != 4 {
 		t.Errorf("cpu = %d, want 4", cpu.Value())
@@ -107,15 +107,19 @@ func TestVirtualMachineHandlerCreate(t *testing.T) {
 		t.Errorf("nova spec = %+v, want project-1 / m1.large", vm.Spec.Nova)
 	}
 	// Intent is the VM's first transition, so a timestamp is stamped, but no
-	// generation has been observed yet.
-	if vm.Spec.Cortex.Intent != string(api.CreateIntent) {
-		t.Errorf("intent = %q, want %q", vm.Spec.Cortex.Intent, api.CreateIntent)
+	// generation has been scheduled yet.
+	if vm.Spec.Cortex.SchedulingIntent != string(api.CreateIntent) {
+		t.Errorf("intent = %q, want %q", vm.Spec.Cortex.SchedulingIntent, api.CreateIntent)
 	}
-	if vm.Spec.Cortex.LastTransitionTime == nil {
-		t.Error("expected LastTransitionTime to be stamped on create")
+	if vm.Spec.Cortex.SchedulingTime == nil {
+		t.Error("expected SchedulingTime to be stamped on create")
 	}
-	if vm.Spec.Cortex.ObservedGeneration != 0 {
-		t.Errorf("observedGeneration = %d, want 0 on create", vm.Spec.Cortex.ObservedGeneration)
+	if vm.Spec.Cortex.ScheduledGeneration != 0 {
+		t.Errorf("scheduledGeneration = %d, want 0 on create", vm.Spec.Cortex.ScheduledGeneration)
+	}
+	// A successful scheduling records no error.
+	if vm.Spec.Cortex.SchedulingError != "" {
+		t.Errorf("schedulingError = %q, want empty on success", vm.Spec.Cortex.SchedulingError)
 	}
 	// Conditions are owned by the vm-operator and must not be written here.
 	if len(vm.Status.Conditions) != 0 {
@@ -137,7 +141,7 @@ func TestVirtualMachineHandlerUpdate(t *testing.T) {
 				// scheduling update.
 				Ownership: vmopv1alpha1.Ownership{Domain: "domain-1"},
 			},
-			Cortex: &vmopv1alpha1.CortexSpec{Intent: string(api.CreateIntent)},
+			Cortex: &vmopv1alpha1.CortexSpec{SchedulingIntent: string(api.CreateIntent)},
 		},
 	}
 	fakeClient := fake.NewClientBuilder().
@@ -156,8 +160,8 @@ func TestVirtualMachineHandlerUpdate(t *testing.T) {
 	if err := fakeClient.Get(context.Background(), client.ObjectKey{Name: "vm-uuid-1"}, vm); err != nil {
 		t.Fatalf("get vm: %v", err)
 	}
-	if len(vm.Spec.Cortex.HostCandidates) != 1 || vm.Spec.Cortex.HostCandidates[0].Name != "compute-1" {
-		t.Errorf("host candidates = %+v, want name compute-1", vm.Spec.Cortex.HostCandidates)
+	if len(vm.Spec.Cortex.SchedulingCandidates) != 1 || vm.Spec.Cortex.SchedulingCandidates[0].Name != "compute-1" {
+		t.Errorf("scheduling candidates = %+v, want name compute-1", vm.Spec.Cortex.SchedulingCandidates)
 	}
 	// Immutable fields must remain unchanged.
 	if vm.Spec.Region != "region-1" || vm.Spec.AZ != "az-1" {
@@ -178,8 +182,8 @@ func TestVirtualMachineHandlerUpdateBumpsOnIntentChange(t *testing.T) {
 			Region: "region-1",
 			AZ:     "az-1",
 			Cortex: &vmopv1alpha1.CortexSpec{
-				Intent:             string(api.CreateIntent),
-				LastTransitionTime: &old,
+				SchedulingIntent: string(api.CreateIntent),
+				SchedulingTime:   &old,
 			},
 		},
 	}
@@ -199,8 +203,8 @@ func TestVirtualMachineHandlerUpdateBumpsOnIntentChange(t *testing.T) {
 	if err := fakeClient.Get(context.Background(), client.ObjectKey{Name: "vm-uuid-1"}, vm); err != nil {
 		t.Fatalf("get vm: %v", err)
 	}
-	if !vm.Spec.Cortex.LastTransitionTime.Equal(&old) {
-		t.Errorf("LastTransitionTime = %v, want preserved %v on unchanged intent", vm.Spec.Cortex.LastTransitionTime, old)
+	if !vm.Spec.Cortex.SchedulingTime.Equal(&old) {
+		t.Errorf("SchedulingTime = %v, want preserved %v on unchanged intent", vm.Spec.Cortex.SchedulingTime, old)
 	}
 
 	// Changed intent: the timestamp must be bumped.
@@ -210,8 +214,8 @@ func TestVirtualMachineHandlerUpdateBumpsOnIntentChange(t *testing.T) {
 	if err := fakeClient.Get(context.Background(), client.ObjectKey{Name: "vm-uuid-1"}, vm); err != nil {
 		t.Fatalf("get vm: %v", err)
 	}
-	if vm.Spec.Cortex.LastTransitionTime.Equal(&old) {
-		t.Error("expected LastTransitionTime to be bumped on intent change")
+	if vm.Spec.Cortex.SchedulingTime.Equal(&old) {
+		t.Error("expected SchedulingTime to be bumped on intent change")
 	}
 }
 

@@ -139,17 +139,18 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, result compute.Place
 
 	// Write the cortex spec (our scheduling result). The intent was resolved by
 	// the API layer (with a graceful fallback to CreateIntent for initial
-	// placements) and passed in.
+	// placements) and passed in. We only reach this point with a target host, so
+	// scheduling succeeded and SchedulingError stays empty.
 	vm.Spec.Cortex = &vmv1alpha1.CortexSpec{}
 	for _, host := range result.OrderedHosts {
-		vm.Spec.Cortex.HostCandidates = append(vm.Spec.Cortex.HostCandidates, vmv1alpha1.HostRef{
+		vm.Spec.Cortex.SchedulingCandidates = append(vm.Spec.Cortex.SchedulingCandidates, vmv1alpha1.HostRef{
 			APIVersion: hv1.GroupVersion.String(),
 			Kind:       "Hypervisor",
 			Name:       host,
 		})
 	}
-	vm.Spec.Cortex.Explanation = explanation
-	vm.Spec.Cortex.Intent = string(intent)
+	vm.Spec.Cortex.SchedulingExplanation = explanation
+	vm.Spec.Cortex.SchedulingIntent = string(intent)
 
 	// If the vm resource doesn't exist yet, create it.
 	vmInCluster := &vmv1alpha1.VirtualMachine{}
@@ -159,10 +160,10 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, result compute.Place
 	}, vmInCluster)
 	if err != nil && apierrors.IsNotFound(err) {
 		// First time we see this VM: this intent is its first transition. We
-		// cannot report an observed generation yet (nothing is persisted), so we
-		// leave ObservedGeneration unset. Conditions are owned by the vm-operator
+		// cannot report a scheduled generation yet (nothing is persisted), so we
+		// leave ScheduledGeneration unset. Conditions are owned by the vm-operator
 		// and never written here, so the status subresource is left untouched.
-		vm.Spec.Cortex.LastTransitionTime = new(metav1.Now())
+		vm.Spec.Cortex.SchedulingTime = new(metav1.Now())
 		if err := h.Create(ctx, vm); err != nil {
 			return fmt.Errorf("failed to create VM: %w", err)
 		}
@@ -176,7 +177,7 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, result compute.Place
 	// object meta and spec. For map data like the labels, we preserve
 	// existing map entries that are not inside the new object, and only
 	// store/override the entries that are present in the new object.
-	// In contrast, for the host candidates we completely replace the
+	// In contrast, for the scheduling candidates we completely replace the
 	// existing list with the new list from the object. For the remaining spec
 	// fields, we follow the same approach as for labels: preserve existing
 	// entries that are not present in the new object, and only store/override
@@ -200,16 +201,18 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, result compute.Place
 	if vmInCluster.Spec.Cortex == nil {
 		vmInCluster.Spec.Cortex = &vmv1alpha1.CortexSpec{}
 	}
-	vmInCluster.Spec.Cortex.HostCandidates = vm.Spec.Cortex.HostCandidates
-	vmInCluster.Spec.Cortex.Explanation = vm.Spec.Cortex.Explanation
-	// LastTransitionTime marks a change of intent; only bump it when the intent
+	vmInCluster.Spec.Cortex.SchedulingCandidates = vm.Spec.Cortex.SchedulingCandidates
+	vmInCluster.Spec.Cortex.SchedulingExplanation = vm.Spec.Cortex.SchedulingExplanation
+	// This scheduling succeeded, so clear any error left from a previous attempt.
+	vmInCluster.Spec.Cortex.SchedulingError = ""
+	// SchedulingTime marks a change of intent; only bump it when the intent
 	// actually transitioned, otherwise carry the existing timestamp forward.
-	if vmInCluster.Spec.Cortex.Intent != vm.Spec.Cortex.Intent {
-		vmInCluster.Spec.Cortex.LastTransitionTime = new(metav1.Now())
+	if vmInCluster.Spec.Cortex.SchedulingIntent != vm.Spec.Cortex.SchedulingIntent {
+		vmInCluster.Spec.Cortex.SchedulingTime = new(metav1.Now())
 	}
-	vmInCluster.Spec.Cortex.Intent = vm.Spec.Cortex.Intent
+	vmInCluster.Spec.Cortex.SchedulingIntent = vm.Spec.Cortex.SchedulingIntent
 	// Record the generation we observed on the resource we just read.
-	vmInCluster.Spec.Cortex.ObservedGeneration = vmInCluster.Generation
+	vmInCluster.Spec.Cortex.ScheduledGeneration = vmInCluster.Generation
 	if err := h.Update(ctx, vmInCluster); err != nil {
 		return fmt.Errorf("failed to update VM: %w", err)
 	}
