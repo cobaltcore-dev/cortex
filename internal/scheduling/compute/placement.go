@@ -115,6 +115,10 @@ func (s *Placement) run(
 		}
 	}
 
+	// Apply defaults after the pre-hook, which may have populated load-bearing
+	// fields.
+	req.ApplyDefaults()
+
 	// When the request opts into gathering all candidates, override the hosts and
 	// weights with every available placement candidate before filtering.
 	if req.GatherAllCandidates {

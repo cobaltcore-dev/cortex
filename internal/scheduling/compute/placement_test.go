@@ -73,6 +73,19 @@ func TestRunPipelineNotFound(t *testing.T) {
 	}
 }
 
+func TestRunDefaultsNumInstances(t *testing.T) {
+	var seen uint64
+	p := &fakePipeline{onRun: func(r PlacementRequest) { seen = r.NumInstances }}
+	s := newTestPlacement(p, &fakeGatherer{})
+	// NumInstances is left at 0; run must default it to 1 before the pipeline.
+	if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, nil, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if seen != 1 {
+		t.Fatalf("pipeline saw NumInstances = %d, want 1", seen)
+	}
+}
+
 func TestRunPreThenPost(t *testing.T) {
 	s := newTestPlacement(&fakePipeline{}, &fakeGatherer{})
 	var order []string
@@ -84,7 +97,7 @@ func TestRunPreThenPost(t *testing.T) {
 		order = append(order, "post")
 		return nil
 	}
-	if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, pre, post); err != nil {
+	if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p", NumInstances: 1}, pre, post); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(order) != 2 || order[0] != "pre" || order[1] != "post" {
@@ -94,7 +107,7 @@ func TestRunPreThenPost(t *testing.T) {
 
 func TestRunNilHooks(t *testing.T) {
 	s := newTestPlacement(&fakePipeline{}, &fakeGatherer{})
-	if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, nil, nil); err != nil {
+	if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p", NumInstances: 1}, nil, nil); err != nil {
 		t.Fatalf("nil hooks should be a no-op, got error: %v", err)
 	}
 }
@@ -103,7 +116,7 @@ func TestRunPostHookErrorAborts(t *testing.T) {
 	s := newTestPlacement(&fakePipeline{}, &fakeGatherer{})
 	boom := errors.New("boom")
 	post := func(_ context.Context, _ PlacementRequest, _ PlacementResult) error { return boom }
-	_, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, nil, post)
+	_, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p", NumInstances: 1}, nil, post)
 	if !errors.Is(err, boom) {
 		t.Fatalf("expected boom error, got %v", err)
 	}
@@ -114,7 +127,7 @@ func TestRunPipelineErrorSkipsPostHook(t *testing.T) {
 	s := newTestPlacement(&fakePipeline{err: boom}, &fakeGatherer{})
 	var ran bool
 	post := func(_ context.Context, _ PlacementRequest, _ PlacementResult) error { ran = true; return nil }
-	_, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, nil, post)
+	_, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p", NumInstances: 1}, nil, post)
 	if !errors.Is(err, boom) {
 		t.Fatalf("expected pipeline error, got %v", err)
 	}
@@ -135,7 +148,7 @@ func TestRunPreHookRunsBeforePipelineAndMutates(t *testing.T) {
 		r.Hosts = []Host{{ComputeHost: "from-prehook"}}
 		return nil
 	}
-	if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, pre, nil); err != nil {
+	if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p", NumInstances: 1}, pre, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if sawHostInPipeline != "from-prehook" {
@@ -149,7 +162,7 @@ func TestRunPreHookErrorAbortsBeforePipeline(t *testing.T) {
 	s := newTestPlacement(p, &fakeGatherer{})
 	boom := errors.New("prehook boom")
 	pre := func(_ context.Context, _ *PlacementRequest) error { return boom }
-	_, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, pre, nil)
+	_, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p", NumInstances: 1}, pre, nil)
 	if !errors.Is(err, boom) {
 		t.Fatalf("expected prehook error, got %v", err)
 	}
@@ -162,7 +175,7 @@ func TestRunGathersCandidatesWhenRequested(t *testing.T) {
 	g := &fakeGatherer{}
 	p := &fakePipeline{}
 	s := newTestPlacement(p, g)
-	req := PlacementRequest{Pipeline: "p", GatherAllCandidates: true}
+	req := PlacementRequest{Pipeline: "p", NumInstances: 1, GatherAllCandidates: true}
 	if _, err := s.Run(context.Background(), req, nil, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -177,7 +190,7 @@ func TestRunGathersCandidatesWhenRequested(t *testing.T) {
 func TestRunDoesNotGatherWithoutGatherAllCandidates(t *testing.T) {
 	g := &fakeGatherer{}
 	s := newTestPlacement(&fakePipeline{}, g)
-	if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, nil, nil); err != nil {
+	if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p", NumInstances: 1}, nil, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if g.called {
@@ -205,7 +218,7 @@ func TestRunHoldsLockAcrossPostHook(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, nil, slowPost); err != nil {
+		if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p", NumInstances: 1}, nil, slowPost); err != nil {
 			t.Errorf("first Run: %v", err)
 		}
 	}()
@@ -213,7 +226,7 @@ func TestRunHoldsLockAcrossPostHook(t *testing.T) {
 	<-firstInPost // first Run is parked inside its post-hook, still holding the lock.
 
 	go func() {
-		if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, nil, nil); err != nil {
+		if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p", NumInstances: 1}, nil, nil); err != nil {
 			t.Errorf("second Run: %v", err)
 		}
 		close(secondDone)
@@ -245,7 +258,7 @@ func TestRunWithoutLockDoesNotBlock(t *testing.T) {
 	}
 
 	go func() {
-		if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p"}, nil, slowPost); err != nil {
+		if _, err := s.Run(context.Background(), PlacementRequest{Pipeline: "p", NumInstances: 1}, nil, slowPost); err != nil {
 			t.Errorf("locked Run: %v", err)
 		}
 	}()
@@ -253,7 +266,7 @@ func TestRunWithoutLockDoesNotBlock(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		if _, err := s.RunWithoutLock(context.Background(), PlacementRequest{Pipeline: "p"}, nil, nil); err != nil {
+		if _, err := s.RunWithoutLock(context.Background(), PlacementRequest{Pipeline: "p", NumInstances: 1}, nil, nil); err != nil {
 			t.Errorf("RunWithoutLock: %v", err)
 		}
 		close(done)
