@@ -94,6 +94,7 @@ func (r *CommittedResourceChangeReconciler) reconcilePreparing(ctx context.Conte
 	// Snapshot current CR specs for all keys in NewState so rollback can restore them.
 	// nil entry = CR did not exist before = delete it on rollback.
 	snapshot := make(map[string]*v1alpha1.CommittedResourceSpec, len(tx.Spec.NewState))
+	var existingCommitment string
 	for uuid := range tx.Spec.NewState {
 		var cr v1alpha1.CommittedResource
 		if err := r.Get(ctx, client.ObjectKey{Name: commitmentName(uuid)}, &cr); err != nil {
@@ -106,20 +107,17 @@ func (r *CommittedResourceChangeReconciler) reconcilePreparing(ctx context.Conte
 			return ctrl.Result{}, err
 		}
 		snapshot[uuid] = cr.Spec.DeepCopy()
+		existingCommitment = uuid
 	}
 
-	// Guard: a dry run must only probe new commitments. A non-nil snapshot entry means an
-	// existing CR would be mutated, which a dry run must never do.
-	if tx.Spec.DryRun {
-		for uuid, snapSpec := range snapshot {
-			if snapSpec != nil {
-				msg := "dryRun must not modify existing commitment " + uuid
-				logger.Info("rejecting change: "+msg, "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID)
-				return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseRejected, v1alpha1.ChangeReasonInvalidSpec, func(s *v1alpha1.CommittedResourceChangeStatus) {
-					s.Message = msg
-				})
-			}
-		}
+	// Guard: a dry run must only probe new commitments. An existing CR (non-nil snapshot entry)
+	// would be mutated, which a dry run must never do.
+	if tx.Spec.DryRun && existingCommitment != "" {
+		msg := "dryRun must not modify existing commitment " + existingCommitment
+		logger.Info("rejecting change: "+msg, "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID)
+		return r.advanceTo(ctx, tx, v1alpha1.ChangePhaseRejected, v1alpha1.ChangeReasonInvalidSpec, func(s *v1alpha1.CommittedResourceChangeStatus) {
+			s.Message = msg
+		})
 	}
 
 	logger.Info("starting transaction", "az", tx.Spec.AvailabilityZone, "correlationID", tx.Spec.CorrelationID, "newStateSize", len(tx.Spec.NewState), "allowRejection", tx.Spec.AllowRejection)
