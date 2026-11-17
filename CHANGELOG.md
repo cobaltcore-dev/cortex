@@ -1,5 +1,22 @@
 # Changelog
 
+## cortex 0.9.4
+
+### Bug Fixes
+
+- **Fix false host oversubscription alerts after capacity refactoring** ([#1543](https://github.com/cobaltcore-dev/cortex/pull/1543), @mblos)
+  After the unified capacity calculation refactoring (#1504), every host with committed-resource reservations **and** running VMs was incorrectly reported as oversubscribed. This patch corrects the false-positive alerting logic in the host oversubscription controller.
+
+### Helm Chart Versions
+
+| Chart | Version |
+|---|---|
+| cortex | 0.9.4 |
+| cortex-postgres | 0.6.36 |
+| cortex-shim | 0.1.42 |
+| bundles | 0.0.118 |
+| cortex-placement-shim | 0.1.42 |
+
 ## Changelog — cortex 0.9.3
 
 **Release PR:** [#1545](https://github.com/cobaltcore-dev/cortex/pull/1545)
