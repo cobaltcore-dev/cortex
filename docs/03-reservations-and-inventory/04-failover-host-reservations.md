@@ -530,11 +530,11 @@ is held back so a *second*, concurrent host failure still has its own free landi
 it already consumed. Keeping `h3` and `h4` means that if the evacuation onto `h1` fails, Nova retries onto an
 ordinary host instead of being forced onto an unmatched reserved slot.
 
-The filter also honors the **call-time** `ignoredReservationTypes` request option. This is what keeps the
-**path finder probe** working: the probe asks the scheduler which hosts would accept a flavor, and it passes
-`ignoredReservationTypes: [FailoverHostReservation]` precisely so a reserved host is *not* hidden from its own
-partition. Because the filter obeys that option, the probe still discovers already-reserved hosts and the
-partitioning does not fragment.
+The filter also honors the **call-time** `AssumeEmptyHosts` request option. This is what keeps the
+**path finder probe** working: the probe asks the scheduler which hosts would accept a flavor, and it sets
+`AssumeEmptyHosts: true` so candidates are judged by total capacity with every reservation ignored — a
+reserved host is *not* hidden from its own partition. Because the filter skips all failover-host blocking
+under that option, the probe still discovers already-reserved hosts and the partitioning does not fragment.
 
 ### The weigher: lift the selected target to the front
 

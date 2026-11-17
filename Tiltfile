@@ -205,6 +205,9 @@ for (bundle_chart_path, bundle_chart_name) in bundle_charts:
         local('sh helm/sync.sh ' + dep_chart_path)
         pkg_out = str(local('helm package ' + dep_chart_path)).strip()
         gen_tgz = os.path.basename(pkg_out)
+        # Always remove stale old versions of this chart (e.g. cortex-0.5.1.tgz when current is 0.9.0).
+        # Uses [0-9] prefix so cortex-[0-9]*.tgz does not accidentally match cortex-postgres-*.tgz.
+        local('find ' + bundle_chart_path + '/charts/ -maxdepth 1 -name "' + dep_chart_name + '-[0-9]*.tgz" ! -name "' + gen_tgz + '" -delete')
         # If the file isn't there yet, copy it over.
         if not os.path.exists(bundle_chart_path + '/charts/' + gen_tgz):
             print('Adding ' + dep_chart_name + ' to ' + bundle_chart_name)

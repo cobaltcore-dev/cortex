@@ -139,6 +139,7 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 
 	// Group flavors by flavorGroupIdentifierName
 	groupMap := make(map[string][]FlavorInGroup)
+	var skippedParseErr, skippedNoHWVersion int
 
 	for _, row := range rows {
 		// Parse extra_specs JSON
@@ -146,6 +147,7 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 		if row.ExtraSpecs != "" {
 			if err := json.Unmarshal([]byte(row.ExtraSpecs), &extraSpecs); err != nil {
 				flavorGroupLog.V(1).Info("failed to parse extra_specs for flavor", "flavor", row.Name, "error", err)
+				skippedParseErr++
 				continue
 			}
 		}
@@ -153,6 +155,7 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 		hwVersion, exists := extraSpecs["quota:hw_version"]
 		if !exists || hwVersion == "" {
 			flavorGroupLog.V(1).Info("flavor missing hw_version extra_spec", "flavor", row.Name)
+			skippedNoHWVersion++
 			continue
 		}
 
@@ -175,18 +178,20 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 
 	// Convert map to features
 	features := make([]FlavorGroupFeature, 0, len(groupMap))
+	var skippedInvalidGroup int
 	for groupName, flavors := range groupMap {
 		if len(flavors) == 0 {
 			continue
 		}
 
-		// Sort flavors by size descending (largest first), tie break by name for consistent ordering
+		// Sort flavors by memory descending (largest first); tie-break by fewest vCPUs to
+		// minimize CPU blocking when multiple flavors share the same memory size.
 		sort.Slice(flavors, func(i, j int) bool {
 			if flavors[i].MemoryMB != flavors[j].MemoryMB {
 				return flavors[i].MemoryMB > flavors[j].MemoryMB
 			}
 			if flavors[i].VCPUs != flavors[j].VCPUs {
-				return flavors[i].VCPUs > flavors[j].VCPUs
+				return flavors[i].VCPUs < flavors[j].VCPUs
 			}
 			return flavors[i].Name < flavors[j].Name
 		})
@@ -242,6 +247,7 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 		}
 		if err := fg.Validate(); err != nil {
 			flavorGroupLog.Error(err, "skipping flavor group with invalid data", "groupName", groupName)
+			skippedInvalidGroup++
 			continue
 		}
 		features = append(features, fg)
@@ -251,6 +257,13 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 	sort.Slice(features, func(i, j int) bool {
 		return features[i].Name < features[j].Name
 	})
+
+	flavorGroupLog.Info("flavor group extraction complete",
+		"totalFlavors", len(rows),
+		"skippedParseError", skippedParseErr,
+		"skippedNoHWVersion", skippedNoHWVersion,
+		"skippedInvalidGroup", skippedInvalidGroup,
+		"groups", len(features))
 
 	return e.Extracted(features)
 }

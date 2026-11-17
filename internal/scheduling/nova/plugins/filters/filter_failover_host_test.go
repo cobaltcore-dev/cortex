@@ -225,7 +225,7 @@ func TestFilterFailoverHost_Run(t *testing.T) {
 	}
 }
 
-func TestFilterFailoverHost_CallTimeIgnoredReservationTypes(t *testing.T) {
+func TestFilterFailoverHost_AssumeEmptyHosts(t *testing.T) {
 	scheme := buildTestScheme(t)
 	step := &FilterFailoverHost{}
 	step.Options = FilterFailoverHostOpts{Enabled: true}
@@ -233,15 +233,13 @@ func TestFilterFailoverHost_CallTimeIgnoredReservationTypes(t *testing.T) {
 		WithObjects(failoverHostReservation("host2", "")).Build()
 
 	request := requestWithHosts("", "", "host1", "host2", "host3")
-	request.Options = scheduling.Options{
-		IgnoredReservationTypes: []v1alpha1.ReservationType{v1alpha1.ReservationTypeFailoverHost},
-	}
+	request.Options = scheduling.Options{AssumeEmptyHosts: true}
 	result, err := step.Run(logr.Discard(), request)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if _, ok := result.Activations["host2"]; !ok {
-		t.Error("expected host2 to survive when failover host reservations are ignored at call time")
+		t.Error("expected host2 to survive under the empty-datacenter view (AssumeEmptyHosts)")
 	}
 }
 

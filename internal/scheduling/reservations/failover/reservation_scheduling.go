@@ -87,6 +87,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		InstanceUUID:          vm.UUID,
 		NumInstances:          1, // one reservation per VM; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
 		ProjectID:             vm.ProjectID,
+		DomainName:            vm.DomainName,
 		AvailabilityZone:      vm.AvailabilityZone,
 		IgnoreHosts:           ignoreHypervisors,
 		ResourceGroup:         resSpec.ResourceGroup(vm.FlavorName),
@@ -94,10 +95,7 @@ func (c *FailoverReservationController) queryHypervisorsFromScheduler(ctx contex
 		ForbiddenTraits:       forbiddenTraits,
 		RequestedCapabilities: api.HypervisorTypeCapability(vm.FlavorExtraSpecs, true),
 		AcceleratorsRequested: api.RequestsAccelerators(vm.FlavorExtraSpecs),
-		Flavor: api.FlavorSpec{
-			VCPUs:    resSpec.VCPUs,
-			MemoryMB: resSpec.MemoryMB,
-		},
+		InstanceCapacity:      api.CapacityFromVCPUsMemoryMB(resSpec.VCPUs, resSpec.MemoryMB),
 	}
 
 	logger.V(1).Info("scheduling failover reservation",
@@ -245,16 +243,14 @@ func (c *FailoverReservationController) validateVMViaSchedulerEvacuation(
 		InstanceUUID:          vm.UUID,
 		NumInstances:          1, // validating one VM; NumInstances must be >= 1 or capacity/bin-pack math treats the host as free
 		ProjectID:             vm.ProjectID,
+		DomainName:            vm.DomainName,
 		AvailabilityZone:      vm.AvailabilityZone,
 		IgnoreHosts:           []string{vm.CurrentHypervisor},
 		RequiredTraits:        requiredTraits,
 		ForbiddenTraits:       forbiddenTraits,
 		RequestedCapabilities: api.HypervisorTypeCapability(flavorExtraSpecs, true),
 		AcceleratorsRequested: api.RequestsAccelerators(flavorExtraSpecs),
-		Flavor: api.FlavorSpec{
-			VCPUs:    vcpus,
-			MemoryMB: memoryMB,
-		},
+		InstanceCapacity:      api.CapacityFromVCPUsMemoryMB(vcpus, memoryMB),
 	}
 
 	logger.V(1).Info("validating VM via scheduler evacuation",

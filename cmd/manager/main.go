@@ -136,6 +136,11 @@ func main() {
 		SetOverrideUserAgent(mainConfig.UserAgent.Component, mainConfig.UserAgent.Version)
 	sso.SetUserAgent(mainConfig.UserAgent.Component, mainConfig.UserAgent.Version)
 
+	// E2E subcommands return before the flag-configured logger is set up below.
+	// Set a default logger now so e2e log output is not silently discarded;
+	// the controller path will override it with the flag-configured zap instance.
+	ctrl.SetLogger(zap.New())
+
 	// Custom entrypoint for scheduler e2e tests.
 	// Usage: /main <subcommand> [json-override]
 	// The optional json-override is merged on top of the ConfigMap config, e.g.:
@@ -504,9 +509,8 @@ func main() {
 	if slices.Contains(mainConfig.EnabledControllers, "inflight-reservation-controller") {
 		setupLog.Info("enabling controller",
 			"controller", "inflight-reservation-controller")
-		config := conf.GetConfigOrDie[inflight.NovaVMClientConfig]()
-		vmClient := inflight.NewNovaVMClient(config)
-		controller := &inflight.Controller{Client: multiclusterClient, VMClient: vmClient}
+		monitor := inflight.NewMonitor(metrics.Registry)
+		controller := &inflight.Controller{Client: multiclusterClient, Monitor: monitor}
 		if err := controller.SetupWithManager(ctx, mgr); err != nil {
 			setupLog.Error(err, "unable to create controller",
 				"controller", "inflight-reservation-controller")

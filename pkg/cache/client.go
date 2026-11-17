@@ -54,7 +54,7 @@ func resourceVersionAtLeast(observed, cached string) bool {
 }
 
 // defaultTTL is used when Config.TTL is zero.
-const defaultTTL = 2 * time.Minute
+const defaultTTL = 30 * time.Second
 
 // Overlay wraps an inner client.Client with a transparent in-process
 // overlay. Writes populate the overlay; reads merge the overlay with the inner

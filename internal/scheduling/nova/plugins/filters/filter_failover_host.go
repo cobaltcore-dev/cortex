@@ -5,7 +5,6 @@ package filters
 
 import (
 	"context"
-	"slices"
 
 	"github.com/go-logr/logr"
 
@@ -54,12 +53,12 @@ func (s *FilterFailoverHost) Run(traceLog logr.Logger, request compute.Placement
 		return result, nil
 	}
 
-	// Honor the call-time ignored reservation types. When failover host
-	// reservations are ignored — as the path finder probe does (see
-	// reservations/failoverhost/pathfinding.go) — block nothing so reserved
-	// hosts stay visible to their own partition.
-	if slices.Contains(request.GetOptions().IgnoredReservationTypes, v1alpha1.ReservationTypeFailoverHost) {
-		traceLog.V(1).Info("failover host reservations ignored, not blocking any hosts")
+	// The empty-datacenter view (AssumeEmptyHosts) reasons about what hosts could
+	// hold once fully cleared, so no failover-host reservation should block — as the
+	// path finder probe does (see reservations/failoverhost/pathfinding.go), where
+	// blocking reserved hosts would hide the very hosts it is reasoning about.
+	if request.GetOptions().AssumeEmptyHosts {
+		traceLog.V(1).Info("assuming empty hosts, failover host reservations not blocking any hosts")
 		return result, nil
 	}
 

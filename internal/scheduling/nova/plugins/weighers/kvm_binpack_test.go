@@ -4,9 +4,10 @@
 package weighers
 
 import (
-	"github.com/go-logr/logr"
 	"strings"
 	"testing"
+
+	"github.com/go-logr/logr"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
@@ -51,12 +52,9 @@ func newBinpackRequest(memoryMB, vcpus, numInstances uint64, hosts []string) com
 		InstanceUUID:     "instance-123",
 		NumInstances:     numInstances,
 		HypervisorFamily: api.HypervisorFamilyKVM,
-		Flavor: api.FlavorSpec{
-			VCPUs:    vcpus,
-			MemoryMB: memoryMB,
-		},
-		Hosts:   hostList,
-		Weights: weights,
+		InstanceCapacity: api.CapacityFromVCPUsMemoryMB(vcpus, memoryMB),
+		Hosts:            hostList,
+		Weights:          weights,
 	}
 }
 
@@ -467,73 +465,6 @@ func TestKVMBinpackStep_Run(t *testing.T) {
 			// Verify statistics are populated
 			if _, ok := result.Statistics["binpack score"]; !ok {
 				t.Error("expected statistics to contain 'binpack score'")
-			}
-		})
-	}
-}
-
-func TestKVMBinpackStep_calcVMResources(t *testing.T) {
-	tests := []struct {
-		name             string
-		request          compute.PlacementRequest
-		expectedMemBytes int64
-		expectedCPU      int64
-	}{
-		{
-			name:             "single instance with 8G memory and 4 CPUs",
-			request:          newBinpackRequest(8192, 4, 1, []string{"host1"}),
-			expectedMemBytes: 8192 * 1024 * 1024,
-			expectedCPU:      4,
-		},
-		{
-			name:             "multiple instances",
-			request:          newBinpackRequest(4096, 2, 3, []string{"host1"}),
-			expectedMemBytes: 4096 * 1024 * 1024 * 3,
-			expectedCPU:      2 * 3,
-		},
-		{
-			name:             "zero memory",
-			request:          newBinpackRequest(0, 4, 1, []string{"host1"}),
-			expectedMemBytes: 0,
-			expectedCPU:      4,
-		},
-		{
-			name:             "zero CPUs",
-			request:          newBinpackRequest(8192, 0, 1, []string{"host1"}),
-			expectedMemBytes: 8192 * 1024 * 1024,
-			expectedCPU:      0,
-		},
-		{
-			name:             "large values",
-			request:          newBinpackRequest(524288, 128, 10, []string{"host1"}), // 512Gi, 128 CPUs, 10 instances
-			expectedMemBytes: 524288 * 1024 * 1024 * 10,
-			expectedCPU:      128 * 10,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			step := &KVMBinpackStep{}
-			resources := step.calcVMResources(tt.request)
-
-			memResource, ok := resources[hv1.ResourceMemory]
-			if !ok {
-				t.Error("expected memory resource to be present")
-			} else {
-				actualMem := memResource.Value()
-				if actualMem != tt.expectedMemBytes {
-					t.Errorf("expected memory %d bytes, got %d", tt.expectedMemBytes, actualMem)
-				}
-			}
-
-			cpuResource, ok := resources[hv1.ResourceCPU]
-			if !ok {
-				t.Error("expected CPU resource to be present")
-			} else {
-				actualCPU := cpuResource.Value()
-				if actualCPU != tt.expectedCPU {
-					t.Errorf("expected CPU %d, got %d", tt.expectedCPU, actualCPU)
-				}
 			}
 		})
 	}

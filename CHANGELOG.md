@@ -1,5 +1,260 @@
 # Changelog
 
+## cortex 0.9.2
+
+### Fixes
+
+- **More stable E2E tests** ([#1538](https://github.com/cobaltcore-dev/cortex/pull/1538)): E2E subcommands now get a default zap logger initialized early in `main()`, preventing log output from being silently discarded before the flag-configured logger is set up. Flavor-group extraction now logs skip counters (`skippedParseErr`, `skippedNoHWVersion`, `skippedInvalidGroup`) and a summary line at extraction completion for easier diagnosis of data-quality issues in CI. Key success-path log lines in commitment E2E checks have been promoted from `V(1)` (debug) to `Info` level so they appear in standard CI output. A new panic on internal dry-run errors (`"internal error processing dry-run request"`) catches controller timeouts and misconfigurations immediately instead of falling through to the generic rejection handler.
+
+### Documentation
+
+- **Add missing plugin entries & fix stale option reference** ([#1533](https://github.com/cobaltcore-dev/cortex/pull/1533)): Added 3 missing plugin entries to nova smart-scheduling docs (`filter_failover_host`, `weigher_failover_host`, `kvm_cr_migration_slot`) and updated the filter count from "seventeen" to "nineteen". Fixed stale reference to `ignoredReservationTypes` → `AssumeEmptyHosts: true` in failover host reservations docs.
+
+### Dependency Updates
+
+| Dependency | Old | New | Note |
+|---|---|---|---|
+| `kube-prometheus-stack` | `v93.3.0` | `v93.3.1` | Helm chart |
+
+## cortex-postgres 0.6.34
+
+- Bump to align with cortex 0.9.2 release.
+
+## cortex-shim 0.1.40
+
+- Bump to align with cortex 0.9.2 release.
+
+## bundles 0.0.116
+
+- Bump to align with cortex 0.9.2 release.
+
+## cortex-placement-shim 0.1.40
+
+- Bump to align with cortex 0.9.2 release.
+
+## Release PR [#1540](https://github.com/cobaltcore-dev/cortex/pull/1540) — 2026-11-17
+
+### Bumped Versions
+
+| Package | Previous | New |
+|---|---|---|
+| cortex | 0.9.1 | 0.9.2 |
+| cortex-postgres | 0.6.33 | 0.6.34 |
+| cortex-shim | 0.1.39 | 0.1.40 |
+| bundles | 0.0.115 | 0.0.116 |
+| cortex-placement-shim | 0.1.39 | 0.1.40 |
+
+### Bug Fixes
+
+- **More stable E2E tests** — Default zap logger for E2E subcommands prevents silently discarded log output. Flavor-group extraction now logs skip counters and a summary line. Commitment E2E check success-path logs promoted to `Info` level. New panic on internal dry-run errors catches controller timeouts immediately.
+
+### Documentation
+
+- **Missing plugin entries & stale option reference** — Added `filter_failover_host`, `weigher_failover_host`, `kvm_cr_migration_slot` to nova smart-scheduling docs (filter count "seventeen" → "nineteen"). Fixed `ignoredReservationTypes` → `AssumeEmptyHosts: true` in failover host reservations docs.
+
+### Chores
+
+- **Bump app version** — `sha-bac55e3a` → `sha-cdb4dfaa` in `helm/library/cortex/Chart.yaml`.
+
+### Dependency Updates
+
+| Dependency | Old | New | Note |
+|---|---|---|---|
+| `kube-prometheus-stack` | `v93.3.0` | `v93.3.1` | Helm chart |
+
+### ⚠️ Operational Notes
+
+1. **No schema or RBAC changes:** Rolling upgrade is sufficient.
+2. **Dry-run panic:** E2E tests will now panic immediately on internal dry-run errors that were previously silently swallowed. If CI failures surface from this path, investigate controller timeouts or misconfigurations rather than reverting.
+
+**Contributors:** @mblos, @cortex-ai-agents[bot], @renovate[bot], @SoWieMarkus
+
+**PR:** [#1540](https://github.com/cobaltcore-dev/cortex/pull/1540) | **Commits:** 4 | **Files changed:** 7 | **+35 / −12**
+
+## cortex 0.9.1
+
+### Refactoring
+
+- **CR & Reservation controller decomposition** ([#1535](https://github.com/cobaltcore-dev/cortex/pull/1535)): The monolithic `Reconcile()` methods in both `CommittedResourceController` and `CommitmentReservationController` have been split into focused sub-functions (`handleRejectedGeneration()`, `reconcileEvicted()`, `reconcilePlaced()`, `reconcileUnplaced()`) for improved readability, testability, and maintainability. The echo-nudge mechanism (`isAlreadyReserving()` helper and `cortex.cloud/echo-nudge` annotation) has been removed — the controller now relies on the Reservation watch plus a 3 s fallback requeue. Spec-change re-placement now clears `Spec.TargetHost` to force re-placement through the eviction → unplaced flow instead of silently stamping a new `ObservedGeneration`. Roadmap TODOs (`#778`, `#781`, `#783`, `#785`–`#790`) are documented inline.
+
+### Fixes
+
+- **Flavor sort order: prefer fewest CPUs on memory tie** ([#1535](https://github.com/cobaltcore-dev/cortex/pull/1535)): The secondary sort for flavors within a group has been changed from VCPUs descending to VCPUs ascending when memory is equal. This minimizes CPU blocking on hosts when multiple flavors share the same memory tier. New test `TestSelectFlavor_SameMemory_PrefersFewestCPU` validates the tiebreak.
+
+### Housekeeping
+
+- **Tiltfile: stale Helm chart cleanup** ([#1535](https://github.com/cobaltcore-dev/cortex/pull/1535)): Added a `find … -delete` step that removes stale packaged Helm chart `.tgz` files before copying the new package, preventing version collisions during local development.
+
+### Dependency Updates
+
+| Dependency | Change | Note |
+|---|---|---|
+| PostgreSQL 18 | `18.6-1.pgdg13+2` → `18.7-1.pgdg13+2` | Dockerfile bump |
+| `go.opentelemetry.io/otel/trace` | → `v1.47.0` | ⚠️ Security |
+| `go.opentelemetry.io/otel/sdk` | → `v1.47.0` | ⚠️ Security |
+| `github.com/sapcc/go-bits` | `13886743d3a7` → `2726a2c437f4` | |
+| `kube-prometheus-stack` | `v93.2.2` → `v93.3.0` | Helm chart |
+| `github.com/gophercloud/gophercloud/v2` | `v2.15.0` → `v2.16.0` | |
+| `sigs.k8s.io/controller-runtime` | `v0.25.2` → `v0.25.3` | |
+
+### Rollout Notes
+
+- **Echo-nudge removal:** Stale reservations may take up to 3 s (requeue interval) to recover instead of being poked immediately via annotation patch. The Reservation watch plus fallback requeue covers this path; the nudge was a secondary mechanism.
+- **Spec-change re-placement:** Clearing `TargetHost` on generation mismatch now triggers a two-cycle eviction → re-place flow. This reuses the existing eviction codepath and is covered by integration tests.
+- **Flavor sort reversal:** Only affects *new* reservations; existing placements are unaffected.
+- **Security dependencies — prioritize rollout:** OpenTelemetry `v1.47.0` patches security vulnerabilities.
+
+## cortex-postgres 0.6.33
+
+- PostgreSQL `18.6-1.pgdg13+2` → `18.7-1.pgdg13+2`.
+- Bump to align with cortex 0.9.1 release.
+
+## cortex-shim 0.1.39
+
+- Bump to align with cortex 0.9.1 release.
+
+## bundles 0.0.115
+
+- Bump to align with cortex 0.9.1 release.
+
+## cortex-placement-shim 0.1.39
+
+- Bump to align with cortex 0.9.1 release.
+
+## Release PR [#1535](https://github.com/cobaltcore-dev/cortex/pull/1535) — 2026-11-16
+
+### Bumped Versions
+
+| Package | Previous | New |
+|---|---|---|
+| cortex | 0.9.0 | 0.9.1 |
+| cortex-postgres | 0.6.32 | 0.6.33 |
+| cortex-shim | 0.1.38 | 0.1.39 |
+| bundles | 0.0.114 | 0.0.115 |
+| cortex-placement-shim | 0.1.38 | 0.1.39 |
+
+### Refactoring
+
+- **CR & Reservation controller decomposition** — The monolithic `Reconcile()` methods in `CommittedResourceController` and `CommitmentReservationController` have been split into focused sub-functions (`handleRejectedGeneration()`, `reconcileEvicted()`, `reconcilePlaced()`, `reconcileUnplaced()`). The echo-nudge mechanism (`isAlreadyReserving()` + `cortex.cloud/echo-nudge` annotation) has been removed in favor of Reservation watch + 3 s fallback requeue. Spec-change re-placement now clears `Spec.TargetHost` to force eviction → re-place instead of in-place `ObservedGeneration` stamping.
+
+### Bug Fixes
+
+- **Flavor sort order: prefer fewest CPUs on memory tie** — The secondary sort for flavors within a group changed from VCPUs descending to VCPUs ascending when memory is equal, minimizing CPU blocking on hosts. New test `TestSelectFlavor_SameMemory_PrefersFewestCPU` validates the behavior.
+
+### Chores
+
+- **Tiltfile: stale Helm chart cleanup** — Added `find … -delete` to remove stale `.tgz` chart files before copying the new package.
+
+### Dependency Updates
+
+| Dependency | Old | New | Note |
+|---|---|---|---|
+| PostgreSQL 18 | `18.6-1.pgdg13+2` | `18.7-1.pgdg13+2` | Dockerfile |
+| `go.opentelemetry.io/otel/trace` | — | `v1.47.0` | ⚠️ Security |
+| `go.opentelemetry.io/otel/sdk` | — | `v1.47.0` | ⚠️ Security |
+| `github.com/sapcc/go-bits` | digest `13886743d3a7` | digest `2726a2c437f4` | |
+| `kube-prometheus-stack` | `v93.2.2` | `v93.3.0` | Helm chart |
+| `github.com/gophercloud/gophercloud/v2` | `v2.15.0` | `v2.16.0` | |
+| `sigs.k8s.io/controller-runtime` | `v0.25.2` | `v0.25.3` | |
+
+### ⚠️ Operational Notes
+
+1. **No schema or RBAC changes:** This is a purely internal restructuring with zero new CRDs or API surface changes. A rolling upgrade is sufficient.
+2. **Echo-nudge removal:** Stale reservations may take up to 3 s (requeue interval) to recover instead of the immediate annotation poke. The Reservation watch + fallback requeue covers the path.
+3. **Spec-change re-placement:** When a placed reservation's `ObservedGeneration` falls behind `res.Generation`, `Spec.TargetHost` is now cleared to force re-placement through the eviction → unplaced flow. This matches the existing eviction codepath and is covered by integration tests.
+4. **Flavor sort reversal:** The scheduler now prefers the flavor with fewest CPU cores when memory ties. Only affects new reservations; existing placements are unaffected.
+5. **Security dependencies — prioritize rollout:** OpenTelemetry trace/SDK `v1.47.0` patches security vulnerabilities.
+
+**Contributors:** @mblos, @renovate[bot]
+
+**PR:** [#1535](https://github.com/cobaltcore-dev/cortex/pull/1535) | **Commits:** 7 | **Files changed:** 18 | **+314 / −308**
+
+## cortex 0.9.0
+
+### Features
+
+- **New Special IaaS Pinning** ([#1515](https://github.com/cobaltcore-dev/cortex/pull/1515)): Introduces `filter_external_customer` and `filter_domain_pinning` filter steps to the `kvm-general-purpose-load-balancing` and `kvm-hana-bin-packing` pipelines. Hosts with the `CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE` trait are now reserved exclusively for allowed `iaas-*` domains, and specific `iaas-*` domains can be pinned to dedicated hypervisors for deterministic host placement. Failover slots respect the same pinning and exclusivity rules. Configurable via Helm values (`filterExternalCustomer`, `filterDomainPinning`) or live-editable via `kubectl edit pipeline`.
+- **Inflight Controller Update** ([#1471](https://github.com/cobaltcore-dev/cortex/pull/1471)): Reworks the in-flight reservation controller with updated logic and metrics.
+- **Generic Quantity Map for Request Spec** ([#1498](https://github.com/cobaltcore-dev/cortex/pull/1498)): Refactors the flavor spec in the scheduling request into a generic quantity map, making the pipeline request spec extensible beyond flavor-based capacity.
+- **Unified Available Capacity Calculation** ([#1504](https://github.com/cobaltcore-dev/cortex/pull/1504)): Moves available capacity calculation into a shared `pkg/capacity` package, providing a single reusable implementation across scheduling plugins.
+
+### Fixes
+
+- **Cache overlay tuning** ([#1509](https://github.com/cobaltcore-dev/cortex/pull/1509)): Increased `cacheOverlayMaxEntries` and reduced `defaultTTL` for the overlay cache to improve cache hit rates and reduce stale data.
+
+### Housekeeping
+
+- **Remove unused scheduling pipelines** ([#1510](https://github.com/cobaltcore-dev/cortex/pull/1510)): Deletes four dead Pipeline CRs (`kvm-new-failover-reservation`, `kvm-valid-host-reuse-failover-reservation`, `kvm-acknowledge-failover-reservation`, `kvm-report-capacity`) superseded by the unified pipeline and `SchedulingIntent` field approach.
+- **Inline `HypervisorDiffHandler`** ([#1516](https://github.com/cobaltcore-dev/cortex/pull/1516)): Removes a standalone typed-event handler used only in the quota controller's `SetupHVWatcher`, inlining it as a simple `handler.TypedFuncs`. No behavior change.
+
+### Dependency Updates
+
+| Dependency | Change |
+|---|---|
+| `kube-prometheus-stack` | `92.22.0` → `93.2.0` |
+| `peter-evans/create-pull-request` | `v8.1.2` → `v8.1.3` |
+| Other external Go dependencies | Updated |
+
+### Rollout Notes
+
+- **IaaS Pinning is fail-closed.** Deploying with an empty `allowedDomainNames` list will immediately block all `iaas-*` domain placements. Ensure the allow-list is populated before rollout.
+- Existing failover slots may churn — slots violating the new pinning/exclusivity rules will be removed by the periodic check and recreated on valid hosts.
+- Pinned hypervisors must also carry the `CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE` trait, and pinned domains must also be on the allow-list.
+- At least 2 hypervisors are needed per pool for failover slots to be created.
+
+## cortex-shim 0.1.38
+
+- Bump to align with cortex 0.9.0 release.
+
+## cortex-cinder 0.0.114
+
+- Bump to align with cortex 0.9.0 release.
+
+## cortex-crds 0.0.114
+
+- Bump to align with cortex 0.9.0 release.
+
+## cortex-ironcore 0.0.114
+
+- Bump to align with cortex 0.9.0 release.
+
+## cortex-manila 0.0.114
+
+- Bump to align with cortex 0.9.0 release.
+
+## cortex-nova 0.0.114
+
+- Bump to align with cortex 0.9.0 release.
+
+## cortex-pods 0.0.114
+
+- Bump to align with cortex 0.9.0 release.
+
+## cortex-placement-shim 0.1.38
+
+- Bump to align with cortex 0.9.0 release.
+
+## Release PR [#1501](https://github.com/cobaltcore-dev/cortex/pull/1501) — 2026-11-09
+
+### Bumped Versions
+
+| Package | Previous | New |
+|---|---|---|
+| cortex | 0.8.1 | 0.8.2 |
+| bundles | 0.0.112 | 0.0.113 |
+
+### Bug Fixes
+
+- **Fix wrong pipeline name in failover host pathfinding** ([#1500](https://github.com/cobaltcore-dev/cortex/pull/1500)) — Corrected the scheduling pipeline name used for HANA-type flavors during evacuation seed candidate fetching from `kvm-hana-load-balancing` to `kvm-hana-bin-packing`. HANA workloads require the bin-packing placement strategy when computing failover evacuation paths; the incorrect pipeline name would have caused HANA failover placements to use the wrong scheduling algorithm, potentially leading to suboptimal or failed VM evacuations.
+
+### Operational Notes
+
+1. **No schema or RBAC changes:** This is a single-line configuration fix with no CRD, Helm, or RBAC changes. A rolling upgrade is sufficient.
+
+**Contributors:** @PhilippMatthes
+
+**PR:** [#1501](https://github.com/cobaltcore-dev/cortex/pull/1501) | **Commits:** 1 | **Files changed:** 1 | **+1 / −1**
+
 ## Release PR [#1495](https://github.com/cobaltcore-dev/cortex/pull/1495) — 2026-11-09
 
 ### Bumped Versions

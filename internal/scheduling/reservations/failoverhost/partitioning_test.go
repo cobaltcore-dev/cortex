@@ -4,6 +4,7 @@
 package failoverhost
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -161,6 +162,35 @@ func TestBuildPartitions(t *testing.T) {
 				t.Errorf("got %v, want %v", gotNames, tt.want)
 			}
 		})
+	}
+}
+
+// TestBuildPartitionsDenseGraph guards against the exponential blowup of the
+// pivot-free Bron-Kerbosch: a homogeneous fleet of identical hosts is a complete
+// mutual graph, which the naive variant explores through 3^(n/3) orderings and
+// never returns from. With pivoting this is a single maximal clique found in one
+// pass. 150 fully-connected hosts would hang the old code; here it must finish
+// well within the test timeout and yield exactly one partition of all hosts.
+func TestBuildPartitionsDenseGraph(t *testing.T) {
+	const n = 150
+	names := make([]string, n)
+	for i := range names {
+		names[i] = fmt.Sprintf("h%03d", i)
+	}
+	var paths []Path
+	for i := range names {
+		for j := range names {
+			if i != j {
+				paths = append(paths, Path{Source: hv(names[i]), Target: hv(names[j])})
+			}
+		}
+	}
+	got := cliquePartitionBuilder{}.BuildPartitions(paths)
+	if len(got) != 1 {
+		t.Fatalf("got %d partitions, want 1", len(got))
+	}
+	if len(got[0].Hosts) != n {
+		t.Errorf("got partition of %d hosts, want %d", len(got[0].Hosts), n)
 	}
 }
 

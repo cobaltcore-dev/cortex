@@ -30,7 +30,7 @@ import (
 	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/lib"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations"
-	"github.com/cobaltcore-dev/cortex/internal/scheduling/reservations/accounting"
+	"github.com/cobaltcore-dev/cortex/pkg/capacity"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -1388,11 +1388,10 @@ func TestCROversubscriptionRemediation(t *testing.T) {
 			placedSlots = append(placedSlots, r)
 		}
 	}
-	free := accounting.HostFreeCapacity(placedSlots, *hv)
-	zero := resource.MustParse("0")
-	for rn, f := range free {
-		if f.Cmp(zero) < 0 {
-			t.Errorf("host still over-subscribed for %s by %s after remediation", rn, f.String())
+	rep := capacity.NewHostUsageReport(*hv, placedSlots)
+	for rn, excess := range rep.Oversubscribed {
+		if excess.Sign() > 0 {
+			t.Errorf("host still over-subscribed for %s by %s after remediation", rn, excess.String())
 		}
 	}
 

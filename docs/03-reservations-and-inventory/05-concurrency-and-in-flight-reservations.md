@@ -66,14 +66,16 @@ confirmed anything:
 ## Learning what the platform actually did
 
 In-flight reservations are only half the story: they express Cortex's *guess*, and the guess has to be
-reconciled with reality. Two feedback channels close that loop:
+reconciled with reality. The feedback loop is closed through the **VirtualMachine CRD**: every in-flight
+reservation is owned by the VM CRD of the workload it reserves for, and Cortex watches that CRD to learn
+when the owning operation has reached a terminal state (placed and running, resized, migrated, or failed).
+Once the VM CRD confirms the outcome, Cortex releases the whole group of per-candidate guesses for that
+operation. A VM CRD is therefore required: without it there is no trustworthy terminal signal, and the
+hold is kept until the operation confirms or the TTL backstop expires it.
 
-- **Exclusion hints on the request.** When the platform retries a placement, it tells Cortex which hosts
-  it has already ruled out (an `ignore_hosts`-style list). Cortex feeds those forward so the next scoring
-  round does not re-offer a host the platform has already rejected.
-- **Watching the reservation resources.** Cortex watches its own reservation resources and reconciles
-  in-flight state against confirmed placements as they arrive — promoting a guess to a confirmed slot when
-  the platform lands where expected, and dropping the other per-candidate guesses for that workload.
+Exclusion hints also flow back on the request itself: when the platform retries a placement, it tells
+Cortex which hosts it has already ruled out (an `ignore_hosts`-style list). Cortex feeds those forward so
+the next scoring round does not re-offer a host the platform has already rejected.
 
 Because the platform's retry behaviour is not uniform, the number of candidates Cortex offers is matched
 to how the caller retries:

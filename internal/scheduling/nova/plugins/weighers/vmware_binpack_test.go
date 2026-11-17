@@ -11,7 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	sched "github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
-	corev1 "k8s.io/api/core/v1"
+	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -25,9 +25,9 @@ func TestVMwareBinpackStepOpts_Validate(t *testing.T) {
 		{
 			name: "valid opts with memory and cpu",
 			opts: VMwareBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 1.0,
-					corev1.ResourceCPU:    1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 1.0,
+					hv1.ResourceCPU:    1.0,
 				},
 			},
 			wantError: false,
@@ -35,8 +35,8 @@ func TestVMwareBinpackStepOpts_Validate(t *testing.T) {
 		{
 			name: "valid opts with only memory",
 			opts: VMwareBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 2.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 2.0,
 				},
 			},
 			wantError: false,
@@ -44,8 +44,8 @@ func TestVMwareBinpackStepOpts_Validate(t *testing.T) {
 		{
 			name: "valid opts with only cpu",
 			opts: VMwareBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceCPU: 0.5,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceCPU: 0.5,
 				},
 			},
 			wantError: false,
@@ -53,15 +53,15 @@ func TestVMwareBinpackStepOpts_Validate(t *testing.T) {
 		{
 			name: "invalid opts - empty resource weights",
 			opts: VMwareBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{},
+				ResourceWeights: map[hv1.ResourceName]float64{},
 			},
 			wantError: true,
 		},
 		{
 			name: "invalid opts - unsupported resource",
 			opts: VMwareBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceStorage: 1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceName("storage"): 1.0,
 				},
 			},
 			wantError: true,
@@ -69,8 +69,8 @@ func TestVMwareBinpackStepOpts_Validate(t *testing.T) {
 		{
 			name: "invalid opts - zero weight",
 			opts: VMwareBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceMemory: 0.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceMemory: 0.0,
 				},
 			},
 			wantError: true,
@@ -78,8 +78,8 @@ func TestVMwareBinpackStepOpts_Validate(t *testing.T) {
 		{
 			name: "invalid opts - negative weight",
 			opts: VMwareBinpackStepOpts{
-				ResourceWeights: map[corev1.ResourceName]float64{
-					corev1.ResourceCPU: -1.0,
+				ResourceWeights: map[hv1.ResourceName]float64{
+					hv1.ResourceCPU: -1.0,
 				},
 			},
 			wantError: true,
@@ -143,9 +143,9 @@ func TestVMwareBinpackStep_Run(t *testing.T) {
 	}
 
 	step := &VMwareBinpackStep{}
-	step.Options.ResourceWeights = map[corev1.ResourceName]float64{
-		corev1.ResourceMemory: 1.0,
-		corev1.ResourceCPU:    1.0,
+	step.Options.ResourceWeights = map[hv1.ResourceName]float64{
+		hv1.ResourceMemory: 1.0,
+		hv1.ResourceCPU:    1.0,
 	}
 	step.Client = fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -164,11 +164,8 @@ func TestVMwareBinpackStep_Run(t *testing.T) {
 		{
 			name: "binpack prefers hosts with higher utilization",
 			request: sched.PlacementRequest{
-				NumInstances: 1,
-				Flavor: api.FlavorSpec{
-					MemoryMB: 1000, // 1GB
-					VCPUs:    1,
-				},
+				NumInstances:     1,
+				InstanceCapacity: api.CapacityFromVCPUsMemoryMB(1, 1000), // 1GB
 				Hosts: []sched.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "host2"},
@@ -183,11 +180,8 @@ func TestVMwareBinpackStep_Run(t *testing.T) {
 		{
 			name: "handles missing host data gracefully",
 			request: sched.PlacementRequest{
-				NumInstances: 1,
-				Flavor: api.FlavorSpec{
-					MemoryMB: 1000,
-					VCPUs:    1,
-				},
+				NumInstances:     1,
+				InstanceCapacity: api.CapacityFromVCPUsMemoryMB(1, 1000),
 				Hosts: []sched.Host{
 					{ComputeHost: "host1"},
 					{ComputeHost: "unknown_host"}, // No utilization data
@@ -231,7 +225,7 @@ func TestVMwareBinpackStep_CalcHostCapacity(t *testing.T) {
 
 	// Memory capacity: 6000 MiB in bytes
 	expectedMemoryBytes := int64(6000) * (1 << 20)
-	memoryCapacity := capacity[corev1.ResourceMemory]
+	memoryCapacity := capacity[hv1.ResourceMemory]
 	if memoryCapacity.Value() != expectedMemoryBytes {
 		t.Errorf("expected memory capacity %d, got %d",
 			expectedMemoryBytes, memoryCapacity.Value())
@@ -239,7 +233,7 @@ func TestVMwareBinpackStep_CalcHostCapacity(t *testing.T) {
 
 	// CPU capacity: 6
 	expectedCPU := int64(6)
-	cpuCapacity := capacity[corev1.ResourceCPU]
+	cpuCapacity := capacity[hv1.ResourceCPU]
 	if cpuCapacity.Value() != expectedCPU {
 		t.Errorf("expected CPU capacity %d, got %d",
 			expectedCPU, cpuCapacity.Value())
@@ -261,7 +255,7 @@ func TestVMwareBinpackStep_CalcHostAllocation(t *testing.T) {
 
 	// Memory allocation: 4000 MiB in bytes
 	expectedMemoryBytes := int64(4000) * (1 << 20)
-	memoryAllocation := allocation[corev1.ResourceMemory]
+	memoryAllocation := allocation[hv1.ResourceMemory]
 	if memoryAllocation.Value() != expectedMemoryBytes {
 		t.Errorf("expected memory allocation %d, got %d",
 			expectedMemoryBytes, memoryAllocation.Value())
@@ -269,63 +263,9 @@ func TestVMwareBinpackStep_CalcHostAllocation(t *testing.T) {
 
 	// CPU allocation: 4
 	expectedCPU := int64(4)
-	cpuAllocation := allocation[corev1.ResourceCPU]
+	cpuAllocation := allocation[hv1.ResourceCPU]
 	if cpuAllocation.Value() != expectedCPU {
 		t.Errorf("expected CPU allocation %d, got %d",
 			expectedCPU, cpuAllocation.Value())
-	}
-}
-
-func TestVMwareBinpackStep_CalcVMResources(t *testing.T) {
-	step := &VMwareBinpackStep{}
-
-	tests := []struct {
-		name           string
-		request        sched.PlacementRequest
-		expectedMemory int64
-		expectedCPU    int64
-	}{
-		{
-			name: "single instance",
-			request: sched.PlacementRequest{
-				NumInstances: 1,
-				Flavor: api.FlavorSpec{
-					MemoryMB: 2048,
-					VCPUs:    4,
-				},
-			},
-			expectedMemory: 2048 * (1 << 20), // 2048 MiB in bytes
-			expectedCPU:    4,
-		},
-		{
-			name: "multiple instances",
-			request: sched.PlacementRequest{
-				NumInstances: 3,
-				Flavor: api.FlavorSpec{
-					MemoryMB: 1024,
-					VCPUs:    2,
-				},
-			},
-			expectedMemory: 3 * 1024 * (1 << 20), // 3 instances * 1024 MiB in bytes
-			expectedCPU:    3 * 2,                // 3 instances * 2 vCPUs
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			resources := step.calcVMResources(tt.request)
-
-			memoryResources := resources[corev1.ResourceMemory]
-			if memoryResources.Value() != tt.expectedMemory {
-				t.Errorf("expected memory %d, got %d",
-					tt.expectedMemory, memoryResources.Value())
-			}
-
-			cpuResources := resources[corev1.ResourceCPU]
-			if cpuResources.Value() != tt.expectedCPU {
-				t.Errorf("expected CPU %d, got %d",
-					tt.expectedCPU, cpuResources.Value())
-			}
-		})
 	}
 }
