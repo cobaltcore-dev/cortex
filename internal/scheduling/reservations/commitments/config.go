@@ -19,6 +19,7 @@ type Config struct {
 	ReservationController       ReservationControllerConfig       `json:"committedResourceReservationController"`
 	CommittedResourceController CommittedResourceControllerConfig `json:"committedResourceController"`
 	UsageReconciler             UsageReconcilerConfig             `json:"committedResourceUsageReconciler"`
+	ChangeReconciler            ChangeReconcilerConfig            `json:"committedResourceChangeReconciler"`
 	API                         APIConfig                         `json:"committedResourceAPI"`
 
 	// DatasourceName is the name of the Datasource CRD that provides database
@@ -46,6 +47,50 @@ func (c *UsageReconcilerConfig) ApplyDefaults() {
 	d := DefaultUsageReconcilerConfig()
 	if c.CooldownInterval.Duration == 0 {
 		c.CooldownInterval = d.CooldownInterval
+	}
+}
+
+// ChangeReconcilerConfig holds tuning knobs for the CommittedResourceChange reconciler's
+// terminal garbage collection and stuck detection. Each retention window controls how long a
+// terminal change request is kept for ops visibility before deletion. A non-positive window
+// disables GC for that phase; non-terminal change requests are never GC'd regardless of age.
+type ChangeReconcilerConfig struct {
+	// AcceptedRetention is how long an Accepted change request is kept before deletion.
+	AcceptedRetention metav1.Duration `json:"acceptedRetention,omitempty"`
+	// RejectedRetention is how long a Rejected change request is kept before deletion.
+	// Longer than AcceptedRetention because failures are worth investigating.
+	RejectedRetention metav1.Duration `json:"rejectedRetention,omitempty"`
+	// SupersededRetention is how long a Superseded change request is kept before deletion.
+	SupersededRetention metav1.Duration `json:"supersededRetention,omitempty"`
+	// StuckThreshold is how long a non-terminal change request may stay in its current phase
+	// before it is reported as stuck via the cortex_committed_resource_change_stuck metric.
+	// Stuck change requests are alerted on, never GC'd.
+	StuckThreshold metav1.Duration `json:"stuckThreshold,omitempty"`
+}
+
+func DefaultChangeReconcilerConfig() ChangeReconcilerConfig {
+	return ChangeReconcilerConfig{
+		AcceptedRetention:   metav1.Duration{Duration: time.Hour},
+		RejectedRetention:   metav1.Duration{Duration: 120 * time.Hour},
+		SupersededRetention: metav1.Duration{Duration: 120 * time.Hour},
+		StuckThreshold:      metav1.Duration{Duration: 30 * time.Minute},
+	}
+}
+
+// ApplyDefaults fills in zero-value fields from the defaults, leaving explicitly configured values intact.
+func (c *ChangeReconcilerConfig) ApplyDefaults() {
+	d := DefaultChangeReconcilerConfig()
+	if c.AcceptedRetention.Duration == 0 {
+		c.AcceptedRetention = d.AcceptedRetention
+	}
+	if c.RejectedRetention.Duration == 0 {
+		c.RejectedRetention = d.RejectedRetention
+	}
+	if c.SupersededRetention.Duration == 0 {
+		c.SupersededRetention = d.SupersededRetention
+	}
+	if c.StuckThreshold.Duration == 0 {
+		c.StuckThreshold = d.StuckThreshold
 	}
 }
 
