@@ -225,7 +225,7 @@ func e2eRoundTripResource(
 			"resource", resourceName, "reason", rejectionReason)
 		return
 	}
-	e2eLog.V(1).Info("round-trip check: commitment accepted", "resource", resourceName, "uuid", testUUID)
+	e2eLog.Info("round-trip check: commitment accepted", "resource", resourceName, "uuid", testUUID)
 
 	// Register cleanup immediately so it runs even if the usage check panics.
 	defer func() {
@@ -428,7 +428,7 @@ func e2eBatchFlavorGroupResource(
 			"resource", resourceName, "reason", reason)
 		return
 	}
-	e2eLog.V(1).Info("batch check: batch confirmed", "resource", resourceName, "uuidA", uuidA, "uuidB", uuidB)
+	e2eLog.Info("batch check: batch confirmed", "resource", resourceName, "uuidA", uuidA, "uuidB", uuidB)
 
 	report := e2eFetchUsageReport(ctx, baseURL, az, projectID)
 	e2eLogUsageReport(report, az, projectID)
@@ -549,10 +549,12 @@ func e2eDryRunResource(
 	rejectionReason := e2eSendChangeCommitments(ctx, baseURL, req, requestTimeout)
 	switch {
 	case rejectionReason == "":
-		e2eLog.V(1).Info("dry-run check: accepted", "resource", resourceName, "az", az)
+		e2eLog.Info("dry-run check: accepted", "resource", resourceName, "az", az)
 	case strings.Contains(rejectionReason, "not sufficient capacity") || strings.Contains(rejectionReason, "insufficient CPU cores"):
 		e2eLog.Info("dry-run check: capacity rejection (expected in constrained clusters)",
 			"resource", resourceName, "az", az, "reason", rejectionReason)
+	case strings.Contains(rejectionReason, "internal error processing dry-run request"):
+		panic(fmt.Sprintf("dry-run check: internal error for resource %s in %s (likely controller timeout or misconfiguration): %s", resourceName, az, rejectionReason))
 	default:
 		panic(fmt.Sprintf("dry-run check: unexpected rejection for resource %s in %s: %s", resourceName, az, rejectionReason))
 	}
@@ -822,7 +824,7 @@ func e2eMarketplaceTransferResource(
 		},
 	}
 
-	e2eLog.V(1).Info("transfer check: transferring commitment from projectA to projectB",
+	e2eLog.Info("transfer check: transferring commitment from projectA to projectB",
 		"resource", resourceName, "uuid", testUUID, "projectA", projectA, "projectB", projectB, "az", az)
 	if reason := e2eSendChangeCommitments(ctx, baseURL, transferReq, requestTimeout); reason != "" {
 		if !strings.Contains(reason, "not sufficient capacity") && !strings.Contains(reason, "insufficient CPU cores") {
