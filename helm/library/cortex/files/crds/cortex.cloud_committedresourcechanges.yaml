@@ -195,7 +195,8 @@ spec:
               of a CommittedResourceChange.
             properties:
               conditions:
-                description: Conditions holds Progressing and Finished conditions.
+                description: Conditions holds Progressing, Finished and Restoring
+                  conditions.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
