@@ -101,6 +101,31 @@ func TestComputeViolations(t *testing.T) {
 				Status: v1alpha1.ReservationStatus{Host: "host-1"},
 			}},
 		},
+		{
+			// Regression: after the pkg/capacity refactor (31b2fe82), FailoverHost reservations
+			// were counted at full Spec.Resources (= entire host) instead of zero.
+			// With VMs running: Available = Total − Used − Total = −Used → false oversubscription.
+			name: "failover host reservation with running VMs does not cause false oversubscription",
+			hv: hv1.Hypervisor{
+				ObjectMeta: metav1.ObjectMeta{Name: "host-1"},
+				Status: hv1.HypervisorStatus{
+					EffectiveCapacity: map[hv1.ResourceName]resource.Quantity{
+						hv1.ResourceMemory: testGiB(512),
+					},
+					Allocation: map[hv1.ResourceName]resource.Quantity{
+						hv1.ResourceMemory: testGiB(256),
+					},
+				},
+			},
+			slots: []v1alpha1.Reservation{{
+				Spec: v1alpha1.ReservationSpec{
+					Type:       v1alpha1.ReservationTypeFailoverHost,
+					TargetHost: "host-1",
+					Resources:  map[hv1.ResourceName]resource.Quantity{hv1.ResourceMemory: testGiB(512)},
+				},
+				Status: v1alpha1.ReservationStatus{Host: "host-1"},
+			}},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
