@@ -57,7 +57,7 @@ selection, so a KVM request never runs a VMware weigher and vice versa.
 
 ## The filters
 
-Nova ships seventeen filters (registered under `internal/scheduling/nova/plugins/filters/`). Filters run
+Nova ships nineteen filters (registered under `internal/scheduling/nova/plugins/filters/`). Filters run
 sequentially and each removes hosts that fail its rule:
 
 | Filter | Removes hosts that… |
@@ -72,6 +72,7 @@ sequentially and each removes hosts that fail its rule:
 | `filter_allowed_projects` | are not allowed for the request's project |
 | `filter_external_customer` | violate external-customer isolation rules |
 | `filter_domain_pinning` | are not among a pinned domain's dedicated hypervisors |
+| `filter_failover_host` | are reserved as failover landing zones (non-evacuation), or are not the selected failover target (evacuation) |
 | `filter_instance_group_affinity` | break a required instance-group affinity |
 | `filter_instance_group_anti_affinity` | break a required instance-group anti-affinity |
 | `filter_live_migratable` | cannot accept a live-migratable instance |
@@ -95,7 +96,10 @@ They split by hypervisor family:
 - `kvm_failover_reservation_consolidation` — consolidate to preserve failover headroom.
 - `kvm_failover_evacuation` — bias placement during evacuation to keep failover capacity (see
   [Failover reservations](../03-reservations-and-inventory/03-failover-reservations.md)).
+- `kvm_cr_migration_slot` — boost hosts that can accommodate a migrating VM's committed-resource reservation slot.
 - `kvm_instance_group_soft_affinity` — honor *soft* instance-group affinity as a preference.
+- `weigher_failover_host` — lift the selected failover target host to the front during gang evacuation (see
+  [Failover host reservations](../03-reservations-and-inventory/04-failover-host-reservations.md)).
 
 **VMware weighers:**
 
