@@ -247,7 +247,7 @@ func TestReconcile(t *testing.T) {
 			name: "non-create: live migration ongoing is kept",
 			objects: []client.Object{
 				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.LiveMigrationIntent, resources: cpu4}),
-				newVM("vm-uuid-1", "host-1", cond(vmv1alpha1.ConditionTypeMigrating, metav1.ConditionTrue, vmv1alpha1.ConditionReasonMigratingOngoing)),
+				newVM("vm-uuid-1", "host-1", cond(vmv1alpha1.ConditionTypeMigrating, metav1.ConditionTrue, vmv1alpha1.ConditionReasonMigratingLiveInProgress)),
 			},
 			wantRequeue:     requeueInterval,
 			wantKept:        []string{"res-1"},
@@ -261,7 +261,7 @@ func TestReconcile(t *testing.T) {
 			objects: []client.Object{
 				newInFlightReservation("a", "vm-uuid-1", "host-1", createA),
 				newInFlightReservation("b", "vm-uuid-1", "host-2", createA),
-				newVM("vm-uuid-1", "host-1", cond(vmv1alpha1.ConditionTypeRunning, metav1.ConditionTrue, "Running")),
+				newVM("vm-uuid-1", "host-1", cond(vmv1alpha1.ConditionTypeRunning, metav1.ConditionTrue, vmv1alpha1.ConditionReasonRunningOK)),
 			},
 			reconcile:   "a",
 			wantDeleted: []string{"a", "b"},
@@ -296,79 +296,71 @@ func TestReconcile(t *testing.T) {
 			wantDeleted: []string{"res-1"},
 		},
 		{
-			// UC2: an ongoing resize keeps the hold and surfaces the Resizing reason.
-			name: "resize: ongoing requeues",
+			// UC2: an in-progress resize keeps the hold and surfaces the Resizing reason.
+			name: "resize: in progress requeues",
 			objects: []client.Object{
 				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.ResizeIntent}),
-				newVM("vm-uuid-1", "host-1", cond(vmv1alpha1.ConditionTypeResizing, metav1.ConditionTrue, vmv1alpha1.ConditionReasonResizingOngoing)),
+				newVM("vm-uuid-1", "host-1", cond(vmv1alpha1.ConditionTypeResizing, metav1.ConditionTrue, vmv1alpha1.ConditionReasonResizingInProgress)),
 			},
 			wantRequeue:     requeueInterval,
 			wantKept:        []string{"res-1"},
 			wantReadyStatus: metav1.ConditionUnknown, wantReadyReason: "Resizing",
 		},
 		{
-			// UC2: a terminal Resizing reason that transitioned before the hold was
-			// created is stale (previous operation) and must not release it.
-			name: "resize: stale terminal condition is kept",
+			// UC2: a settled Resizing condition that transitioned before the hold
+			// was created is stale (idle VM / previous operation) and must not
+			// release it.
+			name: "resize: stale settled condition is kept",
 			objects: []client.Object{
 				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.ResizeIntent, createdAt: &resCreated}),
-				vmWithCond("vm-uuid-1", vmv1alpha1.ConditionTypeResizing, vmv1alpha1.ConditionReasonResizingCompleted, stalePast),
+				vmWithCond("vm-uuid-1", vmv1alpha1.ConditionTypeResizing, vmv1alpha1.ConditionReasonResizingInProgress, stalePast),
 			},
 			wantRequeue:     requeueInterval,
 			wantKept:        []string{"res-1"},
 			wantReadyStatus: metav1.ConditionUnknown, wantReadyReason: "Resizing",
 		},
 		{
-			// UC3: an ongoing live migration keeps both holds.
-			name: "live migration: ongoing requeues",
+			// UC3: an in-progress live migration keeps both holds.
+			name: "live migration: in progress requeues",
 			objects: []client.Object{
 				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.LiveMigrationIntent}),
-				newVM("vm-uuid-1", "host-1", cond(vmv1alpha1.ConditionTypeMigrating, metav1.ConditionTrue, vmv1alpha1.ConditionReasonMigratingOngoing)),
+				newVM("vm-uuid-1", "host-1", cond(vmv1alpha1.ConditionTypeMigrating, metav1.ConditionTrue, vmv1alpha1.ConditionReasonMigratingLiveInProgress)),
 			},
 			wantRequeue:     requeueInterval,
 			wantKept:        []string{"res-1"},
 			wantReadyStatus: metav1.ConditionUnknown, wantReadyReason: "Migrating",
 		},
 		{
-			// UC3: a fresh terminal migration releases both target and source holds
+			// UC3: a fresh settled migration releases both target and source holds
 			// (the whole operation group) through Reconcile.
-			name: "live migration: fresh terminal releases target and source group",
+			name: "live migration: fresh settled releases target and source group",
 			objects: []client.Object{
 				newInFlightReservation("target", "vm-uuid-1", "host-2", inFlightOpts{operationID: "op-m", intent: novaapi.LiveMigrationIntent, createdAt: &resCreated}),
 				newInFlightReservation("source", "vm-uuid-1", "host-1", inFlightOpts{operationID: "op-m", intent: novaapi.LiveMigrationIntent, createdAt: &resCreated}),
-				vmWithCond("vm-uuid-1", vmv1alpha1.ConditionTypeMigrating, vmv1alpha1.ConditionReasonMigratingCompleted, freshFuture),
+				vmWithCond("vm-uuid-1", vmv1alpha1.ConditionTypeMigrating, vmv1alpha1.ConditionReasonMigratingLiveInProgress, freshFuture),
 			},
 			reconcile:   "source",
 			wantDeleted: []string{"target", "source"},
 		},
 	}
-	// Every terminal resize reason, when fresh, releases the hold through Reconcile.
-	for _, r := range []string{
-		vmv1alpha1.ConditionReasonResizingCompleted,
-		vmv1alpha1.ConditionReasonResizingReverted,
-		vmv1alpha1.ConditionReasonResizingFailed,
+	// A fresh settled (status=False) operation condition releases the hold
+	// through Reconcile, for every operation that maps onto the Resizing or
+	// Migrating condition.
+	for _, op := range []struct {
+		name     string
+		intent   v1alpha1.SchedulingIntent
+		condType string
+		reason   string
+	}{
+		{"resize", novaapi.ResizeIntent, vmv1alpha1.ConditionTypeResizing, vmv1alpha1.ConditionReasonResizingInProgress},
+		{"live migration", novaapi.LiveMigrationIntent, vmv1alpha1.ConditionTypeMigrating, vmv1alpha1.ConditionReasonMigratingLiveInProgress},
+		{"evacuate", novaapi.EvacuateIntent, vmv1alpha1.ConditionTypeMigrating, vmv1alpha1.ConditionReasonMigratingColdInProgress},
 	} {
 		tests = append(tests, testCase{
-			name: "resize: fresh terminal " + r + " deletes reservation",
+			name: op.name + ": fresh settled condition deletes reservation",
 			objects: []client.Object{
-				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.ResizeIntent, createdAt: &resCreated}),
-				vmWithCond("vm-uuid-1", vmv1alpha1.ConditionTypeResizing, r, freshFuture),
-			},
-			wantDeleted: []string{"res-1"},
-		})
-	}
-	// Every terminal live-migration reason, when fresh, releases the hold.
-	for _, r := range []string{
-		vmv1alpha1.ConditionReasonMigratingCompleted,
-		vmv1alpha1.ConditionReasonMigratingRolledBack,
-		vmv1alpha1.ConditionReasonMigratingAborting,
-		vmv1alpha1.ConditionReasonMigratingFailed,
-	} {
-		tests = append(tests, testCase{
-			name: "live migration: fresh terminal " + r + " deletes reservation",
-			objects: []client.Object{
-				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: novaapi.LiveMigrationIntent, createdAt: &resCreated}),
-				vmWithCond("vm-uuid-1", vmv1alpha1.ConditionTypeMigrating, r, freshFuture),
+				newInFlightReservation("res-1", "vm-uuid-1", "host-1", inFlightOpts{intent: op.intent, createdAt: &resCreated}),
+				vmWithCond("vm-uuid-1", op.condType, op.reason, freshFuture),
 			},
 			wantDeleted: []string{"res-1"},
 		})

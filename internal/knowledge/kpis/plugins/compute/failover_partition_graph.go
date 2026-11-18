@@ -17,6 +17,7 @@ import (
 	vmv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -120,7 +121,9 @@ func (k *FailoverPartitionGraphKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 	// Count the vms running on each host so the node series can expose it. A vm
 	// Nova hasn't placed yet has no host and is skipped (it also nil-panics on
-	// Status.Nova otherwise).
+	// Status.Nova otherwise). The vm-operator retains the last-known Nova fields
+	// after a server disappears, so skip vms confirmed deleted or scheduled for
+	// deletion to avoid counting ghosts against a host.
 	vmList := &vmv1alpha1.VirtualMachineList{}
 	if err := k.Client.List(ctx, vmList); err != nil {
 		failoverPartitionGraphKPILogger.Error(err, "Failed to list virtual machines")
@@ -129,6 +132,10 @@ func (k *FailoverPartitionGraphKPI) Collect(ch chan<- prometheus.Metric) {
 	vmsByHost := map[string]int{}
 	for _, vm := range vmList.Items {
 		if vm.Status.Nova == nil || vm.Status.Nova.Host == "" {
+			continue
+		}
+		if vm.Status.DeletionTime != nil ||
+			meta.IsStatusConditionTrue(vm.Status.Conditions, vmv1alpha1.ConditionTypeDeleted) {
 			continue
 		}
 		vmsByHost[vm.Status.Nova.Host]++

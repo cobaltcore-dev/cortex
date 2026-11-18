@@ -55,7 +55,6 @@ rules:
   - cobaltcore.cloud
   resources:
   - virtualmachines
-  - virtualmachines/status
   verbs:
   - create
   - get

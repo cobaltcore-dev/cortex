@@ -153,15 +153,19 @@ resource (the vm-operator CRD, cluster-scoped) so operators can inspect it direc
 ```bash
 kubectl get virtualmachines -o custom-columns=\
 NAME:.metadata.name,\
-EXPLANATION:.spec.cortex.explanation,\
-INTENT:.spec.cortex.intent,\
-HOST:.spec.cortex.hostCandidates[0].name
+EXPLANATION:.spec.cortex.schedulingExplanation,\
+INTENT:.spec.cortex.schedulingIntent,\
+HOST:.spec.cortex.schedulingCandidates[0].name
 ```
 
-`.spec.cortex.explanation` carries a human-readable summary of why the chosen host won,
-`.spec.cortex.intent` records the scheduling intent (e.g. initial placement or evacuation), and
-`.spec.cortex.hostCandidates` lists the candidate hosts in ranked order; `-o yaml` on a single
-VM shows the full detail. The detector pipeline emits **`Descheduling`** resources for VMs it
+`.spec.cortex.schedulingExplanation` carries a human-readable summary of why the chosen host won,
+`.spec.cortex.schedulingIntent` records the scheduling intent (e.g. initial placement or evacuation), and
+`.spec.cortex.schedulingCandidates` lists the candidate hosts in ranked order (`.spec.cortex.schedulingError`
+is set instead when scheduling failed); `-o yaml` on a single
+VM shows the full detail. Cortex only ever writes this `spec.cortex` subspec (plus the immutable
+spec and labels on create); the VM's `status.conditions` are owned exclusively by the vm-operator
+and reflect its own observations (Running, Migrating, Resizing, …), not the scheduling decision.
+The detector pipeline emits **`Descheduling`** resources for VMs it
 wants to move:
 
 ```bash

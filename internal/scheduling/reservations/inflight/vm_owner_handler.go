@@ -5,7 +5,6 @@ package inflight
 
 import (
 	"context"
-	"slices"
 	"time"
 
 	novaapi "github.com/cobaltcore-dev/cortex/api/external/nova"
@@ -252,11 +251,6 @@ func (h *VirtualMachineHandler) terminalForIntent(res *v1alpha1.Reservation, vm 
 		// live (host assigned and the domain running / Nova ACTIVE), or on an
 		// explicit Nova failure (Nova ERROR). While the VM is still building,
 		// keep blocking all candidates.
-		//
-		// Scheduled=False is intentionally NOT used as a release trigger: it is
-		// not written on failure today, and it reflects the latest scheduling
-		// result for the VM rather than this operation, so it cannot be
-		// correlated to an OperationID.
 		placed := vm.Status.Host != nil && vm.Status.Host.Name != ""
 		running := meta.IsStatusConditionTrue(vm.Status.Conditions, vmv1alpha1.ConditionTypeRunning)
 		novaActive := vm.Status.Nova != nil && vm.Status.Nova.Status == novaStatusActive
@@ -269,7 +263,7 @@ func (h *VirtualMachineHandler) terminalForIntent(res *v1alpha1.Reservation, vm 
 		}
 		// We have at least some VM-CRD signal but it is not yet decisive; keep
 		// waiting for a confirmed running/ACTIVE (or ERROR) signal.
-		if placed || meta.FindStatusCondition(vm.Status.Conditions, vmv1alpha1.ConditionTypeScheduled) != nil || vm.Status.Nova != nil {
+		if placed || vm.Status.Nova != nil {
 			return TerminalResult{RequeueAfter: requeueInterval, Reason: reasonAwaitingPlacement,
 				Message: "VM not yet confirmed running on a host"}, true
 		}
@@ -292,60 +286,59 @@ func (h *VirtualMachineHandler) terminalForIntent(res *v1alpha1.Reservation, vm 
 				Message: "unmanaged-source resize not yet confirmed running on target"}, true
 		}
 		// KVM-source resize: release when the resize is no longer in progress.
-		return terminalByReason(res.CreationTimestamp, vm.Status.Conditions, vmv1alpha1.ConditionTypeResizing,
-			reasonResizing, "resize in progress",
-			vmv1alpha1.ConditionReasonResizingCompleted,
-			vmv1alpha1.ConditionReasonResizingReverted,
-			vmv1alpha1.ConditionReasonResizingFailed)
+		return terminalBySettledStatus(res.CreationTimestamp, vm.Status.Conditions, vmv1alpha1.ConditionTypeResizing,
+			reasonResizing, "resize in progress")
 
-	case novaapi.LiveMigrationIntent:
-		// UC3 live migration: release both the forward (target) and rollback
-		// (source) reservations once the migration settles, including an abort.
-		return terminalByReason(res.CreationTimestamp, vm.Status.Conditions, vmv1alpha1.ConditionTypeMigrating,
-			reasonMigrating, "live migration in progress",
-			vmv1alpha1.ConditionReasonMigratingCompleted,
-			vmv1alpha1.ConditionReasonMigratingRolledBack,
-			vmv1alpha1.ConditionReasonMigratingAborting,
-			vmv1alpha1.ConditionReasonMigratingFailed)
+	case novaapi.LiveMigrationIntent, novaapi.EvacuateIntent:
+		// UC3 live migration and evacuation: the vm-operator's Migrating
+		// condition now covers both live and cold migrations (an evacuation is a
+		// cold migration). Release both the forward (target) and rollback
+		// (source) reservations once the migration is no longer in progress.
+		return terminalBySettledStatus(res.CreationTimestamp, vm.Status.Conditions, vmv1alpha1.ConditionTypeMigrating,
+			reasonMigrating, "migration in progress")
 
 	default:
-		// Other intents (rebuild, evacuate, ...) have no dedicated condition
-		// yet; keep the hold pending a future condition (the optional TTL
-		// backstop only acts if an EndTime is set).
+		// Other intents (e.g. rebuild) have no dedicated condition yet; keep the
+		// hold pending a future condition (the optional TTL backstop only acts if
+		// an EndTime is set).
 		return TerminalResult{}, false
 	}
 }
 
-// terminalByReason returns (result, ok) for a condition whose terminal reasons
-// are listed. ok=false when the condition is absent (caller keeps waiting).
+// terminalBySettledStatus returns (result, ok) for an operation-progress
+// condition (Migrating, Resizing) under the vm-operator's current semantics:
 //
-// A terminal reason is only trusted when it is *fresh*: the condition's
-// LastTransitionTime must be at or after createdAt (the reservation's creation
-// time). Nova serializes its own operations per VM, so when this VM-owned
-// reservation was created no other Nova operation on the VM was in flight; a
-// terminal condition that transitioned *before* this reservation existed
-// therefore describes a previous operation and must not release the freshly
-// created holds. In that stale case we keep waiting for the vm-operator to
-// transition the condition for the current operation.
+//   - status=True: the operation is in progress — keep waiting.
+//   - status=Unknown: authoritative datasources disagree — keep waiting.
+//   - status=False: the operation is not in progress. This status also covers a
+//     VM that was never migrated/resized, so it is only trusted as a completion
+//     signal when it is *fresh*: the condition's LastTransitionTime must be at or
+//     after createdAt (the reservation's creation time). Nova serializes its own
+//     operations per VM, so when this VM-owned reservation was created no other
+//     Nova operation on the VM was in flight; a False that transitioned *before*
+//     this reservation existed therefore describes an idle VM (or a previous
+//     operation) and must not release the freshly created holds.
 //
-// When Done is false the result carries the waiting reason/message.
-func terminalByReason(createdAt metav1.Time, conditions []metav1.Condition, condType, waitReason, waitMessage string, terminalReasons ...string) (TerminalResult, bool) {
+// ok=false when the condition is absent, so the caller keeps waiting for the
+// vm-operator to record the operation. When Done is false the result carries the
+// waiting reason/message.
+func terminalBySettledStatus(createdAt metav1.Time, conditions []metav1.Condition, condType, waitReason, waitMessage string) (TerminalResult, bool) {
 	cond := meta.FindStatusCondition(conditions, condType)
 	if cond == nil {
 		return TerminalResult{}, false
 	}
-	if slices.Contains(terminalReasons, cond.Reason) && !conditionIsStale(cond, createdAt) {
+	if cond.Status == metav1.ConditionFalse && !conditionIsStale(cond, createdAt) {
 		return TerminalResult{Done: true}, true
 	}
 	return TerminalResult{RequeueAfter: requeueInterval, Reason: waitReason, Message: waitMessage}, true
 }
 
 // conditionIsStale reports whether cond transitioned before the reservation was
-// created, i.e. the condition reflects a previous operation rather than the one
-// this reservation belongs to. A zero LastTransitionTime is treated as stale:
-// without a trustworthy transition time we cannot attribute the terminal signal
-// to the current operation, so we conservatively keep waiting rather than risk
-// releasing holds early.
+// created, i.e. the condition reflects a previous operation (or a long-idle VM)
+// rather than the one this reservation belongs to. A zero LastTransitionTime is
+// treated as stale: without a trustworthy transition time we cannot attribute
+// the signal to the current operation, so we conservatively keep waiting rather
+// than risk releasing holds early.
 func conditionIsStale(cond *metav1.Condition, createdAt metav1.Time) bool {
 	if cond.LastTransitionTime.IsZero() {
 		return true

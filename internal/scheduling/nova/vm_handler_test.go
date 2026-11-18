@@ -6,6 +6,7 @@ package nova
 import (
 	"context"
 	"testing"
+	"time"
 
 	api "github.com/cobaltcore-dev/cortex/api/external/nova"
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/compute"
@@ -57,16 +58,17 @@ func vmTestRequest() api.ExternalSchedulerRequest {
 }
 
 func vmTestResult(targetHost *string) compute.PlacementResult {
-	return compute.PlacementResult{TargetHost: targetHost}
+	res := compute.PlacementResult{TargetHost: targetHost}
+	if targetHost != nil {
+		res.OrderedHosts = []string{*targetHost}
+	}
+	return res
 }
 
-func vmTestHypervisor(region, az string) *hv1.Hypervisor {
-	labels := map[string]string{}
+func vmTestHypervisor(region string) *hv1.Hypervisor {
+	labels := map[string]string{corev1.LabelTopologyZone: "az-1"}
 	if region != "" {
 		labels[corev1.LabelTopologyRegion] = region
-	}
-	if az != "" {
-		labels[corev1.LabelTopologyZone] = az
 	}
 	return &hv1.Hypervisor{ObjectMeta: metav1.ObjectMeta{Name: "compute-1", Labels: labels}}
 }
@@ -76,7 +78,7 @@ func TestVirtualMachineHandlerCreate(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithStatusSubresource(&vmopv1alpha1.VirtualMachine{}).
-		WithObjects(vmTestHypervisor("region-1", "az-1")).
+		WithObjects(vmTestHypervisor("region-1")).
 		Build()
 	h := &VirtualMachineHandler{Client: fakeClient}
 
@@ -92,8 +94,8 @@ func TestVirtualMachineHandlerCreate(t *testing.T) {
 	if vm.Spec.Region != "region-1" || vm.Spec.AZ != "az-1" {
 		t.Errorf("region/az = %q/%q, want region-1/az-1", vm.Spec.Region, vm.Spec.AZ)
 	}
-	if vm.Spec.TargetHost == nil || vm.Spec.TargetHost.Name != "compute-1" {
-		t.Errorf("target host ref = %+v, want name compute-1", vm.Spec.TargetHost)
+	if len(vm.Spec.Cortex.SchedulingCandidates) != 1 || vm.Spec.Cortex.SchedulingCandidates[0].Name != "compute-1" {
+		t.Errorf("scheduling candidates = %+v, want name compute-1", vm.Spec.Cortex.SchedulingCandidates)
 	}
 	if cpu := vm.Spec.Resources[vmopv1alpha1.ResourceCPU]; cpu.Value() != 4 {
 		t.Errorf("cpu = %d, want 4", cpu.Value())
@@ -104,8 +106,24 @@ func TestVirtualMachineHandlerCreate(t *testing.T) {
 	if vm.Spec.Nova.Ownership.Project != "project-1" || vm.Spec.Nova.Flavor.Name != "m1.large" {
 		t.Errorf("nova spec = %+v, want project-1 / m1.large", vm.Spec.Nova)
 	}
-	if vm.Labels[vmopv1alpha1.LabelTargetHost] != "compute-1" {
-		t.Errorf("target host label = %q, want compute-1", vm.Labels[vmopv1alpha1.LabelTargetHost])
+	// Intent is the VM's first transition, so a timestamp is stamped, but no
+	// generation has been scheduled yet.
+	if vm.Spec.Cortex.SchedulingIntent != string(api.CreateIntent) {
+		t.Errorf("intent = %q, want %q", vm.Spec.Cortex.SchedulingIntent, api.CreateIntent)
+	}
+	if vm.Spec.Cortex.SchedulingTime == nil {
+		t.Error("expected SchedulingTime to be stamped on create")
+	}
+	if vm.Spec.Cortex.ScheduledGeneration != 0 {
+		t.Errorf("scheduledGeneration = %d, want 0 on create", vm.Spec.Cortex.ScheduledGeneration)
+	}
+	// A successful scheduling records no error.
+	if vm.Spec.Cortex.SchedulingError != "" {
+		t.Errorf("schedulingError = %q, want empty on success", vm.Spec.Cortex.SchedulingError)
+	}
+	// Conditions are owned by the vm-operator and must not be written here.
+	if len(vm.Status.Conditions) != 0 {
+		t.Errorf("expected no conditions written, got %+v", vm.Status.Conditions)
 	}
 }
 
@@ -113,19 +131,23 @@ func TestVirtualMachineHandlerUpdate(t *testing.T) {
 	scheme := vmTestScheme(t)
 	existing := &vmopv1alpha1.VirtualMachine{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   "vm-uuid-1",
-			Labels: map[string]string{vmopv1alpha1.LabelTargetHost: "old-host"},
+			Name: "vm-uuid-1",
 		},
 		Spec: vmopv1alpha1.VMSpec{
-			Region:     "region-1",
-			AZ:         "az-1",
-			TargetHost: &corev1.ObjectReference{Name: "hv-old"},
+			Region: "region-1",
+			AZ:     "az-1",
+			Nova: vmopv1alpha1.NovaSpec{
+				// Domain is populated out of band (keystone) and must survive a
+				// scheduling update.
+				Ownership: vmopv1alpha1.Ownership{Domain: "domain-1"},
+			},
+			Cortex: &vmopv1alpha1.CortexSpec{SchedulingIntent: string(api.CreateIntent)},
 		},
 	}
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithStatusSubresource(&vmopv1alpha1.VirtualMachine{}).
-		WithObjects(vmTestHypervisor("region-1", "az-1"), existing).
+		WithObjects(vmTestHypervisor("region-1"), existing).
 		Build()
 	h := &VirtualMachineHandler{Client: fakeClient}
 
@@ -138,15 +160,62 @@ func TestVirtualMachineHandlerUpdate(t *testing.T) {
 	if err := fakeClient.Get(context.Background(), client.ObjectKey{Name: "vm-uuid-1"}, vm); err != nil {
 		t.Fatalf("get vm: %v", err)
 	}
-	if vm.Spec.TargetHost == nil || vm.Spec.TargetHost.Name != "compute-1" {
-		t.Errorf("target host ref = %+v, want name compute-1", vm.Spec.TargetHost)
-	}
-	if vm.Labels[vmopv1alpha1.LabelTargetHost] != "compute-1" {
-		t.Errorf("target host label = %q, want compute-1", vm.Labels[vmopv1alpha1.LabelTargetHost])
+	if len(vm.Spec.Cortex.SchedulingCandidates) != 1 || vm.Spec.Cortex.SchedulingCandidates[0].Name != "compute-1" {
+		t.Errorf("scheduling candidates = %+v, want name compute-1", vm.Spec.Cortex.SchedulingCandidates)
 	}
 	// Immutable fields must remain unchanged.
 	if vm.Spec.Region != "region-1" || vm.Spec.AZ != "az-1" {
 		t.Errorf("immutable region/az changed: %q/%q", vm.Spec.Region, vm.Spec.AZ)
+	}
+	// The out-of-band domain must be preserved across the Nova spec overwrite.
+	if vm.Spec.Nova.Ownership.Domain != "domain-1" {
+		t.Errorf("domain = %q, want domain-1 preserved", vm.Spec.Nova.Ownership.Domain)
+	}
+}
+
+func TestVirtualMachineHandlerUpdateBumpsOnIntentChange(t *testing.T) {
+	scheme := vmTestScheme(t)
+	old := metav1.NewTime(metav1.Now().Add(-time.Hour).Truncate(time.Second))
+	existing := &vmopv1alpha1.VirtualMachine{
+		ObjectMeta: metav1.ObjectMeta{Name: "vm-uuid-1"},
+		Spec: vmopv1alpha1.VMSpec{
+			Region: "region-1",
+			AZ:     "az-1",
+			Cortex: &vmopv1alpha1.CortexSpec{
+				SchedulingIntent: string(api.CreateIntent),
+				SchedulingTime:   &old,
+			},
+		},
+	}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&vmopv1alpha1.VirtualMachine{}).
+		WithObjects(vmTestHypervisor("region-1"), existing).
+		Build()
+	h := &VirtualMachineHandler{Client: fakeClient}
+
+	targetHost := "compute-1"
+	// Same intent: the timestamp must be carried forward unchanged.
+	if err := h.Upsert(context.Background(), vmTestResult(&targetHost), vmTestRequest(), api.CreateIntent); err != nil {
+		t.Fatalf("Upsert same intent: %v", err)
+	}
+	vm := &vmopv1alpha1.VirtualMachine{}
+	if err := fakeClient.Get(context.Background(), client.ObjectKey{Name: "vm-uuid-1"}, vm); err != nil {
+		t.Fatalf("get vm: %v", err)
+	}
+	if !vm.Spec.Cortex.SchedulingTime.Equal(&old) {
+		t.Errorf("SchedulingTime = %v, want preserved %v on unchanged intent", vm.Spec.Cortex.SchedulingTime, old)
+	}
+
+	// Changed intent: the timestamp must be bumped.
+	if err := h.Upsert(context.Background(), vmTestResult(&targetHost), vmTestRequest(), api.LiveMigrationIntent); err != nil {
+		t.Fatalf("Upsert new intent: %v", err)
+	}
+	if err := fakeClient.Get(context.Background(), client.ObjectKey{Name: "vm-uuid-1"}, vm); err != nil {
+		t.Fatalf("get vm: %v", err)
+	}
+	if vm.Spec.Cortex.SchedulingTime.Equal(&old) {
+		t.Error("expected SchedulingTime to be bumped on intent change")
 	}
 }
 
@@ -171,7 +240,7 @@ func TestVirtualMachineHandlerMissingRegion(t *testing.T) {
 	scheme := vmTestScheme(t)
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(vmTestHypervisor("", "az-1")). // no region label
+		WithObjects(vmTestHypervisor("")). // no region label
 		Build()
 	h := &VirtualMachineHandler{Client: fakeClient}
 

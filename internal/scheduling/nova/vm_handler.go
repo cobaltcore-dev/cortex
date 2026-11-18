@@ -18,7 +18,6 @@ import (
 	vmv1alpha1 "github.com/cobaltcore-dev/vm-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -36,9 +35,10 @@ type VirtualMachineHandler struct {
 
 // Upsert creates or patches the VirtualMachine resource described by the
 // scheduling result and request. Region and AZ are immutable on the CRD and only
-// written on create; mutable fields (target host, cortex spec, labels) are
-// patched on updates. A human-readable explanation of the result and the intent
-// are recorded on the VM's cortex spec.
+// written on create; mutable fields (cortex spec, labels) are patched on
+// updates. A human-readable explanation of the result and the intent are
+// recorded on the VM's cortex spec. Conditions are owned by the vm-operator and
+// never written here.
 func (h *VirtualMachineHandler) Upsert(ctx context.Context, result compute.PlacementResult, request api.ExternalSchedulerRequest, intent v1alpha1.SchedulingIntent) error {
 	log := ctrl.LoggerFrom(ctx)
 
@@ -75,20 +75,14 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, result compute.Place
 	vm.ObjectMeta = metav1.ObjectMeta{
 		Name: request.Spec.Data.InstanceUUID,
 		Labels: map[string]string{
-			vmv1alpha1.LabelRegion:     targetHvRegion,
-			vmv1alpha1.LabelAZ:         targetHvAZ,
-			vmv1alpha1.LabelTargetHost: targetHv.Name,
+			vmv1alpha1.LabelRegion: targetHvRegion,
+			vmv1alpha1.LabelAZ:     targetHvAZ,
 		},
 	}
 
 	// Add hierarchical location information to the virtual machine spec.
 	vm.Spec.Region = targetHvRegion
 	vm.Spec.AZ = targetHvAZ
-	vm.Spec.TargetHost = &vmv1alpha1.HostRef{
-		APIVersion: hv1.GroupVersion.String(),
-		Kind:       "Hypervisor",
-		Name:       targetHost,
-	}
 
 	// Derive the hypervisor type from the flavor extra spec hypervisor type.
 	if hvType, ok := request.Spec.Data.Flavor.
@@ -145,42 +139,18 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, result compute.Place
 
 	// Write the cortex spec (our scheduling result). The intent was resolved by
 	// the API layer (with a graceful fallback to CreateIntent for initial
-	// placements) and passed in.
+	// placements) and passed in. We only reach this point with a target host, so
+	// scheduling succeeded and SchedulingError stays empty.
 	vm.Spec.Cortex = &vmv1alpha1.CortexSpec{}
 	for _, host := range result.OrderedHosts {
-		vm.Spec.Cortex.HostCandidates = append(vm.Spec.Cortex.HostCandidates, vmv1alpha1.HostRef{
+		vm.Spec.Cortex.SchedulingCandidates = append(vm.Spec.Cortex.SchedulingCandidates, vmv1alpha1.HostRef{
 			APIVersion: hv1.GroupVersion.String(),
 			Kind:       "Hypervisor",
 			Name:       host,
 		})
 	}
-	vm.Spec.Cortex.Explanation = explanation
-	vm.Spec.Cortex.Intent = string(intent)
-
-	// Write the ConditionTypeScheduled condition to indicate that the VM has
-	// been successfully scheduled. For that we need to extract the scheduling
-	// intent from request and verify that the operation
-	var reason string
-	switch intent {
-	case api.LiveMigrationIntent:
-		reason = vmv1alpha1.ConditionReasonScheduledLiveMigration
-	case api.RebuildIntent:
-		reason = vmv1alpha1.ConditionReasonScheduledRebuild
-	case api.ResizeIntent:
-		reason = vmv1alpha1.ConditionReasonScheduledResize
-	case api.EvacuateIntent:
-		reason = vmv1alpha1.ConditionReasonScheduledEvacuation
-	case api.CreateIntent:
-		reason = vmv1alpha1.ConditionReasonScheduledInitialPlacement
-	default:
-		reason = "Unknown intent: " + string(intent)
-	}
-	meta.SetStatusCondition(&vm.Status.Conditions, metav1.Condition{
-		Type:    vmv1alpha1.ConditionTypeScheduled,
-		Status:  metav1.ConditionTrue,
-		Reason:  reason,
-		Message: "VM has been successfully scheduled by Cortex",
-	})
+	vm.Spec.Cortex.SchedulingExplanation = explanation
+	vm.Spec.Cortex.SchedulingIntent = string(intent)
 
 	// If the vm resource doesn't exist yet, create it.
 	vmInCluster := &vmv1alpha1.VirtualMachine{}
@@ -189,16 +159,13 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, result compute.Place
 		Name:      vm.Name,
 	}, vmInCluster)
 	if err != nil && apierrors.IsNotFound(err) {
-		// Create ignores the status subresource and writes the server response
-		// (with an empty status) back into vm, so snapshot the conditions and
-		// restore them before persisting the status.
-		conditions := vm.Status.Conditions
+		// First time we see this VM: this intent is its first transition. We
+		// cannot report a scheduled generation yet (nothing is persisted), so we
+		// leave ScheduledGeneration unset. Conditions are owned by the vm-operator
+		// and never written here, so the status subresource is left untouched.
+		vm.Spec.Cortex.SchedulingTime = new(metav1.Now())
 		if err := h.Create(ctx, vm); err != nil {
 			return fmt.Errorf("failed to create VM: %w", err)
-		}
-		vm.Status.Conditions = conditions
-		if err := h.Status().Update(ctx, vm); err != nil {
-			return fmt.Errorf("failed to update VM status: %w", err)
 		}
 		log.Info("created virtual machine resource", "instanceUUID", vm.Name, "targetHost", targetHost, "intent", intent)
 		return nil
@@ -207,11 +174,10 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, result compute.Place
 	}
 
 	// The vm already exists, so update the existing resource with the new
-	// object meta, spec, and status. For map data like the labels, we preserve
+	// object meta and spec. For map data like the labels, we preserve
 	// existing map entries that are not inside the new object, and only
-	// store/override the entries that are present in the new object. For status
-	// conditions, we only update the conditions that are present in the new
-	// object. In contrast, for the host candidates we completely replace the
+	// store/override the entries that are present in the new object.
+	// In contrast, for the scheduling candidates we completely replace the
 	// existing list with the new list from the object. For the remaining spec
 	// fields, we follow the same approach as for labels: preserve existing
 	// entries that are not present in the new object, and only store/override
@@ -222,27 +188,33 @@ func (h *VirtualMachineHandler) Upsert(ctx context.Context, result compute.Place
 	maps.Copy(vmInCluster.Labels, vm.Labels)
 	// Region and AZ are immutable and are only ever written on create, so we
 	// leave vmInCluster.Spec.Region and vmInCluster.Spec.AZ untouched.
-	vmInCluster.Spec.TargetHost = vm.Spec.TargetHost
 	vmInCluster.Spec.HypervisorType = vm.Spec.HypervisorType
 	if vmInCluster.Spec.Resources == nil {
 		vmInCluster.Spec.Resources = map[vmv1alpha1.ResourceName]resource.Quantity{}
 	}
 	maps.Copy(vmInCluster.Spec.Resources, vm.Spec.Resources)
+	// Nova does not expose the project's domain; it is populated out of band
+	// (via keystone) and must not be clobbered by a scheduling write.
+	domain := vmInCluster.Spec.Nova.Ownership.Domain
 	vmInCluster.Spec.Nova = vm.Spec.Nova
+	vmInCluster.Spec.Nova.Ownership.Domain = domain
 	if vmInCluster.Spec.Cortex == nil {
 		vmInCluster.Spec.Cortex = &vmv1alpha1.CortexSpec{}
 	}
-	vmInCluster.Spec.Cortex.HostCandidates = vm.Spec.Cortex.HostCandidates
-	vmInCluster.Spec.Cortex.Explanation = vm.Spec.Cortex.Explanation
-	vmInCluster.Spec.Cortex.Intent = vm.Spec.Cortex.Intent
+	vmInCluster.Spec.Cortex.SchedulingCandidates = vm.Spec.Cortex.SchedulingCandidates
+	vmInCluster.Spec.Cortex.SchedulingExplanation = vm.Spec.Cortex.SchedulingExplanation
+	// This scheduling succeeded, so clear any error left from a previous attempt.
+	vmInCluster.Spec.Cortex.SchedulingError = ""
+	// SchedulingTime marks a change of intent; only bump it when the intent
+	// actually transitioned, otherwise carry the existing timestamp forward.
+	if vmInCluster.Spec.Cortex.SchedulingIntent != vm.Spec.Cortex.SchedulingIntent {
+		vmInCluster.Spec.Cortex.SchedulingTime = new(metav1.Now())
+	}
+	vmInCluster.Spec.Cortex.SchedulingIntent = vm.Spec.Cortex.SchedulingIntent
+	// Record the generation we observed on the resource we just read.
+	vmInCluster.Spec.Cortex.ScheduledGeneration = vmInCluster.Generation
 	if err := h.Update(ctx, vmInCluster); err != nil {
 		return fmt.Errorf("failed to update VM: %w", err)
-	}
-	for _, cond := range vm.Status.Conditions {
-		meta.SetStatusCondition(&vmInCluster.Status.Conditions, cond)
-	}
-	if err := h.Status().Update(ctx, vmInCluster); err != nil {
-		return fmt.Errorf("failed to update VM status: %w", err)
 	}
 	log.Info("updated virtual machine resource", "instanceUUID", vm.Name, "targetHost", targetHost, "intent", intent)
 	return nil
