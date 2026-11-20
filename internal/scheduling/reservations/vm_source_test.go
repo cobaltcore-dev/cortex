@@ -416,10 +416,12 @@ func TestFilterVMsOnKnownHypervisors(t *testing.T) {
 	}
 }
 
-// TestDBVMSource_ListVMs_DomainLookupFailOpen verifies that a failing project
-// domain lookup does not abort ListVMs: VMs are still returned and treated as
-// regular tenants (empty DomainName).
-func TestDBVMSource_ListVMs_DomainLookupFailOpen(t *testing.T) {
+// TestDBVMSource_ListVMs_DomainLookupFailClosed verifies that a failing project
+// domain lookup causes ListVMs to return an error (fail-closed). This ensures
+// that an identity service outage does not silently degrade tenant isolation by
+// treating all VMs as regular tenants.
+func TestDBVMSource_ListVMs_DomainLookupFailClosed(t *testing.T) {
+	domainErr := errors.New("identity tables not synced")
 	mock := &mockNovaReader{
 		getAllServersFunc: func(ctx context.Context) ([]nova.Server, error) {
 			return []nova.Server{
@@ -430,18 +432,88 @@ func TestDBVMSource_ListVMs_DomainLookupFailOpen(t *testing.T) {
 			return []nova.Flavor{{Name: "m1.large", VCPUs: 4, RAM: 8192}}, nil
 		},
 		getProjectDomainNamesFunc: func(ctx context.Context) (map[string]string, error) {
-			return nil, errors.New("identity tables not synced")
+			return nil, domainErr
 		},
 	}
 	vms, err := NewDBVMSource(mock).ListVMs(context.Background())
-	if err != nil {
-		t.Fatalf("expected no error on domain lookup failure, got: %v", err)
+	if err == nil {
+		t.Fatal("expected error when domain lookup fails, got nil")
 	}
-	if len(vms) != 1 {
-		t.Fatalf("expected 1 VM, got %d", len(vms))
+	if !strings.Contains(err.Error(), "failed to get project domain names") {
+		t.Errorf("expected error to contain 'failed to get project domain names', got: %v", err)
 	}
-	if vms[0].DomainName != "" {
-		t.Errorf("expected empty DomainName when lookup fails, got %q", vms[0].DomainName)
+	if !errors.Is(err, domainErr) {
+		t.Errorf("expected error to wrap domain error, got: %v", err)
+	}
+	if vms != nil {
+		t.Errorf("expected nil VMs when error occurs, got %v", vms)
+	}
+}
+
+// TestDBVMSource_ListVMsByProject_DomainLookupFailClosed verifies that a failing
+// project domain lookup causes ListVMsByProject to return an error (fail-closed).
+func TestDBVMSource_ListVMsByProject_DomainLookupFailClosed(t *testing.T) {
+	domainErr := errors.New("identity tables not synced")
+	mock := &mockNovaReader{
+		getServersByProjectFunc: func(ctx context.Context, projectID string) ([]nova.Server, error) {
+			return []nova.Server{
+				{ID: "vm-1", FlavorName: "m1.large", OSEXTSRVATTRHost: "host1", TenantID: "project-1"},
+			}, nil
+		},
+		getAllFlavorsFunc: func(ctx context.Context) ([]nova.Flavor, error) {
+			return []nova.Flavor{{Name: "m1.large", VCPUs: 4, RAM: 8192}}, nil
+		},
+		getProjectDomainNamesFunc: func(ctx context.Context) (map[string]string, error) {
+			return nil, domainErr
+		},
+	}
+	vms, err := NewDBVMSource(mock).ListVMsByProject(context.Background(), "project-1")
+	if err == nil {
+		t.Fatal("expected error when domain lookup fails, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to get project domain names") {
+		t.Errorf("expected error to contain 'failed to get project domain names', got: %v", err)
+	}
+	if !errors.Is(err, domainErr) {
+		t.Errorf("expected error to wrap domain error, got: %v", err)
+	}
+	if vms != nil {
+		t.Errorf("expected nil VMs when error occurs, got %v", vms)
+	}
+}
+
+// TestDBVMSource_GetVM_DomainLookupFailClosed verifies that a failing project
+// domain lookup causes GetVM to return an error (fail-closed).
+func TestDBVMSource_GetVM_DomainLookupFailClosed(t *testing.T) {
+	domainErr := errors.New("identity tables not synced")
+	mock := &mockNovaReader{
+		getServerByIDFunc: func(ctx context.Context, serverID string) (*nova.Server, error) {
+			return &nova.Server{
+				ID:               "vm-1",
+				FlavorName:       "m1.large",
+				OSEXTSRVATTRHost: "host1",
+				TenantID:         "project-1",
+			}, nil
+		},
+		getFlavorByNameFunc: func(ctx context.Context, flavorName string) (*nova.Flavor, error) {
+			return &nova.Flavor{Name: "m1.large", VCPUs: 4, RAM: 8192}, nil
+		},
+		getProjectDomainNamesFunc: func(ctx context.Context) (map[string]string, error) {
+			return nil, domainErr
+		},
+	}
+	vm, err := NewDBVMSource(mock).GetVM(context.Background(), "vm-1")
+	if err == nil {
+		t.Fatal("expected error when domain lookup fails, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to get project domain names") {
+		t.Errorf("expected error to contain 'failed to get project domain names', got: %v", err)
+	}
+	if !errors.Is(err, domainErr) {
+		t.Errorf("expected error to wrap domain error, got: %v", err)
+	}
+	if vm != nil {
+		t.Errorf("expected nil VM when error occurs, got %v", vm)
 	}
 }
 
@@ -451,6 +523,7 @@ type mockNovaReader struct {
 	getServerByIDFunc         func(ctx context.Context, serverID string) (*nova.Server, error)
 	getFlavorByNameFunc       func(ctx context.Context, flavorName string) (*nova.Flavor, error)
 	getProjectDomainNamesFunc func(ctx context.Context) (map[string]string, error)
+	getServersByProjectFunc   func(ctx context.Context, projectID string) ([]nova.Server, error)
 }
 
 func (m *mockNovaReader) GetAllServers(ctx context.Context) ([]nova.Server, error) {
@@ -492,6 +565,9 @@ func (m *mockNovaReader) GetProjectDomainNames(ctx context.Context) (map[string]
 	return map[string]string{}, nil
 }
 
-func (m *mockNovaReader) GetServersByProject(_ context.Context, _ string) ([]nova.Server, error) {
+func (m *mockNovaReader) GetServersByProject(ctx context.Context, projectID string) ([]nova.Server, error) {
+	if m.getServersByProjectFunc != nil {
+		return m.getServersByProjectFunc(ctx, projectID)
+	}
 	return nil, nil
 }
