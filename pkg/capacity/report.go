@@ -40,8 +40,9 @@ type ResourceMap = map[hv1.ResourceName]resource.Quantity
 // fits (against Available, or against Total for an empty-datacenter view).
 type HostUsageReport struct {
 	// Total is the schedulable capacity per resource: the effective (overcommit-adjusted)
-	// capacity, falling back to the raw capacity for any resource the effective map
-	// reports as zero or omits. A resource absent here is unknown to this host.
+	// capacity, falling back to the raw capacity for any resource the effective map omits.
+	// A zero EffectiveCapacity is kept (the host intentionally has zero of that resource).
+	// A resource absent here is unknown to this host.
 	Total ResourceMap
 
 	// Used is capacity consumed by the workloads the hypervisor currently reports running
@@ -89,8 +90,10 @@ func (r HostUsageReport) ReservedTotal(types ...v1alpha1.ReservationType) Resour
 // A reservation counts toward a host when its Spec.TargetHost or Status.Host equals
 // hv.Name; one whose Spec.TargetHost is empty is treated as unplaced and never counts.
 // Total is EffectiveCapacity, falling back per resource to raw Capacity for any resource
-// the operator reports as zero or omits; a resource zero in both is dropped. When no
-// resource has capacity the zero report is returned.
+// the operator omits from the effective map; a resource zero in both is dropped. A
+// resource explicitly present in EffectiveCapacity with a zero value is kept as-is (the
+// host intentionally has zero of that resource). When no resource has capacity the zero
+// report is returned.
 //
 // For an "empty host" view (what a host could hold once fully cleared), the caller passes
 // no reservations and reads Total: with no workloads subtracted that is exactly the free
@@ -105,8 +108,9 @@ func NewHostUsageReport(hv hv1.Hypervisor, reservations []v1alpha1.Reservation) 
 		Oversubscribed: ResourceMap{},
 	}
 	// Total is the effective (overcommit-adjusted) capacity per resource, falling back to
-	// the raw capacity for any resource the operator reports as zero or omits in the
-	// effective map. A resource zero or absent in both is dropped entirely.
+	// the raw capacity for any resource the operator omits from the effective map. A
+	// resource explicitly zero in the effective map is kept (drained host); a resource
+	// zero or absent in both maps is dropped entirely.
 	for name := range hv.Status.EffectiveCapacity {
 		rep.Total[name] = resource.Quantity{}
 	}
@@ -114,8 +118,8 @@ func NewHostUsageReport(hv hv1.Hypervisor, reservations []v1alpha1.Reservation) 
 		rep.Total[name] = resource.Quantity{}
 	}
 	for name := range rep.Total {
-		qty := hv.Status.EffectiveCapacity[name]
-		if qty.IsZero() {
+		qty, inEffective := hv.Status.EffectiveCapacity[name]
+		if !inEffective {
 			qty = hv.Status.Capacity[name]
 		}
 		if qty.IsZero() {
