@@ -4,7 +4,6 @@
 package extractor
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -29,10 +28,9 @@ const (
 )
 
 var (
-	errUnknownOutputType  = errors.New("unknown output type")
 	errExpressionCompile  = errors.New("expression compilation failed")
 	errExpressionRun      = errors.New("expression evaluation failed")
-	errExpressionOutput   = errors.New("expression output does not match the output type")
+	errExpressionOutput   = errors.New("expression output is not a list of json values")
 	errExpressionDeadline = errors.New("expression evaluation timed out")
 )
 
@@ -49,8 +47,8 @@ type expressionEvaluator struct {
 	programs map[string]compiledExpression
 }
 
-// Evaluate the expression over the given inputs and decode the output into
-// a list of the registered output type.
+// Evaluate the expression over the given inputs. The output must be a list,
+// whose elements are returned as generic json values.
 func (e *expressionEvaluator) evaluate(
 	ctx context.Context,
 	knowledgeName string,
@@ -60,10 +58,6 @@ func (e *expressionEvaluator) evaluate(
 	memoryBudget uint,
 ) ([]Feature, error) {
 
-	featureType, ok := FeatureTypes[spec.Output]
-	if !ok {
-		return nil, fmt.Errorf("%w: %q", errUnknownOutputType, spec.Output)
-	}
 	program, err := e.compile(knowledgeName, spec.Run, env)
 	if err != nil {
 		return nil, err
@@ -94,7 +88,7 @@ func (e *expressionEvaluator) evaluate(
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	return decodeOutput(output, featureType)
+	return decodeOutput(output)
 }
 
 // Compile the expression for the given inputs, or reuse the cached program
@@ -130,23 +124,22 @@ func (e *expressionEvaluator) forget(knowledgeName string) {
 	delete(e.programs, knowledgeName)
 }
 
-// Strictly decode the expression output, which must be a list, into a list
-// of the feature type. Keys of the output objects must match the json field
-// names of the feature type.
-func decodeOutput(output any, featureType reflect.Type) ([]Feature, error) {
+// Decode the expression output, which must be a list, into generic json
+// values, e.g. maps for objects.
+func decodeOutput(output any) ([]Feature, error) {
+	if output == nil {
+		return []Feature{}, nil
+	}
+	if kind := reflect.ValueOf(output).Kind(); kind != reflect.Slice && kind != reflect.Array {
+		return nil, fmt.Errorf("%w: got %T", errExpressionOutput, output)
+	}
 	raw, err := json.Marshal(output)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errExpressionOutput, err)
 	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	decoded := reflect.New(reflect.SliceOf(featureType))
-	if err := decoder.Decode(decoded.Interface()); err != nil {
-		return nil, fmt.Errorf("%w %s: %w", errExpressionOutput, featureType, err)
-	}
-	features := make([]Feature, decoded.Elem().Len())
-	for i := range features {
-		features[i] = decoded.Elem().Index(i).Interface()
+	features := []Feature{}
+	if err := json.Unmarshal(raw, &features); err != nil {
+		return nil, fmt.Errorf("%w: %w", errExpressionOutput, err)
 	}
 	return features, nil
 }

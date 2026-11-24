@@ -80,8 +80,8 @@ func init() {
 func TestKnowledgeReconciler_Reconcile(t *testing.T) {
 	inputs := []v1alpha1.InputSpec{{Var: "objs", Datasource: "ds"}, {Var: "feats", Knowledge: "k-in"}}
 	extractor := &v1alpha1.KnowledgeExtractorSpec{Name: "test_extractor"}
-	expression := func(run, output string) *v1alpha1.KnowledgeExpressionSpec {
-		return &v1alpha1.KnowledgeExpressionSpec{Run: run, Output: output}
+	expression := func(run string) *v1alpha1.KnowledgeExpressionSpec {
+		return &v1alpha1.KnowledgeExpressionSpec{Run: run}
 	}
 	tests := []struct {
 		name       string
@@ -101,7 +101,7 @@ func TestKnowledgeReconciler_Reconcile(t *testing.T) {
 		},
 		{
 			name:       "expression",
-			expression: expression(`objs | map(let o = #; {name: o.Name, total: o.Value + len(feats) + feats[0].Total})`, "testFeature"),
+			expression: expression(`objs | map(let o = #; {name: o.Name, total: o.Value + len(feats) + feats[0].Total})`),
 			inputs:     inputs,
 			wantReason: "KnowledgeExtracted",
 			want:       []testFeature{{"a", 12}, {"b", 13}},
@@ -138,27 +138,22 @@ func TestKnowledgeReconciler_Reconcile(t *testing.T) {
 		},
 		{
 			name:       "expression with unknown field",
-			expression: expression(`objs | map(.UnknownField)`, "testFeature"),
+			expression: expression(`objs | map(.UnknownField)`),
 			inputs:     inputs,
 			wantReason: "ExpressionCompilationFailed",
 		},
 		{
-			name:       "expression output with unknown key",
-			expression: expression(`objs | map(let o = #; {name: o.Name, other: 1})`, "testFeature"),
-			inputs:     inputs,
-			wantReason: "ExpressionOutputInvalid",
+			name:       "expression over generic features of an expression knowledge",
+			expression: expression(`objs | map(let o = #; {name: o.Name, total: o.Value + feats[0].total, extra: true})`),
+			inputs:     []v1alpha1.InputSpec{inputs[0], {Var: "feats", Knowledge: "k-expr"}},
+			wantReason: "KnowledgeExtracted",
+			want:       []testFeature{{"a", 21}, {"b", 22}},
 		},
 		{
 			name:       "expression output not a list",
-			expression: expression(`len(objs)`, "testFeature"),
+			expression: expression(`len(objs)`),
 			inputs:     inputs,
 			wantReason: "ExpressionOutputInvalid",
-		},
-		{
-			name:       "expression with unknown output type",
-			expression: expression(`objs`, "Unknown"),
-			inputs:     inputs,
-			wantReason: "UnknownOutputType",
 		},
 	}
 	for _, tt := range tests {
@@ -178,6 +173,11 @@ func TestKnowledgeReconciler_Reconcile(t *testing.T) {
 				&v1alpha1.Datasource{
 					ObjectMeta: metav1.ObjectMeta{Name: "ds"},
 					Spec:       v1alpha1.DatasourceSpec{Type: testType, Storage: v1alpha1.StorageSpec{Type: testType}},
+				},
+				&v1alpha1.Knowledge{
+					ObjectMeta: metav1.ObjectMeta{Name: "k-expr"},
+					Spec:       v1alpha1.KnowledgeSpec{Expression: expression(`[]`)},
+					Status:     v1alpha1.KnowledgeStatus{Raw: runtime.RawExtension{Raw: []byte(`{"features":[{"name":"y","total":20}]}`)}},
 				},
 				&v1alpha1.Knowledge{
 					ObjectMeta: metav1.ObjectMeta{Name: "k-in"},

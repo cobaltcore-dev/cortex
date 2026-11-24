@@ -146,8 +146,6 @@ func (r *KnowledgeReconciler) extract(ctx context.Context, knowledge *v1alpha1.K
 		start := time.Now()
 		features, err := r.expressions.evaluate(ctx, knowledge.Name, *spec.Expression, env, timeout, memoryBudget)
 		switch {
-		case errors.Is(err, errUnknownOutputType):
-			return nil, &extractionError{reason: "UnknownOutputType", err: err}
 		case errors.Is(err, errExpressionCompile):
 			return nil, &extractionError{reason: "ExpressionCompilationFailed", err: err}
 		case errors.Is(err, errExpressionOutput):

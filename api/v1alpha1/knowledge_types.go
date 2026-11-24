@@ -22,13 +22,10 @@ type KnowledgeExtractorSpec struct {
 type KnowledgeExpressionSpec struct {
 	// Expression (https://expr-lang.org) evaluated over the inputs, which are
 	// available as variables named by their var. Fields of input objects are
-	// accessed by their go field names. The expression must return a list.
+	// accessed by their go field names. The expression must return a list,
+	// whose elements are stored as json features. Consumers model the
+	// features themselves and unbox them with UnboxFeatureList.
 	Run string `json:"run"`
-
-	// Name of the registered go type of a single output feature. The output
-	// of the expression is strictly decoded into a list of this type, so
-	// consumers can unbox the knowledge with the same type.
-	Output string `json:"output"`
 }
 
 // +kubebuilder:validation:XValidation:rule="has(self.extractor) != has(self.expression)",message="exactly one of extractor or expression must be set"

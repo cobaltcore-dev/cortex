@@ -22,17 +22,19 @@ variable name to a `Datasource` or another `Knowledge`:
 apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
 metadata:
-  name: host-capabilities
+  name: vm-host-residency
 spec:
   schedulingDomain: nova
   extractor:
-    name: host_capabilities_extractor
+    name: vm_host_residency_extractor
   recency: 60s
   inputs:
-    - var: hypervisors
-      datasource: nova-hypervisors
-    - var: traits
-      datasource: placement-resource-provider-traits
+    - var: migrations
+      datasource: nova-migrations
+    - var: servers
+      datasource: nova-servers
+    - var: flavors
+      datasource: nova-flavors
 ```
 
 Before an extraction, the controller resolves every input (`pkg/knowledge/inputs`):
@@ -48,42 +50,39 @@ knowledge (within its recency). Resolution errors surface as the `Ready` conditi
 
 ## Go extractors
 
-A Go extractor declares its inputs as a struct with fields tagged `input:"<var>"` and returns typed
-features. The feature type lives in the same file, so consumers import it and unbox the knowledge with
-`v1alpha1.UnboxFeatureList[compute.HostCapabilities](knowledge.Status.Raw)`:
+Use a Go extractor when the derivation doesn't fit an [expression](#expression-knowledges), e.g.
+histograms or multi-step logic. It declares its inputs as a struct with fields tagged `input:"<var>"` and
+returns typed features. The feature type lives in the same file, so consumers import it and unbox the
+knowledge with `v1alpha1.UnboxFeatureList[compute.VMHostResidencyHistogramBucket](knowledge.Status.Raw)`:
 
 ```go
-type HostCapabilitiesInputs struct {
-	Hypervisors []nova.Hypervisor `input:"hypervisors"`
-	Traits      []placement.Trait `input:"traits"`
+type VMHostResidencyInputs struct {
+	Migrations []nova.Migration `input:"migrations"`
+	Servers    []nova.Server    `input:"servers"`
+	Flavors    []nova.Flavor    `input:"flavors"`
 }
 
-type HostCapabilitiesExtractor struct {
+type VMHostResidencyExtractor struct {
 	extractor.BaseExtractor[struct{}] // options from spec.extractor.config
 }
 
-func (e *HostCapabilitiesExtractor) Extract(ctx context.Context, in HostCapabilitiesInputs) ([]HostCapabilities, error) {
+func (e *VMHostResidencyExtractor) Extract(ctx context.Context, in VMHostResidencyInputs) ([]VMHostResidencyHistogramBucket, error) {
 	// join and aggregate in Go
 }
 
 func init() {
-	extractor.Register("host_capabilities_extractor",
-		func() extractor.Extractor[HostCapabilitiesInputs, HostCapabilities] { return &HostCapabilitiesExtractor{} })
+	extractor.Register("vm_host_residency_extractor",
+		func() extractor.Extractor[VMHostResidencyInputs, VMHostResidencyHistogramBucket] { return &VMHostResidencyExtractor{} })
 }
 ```
 
-`extractor.Register` (`pkg/knowledge/extractor`) validates the inputs struct at startup and also registers
-the feature type by its Go type name, so expression knowledges can produce it. The configured inputs must
-match the tagged fields exactly, and the datasource model must match the field's element type.
+`extractor.Register` (`pkg/knowledge/extractor`) validates the inputs struct at startup. The configured
+inputs must match the tagged fields exactly, and the datasource model must match the field's element type.
 
-Cortex ships two plugin families under `internal/knowledge/extractor/plugins`:
-
-- **compute** — `host_utilization_extractor`, `host_capabilities_extractor`, `host_az_extractor`,
-  `host_pinned_projects_extractor`, `vmware_host_details_extractor`, `flavor_groups`,
-  `vm_host_residency_extractor`, `vm_life_span_histogram_extractor`, the vROps resolver, noisiness and
-  contention extractors, and `kvm_libvirt_domain_cpu_steal_pct_extractor` (the feature the
-  [`avoid_high_steal_pct` detector](../02-external-scheduler-api/02-nova-smart-scheduling.md) acts on).
-- **storage** — `netapp_storage_pool_cpu_usage_extractor`, the feature behind Manila's one weigher.
+Cortex ships these Go extractors under `internal/knowledge/extractor/plugins/compute`:
+`host_pinned_projects_extractor`, `vmware_host_details_extractor`, `flavor_groups`,
+`vm_host_residency_extractor` and `vm_life_span_histogram_extractor`. All other knowledges in the helm
+bundles are expressions.
 
 Extractors outside the cortex repository can be built into a custom manager binary, see
 [Extend Cortex](../02-external-scheduler-api/07-extending-cortex.md).
@@ -92,32 +91,44 @@ Extractors outside the cortex repository can be built into a custom manager bina
 
 Instead of Go code, a knowledge can carry an [expr](https://expr-lang.org) expression. The inputs are
 available as variables, and fields of the input objects are accessed by their **Go field names**. The
-expression must return a list, which is strictly decoded into the registered Go feature type named in
-`output` — so consumers keep using the same typed feature:
+expression must return a list, whose elements are stored as JSON features — no Go type needs to exist to
+add a new knowledge. Consumers model the features themselves and unbox them with
+`v1alpha1.UnboxFeatureList[T]`, e.g. into `compute.HostCapabilities`:
 
 ```yaml
 spec:
   expression:
-    output: HostCapabilities
     run: |
       let traitsByProvider = groupBy(traits, .ResourceProviderUUID);
       hypervisors
       | filter(len(traitsByProvider[.ID] ?? []) > 0)
-      | groupBy(.ServiceHost + "/" + .HypervisorType)
+      | groupBy(.ServiceHost + "\x00" + .HypervisorType)
       | values()
       | map(let g = #; {
           ComputeHost:    g[0].ServiceHost,
           HypervisorType: g[0].HypervisorType,
           Traits:         g | map(traitsByProvider[.ID]) | flatten() | map(.Name) | sort() | join(","),
         })
-      | sortBy(.ComputeHost)
+      | sortBy(.ComputeHost + "\x00" + .HypervisorType)
 ```
+
+The expression knowledges shipped with cortex are `host-capabilities`, `host-utilization`, `host-az`,
+`kvm-libvirt-domain-cpu-steal-pct` (the feature the
+[`avoid_high_steal_pct` detector](../02-external-scheduler-api/02-nova-smart-scheduling.md) acts on), the
+vROps knowledges `vmware-resolved-hostsystems`, `vmware-project-noisiness`, `vmware-long-term-contended-hosts`
+and `vmware-short-term-contended-hosts`, and `netapp-storage-pool-cpu-usage-manila`, the feature behind
+Manila's one weigher. Their test cases live in `internal/knowledge/extractor/plugins/expressions_test.go`,
+which evaluates the expressions straight from the helm templates and checks that the features decode into
+the Go types their consumers use; `extractor.EvaluateExpression` does the same for your own expressions.
 
 Things to keep in mind:
 
-- Object keys of the output must match the JSON field names of the output type (the Go field name if it
-  has no `json` tag, matched case-insensitively); unknown keys fail with `ExpressionOutputInvalid`.
-  Missing keys are left at their zero value.
+- Object keys of the output must match the JSON field names of the consumer's Go type (the Go field name
+  if it has no `json` tag, matched case-insensitively). Nothing enforces this at runtime: unknown keys are
+  ignored by `UnboxFeatureList` and missing keys are left at their zero value, so cover it with a test.
+- The output must be a list of JSON values, otherwise the knowledge fails with `ExpressionOutputInvalid`.
+- Features of an expression knowledge used as input of another expression are generic maps keyed as
+  written by the producing expression, so typos in their keys are only noticed at runtime.
 - Typos in variables or input fields are caught when the expression is compiled
   (`ExpressionCompilationFailed`).
 - A map literal can't be the direct argument of `map(...)`: `map({...})` is parsed as a closure body.

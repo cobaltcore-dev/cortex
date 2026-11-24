@@ -6,7 +6,6 @@ metadata:
 spec:
   schedulingDomain: nova
   expression:
-    output: ResolvedVROpsHostsystem
     run: |
       let serversByID = groupBy(servers, .ID);
       metrics
@@ -37,7 +36,6 @@ metadata:
 spec:
   schedulingDomain: nova
   expression:
-    output: VROpsProjectNoisiness
     run: |
       let metricsByProject = groupBy(metrics, .Project);
       let metricsByServer = groupBy(metrics, .InstanceUUID);
@@ -73,7 +71,6 @@ metadata:
 spec:
   schedulingDomain: nova
   expression:
-    output: VROpsHostsystemContentionLongTerm
     run: |
       let computeHostByHostsystem = groupBy(resolvedHostsystems, .VROpsHostsystem);
       metrics
@@ -109,7 +106,6 @@ metadata:
 spec:
   schedulingDomain: nova
   expression:
-    output: VROpsHostsystemContentionShortTerm
     run: |
       let computeHostByHostsystem = groupBy(resolvedHostsystems, .VROpsHostsystem);
       metrics
@@ -169,7 +165,6 @@ metadata:
 spec:
   schedulingDomain: nova
   expression:
-    output: HostUtilization
     run: |
       let inventory = groupBy(inventoryUsages, .ResourceProviderUUID + "\x00" + .InventoryClassName);
       hypervisors
@@ -212,7 +207,6 @@ metadata:
 spec:
   schedulingDomain: nova
   expression:
-    output: HostCapabilities
     run: |
       let traitsByProvider = groupBy(traits, .ResourceProviderUUID);
       hypervisors
@@ -281,7 +275,6 @@ metadata:
 spec:
   schedulingDomain: nova
   expression:
-    output: HostAZ
     run: |
       let azsByHost = aggregates
         | filter(.ComputeHost != nil && .AvailabilityZone != nil)

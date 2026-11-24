@@ -4,21 +4,23 @@
 package plugins_test
 
 import (
+	"bytes"
 	"encoding/json"
-	"math/rand/v2"
 	"os"
 	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
-	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/storage"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
+	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/storage"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/manila"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/placement"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/prometheus"
 	"github.com/cobaltcore-dev/cortex/pkg/knowledge/extractor"
-	"github.com/cobaltcore-dev/cortex/pkg/knowledge/inputs"
 	"sigs.k8s.io/yaml"
 )
 
@@ -27,19 +29,6 @@ var knowledgeFiles = []string{
 	"../../../../helm/bundles/cortex-nova/templates/knowledges.yaml",
 	"../../../../helm/bundles/cortex-nova/templates/knowledges_kvm.yaml",
 	"../../../../helm/bundles/cortex-manila/templates/knowledges.yaml",
-}
-
-// Go extractors that the expression knowledges must be equivalent to.
-var expressionEquivalents = map[string]string{
-	"host-capabilities":                    "host_capabilities_extractor",
-	"host-utilization":                     "host_utilization_extractor",
-	"host-az":                              "host_az_extractor",
-	"kvm-libvirt-domain-cpu-steal-pct":     "kvm_libvirt_domain_cpu_steal_pct_extractor",
-	"vmware-resolved-hostsystems":          "vrops_hostsystem_resolver",
-	"vmware-project-noisiness":             "vrops_project_noisiness_extractor",
-	"vmware-long-term-contended-hosts":     "vrops_hostsystem_contention_long_term_extractor",
-	"vmware-short-term-contended-hosts":    "vrops_hostsystem_contention_short_term_extractor",
-	"netapp-storage-pool-cpu-usage-manila": "netapp_storage_pool_cpu_usage_extractor",
 }
 
 // Load the expression knowledges from the helm templates, skipping lines
@@ -71,146 +60,448 @@ func loadExpressionKnowledges(t *testing.T) map[string]v1alpha1.Knowledge {
 	return knowledges
 }
 
-func TestExpressionKnowledgesMatchGoExtractors(t *testing.T) {
-	const seeds = 1000
+func usage(class string, ratio float32, total, used, reserved int) placement.InventoryUsage {
+	return placement.InventoryUsage{
+		ResourceProviderUUID: "1",
+		InventoryClassName:   class,
+		AllocationRatio:      ratio,
+		Total:                total,
+		Used:                 used,
+		Reserved:             reserved,
+	}
+}
+
+var (
+	utilizationHypervisors = []nova.Hypervisor{
+		{ID: "1", Hostname: "hostname1", ServiceHost: "host1"},
+		// No usage data for this host.
+		{ID: "2", Hostname: "hostname2", ServiceHost: "host2"},
+	}
+	utilization = compute.HostUtilization{
+		ComputeHost:            "host1",
+		TotalVCPUsAllocatable:  100,
+		TotalRAMAllocatableMB:  1000,
+		TotalDiskAllocatableGB: 2000,
+		VCPUsUsed:              25,
+		RAMUsedMB:              500,
+		DiskUsedGB:             1000,
+		VCPUsUtilizedPct:       25,
+		RAMUtilizedPct:         50,
+		DiskUtilizedPct:        50,
+	}
+	contentionMetrics = []prometheus.VROpsHostMetric{
+		{HostSystem: "hostsystem1", Value: 30.0},
+		{HostSystem: "hostsystem2", Value: 40.0},
+		{HostSystem: "hostsystem1", Value: 50.0},
+		{HostSystem: "unresolved", Value: 99.0},
+	}
+	contentionResolved = []compute.ResolvedVROpsHostsystem{
+		{VROpsHostsystem: "hostsystem2", NovaComputeHost: "compute_host2"},
+		{VROpsHostsystem: "hostsystem1", NovaComputeHost: "compute_host1"},
+	}
+	contentionMultiMetrics = []prometheus.VROpsHostMetric{
+		{HostSystem: "hostsystem1", Value: 30.0},
+		{HostSystem: "hostsystem1", Value: 50.0},
+		{HostSystem: "hostsystem2", Value: 10.0},
+		{HostSystem: "unresolved", Value: 99.0},
+	}
+	contentionMultiResolved = []compute.ResolvedVROpsHostsystem{
+		{VROpsHostsystem: "hostsystem1", NovaComputeHost: "compute_host1"},
+		{VROpsHostsystem: "hostsystem2", NovaComputeHost: "compute_host1"},
+	}
+)
+
+func TestExpressionKnowledges(t *testing.T) {
+	withOvercommit := utilization
+	withOvercommit.TotalVCPUsAllocatable = 200
+	withOvercommit.VCPUsUsed = 50
+
+	tests := []struct {
+		name      string
+		knowledge string
+		env       map[string]any
+		want      any
+	}{
+		{
+			name:      "joins traits per compute host",
+			knowledge: "host-capabilities",
+			env: map[string]any{
+				"hypervisors": []nova.Hypervisor{
+					{ID: "uuid2", ServiceHost: "host2", HypervisorType: "QEMU"},
+					{ID: "uuid1", ServiceHost: "host1", HypervisorType: "QEMU"},
+					// Hypervisors without traits are skipped.
+					{ID: "uuid3", ServiceHost: "host3", HypervisorType: "QEMU"},
+				},
+				"traits": []placement.Trait{
+					{ResourceProviderUUID: "uuid1", Name: "TRAIT_1"},
+					{ResourceProviderUUID: "uuid1", Name: "TRAIT_2"},
+					{ResourceProviderUUID: "uuid2", Name: "TRAIT_3"},
+					{ResourceProviderUUID: "unknown", Name: "TRAIT_4"},
+				},
+			},
+			want: []compute.HostCapabilities{
+				{ComputeHost: "host1", Traits: "TRAIT_1,TRAIT_2", HypervisorType: "QEMU"},
+				{ComputeHost: "host2", Traits: "TRAIT_3", HypervisorType: "QEMU"},
+			},
+		},
+		{
+			name:      "sorts traits of all hypervisors of a host and hypervisor type",
+			knowledge: "host-capabilities",
+			env: map[string]any{
+				"hypervisors": []nova.Hypervisor{
+					{ID: "uuid1", ServiceHost: "host1", HypervisorType: "VMware vCenter Server"},
+					{ID: "uuid2", ServiceHost: "host1", HypervisorType: "VMware vCenter Server"},
+					{ID: "uuid3", ServiceHost: "host1", HypervisorType: "ironic"},
+				},
+				"traits": []placement.Trait{
+					{ResourceProviderUUID: "uuid1", Name: "TRAIT_C"},
+					{ResourceProviderUUID: "uuid1", Name: "TRAIT_A"},
+					{ResourceProviderUUID: "uuid2", Name: "TRAIT_B"},
+					{ResourceProviderUUID: "uuid3", Name: "TRAIT_D"},
+				},
+			},
+			want: []compute.HostCapabilities{
+				{ComputeHost: "host1", Traits: "TRAIT_A,TRAIT_B,TRAIT_C", HypervisorType: "VMware vCenter Server"},
+				{ComputeHost: "host1", Traits: "TRAIT_D", HypervisorType: "ironic"},
+			},
+		},
+		{
+			name:      "no hypervisors",
+			knowledge: "host-utilization",
+			env: map[string]any{
+				"hypervisors":     []nova.Hypervisor{},
+				"inventoryUsages": []placement.InventoryUsage{},
+			},
+			want: []compute.HostUtilization{},
+		},
+		{
+			name:      "no reserved capacity",
+			knowledge: "host-utilization",
+			env: map[string]any{
+				"hypervisors": utilizationHypervisors,
+				"inventoryUsages": []placement.InventoryUsage{
+					usage("VCPU", 1, 100, 25, 0),
+					usage("MEMORY_MB", 1, 1000, 500, 0),
+					usage("DISK_GB", 1, 2000, 1000, 0),
+				},
+			},
+			want: []compute.HostUtilization{utilization},
+		},
+		{
+			name:      "reserved capacity",
+			knowledge: "host-utilization",
+			env: map[string]any{
+				"hypervisors": utilizationHypervisors,
+				"inventoryUsages": []placement.InventoryUsage{
+					usage("VCPU", 1, 105, 25, 5),
+					usage("MEMORY_MB", 1, 1100, 500, 100),
+					usage("DISK_GB", 1, 2100, 1000, 100),
+				},
+			},
+			want: []compute.HostUtilization{utilization},
+		},
+		{
+			name:      "overcommit factor",
+			knowledge: "host-utilization",
+			env: map[string]any{
+				"hypervisors": utilizationHypervisors,
+				"inventoryUsages": []placement.InventoryUsage{
+					// Total allocatable vcpus: (110-10)*2 = 200, used already includes overcommit.
+					usage("VCPU", 2, 110, 50, 10),
+					usage("MEMORY_MB", 1, 1000, 500, 0),
+					usage("DISK_GB", 1, 2000, 1000, 0),
+				},
+			},
+			want: []compute.HostUtilization{withOvercommit},
+		},
+		{
+			name:      "incomplete inventory is skipped",
+			knowledge: "host-utilization",
+			env: map[string]any{
+				"hypervisors": utilizationHypervisors,
+				"inventoryUsages": []placement.InventoryUsage{
+					usage("VCPU", 1, 100, 25, 0),
+					usage("MEMORY_MB", 1, 1000, 500, 0),
+				},
+			},
+			want: []compute.HostUtilization{},
+		},
+		{
+			name:      "resolves availability zones from aggregates",
+			knowledge: "host-az",
+			env: map[string]any{
+				"hypervisors": []nova.Hypervisor{
+					{ID: "uuid4", ServiceHost: "host4"},
+					{ID: "uuid1", ServiceHost: "host1"},
+					{ID: "uuid2", ServiceHost: "host2"},
+					{ID: "uuid3", ServiceHost: "host3"},
+				},
+				"aggregates": []nova.Aggregate{
+					// Aggregates without availability zone are ignored.
+					{UUID: "agg1", Name: "something_else", ComputeHost: new("host1"), Metadata: "{}"},
+					{UUID: "agg2", Name: "az1", AvailabilityZone: new("az1"), ComputeHost: new("host1"), Metadata: "{}"},
+					// Only an aggregate without availability zone for host2.
+					{UUID: "agg3", Name: "something_else_again", ComputeHost: new("host2"), Metadata: "{}"},
+					// No aggregate for host3.
+					{UUID: "agg4", Name: "az2", AvailabilityZone: new("az2"), ComputeHost: new("host4"), Metadata: "{}"},
+					// Aggregates without compute host are ignored.
+					{UUID: "agg5", Name: "az3", AvailabilityZone: new("az3"), Metadata: "{}"},
+				},
+			},
+			want: []compute.HostAZ{
+				{ComputeHost: "host1", AvailabilityZone: new("az1")},
+				{ComputeHost: "host2"},
+				{ComputeHost: "host3"},
+				{ComputeHost: "host4", AvailabilityZone: new("az2")},
+			},
+		},
+		{
+			name:      "uses the lexicographically smallest of multiple availability zones",
+			knowledge: "host-az",
+			env: map[string]any{
+				"hypervisors": []nova.Hypervisor{{ID: "uuid1", ServiceHost: "host1"}},
+				"aggregates": []nova.Aggregate{
+					{UUID: "agg1", AvailabilityZone: new("az-b"), ComputeHost: new("host1")},
+					{UUID: "agg2", AvailabilityZone: new("az-a"), ComputeHost: new("host1")},
+					{UUID: "agg3", AvailabilityZone: new("az-c"), ComputeHost: new("host1")},
+				},
+			},
+			want: []compute.HostAZ{{ComputeHost: "host1", AvailabilityZone: new("az-a")}},
+		},
+		{
+			name:      "no hypervisors",
+			knowledge: "host-az",
+			env: map[string]any{
+				"hypervisors": []nova.Hypervisor{},
+				"aggregates":  []nova.Aggregate{{UUID: "agg1", AvailabilityZone: new("az1"), ComputeHost: new("host1")}},
+			},
+			want: []compute.HostAZ{},
+		},
+		{
+			name:      "max steal time per server",
+			knowledge: "kvm-libvirt-domain-cpu-steal-pct",
+			env: map[string]any{
+				"metrics": []prometheus.KVMDomainMetric{
+					{Domain: "instance-00000001", Value: 15.5},
+					{Domain: "instance-00000001", Value: 25.0},
+					{Domain: "instance-00000002", Value: 10.2},
+					{Domain: "instance-00000003", Value: 30.8},
+					// Metrics without matching server are skipped.
+					{Domain: "instance-00000004", Value: 50.0},
+				},
+				"servers": []nova.Server{
+					{ID: "uuid-3", OSEXTSRVATTRInstanceName: "instance-00000003", OSEXTSRVATTRHost: "compute-host-1"},
+					{ID: "uuid-1", OSEXTSRVATTRInstanceName: "instance-00000001", OSEXTSRVATTRHost: "compute-host-1"},
+					{ID: "uuid-2", OSEXTSRVATTRInstanceName: "instance-00000002", OSEXTSRVATTRHost: "compute-host-2"},
+				},
+			},
+			want: []compute.LibvirtDomainCPUStealPct{
+				{InstanceUUID: "uuid-1", Host: "compute-host-1", MaxStealTimePct: 25.0},
+				{InstanceUUID: "uuid-2", Host: "compute-host-2", MaxStealTimePct: 10.2},
+				{InstanceUUID: "uuid-3", Host: "compute-host-1", MaxStealTimePct: 30.8},
+			},
+		},
+		{
+			name:      "resolves hostsystems to compute hosts",
+			knowledge: "vmware-resolved-hostsystems",
+			env: map[string]any{
+				"metrics": []prometheus.VROpsVMMetric{
+					{HostSystem: "hostsystem2", InstanceUUID: "uuid2"},
+					{HostSystem: "hostsystem1", InstanceUUID: "uuid1"},
+					// Duplicate metrics of the same server are deduplicated.
+					{HostSystem: "hostsystem1", InstanceUUID: "uuid1"},
+					// Metrics of unknown servers are skipped.
+					{HostSystem: "hostsystem3", InstanceUUID: "unknown"},
+					// Servers without host are skipped.
+					{HostSystem: "hostsystem4", InstanceUUID: "uuid4"},
+				},
+				"servers": []nova.Server{
+					{ID: "uuid1", OSEXTSRVATTRHost: "service_host1"},
+					{ID: "uuid2", OSEXTSRVATTRHost: "service_host2"},
+					{ID: "uuid4", OSEXTSRVATTRHost: ""},
+				},
+			},
+			want: []compute.ResolvedVROpsHostsystem{
+				{VROpsHostsystem: "hostsystem1", NovaComputeHost: "service_host1"},
+				{VROpsHostsystem: "hostsystem2", NovaComputeHost: "service_host2"},
+			},
+		},
+		{
+			name:      "average project cpu per compute host",
+			knowledge: "vmware-project-noisiness",
+			env: map[string]any{
+				"metrics": []prometheus.VROpsVMMetric{
+					{Project: "project1", Value: 50, InstanceUUID: "uuid1"},
+					{Project: "project1", Value: 60, InstanceUUID: "uuid2"},
+					{Project: "project2", Value: 70, InstanceUUID: "uuid3"},
+				},
+				"servers": []nova.Server{
+					{ID: "uuid1", TenantID: "project1", OSEXTSRVATTRHypervisorHostname: "host1"},
+					{ID: "uuid2", TenantID: "project1", OSEXTSRVATTRHypervisorHostname: "host2"},
+					{ID: "uuid3", TenantID: "project2", OSEXTSRVATTRHypervisorHostname: "host1"},
+					// Servers without metrics are skipped.
+					{ID: "uuid4", TenantID: "project3", OSEXTSRVATTRHypervisorHostname: "host2"},
+				},
+				"hypervisors": []nova.Hypervisor{
+					{ID: "1", Hostname: "host1", ServiceHost: "service_host1"},
+					{ID: "2", Hostname: "host2", ServiceHost: "service_host2"},
+				},
+			},
+			want: []compute.VROpsProjectNoisiness{
+				{Project: "project1", ComputeHost: "service_host1", AvgCPUOfProject: 55},
+				{Project: "project1", ComputeHost: "service_host2", AvgCPUOfProject: 55},
+				{Project: "project2", ComputeHost: "service_host1", AvgCPUOfProject: 70},
+			},
+		},
+		{
+			name:      "average and maximum per compute host",
+			knowledge: "vmware-long-term-contended-hosts",
+			env:       map[string]any{"metrics": contentionMetrics, "resolvedHostsystems": genericFeatures(t, contentionResolved)},
+			want: []compute.VROpsHostsystemContentionLongTerm{
+				{ComputeHost: "compute_host1", AvgCPUContention: 40.0, MaxCPUContention: 50.0},
+				{ComputeHost: "compute_host2", AvgCPUContention: 40.0, MaxCPUContention: 40.0},
+			},
+		},
+		{
+			name:      "average of averages and maximum of maximums across hostsystems",
+			knowledge: "vmware-long-term-contended-hosts",
+			env:       map[string]any{"metrics": contentionMultiMetrics, "resolvedHostsystems": genericFeatures(t, contentionMultiResolved)},
+			// avg((30+50)/2, 10) = 25, max(50, 10) = 50
+			want: []compute.VROpsHostsystemContentionLongTerm{
+				{ComputeHost: "compute_host1", AvgCPUContention: 25.0, MaxCPUContention: 50.0},
+			},
+		},
+		{
+			name:      "no resolved hostsystems",
+			knowledge: "vmware-long-term-contended-hosts",
+			env: map[string]any{
+				"metrics":             []prometheus.VROpsHostMetric{{HostSystem: "hostsystem1", Value: 30.0}},
+				"resolvedHostsystems": []map[string]any{},
+			},
+			want: []compute.VROpsHostsystemContentionLongTerm{},
+		},
+		{
+			name:      "average and maximum per compute host",
+			knowledge: "vmware-short-term-contended-hosts",
+			env:       map[string]any{"metrics": contentionMetrics, "resolvedHostsystems": genericFeatures(t, contentionResolved)},
+			want: []compute.VROpsHostsystemContentionShortTerm{
+				{ComputeHost: "compute_host1", AvgCPUContention: 40.0, MaxCPUContention: 50.0},
+				{ComputeHost: "compute_host2", AvgCPUContention: 40.0, MaxCPUContention: 40.0},
+			},
+		},
+		{
+			name:      "average of averages and maximum of maximums across hostsystems",
+			knowledge: "vmware-short-term-contended-hosts",
+			env:       map[string]any{"metrics": contentionMultiMetrics, "resolvedHostsystems": genericFeatures(t, contentionMultiResolved)},
+			want: []compute.VROpsHostsystemContentionShortTerm{
+				{ComputeHost: "compute_host1", AvgCPUContention: 25.0, MaxCPUContention: 50.0},
+			},
+		},
+		{
+			name:      "node cpu usage per storage pool",
+			knowledge: "netapp-storage-pool-cpu-usage-manila",
+			env: map[string]any{
+				"storagePools": []manila.StoragePool{
+					{Name: "pool2", Pool: "aggr2"},
+					{Name: "pool1", Pool: "aggr1"},
+					// Aggregate spanning multiple nodes yields one feature per node.
+					{Name: "pool3", Pool: "aggr3"},
+					// Pools without aggregate labels are skipped.
+					{Name: "pool4", Pool: "aggr4"},
+				},
+				"aggregateLabels": []prometheus.NetAppAggregateLabelsMetric{
+					{Aggregate: "aggr1", Node: "node1"},
+					{Aggregate: "aggr2", Node: "node2"},
+					{Aggregate: "aggr3", Node: "node1"},
+					{Aggregate: "aggr3", Node: "node2"},
+					// Duplicate labels are ignored.
+					{Aggregate: "aggr3", Node: "node2"},
+				},
+				"nodeCPUBusy": []prometheus.NetAppNodeMetric{
+					{Node: "node1", Value: 10.5},
+					{Node: "node1", Value: 20.0},
+					{Node: "node2", Value: 30.0},
+					{Node: "node2", Value: 40.0},
+				},
+			},
+			want: []storage.StoragePoolCPUUsage{
+				{StoragePoolName: "pool1", AvgCPUUsagePct: 15.25, MaxCPUUsagePct: 20.0},
+				{StoragePoolName: "pool2", AvgCPUUsagePct: 35.0, MaxCPUUsagePct: 40.0},
+				{StoragePoolName: "pool3", AvgCPUUsagePct: 15.25, MaxCPUUsagePct: 20.0},
+				{StoragePoolName: "pool3", AvgCPUUsagePct: 35.0, MaxCPUUsagePct: 40.0},
+			},
+		},
+	}
+
 	knowledges := loadExpressionKnowledges(t)
+	covered := map[string]bool{}
+	for _, tt := range tests {
+		covered[tt.knowledge] = true
+	}
 	for name := range knowledges {
-		if _, ok := expressionEquivalents[name]; !ok {
-			t.Errorf("expression knowledge %q has no equivalent go extractor to test against", name)
+		if !covered[name] {
+			t.Errorf("expression knowledge %q has no test case", name)
 		}
 	}
-	for name, extractorName := range expressionEquivalents {
-		t.Run(name, func(t *testing.T) {
-			k, ok := knowledges[name]
+	for _, tt := range tests {
+		t.Run(tt.knowledge+"/"+tt.name, func(t *testing.T) {
+			k, ok := knowledges[tt.knowledge]
 			if !ok {
-				t.Fatalf("expression knowledge %q not found in helm templates", name)
+				t.Fatalf("expression knowledge %q not found in helm templates", tt.knowledge)
 			}
-			nonEmpty := 0
-			for seed := range uint64(seeds) {
-				r := rand.New(rand.NewPCG(seed, 0)) //nolint:gosec // test data
-				goExtractor := extractor.Index[extractorName]()
-				in := goExtractor.NewInputs()
-				env := randomInputs(t, r, in)
-				want, err := goExtractor.Extract(t.Context(), in)
-				if err != nil {
-					t.Fatalf("seed %d: go extractor failed: %v", seed, err)
-				}
-				got, err := extractor.EvaluateExpression(t.Context(), *k.Spec.Expression, env)
-				if err != nil {
-					t.Fatalf("seed %d: expression failed: %v", seed, err)
-				}
-				if g, w := canonical(t, got), canonical(t, want); !slices.Equal(g, w) {
-					t.Fatalf("seed %d: expression differs from go extractor\nexpression: %v\ngo:         %v", seed, g, w)
-				}
-				if len(want) > 0 {
-					nonEmpty++
-				}
+			got, err := extractor.EvaluateExpression(t.Context(), *k.Spec.Expression, tt.env)
+			if err != nil {
+				t.Fatalf("expression failed: %v", err)
 			}
-			// Guard against the random inputs rarely producing any features.
-			if nonEmpty < seeds*15/100 {
-				t.Errorf("only %d of %d random inputs produced features", nonEmpty, seeds)
+			// Consumers unbox the features into their own type, so all keys must
+			// match its json fields.
+			raw, err := json.Marshal(got)
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoder := json.NewDecoder(bytes.NewReader(raw))
+			decoder.DisallowUnknownFields()
+			decoded := reflect.New(reflect.TypeOf(tt.want))
+			if err := decoder.Decode(decoded.Interface()); err != nil {
+				t.Fatalf("features don't match %T: %v", tt.want, err)
+			}
+			if g, w := canonical(t, decoded.Elem().Interface()), canonical(t, tt.want); !slices.Equal(g, w) {
+				t.Errorf("expected %v, got %v", w, g)
 			}
 		})
 	}
 }
 
-// Fill the input fields of the inputs struct with random objects and return
-// them keyed by their var, as passed to expressions.
-func randomInputs(t *testing.T, r *rand.Rand, in any) map[string]any {
+// Features of an expression knowledge as passed to other expressions, which
+// are generic json values since their type isn't known.
+func genericFeatures[F any](t *testing.T, features []F) []map[string]any {
 	t.Helper()
-	val := reflect.ValueOf(in).Elem()
-	fields, err := inputs.Fields(val.Type())
+	raw, err := json.Marshal(features)
 	if err != nil {
 		t.Fatal(err)
 	}
-	env := map[string]any{}
-	for v, idx := range fields {
-		field := val.Field(idx)
-		objs := reflect.MakeSlice(field.Type(), 0, 0)
-		seen := map[string]bool{}
-		for range r.IntN(40) {
-			obj := reflect.New(field.Type().Elem()).Elem()
-			fillRandom(r, obj)
-			// Objects with the same primary key can't be stored twice.
-			if key, ok := primaryKey(obj); ok {
-				if seen[key] {
-					continue
-				}
-				seen[key] = true
-			}
-			objs = reflect.Append(objs, obj)
-		}
-		field.Set(objs)
-		env[v] = objs.Interface()
+	var generic []map[string]any
+	if err := json.Unmarshal(raw, &generic); err != nil {
+		t.Fatal(err)
 	}
-	return env
-}
-
-// Small value pools, so that joins across inputs match frequently.
-var (
-	randomStrings = []string{"", "a", "b", "c", "MEMORY_MB", "VCPU", "DISK_GB"}
-	randomFloats  = []float64{0, 0.5, 1, 1.5, 4, 33.3}
-)
-
-func fillRandom(r *rand.Rand, v reflect.Value) {
-	switch v.Kind() {
-	case reflect.String:
-		v.SetString(randomStrings[r.IntN(len(randomStrings))])
-	case reflect.Int, reflect.Int32, reflect.Int64:
-		v.SetInt(int64(r.IntN(10)))
-	case reflect.Uint, reflect.Uint32, reflect.Uint64:
-		v.SetUint(r.Uint64N(10))
-	case reflect.Float32, reflect.Float64:
-		v.SetFloat(randomFloats[r.IntN(len(randomFloats))])
-	case reflect.Bool:
-		v.SetBool(r.IntN(2) == 0)
-	case reflect.Pointer:
-		if r.IntN(3) == 0 {
-			v.SetZero()
-			return
-		}
-		p := reflect.New(v.Type().Elem())
-		fillRandom(r, p.Elem())
-		v.Set(p)
-	case reflect.Struct:
-		if v.Type() == reflect.TypeFor[time.Time]() {
-			v.Set(reflect.ValueOf(time.Unix(int64(r.IntN(1000)), 0)))
-			return
-		}
-		for i := range v.NumField() {
-			if v.Type().Field(i).IsExported() {
-				fillRandom(r, v.Field(i))
-			}
-		}
-	}
-}
-
-// Primary key of a stored model, from the fields tagged as primarykey.
-func primaryKey(obj reflect.Value) (string, bool) {
-	var parts []string
-	for i := range obj.NumField() {
-		if strings.Contains(obj.Type().Field(i).Tag.Get("db"), ",primarykey") {
-			parts = append(parts, obj.Field(i).String())
-		}
-	}
-	return strings.Join(parts, "\x00"), len(parts) > 0
+	return generic
 }
 
 // Canonical form of features for comparison, ignoring their order and
 // floating point differences from summing in different orders.
-func canonical[F any](t *testing.T, features []F) []string {
+func canonical(t *testing.T, features any) []string {
 	t.Helper()
-	out := make([]string, len(features))
-	for i, f := range features {
-		raw, err := json.Marshal(f)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var generic any
-		if err := json.Unmarshal(raw, &generic); err != nil {
-			t.Fatal(err)
-		}
-		raw, err = json.Marshal(roundFloats(generic))
+	raw, err := json.Marshal(features)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var generic []any
+	if err := json.Unmarshal(raw, &generic); err != nil {
+		t.Fatal(err)
+	}
+	out := make([]string, len(generic))
+	for i, f := range generic {
+		raw, err := json.Marshal(roundFloats(f))
 		if err != nil {
 			t.Fatal(err)
 		}

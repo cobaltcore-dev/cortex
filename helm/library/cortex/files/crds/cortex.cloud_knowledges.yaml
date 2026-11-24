@@ -67,20 +67,15 @@ spec:
               expression:
                 description: The expression to use for extracting this knowledge.
                 properties:
-                  output:
-                    description: |-
-                      Name of the registered go type of a single output feature. The output
-                      of the expression is strictly decoded into a list of this type, so
-                      consumers can unbox the knowledge with the same type.
-                    type: string
                   run:
                     description: |-
                       Expression (https://expr-lang.org) evaluated over the inputs, which are
                       available as variables named by their var. Fields of input objects are
-                      accessed by their go field names. The expression must return a list.
+                      accessed by their go field names. The expression must return a list,
+                      whose elements are stored as json features. Consumers model the
+                      features themselves and unbox them with UnboxFeatureList.
                     type: string
                 required:
-                - output
                 - run
                 type: object
               extractor:

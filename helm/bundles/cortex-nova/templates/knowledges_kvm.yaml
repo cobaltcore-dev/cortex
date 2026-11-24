@@ -25,7 +25,6 @@ spec:
   schedulingDomain: nova
   recency: "60s"
   expression:
-    output: LibvirtDomainCPUStealPct
     run: |
       let metricsByDomain = groupBy(metrics, .Domain);
       servers

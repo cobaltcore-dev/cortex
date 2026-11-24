@@ -6,7 +6,6 @@ metadata:
 spec:
   schedulingDomain: manila
   expression:
-    output: StoragePoolCPUUsage
     run: |
       let nodesByAggregate = groupBy(aggregateLabels, .Aggregate);
       let cpuByNode = groupBy(nodeCPUBusy, .Node);
