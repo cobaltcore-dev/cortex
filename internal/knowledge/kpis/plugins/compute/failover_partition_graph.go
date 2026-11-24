@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
@@ -47,8 +46,8 @@ type FailoverPartitionGraphKPI struct {
 func (FailoverPartitionGraphKPI) GetName() string { return "failover_partition_graph_kpi" }
 
 // Initialize the KPI.
-func (k *FailoverPartitionGraphKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
-	if err := k.BaseKPI.Init(db, client, opts); err != nil {
+func (k *FailoverPartitionGraphKPI) Init(inputs plugins.Inputs, client client.Client, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(inputs, client, opts); err != nil {
 		return err
 	}
 	k.node = prometheus.NewDesc(

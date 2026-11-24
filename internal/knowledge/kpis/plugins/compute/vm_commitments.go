@@ -4,14 +4,14 @@
 package compute
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/limes"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/limes"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -30,8 +30,8 @@ func (VMCommitmentsKPI) GetName() string {
 	return "vm_commitments_kpi"
 }
 
-func (k *VMCommitmentsKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
-	if err := k.BaseKPI.Init(db, client, opts); err != nil {
+func (k *VMCommitmentsKPI) Init(inputs plugins.Inputs, client client.Client, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(inputs, client, opts); err != nil {
 		return err
 	}
 	k.vmCommitmentsTotalDesc = prometheus.NewDesc(
@@ -102,22 +102,25 @@ func convertLimesMemory(unit string) (float64, error) {
 	}
 }
 
+// Inputs of the vm commitments kpi.
+type VMCommitmentsInputs struct {
+	Commitments []limes.Commitment `input:"commitments"`
+	Flavors     []nova.Flavor      `input:"flavors"`
+}
+
 func (k *VMCommitmentsKPI) Collect(ch chan<- prometheus.Metric) {
+	var in VMCommitmentsInputs
+	if err := k.ResolveInputs(context.Background(), &in); err != nil {
+		log.Error(err, "failed to resolve inputs")
+		return
+	}
 	var commitments []limes.Commitment
-	table := limes.Commitment{}.TableName()
-	if _, err := k.DB.Select(&commitments, `
-        SELECT * FROM `+table+`
-        WHERE service_type = 'compute'
-    `); err != nil {
-		log.Error(err, "failed to load commitments")
-		return
+	for _, c := range in.Commitments {
+		if c.ServiceType == "compute" {
+			commitments = append(commitments, c)
+		}
 	}
-	var flavors []nova.Flavor
-	table = nova.Flavor{}.TableName()
-	if _, err := k.DB.Select(&flavors, "SELECT * FROM "+table); err != nil {
-		log.Error(err, "failed to load flavors")
-		return
-	}
+	flavors := in.Flavors
 	flavorsByName := make(map[string]nova.Flavor, len(flavors))
 	for _, flavor := range flavors {
 		flavorsByName[flavor.Name] = flavor

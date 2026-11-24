@@ -4,14 +4,13 @@
 package compute
 
 import (
-	"errors"
+	"context"
 	"strconv"
 	"strings"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
 	"github.com/prometheus/client_golang/prometheus"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,10 +34,10 @@ type VMFaultsKPI struct {
 func (VMFaultsKPI) GetName() string { return "vm_faults_kpi" }
 
 // Init initializes the kpi, e.g. by creating the necessary Prometheus
-// descriptors. The base kpi is also initialized with the provided database,
+// descriptors. The base kpi is also initialized with the provided inputs,
 // client and options.
-func (k *VMFaultsKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
-	if err := k.BaseKPI.Init(db, client, opts); err != nil {
+func (k *VMFaultsKPI) Init(inputs plugins.Inputs, client client.Client, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(inputs, client, opts); err != nil {
 		return err
 	}
 	k.vmFaultsDesc = prometheus.NewDesc("cortex_vm_faults",
@@ -52,35 +51,23 @@ func (k *VMFaultsKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) e
 // used by Prometheus to know which metrics this kpi exposes.
 func (k *VMFaultsKPI) Describe(ch chan<- *prometheus.Desc) { ch <- k.vmFaultsDesc }
 
-// Collect collects the current state of vms from the database and sends it as
+// Inputs of the vm faults kpi.
+type VMFaultsInputs struct {
+	Servers []nova.Server `input:"servers"`
+	Flavors []nova.Flavor `input:"flavors"`
+}
+
+// Collect collects the current state of vms from the inputs and sends it as
 // Prometheus metrics to the provided channel.
 func (k *VMFaultsKPI) Collect(ch chan<- prometheus.Metric) {
 	vmFaultsKPIlogger.V(1).Info("collecting metrics")
 
-	// This can happen when no datasource is provided that connects to a database.
-	if k.DB == nil {
-		err := errors.New("no database connection")
-		vmFaultsKPIlogger.Error(err, "cannot collect metric")
+	var in VMFaultsInputs
+	if err := k.ResolveInputs(context.Background(), &in); err != nil {
+		vmFaultsKPIlogger.Error(err, "failed to resolve inputs")
 		return
 	}
-
-	// Get all vms with their current state from the database.
-	var servers []nova.Server
-	nServers, err := k.DB.Select(&servers, "SELECT * FROM "+nova.Server{}.TableName())
-	if err != nil {
-		vmFaultsKPIlogger.Error(err, "failed to query servers from database")
-		return
-	}
-	vmFaultsKPIlogger.V(1).Info("queried servers from database", "nServers", nServers)
-
-	// Get all flavors from the database to map them to the vms.
-	var flavors []nova.Flavor
-	nFlavors, err := k.DB.Select(&flavors, "SELECT * FROM "+nova.Flavor{}.TableName())
-	if err != nil {
-		vmFaultsKPIlogger.Error(err, "failed to query flavors from database")
-		return
-	}
-	vmFaultsKPIlogger.V(1).Info("queried flavors from database", "nFlavors", nFlavors)
+	servers, flavors := in.Servers, in.Flavors
 
 	flavorsByName := make(map[string]nova.Flavor, len(flavors))
 	for _, flavor := range flavors {

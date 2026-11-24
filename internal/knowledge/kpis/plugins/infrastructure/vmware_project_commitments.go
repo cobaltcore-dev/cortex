@@ -4,14 +4,14 @@
 package infrastructure
 
 import (
+	"context"
 	"strings"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/limes"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/identity"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/limes"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -36,8 +36,8 @@ func (k *VMwareProjectCommitmentsKPI) GetName() string {
 	return "vmware_project_commitments_kpi"
 }
 
-func (k *VMwareProjectCommitmentsKPI) Init(dbConn *db.DB, c client.Client, opts conf.RawOpts) error {
-	if err := k.BaseKPI.Init(dbConn, c, opts); err != nil {
+func (k *VMwareProjectCommitmentsKPI) Init(inputs plugins.Inputs, c client.Client, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(inputs, c, opts); err != nil {
 		return err
 	}
 
@@ -59,120 +59,85 @@ func (k *VMwareProjectCommitmentsKPI) Describe(ch chan<- *prometheus.Desc) {
 	ch <- k.unusedHanaCommittedResourcesPerProject
 }
 
+// Inputs of the vmware project commitments kpi.
+type VMwareProjectCommitmentsInputs struct {
+	Servers     []nova.Server      `input:"servers"`
+	Flavors     []nova.Flavor      `input:"flavors"`
+	Commitments []limes.Commitment `input:"commitments"`
+	Projects    []identity.Project `input:"projects"`
+	Domains     []identity.Domain  `input:"domains"`
+}
+
 func (k *VMwareProjectCommitmentsKPI) Collect(ch chan<- prometheus.Metric) {
-	if k.DB == nil {
+	var in VMwareProjectCommitmentsInputs
+	if err := k.ResolveInputs(context.Background(), &in); err != nil {
+		log.Error(err, "vmware_project_commitments: failed to resolve inputs")
 		return
 	}
-
-	flavorsByName, err := k.getFlavorsByName()
-	if err != nil {
-		log.Error(err, "vmware_project_commitments: failed to load flavors")
-		return
+	flavorsByName := make(map[string]nova.Flavor, len(in.Flavors))
+	for _, f := range in.Flavors {
+		flavorsByName[f.Name] = f
 	}
-
-	projects, err := k.getProjectsWithDomains()
-	if err != nil {
-		log.Error(err, "vmware_project_commitments: failed to load projects with domains")
-		return
-	}
-
-	k.collectGeneralPurpose(ch, flavorsByName, projects)
-	k.collectHana(ch, flavorsByName, projects)
+	projects := getProjectsWithDomains(in.Projects, in.Domains)
+	k.collectGeneralPurpose(ch, in, flavorsByName, projects)
+	k.collectHana(ch, in, flavorsByName, projects)
 }
 
-// getFlavorsByName loads all flavors and returns them keyed by name.
-func (k *VMwareProjectCommitmentsKPI) getFlavorsByName() (map[string]nova.Flavor, error) {
-	var flavors []nova.Flavor
-	if _, err := k.DB.Select(&flavors, "SELECT * FROM "+nova.Flavor{}.TableName()); err != nil {
-		return nil, err
-	}
-	byName := make(map[string]nova.Flavor, len(flavors))
-	for _, f := range flavors {
-		byName[f.Name] = f
-	}
-	return byName, nil
+// Whether the commitment is a confirmed or guaranteed compute commitment.
+func isActiveComputeCommitment(c limes.Commitment) bool {
+	return c.ServiceType == "compute" && (c.Status == "confirmed" || c.Status == "guaranteed")
 }
 
-// getGeneralPurposeCommitments loads confirmed/guaranteed cores and ram commitments.
-func (k *VMwareProjectCommitmentsKPI) getGeneralPurposeCommitments() ([]limes.Commitment, error) {
-	var commitments []limes.Commitment
-	if _, err := k.DB.Select(&commitments, `
-		SELECT * FROM `+limes.Commitment{}.TableName()+`
-		WHERE service_type = 'compute'
-		  AND resource_name IN ('cores', 'ram')
-		  AND status IN ('confirmed', 'guaranteed')
-	`); err != nil {
-		return nil, err
+// getGeneralPurposeCommitments filters confirmed/guaranteed cores and ram commitments.
+func getGeneralPurposeCommitments(commitments []limes.Commitment) []limes.Commitment {
+	var result []limes.Commitment
+	for _, c := range commitments {
+		if isActiveComputeCommitment(c) && (c.ResourceName == "cores" || c.ResourceName == "ram") {
+			result = append(result, c)
+		}
 	}
-	return commitments, nil
+	return result
 }
 
-// getGeneralPurposeServers loads running non-HANA servers for general purpose usage accounting.
-// KVM-specific flavors are filtered out in Go since SQL LIKE cannot express the segment-exact pattern.
-func (k *VMwareProjectCommitmentsKPI) getGeneralPurposeServers() ([]nova.Server, error) {
-	var servers []nova.Server
-	if _, err := k.DB.Select(&servers, `
-		SELECT * FROM `+nova.Server{}.TableName()+`
-		WHERE status NOT IN ('DELETED', 'ERROR')
-		  AND flavor_name NOT LIKE 'hana_%'
-	`); err != nil {
-		return nil, err
-	}
-	result := make([]nova.Server, 0, len(servers))
+// getGeneralPurposeServers filters running non-HANA VMware servers for
+// general purpose usage accounting.
+func getGeneralPurposeServers(servers []nova.Server) []nova.Server {
+	var result []nova.Server
 	for _, s := range servers {
-		if !isKVMFlavor(s.FlavorName) {
+		if isActiveServer(s) && !strings.HasPrefix(s.FlavorName, "hana_") && !isKVMFlavor(s.FlavorName) {
 			result = append(result, s)
 		}
 	}
-	return result, nil
+	return result
 }
 
-// getHanaInstanceCommitments loads confirmed/guaranteed HANA instance commitments.
-func (k *VMwareProjectCommitmentsKPI) getHanaInstanceCommitments() ([]limes.Commitment, error) {
-	var commitments []limes.Commitment
-	if _, err := k.DB.Select(&commitments, `
-		SELECT * FROM `+limes.Commitment{}.TableName()+`
-		WHERE service_type = 'compute'
-		  AND resource_name LIKE 'instances_hana_%'
-		  AND status IN ('confirmed', 'guaranteed')
-	`); err != nil {
-		return nil, err
+// getHanaInstanceCommitments filters confirmed/guaranteed HANA instance commitments.
+func getHanaInstanceCommitments(commitments []limes.Commitment) []limes.Commitment {
+	var result []limes.Commitment
+	for _, c := range commitments {
+		if isActiveComputeCommitment(c) && strings.HasPrefix(c.ResourceName, "instances_hana_") {
+			result = append(result, c)
+		}
 	}
-	return commitments, nil
+	return result
 }
 
-// getRunningHanaServers loads all running HANA VMware servers (KVM HANA flavors excluded in Go).
-func (k *VMwareProjectCommitmentsKPI) getRunningHanaServers() ([]nova.Server, error) {
-	var servers []nova.Server
-	if _, err := k.DB.Select(&servers, `
-		SELECT * FROM `+nova.Server{}.TableName()+`
-		WHERE status NOT IN ('DELETED', 'ERROR')
-		  AND flavor_name LIKE 'hana_%'
-	`); err != nil {
-		return nil, err
-	}
-	result := make([]nova.Server, 0, len(servers))
+// getRunningHanaServers filters running HANA VMware servers.
+func getRunningHanaServers(servers []nova.Server) []nova.Server {
+	var result []nova.Server
 	for _, s := range servers {
-		if !isKVMFlavor(s.FlavorName) {
+		if isActiveServer(s) && strings.HasPrefix(s.FlavorName, "hana_") && !isKVMFlavor(s.FlavorName) {
 			result = append(result, s)
 		}
 	}
-	return result, nil
+	return result
 }
 
 // collectGeneralPurpose computes and emits unused general purpose committed resources per project.
 // Unused = committed - in-use (clamped to zero; zero values are not emitted).
-func (k *VMwareProjectCommitmentsKPI) collectGeneralPurpose(ch chan<- prometheus.Metric, flavorsByName map[string]nova.Flavor, projects map[string]projectWithDomain) {
-	commitments, err := k.getGeneralPurposeCommitments()
-	if err != nil {
-		log.Error(err, "vmware_project_commitments: failed to load gp commitments")
-		return
-	}
-	servers, err := k.getGeneralPurposeServers()
-	if err != nil {
-		log.Error(err, "vmware_project_commitments: failed to load gp servers")
-		return
-	}
+func (k *VMwareProjectCommitmentsKPI) collectGeneralPurpose(ch chan<- prometheus.Metric, in VMwareProjectCommitmentsInputs, flavorsByName map[string]nova.Flavor, projects map[string]projectWithDomain) {
+	commitments := getGeneralPurposeCommitments(in.Commitments)
+	servers := getGeneralPurposeServers(in.Servers)
 
 	type gpKey struct{ projectID, az, resource string }
 
@@ -220,17 +185,9 @@ func (k *VMwareProjectCommitmentsKPI) collectGeneralPurpose(ch chan<- prometheus
 // collectHana computes and emits unused committed HANA instance resources per project.
 // Each HANA instance commitment is compared against running servers; the remainder is
 // translated to cpu/ram/disk capacity using the flavor spec.
-func (k *VMwareProjectCommitmentsKPI) collectHana(ch chan<- prometheus.Metric, flavorsByName map[string]nova.Flavor, projects map[string]projectWithDomain) {
-	commitments, err := k.getHanaInstanceCommitments()
-	if err != nil {
-		log.Error(err, "vmware_resource_commitments: failed to load hana commitments")
-		return
-	}
-	servers, err := k.getRunningHanaServers()
-	if err != nil {
-		log.Error(err, "vmware_resource_commitments: failed to load hana servers")
-		return
-	}
+func (k *VMwareProjectCommitmentsKPI) collectHana(ch chan<- prometheus.Metric, in VMwareProjectCommitmentsInputs, flavorsByName map[string]nova.Flavor, projects map[string]projectWithDomain) {
+	commitments := getHanaInstanceCommitments(in.Commitments)
+	servers := getRunningHanaServers(in.Servers)
 
 	type serverKey struct{ projectID, flavorName, az string }
 	running := make(map[serverKey]uint64, len(servers))
@@ -279,27 +236,28 @@ func (k *VMwareProjectCommitmentsKPI) collectHana(ch chan<- prometheus.Metric, f
 }
 
 type projectWithDomain struct {
-	ProjectID   string `db:"project_id"`
-	ProjectName string `db:"project_name"`
-	DomainID    string `db:"domain_id"`
-	DomainName  string `db:"domain_name"`
+	ProjectID   string
+	ProjectName string
+	DomainID    string
+	DomainName  string
 }
 
-func (k *VMwareProjectCommitmentsKPI) getProjectsWithDomains() (map[string]projectWithDomain, error) {
-	var projects []projectWithDomain
-	if _, err := k.DB.Select(&projects, `
-		SELECT p.id AS project_id, p.name AS project_name, COALESCE(d.id, '') AS domain_id, COALESCE(d.name, '') AS domain_name
-		FROM `+identity.Project{}.TableName()+` p
-		LEFT JOIN `+identity.Domain{}.TableName()+` d ON p.domain_id = d.id
-	`); err != nil {
-		return nil, err
+// Look up projects with the id and name of their domain, which are empty if
+// the domain is unknown.
+func getProjectsWithDomains(projects []identity.Project, domains []identity.Domain) map[string]projectWithDomain {
+	domainsByID := make(map[string]identity.Domain, len(domains))
+	for _, d := range domains {
+		domainsByID[d.ID] = d
 	}
-
 	projectMap := make(map[string]projectWithDomain, len(projects))
 	for _, p := range projects {
-		projectMap[p.ProjectID] = p
+		pd := projectWithDomain{ProjectID: p.ID, ProjectName: p.Name}
+		if d, ok := domainsByID[p.DomainID]; ok {
+			pd.DomainID, pd.DomainName = d.ID, d.Name
+		}
+		projectMap[p.ID] = pd
 	}
-	return projectMap, nil
+	return projectMap
 }
 
 func init() {

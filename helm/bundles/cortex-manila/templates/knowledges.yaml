@@ -5,13 +5,30 @@ metadata:
   name: netapp-storage-pool-cpu-usage-manila
 spec:
   schedulingDomain: manila
-  extractor:
-    name: netapp_storage_pool_cpu_usage_extractor
+  expression:
+    output: StoragePoolCPUUsage
+    run: |
+      let nodesByAggregate = groupBy(aggregateLabels, .Aggregate);
+      let cpuByNode = groupBy(nodeCPUBusy, .Node);
+      storagePools
+      | map(let pool = #; (nodesByAggregate[pool.Pool] ?? [])
+          | map(.Node)
+          | uniq()
+          | filter(len(cpuByNode[#] ?? []) > 0)
+          | map(let o = #; {
+              StoragePoolName: pool.Name,
+              AvgCPUUsagePct:  mean(map(cpuByNode[#], .Value)),
+              MaxCPUUsagePct:  max(map(cpuByNode[#], .Value)),
+            }))
+      | flatten()
+      | sortBy(.StoragePoolName)
   description: |
     This knowledge aggregates CPU usage information for NetApp storage pools.
   recency: "60s"
-  dependencies:
-    datasources:
-      - name: manila-storage-pools
-      - name: netapp-node-cpu-busy-manila
-      - name: netapp-aggr-labels-manila
+  inputs:
+    - var: storagePools
+      datasource: manila-storage-pools
+    - var: aggregateLabels
+      datasource: netapp-aggr-labels-manila
+    - var: nodeCPUBusy
+      datasource: netapp-node-cpu-busy-manila

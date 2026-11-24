@@ -7,9 +7,9 @@ metadata:
 spec:
   schedulingDomain: nova
   impl: kvm_host_capacity_kpi
-  dependencies:
-    knowledges:
-      - name: host-utilization
+  inputs:
+    - var: hostUtilization
+      knowledge: host-utilization
   description: |
     This KPI tracks the total, utilized, reserved and failover capacity of KVM hosts.
 ---
@@ -34,12 +34,15 @@ metadata:
 spec:
   schedulingDomain: nova
   impl: kvm_project_utilization_kpi
-  dependencies:
-    datasources:
-      - name: nova-servers
-      - name: nova-flavors
-      - name: identity-projects
-      - name: identity-domains
+  inputs:
+    - var: servers
+      datasource: nova-servers
+    - var: flavors
+      datasource: nova-flavors
+    - var: projects
+      datasource: identity-projects
+    - var: domains
+      datasource: identity-domains
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI
@@ -48,12 +51,15 @@ metadata:
 spec:
   schedulingDomain: nova
   impl: kvm_hana_stacking_kpi
-  dependencies:
-    datasources:
-      - name: nova-servers
-      - name: nova-flavors
-      - name: identity-projects
-      - name: identity-domains
+  inputs:
+    - var: servers
+      datasource: nova-servers
+    - var: flavors
+      datasource: nova-flavors
+    - var: projects
+      datasource: identity-projects
+    - var: domains
+      datasource: identity-domains
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: KPI

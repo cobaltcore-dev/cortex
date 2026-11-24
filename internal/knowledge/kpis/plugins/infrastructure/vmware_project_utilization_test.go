@@ -7,17 +7,13 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/internal/knowledge/db/testing"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/identity"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/inputs"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func buildMetricKey(name string, labels map[string]string) string {
@@ -53,72 +49,14 @@ func capacityMetric(computeHost, az, projectID, projectName, domainID, domainNam
 	return collectedVMwareMetric{Name: "cortex_vmware_project_capacity_usage", Labels: labels, Value: value}
 }
 
-func buildVMwareHostDetailsClient(t *testing.T, hostDetails []compute.VMwareHostDetails) *fake.ClientBuilder {
-	t.Helper()
-	scheme, err := v1alpha1.SchemeBuilder.Build()
-	if err != nil {
-		t.Fatalf("failed to build scheme: %v", err)
-	}
-	raw, err := v1alpha1.BoxFeatureList(hostDetails)
-	if err != nil {
-		t.Fatalf("failed to box host details: %v", err)
-	}
-	return fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(
-		&v1alpha1.Knowledge{
-			ObjectMeta: v1.ObjectMeta{Name: vmwareHostDetailsKnowledgeName},
-			Status:     v1alpha1.KnowledgeStatus{Raw: raw},
-		},
-	)
-}
-
 func TestVMwareProjectUtilizationKPI_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	kpi := &VMwareProjectUtilizationKPI{}
-	if err := kpi.Init(&testDB, nil, conf.NewRawOpts("{}")); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
 
-func TestVMwareProjectUtilizationKPI_getVMwareHosts(t *testing.T) {
-	// Filtering of KVM and ironic hosts happens in the extractor SQL, so the KPI
-	// maps every host present in the knowledge.
-	hostDetails := []compute.VMwareHostDetails{
-		{ComputeHost: "nova-compute-1"},
-		{ComputeHost: "nova-compute-2"},
-	}
-
-	clientBuilder := buildVMwareHostDetailsClient(t, hostDetails)
-	kpi := &VMwareProjectUtilizationKPI{}
-	kpi.Client = clientBuilder.Build()
-
-	hostMapping, err := kpi.getVMwareHosts()
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	expectedHosts := map[string]vmwareHost{
-		"nova-compute-1": {VMwareHostDetails: hostDetails[0]},
-		"nova-compute-2": {VMwareHostDetails: hostDetails[1]},
-	}
-
-	if len(hostMapping) != len(expectedHosts) {
-		t.Fatalf("expected %d hosts, got %d", len(expectedHosts), len(hostMapping))
-	}
-
-	for computeHost, expectedHost := range expectedHosts {
-		host, ok := hostMapping[computeHost]
-		if !ok {
-			t.Fatalf("expected host %s not found in mapping", computeHost)
-		}
-		if host.ComputeHost != expectedHost.ComputeHost {
-			t.Errorf("host details mismatch for %s: expected %+v, got %+v", computeHost, expectedHost, host)
-		}
-	}
-}
-
-func TestVMwareProjectUtilizationKPI_queryProjectInstanceCount(t *testing.T) {
+func TestProjectInstanceCounts_VMware(t *testing.T) {
 	tests := []struct {
 		name           string
 		servers        []nova.Server
@@ -231,43 +169,7 @@ func TestVMwareProjectUtilizationKPI_queryProjectInstanceCount(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dbEnv := testlibDB.SetupDBEnv(t)
-			testDB := db.DB{DbMap: dbEnv.DbMap}
-			defer dbEnv.Close()
-
-			if err := testDB.CreateTable(
-				testDB.AddTable(nova.Server{}),
-				testDB.AddTable(identity.Project{}),
-				testDB.AddTable(identity.Domain{}),
-			); err != nil {
-				t.Fatalf("failed to create tables: %v", err)
-			}
-
-			var mockData []any
-			for i := range tt.servers {
-				mockData = append(mockData, &tt.servers[i])
-			}
-			for i := range tt.projects {
-				mockData = append(mockData, &tt.projects[i])
-			}
-			for i := range tt.domains {
-				mockData = append(mockData, &tt.domains[i])
-			}
-			if len(mockData) > 0 {
-				if err := testDB.Insert(mockData...); err != nil {
-					t.Fatalf("expected no error, got %v", err)
-				}
-			}
-
-			client := buildVMwareHostDetailsClient(t, []compute.VMwareHostDetails{})
-			kpi := &VMwareProjectUtilizationKPI{}
-			if err := kpi.Init(&testDB, client.Build(), conf.NewRawOpts("{}")); err != nil {
-				t.Fatalf("expected no error on Init, got %v", err)
-			}
-			counts, err := kpi.queryProjectInstanceCount()
-			if err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
+			counts := projectInstanceCounts(tt.servers, projectDetailsByID(tt.projects, tt.domains), isVMwareComputeHost)
 
 			if len(counts) != len(tt.expectedCounts) {
 				t.Fatalf("expected %d counts, got %d", len(tt.expectedCounts), len(counts))
@@ -287,7 +189,7 @@ func TestVMwareProjectUtilizationKPI_queryProjectInstanceCount(t *testing.T) {
 	}
 }
 
-func TestVMwareProjectUtilizationKPI_queryProjectCapacityUsage(t *testing.T) {
+func TestProjectCapacityUsages_VMware(t *testing.T) {
 	tests := []struct {
 		name           string
 		servers        []nova.Server
@@ -423,47 +325,7 @@ func TestVMwareProjectUtilizationKPI_queryProjectCapacityUsage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dbEnv := testlibDB.SetupDBEnv(t)
-			testDB := db.DB{DbMap: dbEnv.DbMap}
-			defer dbEnv.Close()
-
-			if err := testDB.CreateTable(
-				testDB.AddTable(nova.Server{}),
-				testDB.AddTable(identity.Project{}),
-				testDB.AddTable(identity.Domain{}),
-				testDB.AddTable(nova.Flavor{}),
-			); err != nil {
-				t.Fatalf("failed to create tables: %v", err)
-			}
-
-			var mockData []any
-			for i := range tt.servers {
-				mockData = append(mockData, &tt.servers[i])
-			}
-			for i := range tt.projects {
-				mockData = append(mockData, &tt.projects[i])
-			}
-			for i := range tt.domains {
-				mockData = append(mockData, &tt.domains[i])
-			}
-			for i := range tt.flavors {
-				mockData = append(mockData, &tt.flavors[i])
-			}
-			if len(mockData) > 0 {
-				if err := testDB.Insert(mockData...); err != nil {
-					t.Fatalf("expected no error, got %v", err)
-				}
-			}
-
-			client := buildVMwareHostDetailsClient(t, []compute.VMwareHostDetails{})
-			kpi := &VMwareProjectUtilizationKPI{}
-			if err := kpi.Init(&testDB, client.Build(), conf.NewRawOpts("{}")); err != nil {
-				t.Fatalf("expected no error on Init, got %v", err)
-			}
-			usages, err := kpi.queryProjectCapacityUsage()
-			if err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
+			usages := projectCapacityUsages(tt.servers, tt.flavors, projectDetailsByID(tt.projects, tt.domains), isVMwareComputeHost)
 
 			if len(usages) != len(tt.expectedUsages) {
 				t.Fatalf("expected %d usages, got %d", len(tt.expectedUsages), len(usages))
@@ -689,41 +551,12 @@ func TestVMwareProjectUtilizationKPI_Collect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dbEnv := testlibDB.SetupDBEnv(t)
-			testDB := db.DB{DbMap: dbEnv.DbMap}
-			defer dbEnv.Close()
-
-			if err := testDB.CreateTable(
-				testDB.AddTable(nova.Server{}),
-				testDB.AddTable(identity.Project{}),
-				testDB.AddTable(identity.Domain{}),
-				testDB.AddTable(nova.Flavor{}),
-			); err != nil {
-				t.Fatalf("failed to create tables: %v", err)
+			in := inputs.Static{
+				"servers": tt.servers, "flavors": tt.flavors, "projects": tt.projects,
+				"domains": tt.domains, "hostDetails": tt.hostDetails,
 			}
-
-			var mockData []any
-			for i := range tt.servers {
-				mockData = append(mockData, &tt.servers[i])
-			}
-			for i := range tt.projects {
-				mockData = append(mockData, &tt.projects[i])
-			}
-			for i := range tt.domains {
-				mockData = append(mockData, &tt.domains[i])
-			}
-			for i := range tt.flavors {
-				mockData = append(mockData, &tt.flavors[i])
-			}
-			if len(mockData) > 0 {
-				if err := testDB.Insert(mockData...); err != nil {
-					t.Fatalf("expected no error inserting data, got %v", err)
-				}
-			}
-
-			client := buildVMwareHostDetailsClient(t, tt.hostDetails)
 			kpi := &VMwareProjectUtilizationKPI{}
-			if err := kpi.Init(&testDB, client.Build(), conf.NewRawOpts("{}")); err != nil {
+			if err := kpi.Init(in, nil, conf.NewRawOpts("{}")); err != nil {
 				t.Fatalf("expected no error on Init, got %v", err)
 			}
 

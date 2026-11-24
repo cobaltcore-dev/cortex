@@ -5,599 +5,222 @@ package compute
 
 import (
 	"fmt"
-	"os"
 	"reflect"
+	"strings"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/internal/knowledge/db/testing"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/identity"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
 )
 
-func TestHostPinnedProjectsExtractor_Init(t *testing.T) {
-	extractor := &HostPinnedProjectsExtractor{}
-	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(nil, nil, config); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-}
-
 func TestHostPinnedProjectsExtractor_Extract(t *testing.T) {
-	if os.Getenv("POSTGRES_CONTAINER") != "1" {
-		t.Skip("skipping test; set POSTGRES_CONTAINER=1 to run")
+	projects := []identity.Project{
+		{ID: "project_id_1", Name: "project_name_1", DomainID: "domain_id_1"},
+		{ID: "project_id_2", Name: "project_name_2", DomainID: "domain_id_2"},
 	}
+	domains := []identity.Domain{
+		{ID: "domain_id_1", Name: "domain_name_1"},
+		{ID: "domain_id_2", Name: "domain_name_2"},
+	}
+	aggregate := func(uuid string, host *string, metadata string) nova.Aggregate {
+		return nova.Aggregate{Name: uuid, UUID: uuid, ComputeHost: host, Metadata: metadata}
+	}
+	hypervisor := func(host, hypervisorType string) nova.Hypervisor {
+		return nova.Hypervisor{ID: host, ServiceHost: host, HypervisorType: hypervisorType}
+	}
+	pinned := func(agg string, host *string, projectID string, domainID *string, label string) HostPinnedProjects {
+		return HostPinnedProjects{
+			AggregateName: &agg,
+			AggregateUUID: &agg,
+			ComputeHost:   host,
+			ProjectID:     &projectID,
+			DomainID:      domainID,
+			Label:         &label,
+		}
+	}
+	project1 := func(agg string, host *string) HostPinnedProjects {
+		return pinned(agg, host, "project_id_1", new("domain_id_1"), "project_name_1 (domain_name_1)")
+	}
+	project2 := func(agg string, host *string) HostPinnedProjects {
+		return pinned(agg, host, "project_id_2", new("domain_id_2"), "project_name_2 (domain_name_2)")
+	}
+	unrestricted := func(host string) HostPinnedProjects {
+		return HostPinnedProjects{ComputeHost: &host}
+	}
+
 	tests := []struct {
 		name     string
-		mockData []any
+		in       HostPinnedProjectsInputs
 		expected []HostPinnedProjects
 	}{
 		{
-			name: "find compute host to project mapping from aggregates",
-			mockData: []any{
-				&nova.Aggregate{
-					Name:        "agg1",
-					UUID:        "agg1",
-					ComputeHost: new("host1"),
-					Metadata:    `{"filter_tenant_id":"project_id_1, project_id_2"}`,
+			name: "compute host to project mapping from aggregates",
+			in: HostPinnedProjectsInputs{
+				Aggregates: []nova.Aggregate{
+					aggregate("agg1", new("host2"), `{"filter_tenant_id":"project_id_1, project_id_2"}`),
+					aggregate("agg1", new("host1"), `{"filter_tenant_id":"project_id_2,project_id_1"}`),
 				},
-				&nova.Aggregate{
-					Name:        "agg1",
-					UUID:        "agg1",
-					ComputeHost: new("host2"),
-					Metadata:    `{"filter_tenant_id":"project_id_1, project_id_2"}`,
-				},
-
-				&identity.Project{
-					ID:       "project_id_1",
-					Name:     "project_name_1",
-					DomainID: "domain_id_1",
-				},
-				&identity.Project{
-					ID:       "project_id_2",
-					Name:     "project_name_2",
-					DomainID: "domain_id_2",
-				},
-				&identity.Domain{
-					ID:   "domain_id_1",
-					Name: "domain_name_1",
-				},
-				&identity.Domain{
-					ID:   "domain_id_2",
-					Name: "domain_name_2",
-				},
+				Projects: projects,
+				Domains:  domains,
 			},
 			expected: []HostPinnedProjects{
-				{
-					AggregateName: new("agg1"),
-					AggregateUUID: new("agg1"),
-					ComputeHost:   new("host1"),
-					ProjectID:     new("project_id_1"),
-					DomainID:      new("domain_id_1"),
-					Label:         new("project_name_1 (domain_name_1)"),
-				},
-				{
-					AggregateName: new("agg1"),
-					AggregateUUID: new("agg1"),
-					ComputeHost:   new("host1"),
-					ProjectID:     new("project_id_2"),
-					DomainID:      new("domain_id_2"),
-					Label:         new("project_name_2 (domain_name_2)"),
-				},
-				{
-					AggregateName: new("agg1"),
-					AggregateUUID: new("agg1"),
-					ComputeHost:   new("host2"),
-					ProjectID:     new("project_id_1"),
-					DomainID:      new("domain_id_1"),
-					Label:         new("project_name_1 (domain_name_1)"),
-				},
-				{
-					AggregateName: new("agg1"),
-					AggregateUUID: new("agg1"),
-					ComputeHost:   new("host2"),
-					ProjectID:     new("project_id_2"),
-					DomainID:      new("domain_id_2"),
-					Label:         new("project_name_2 (domain_name_2)"),
-				},
+				project1("agg1", new("host1")),
+				project2("agg1", new("host1")),
+				project1("agg1", new("host2")),
+				project2("agg1", new("host2")),
 			},
 		},
 		{
-			name: "ignore aggregates without filter_tenant_id",
-			mockData: []any{
-				&nova.Aggregate{
-					Name:        "ignore-no-filter-tenant",
-					UUID:        "ignore",
-					ComputeHost: new("host1"),
-					Metadata:    `{"something_different":"project_id_1, project_id_2"}`,
+			name: "aggregates without filter_tenant_id are ignored",
+			in: HostPinnedProjectsInputs{
+				Aggregates: []nova.Aggregate{
+					aggregate("ignore", new("host1"), `{"something_different":"project_id_1, project_id_2"}`),
 				},
 			},
-			expected: []HostPinnedProjects{},
+			expected: nil,
 		},
 		{
-			name: "support filter_tenant_id with no compute host assigned to the aggregate",
-			mockData: []any{
-				// This aggregate doesn't have a compute host so project_3 and 4 should have an empty entry for the compute host
-				&nova.Aggregate{
-					Name:        "agg1",
-					UUID:        "agg1",
-					ComputeHost: nil,
-					Metadata:    `{"filter_tenant_id":"project_id_1, project_id_2"}`,
+			name: "aggregates without compute host are sorted last",
+			in: HostPinnedProjectsInputs{
+				Aggregates: []nova.Aggregate{
+					aggregate("agg1", nil, `{"filter_tenant_id":"project_id_1, project_id_2"}`),
+					aggregate("agg2", new("host1"), `{"filter_tenant_id":"project_id_1, project_id_2"}`),
 				},
-				// Because of this aggregate project 3 and 4 should additionally have a host-4 as pinned
-				&nova.Aggregate{
-					Name:        "agg2",
-					UUID:        "agg2",
-					ComputeHost: new("host1"),
-					Metadata:    `{"filter_tenant_id":"project_id_1, project_id_2"}`,
-				},
-
-				// Projects
-				&identity.Project{
-					ID:       "project_id_1",
-					Name:     "project_name_1",
-					DomainID: "domain_id_1",
-				},
-				&identity.Project{
-					ID:       "project_id_2",
-					Name:     "project_name_2",
-					DomainID: "domain_id_2",
-				},
-				// Domains
-				&identity.Domain{
-					ID:   "domain_id_1",
-					Name: "domain_name_1",
-				},
-				&identity.Domain{
-					ID:   "domain_id_2",
-					Name: "domain_name_2",
-				},
+				Projects: projects,
+				Domains:  domains,
 			},
 			expected: []HostPinnedProjects{
-				{
-					AggregateName: new("agg2"),
-					AggregateUUID: new("agg2"),
-					ComputeHost:   new("host1"),
-					ProjectID:     new("project_id_1"),
-					DomainID:      new("domain_id_1"),
-					Label:         new("project_name_1 (domain_name_1)"),
-				},
-				{
-					AggregateName: new("agg2"),
-					AggregateUUID: new("agg2"),
-					ComputeHost:   new("host1"),
-					ProjectID:     new("project_id_2"),
-					DomainID:      new("domain_id_2"),
-					Label:         new("project_name_2 (domain_name_2)"),
-				},
-				{
-					AggregateName: new("agg1"),
-					AggregateUUID: new("agg1"),
-					ComputeHost:   nil,
-					ProjectID:     new("project_id_1"),
-					DomainID:      new("domain_id_1"),
-					Label:         new("project_name_1 (domain_name_1)"),
-				},
-				{
-					AggregateName: new("agg1"),
-					AggregateUUID: new("agg1"),
-					ComputeHost:   nil,
-					ProjectID:     new("project_id_2"),
-					DomainID:      new("domain_id_2"),
-					Label:         new("project_name_2 (domain_name_2)"),
-				},
+				project1("agg2", new("host1")),
+				project2("agg2", new("host1")),
+				project1("agg1", nil),
+				project2("agg1", nil),
 			},
 		},
 		{
-			name: "filter out empty filter_tenant_id lists",
-			mockData: []any{
-				// Doesn't have any filter_tenant_id set, so this aggregate is supposed to be ignored
-				&nova.Aggregate{
-					Name:        "agg1",
-					UUID:        "agg1",
-					ComputeHost: nil,
-					Metadata:    `{"filter_tenant_id":""}`,
-				},
-				&nova.Aggregate{
-					Name:        "agg2",
-					UUID:        "agg2",
-					ComputeHost: nil,
-					Metadata:    `{"filter_tenant_id":[]}`,
+			name: "empty filter_tenant_id lists are ignored",
+			in: HostPinnedProjectsInputs{
+				Aggregates: []nova.Aggregate{
+					aggregate("agg1", nil, `{"filter_tenant_id":""}`),
+					aggregate("agg2", nil, `{"filter_tenant_id":[]}`),
 				},
 			},
-			expected: []HostPinnedProjects{},
+			expected: nil,
 		},
 		{
-			name: "find all hypervisors if no aggregate is provided",
-			mockData: []any{
-				// Doesn't have any filter_tenant_id set, so this aggregate is supposed to be ignored
-				&nova.Hypervisor{
-					ID:             "1",
-					ServiceHost:    "host1",
-					HypervisorType: "ironic",
+			name: "non-ironic hypervisors are unrestricted without aggregates",
+			in: HostPinnedProjectsInputs{
+				Hypervisors: []nova.Hypervisor{
+					hypervisor("host3", "other-not-ironic"),
+					hypervisor("host1", "ironic"),
+					hypervisor("host2", "not-ironic"),
 				},
-				&nova.Hypervisor{
-					ID:             "2",
-					ServiceHost:    "host2",
-					HypervisorType: "not-ironic",
+			},
+			expected: []HostPinnedProjects{unrestricted("host2"), unrestricted("host3")},
+		},
+		{
+			name: "hypervisors without filter_tenant_id are unrestricted besides pinned ones",
+			in: HostPinnedProjectsInputs{
+				Hypervisors: []nova.Hypervisor{
+					hypervisor("host1", "not-ironic"),
+					hypervisor("host2", "other-not-ironic"),
+					hypervisor("host3", "non-filter-host"),
 				},
-				// Ignore ironic hypervisors
-				&nova.Hypervisor{
-					ID:             "3",
-					ServiceHost:    "host3",
-					HypervisorType: "other-not-ironic",
+				Aggregates: []nova.Aggregate{
+					aggregate("agg1", new("host1"), `{"filter_tenant_id":"project_id_1"}`),
+					aggregate("agg1", new("host2"), `{"filter_tenant_id":"project_id_1"}`),
+					aggregate("az1", new("host1"), `{"type":"az"}`),
+					aggregate("az1", new("host2"), `{"type":"az"}`),
+					aggregate("az1", new("host3"), `{"type":"az"}`),
 				},
+				Projects: projects,
+				Domains:  domains,
 			},
 			expected: []HostPinnedProjects{
-				{
-					AggregateName: nil,
-					AggregateUUID: nil,
-					ComputeHost:   new("host2"),
-					ProjectID:     nil,
-					DomainID:      nil,
-					Label:         nil,
-				},
-				{
-					AggregateName: nil,
-					AggregateUUID: nil,
-					ComputeHost:   new("host3"),
-					ProjectID:     nil,
-					DomainID:      nil,
-					Label:         nil,
-				},
+				project1("agg1", new("host1")),
+				project1("agg1", new("host2")),
+				unrestricted("host3"),
 			},
 		},
 		{
-			name: "check if all hypervisors without filter_tenant_id are found when aggregates with filter_tenant_id exist",
-			mockData: []any{
-				// Hypervisors
-				&nova.Hypervisor{
-					ID:             "1",
-					ServiceHost:    "host1",
-					HypervisorType: "not-ironic",
+			name: "duplicate hosts and projects are deduplicated",
+			in: HostPinnedProjectsInputs{
+				Hypervisors: []nova.Hypervisor{hypervisor("host1", "not-ironic")},
+				Aggregates: []nova.Aggregate{
+					aggregate("agg1", new("host1"), `{"filter_tenant_id":"project_id_1, project_id_1"}`),
+					aggregate("agg1", new("host1"), `{"filter_tenant_id":"project_id_1, project_id_1"}`),
 				},
-				&nova.Hypervisor{
-					ID:             "2",
-					ServiceHost:    "host2",
-					HypervisorType: "other-not-ironic",
+				Projects: projects,
+				Domains:  domains,
+			},
+			expected: []HostPinnedProjects{project1("agg1", new("host1"))},
+		},
+		{
+			name: "project and host in multiple aggregates",
+			in: HostPinnedProjectsInputs{
+				Hypervisors: []nova.Hypervisor{hypervisor("host1", "not-ironic")},
+				Aggregates: []nova.Aggregate{
+					aggregate("agg2", new("host1"), `{"filter_tenant_id":"project_id_1"}`),
+					aggregate("agg1", new("host1"), `{"filter_tenant_id":"project_id_1"}`),
 				},
-				&nova.Hypervisor{
-					ID:             "3",
-					ServiceHost:    "host3",
-					HypervisorType: "non-filter-host",
+				Projects: projects,
+				Domains:  domains,
+			},
+			expected: []HostPinnedProjects{project1("agg1", new("host1")), project1("agg2", new("host1"))},
+		},
+		{
+			name: "unknown label if project or domain is missing",
+			in: HostPinnedProjectsInputs{
+				Hypervisors: []nova.Hypervisor{hypervisor("host1", "not-ironic")},
+				Aggregates: []nova.Aggregate{
+					aggregate("agg1", new("host1"), `{"filter_tenant_id":"project_id_unknown, project_id_domain_unknown, project_id_1"}`),
 				},
-
-				// Aggregates
-				&nova.Aggregate{
-					Name:        "agg1",
-					UUID:        "agg1",
-					ComputeHost: new("host1"),
-					Metadata:    `{"filter_tenant_id":"project_id_1"}`,
-				},
-				&nova.Aggregate{
-					Name:        "agg1",
-					UUID:        "agg1",
-					ComputeHost: new("host2"),
-					Metadata:    `{"filter_tenant_id":"project_id_1"}`,
-				},
-				&nova.Aggregate{
-					Name:        "az1",
-					UUID:        "az1",
-					ComputeHost: new("host1"),
-					Metadata:    `{"type":"az"}`,
-				},
-				&nova.Aggregate{
-					Name:        "az1",
-					UUID:        "az1",
-					ComputeHost: new("host2"),
-					Metadata:    `{"type":"az"}`,
-				},
-				// Host 3 is part of an availability zone aggregate, but has no filter_tenant_id
-				&nova.Aggregate{
-					Name:        "az1",
-					UUID:        "az1",
-					ComputeHost: new("host3"),
-					Metadata:    `{"type":"az"}`,
-				},
-
-				// Projects
-				&identity.Project{
-					ID:       "project_id_1",
-					Name:     "project_name_1",
-					DomainID: "domain_id_1",
-				},
-				// Domains
-				&identity.Domain{
-					ID:   "domain_id_1",
-					Name: "domain_name_1",
-				},
+				Projects: append(projects, identity.Project{ID: "project_id_domain_unknown", Name: "project_name_3", DomainID: "domain_id_unknown"}),
+				Domains:  domains,
 			},
 			expected: []HostPinnedProjects{
-				{
-					AggregateName: new("agg1"),
-					AggregateUUID: new("agg1"),
-					ComputeHost:   new("host1"),
-					ProjectID:     new("project_id_1"),
-					DomainID:      new("domain_id_1"),
-					Label:         new("project_name_1 (domain_name_1)"),
-				},
-				{
-					AggregateName: new("agg1"),
-					AggregateUUID: new("agg1"),
-					ComputeHost:   new("host2"),
-					ProjectID:     new("project_id_1"),
-					DomainID:      new("domain_id_1"),
-					Label:         new("project_name_1 (domain_name_1)"),
-				},
-				{
-					AggregateName: nil,
-					AggregateUUID: nil,
-					ComputeHost:   new("host3"),
-					ProjectID:     nil,
-					DomainID:      nil,
-					Label:         nil,
-				},
+				project1("agg1", new("host1")),
+				pinned("agg1", new("host1"), "project_id_domain_unknown", new("domain_id_unknown"), "project_name_3 (unknown)"),
+				pinned("agg1", new("host1"), "project_id_unknown", nil, "unknown (unknown)"),
 			},
 		},
 		{
-			name: "check behavior with duplicate hosts and projects in one aggregate",
-			mockData: []any{
-				// Hypervisors
-				&nova.Hypervisor{
-					ID:             "1",
-					ServiceHost:    "host1",
-					HypervisorType: "not-ironic",
+			name: "aggregates with invalid metadata are skipped",
+			in: HostPinnedProjectsInputs{
+				Hypervisors: []nova.Hypervisor{hypervisor("host1", "not-ironic"), hypervisor("host2", "not-ironic")},
+				Aggregates: []nova.Aggregate{
+					aggregate("agg1", new("host1"), `not json`),
+					aggregate("agg2", new("host2"), `{"filter_tenant_id":"project_id_2"}`),
 				},
-
-				// Aggregates
-				&nova.Aggregate{
-					Name:        "agg1",
-					UUID:        "agg1",
-					ComputeHost: new("host1"),
-					Metadata:    `{"filter_tenant_id":"project_id_1, project_id_1"}`,
-				},
-				&nova.Aggregate{
-					Name:        "agg1",
-					UUID:        "agg1",
-					ComputeHost: new("host1"),
-					Metadata:    `{"filter_tenant_id":"project_id_1, project_id_1"}`,
-				},
-
-				// Projects
-				&identity.Project{
-					ID:       "project_id_1",
-					Name:     "project_name_1",
-					DomainID: "domain_id_1",
-				},
-
-				// Domains
-				&identity.Domain{
-					ID:   "domain_id_1",
-					Name: "domain_name_1",
-				},
+				Projects: projects,
+				Domains:  domains,
 			},
-			expected: []HostPinnedProjects{
-				{
-					AggregateName: new("agg1"),
-					AggregateUUID: new("agg1"),
-					ComputeHost:   new("host1"),
-					ProjectID:     new("project_id_1"),
-					DomainID:      new("domain_id_1"),
-					Label:         new("project_name_1 (domain_name_1)"),
-				},
-			},
-		},
-		{
-			name: "check behavior if project id and host are part of multiple aggregates",
-			mockData: []any{
-				// Hypervisors
-				&nova.Hypervisor{
-					ID:             "1",
-					ServiceHost:    "host1",
-					HypervisorType: "not-ironic",
-				},
-
-				// Aggregates
-				&nova.Aggregate{
-					Name:        "agg1",
-					UUID:        "agg1",
-					ComputeHost: new("host1"),
-					Metadata:    `{"filter_tenant_id":"project_id_1"}`,
-				},
-				&nova.Aggregate{
-					Name:        "agg2",
-					UUID:        "agg2",
-					ComputeHost: new("host1"),
-					Metadata:    `{"filter_tenant_id":"project_id_1"}`,
-				},
-
-				// Projects
-				&identity.Project{
-					ID:       "project_id_1",
-					Name:     "project_name_1",
-					DomainID: "domain_id_1",
-				},
-				// Domains
-				&identity.Domain{
-					ID:   "domain_id_1",
-					Name: "domain_name_1",
-				},
-			},
-			expected: []HostPinnedProjects{
-				{
-					AggregateName: new("agg1"),
-					AggregateUUID: new("agg1"),
-					ComputeHost:   new("host1"),
-					ProjectID:     new("project_id_1"),
-					DomainID:      new("domain_id_1"),
-					Label:         new("project_name_1 (domain_name_1)"),
-				},
-				{
-					AggregateName: new("agg2"),
-					AggregateUUID: new("agg2"),
-					ComputeHost:   new("host1"),
-					ProjectID:     new("project_id_1"),
-					DomainID:      new("domain_id_1"),
-					Label:         new("project_name_1 (domain_name_1)"),
-				},
-			},
-		},
-		{
-			name: "Expect unknown label if project or domain is missing",
-			mockData: []any{
-				// Hypervisors
-				&nova.Hypervisor{
-					ID:             "1",
-					ServiceHost:    "host1",
-					HypervisorType: "not-ironic",
-				},
-
-				// Aggregates
-				&nova.Aggregate{
-					Name:        "agg1",
-					UUID:        "agg1",
-					ComputeHost: new("host1"),
-					Metadata:    `{"filter_tenant_id":"project_id_1, project_id_domain_unknown, project_id_unknown"}`,
-				},
-
-				// Projects
-				&identity.Project{
-					ID:       "project_id_1",
-					Name:     "project_name_1",
-					DomainID: "domain_id_1",
-				},
-				&identity.Project{
-					ID:       "project_id_domain_unknown",
-					Name:     "project_name_2",
-					DomainID: "domain_id_unknown",
-				},
-				// Domains
-				&identity.Domain{
-					ID:   "domain_id_1",
-					Name: "domain_name_1",
-				},
-			},
-			expected: []HostPinnedProjects{
-				{
-					AggregateName: new("agg1"),
-					AggregateUUID: new("agg1"),
-					ComputeHost:   new("host1"),
-					ProjectID:     new("project_id_1"),
-					DomainID:      new("domain_id_1"),
-					Label:         new("project_name_1 (domain_name_1)"),
-				},
-				{
-					AggregateName: new("agg1"),
-					AggregateUUID: new("agg1"),
-					ComputeHost:   new("host1"),
-					ProjectID:     new("project_id_domain_unknown"),
-					DomainID:      new("domain_id_unknown"),
-					Label:         new("project_name_2 (unknown)"),
-				},
-				{
-					AggregateName: new("agg1"),
-					AggregateUUID: new("agg1"),
-					ComputeHost:   new("host1"),
-					ProjectID:     new("project_id_unknown"),
-					DomainID:      nil,
-					Label:         new("unknown (unknown)"),
-				},
-			},
+			expected: []HostPinnedProjects{unrestricted("host1"), project2("agg2", new("host2"))},
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dbEnv := testlibDB.SetupDBEnv(t)
-			testDB := db.DB{DbMap: dbEnv.DbMap}
-			defer dbEnv.Close()
-
-			if err := testDB.CreateTable(
-				testDB.AddTable(nova.Aggregate{}),
-				testDB.AddTable(nova.Hypervisor{}),
-				testDB.AddTable(identity.Project{}),
-				testDB.AddTable(identity.Domain{}),
-			); err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
-			if err := testDB.Insert(tt.mockData...); err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
-
-			extractor := &HostPinnedProjectsExtractor{}
-			config := v1alpha1.KnowledgeSpec{}
-
-			if err := extractor.Init(&testDB, nil, config); err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
-
-			features, err := extractor.Extract()
+			features, err := (&HostPinnedProjectsExtractor{}).Extract(t.Context(), tt.in)
 			if err != nil {
 				t.Fatalf("expected no error, got %v", err)
 			}
-
-			// Check if the expected hosts match the extracted ones
-			if len(features) != len(tt.expected) {
-				t.Fatalf("expected %d host pinned projects, got %d", len(tt.expected), len(features))
-			}
-
-			for _, f := range features {
-				hpp := f.(HostPinnedProjects)
-				found := false
-				for _, exp := range tt.expected {
-					if reflect.DeepEqual(hpp, exp) {
-						found = true
-						break
-					}
-				}
-				if !found {
-					t.Errorf("unexpected host pinned project found: %s", printHostPinnedProject(hpp))
-				}
+			if !reflect.DeepEqual(features, tt.expected) {
+				t.Errorf("expected:\n%s\ngot:\n%s", formatHostPinnedProjects(tt.expected), formatHostPinnedProjects(features))
 			}
 		})
 	}
 }
 
-func printHostPinnedProject(hpp HostPinnedProjects) string {
-	var aggUUID, aggName, computeHost, projectID, domainID, label string
-
-	if hpp.AggregateUUID != nil {
-		aggUUID = *hpp.AggregateUUID
-	} else {
-		aggUUID = "<nil>"
+func formatHostPinnedProjects(features []HostPinnedProjects) string {
+	deref := func(s *string) string {
+		if s == nil {
+			return "<nil>"
+		}
+		return *s
 	}
-
-	if hpp.AggregateName != nil {
-		aggName = *hpp.AggregateName
-	} else {
-		aggName = "<nil>"
+	lines := make([]string, 0, len(features))
+	for _, f := range features {
+		lines = append(lines, fmt.Sprintf("{AggUUID: %s, AggName: %s, Host: %s, ProjectID: %s, DomainID: %s, Label: %s}",
+			deref(f.AggregateUUID), deref(f.AggregateName), deref(f.ComputeHost), deref(f.ProjectID), deref(f.DomainID), deref(f.Label)))
 	}
-
-	if hpp.ComputeHost != nil {
-		computeHost = *hpp.ComputeHost
-	} else {
-		computeHost = "<nil>"
-	}
-
-	if hpp.ProjectID != nil {
-		projectID = *hpp.ProjectID
-	} else {
-		projectID = "<nil>"
-	}
-
-	if hpp.DomainID != nil {
-		domainID = *hpp.DomainID
-	} else {
-		domainID = "<nil>"
-	}
-
-	if hpp.Label != nil {
-		label = *hpp.Label
-	} else {
-		label = "<nil>"
-	}
-
-	return fmt.Sprintf("{AggUUID: %s, AggName: %s, Host: %s, ProjectID: %s, DomainID: %s, Label: %s}",
-		aggUUID, aggName, computeHost, projectID, domainID, label)
+	return strings.Join(lines, "\n")
 }

@@ -4,38 +4,61 @@
 package compute
 
 import (
-	_ "embed"
+	"cmp"
+	"context"
+	"slices"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/prometheus"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/extractor"
 )
 
-// Feature that resolves the vROps metrics hostsystem label to the
-// corresponding Nova compute host.
+// Feature that maps a vROps hostsystem to a nova compute host.
 type ResolvedVROpsHostsystem struct {
 	VROpsHostsystem string `db:"vrops_hostsystem"`
 	NovaComputeHost string `db:"nova_compute_host"`
 }
 
-// Extractor that resolves the vROps metrics hostsystem label to the
-// corresponding Nova compute host and stores it as a feature into the database.
-type VROpsHostsystemResolver struct {
-	// Common base for all extractors that provides standard functionality.
-	plugins.BaseExtractor[
-		struct{},                // No options passed through yaml config
-		ResolvedVROpsHostsystem, // Feature model
-	]
+// Inputs of the vROps hostsystem resolver.
+type VROpsHostsystemResolverInputs struct {
+	// Any vROps virtual machine metric.
+	Metrics []prometheus.VROpsVMMetric `input:"metrics"`
+	Servers []nova.Server              `input:"servers"`
 }
 
-//go:embed vrops_hostsystem_resolver.sql
-var vropsHostsystemSQL string
+// Extractor that resolves the vROps hostsystem to nova compute hosts.
+type VROpsHostsystemResolver struct {
+	// Common base for all extractors that provides standard functionality.
+	extractor.BaseExtractor[struct{}]
+}
 
-// Resolve vROps hostsystems to Nova compute hosts.
-func (e *VROpsHostsystemResolver) Extract() ([]plugins.Feature, error) {
-	return e.ExtractSQL(vropsHostsystemSQL)
+// Resolve the hostsystem names from vROps vm metrics to the compute hosts of
+// the nova servers the metrics belong to.
+func (e *VROpsHostsystemResolver) Extract(_ context.Context, in VROpsHostsystemResolverInputs) ([]ResolvedVROpsHostsystem, error) {
+	hostByServer := make(map[string]string, len(in.Servers))
+	for _, s := range in.Servers {
+		hostByServer[s.ID] = s.OSEXTSRVATTRHost
+	}
+	resolved := make(map[ResolvedVROpsHostsystem]struct{})
+	for _, m := range in.Metrics {
+		host, ok := hostByServer[m.InstanceUUID]
+		if !ok || host == "" {
+			continue
+		}
+		resolved[ResolvedVROpsHostsystem{VROpsHostsystem: m.HostSystem, NovaComputeHost: host}] = struct{}{}
+	}
+	features := make([]ResolvedVROpsHostsystem, 0, len(resolved))
+	for f := range resolved {
+		features = append(features, f)
+	}
+	slices.SortFunc(features, func(a, b ResolvedVROpsHostsystem) int {
+		return cmp.Or(cmp.Compare(a.VROpsHostsystem, b.VROpsHostsystem), cmp.Compare(a.NovaComputeHost, b.NovaComputeHost))
+	})
+	return features, nil
 }
 
 func init() {
-	plugins.Index["vrops_hostsystem_resolver"] = func() plugins.FeatureExtractor {
+	extractor.Register("vrops_hostsystem_resolver", func() extractor.Extractor[VROpsHostsystemResolverInputs, ResolvedVROpsHostsystem] {
 		return &VROpsHostsystemResolver{}
-	}
+	})
 }

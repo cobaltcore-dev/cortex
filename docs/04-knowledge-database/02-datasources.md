@@ -11,11 +11,14 @@ them into Postgres so the rest of Cortex can work from a local, query-fast copy 
 source. This page covers the two source families — OpenStack and Prometheus — the sync model, and how a
 datasource is authored.
 
-## Caching the world into Postgres
+## Caching the world into a store
 
 Cortex does not query OpenStack or Prometheus during a placement request; that would put a slow, external
 dependency on the hot path. Instead, each `Datasource` periodically pulls its source and writes the results
-into Postgres (via `internal/knowledge/db`), and everything downstream reads from there. The `Datasource`
+into the storage backend configured in `spec.storage`, and everything downstream reads from there. Storage
+is abstracted behind `pkg/knowledge/store`, which only lists and replaces all objects of a datasource;
+`postgres` (`pkg/knowledge/store/postgres`) is currently the only backend. Extractors and KPIs never query
+the store directly — they receive the objects of their inputs as typed Go lists. The `Datasource`
 CRD sets a `syncInterval` controlling how often the pull runs.
 
 There are two source families, dispatched by the datasource `type`:
@@ -37,9 +40,12 @@ metadata:
   name: nova-servers
 spec:
   schedulingDomain: nova
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: cortex
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: cortex-nova-postgres
+        namespace: cortex
   type: openstack
   openstack:
     syncInterval: 600s

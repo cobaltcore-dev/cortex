@@ -4,105 +4,73 @@
 package compute
 
 import (
-	"os"
 	"reflect"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/internal/knowledge/db/testing"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
 )
 
-func TestHostAZExtractor_Init(t *testing.T) {
-	extractor := &HostAZExtractor{}
-	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(nil, nil, config); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-}
-
 func TestHostAZExtractor_Extract(t *testing.T) {
-	if os.Getenv("POSTGRES_CONTAINER") != "1" {
-		t.Skip("skipping test; set POSTGRES_CONTAINER=1 to run")
-	}
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-	// Create dependency tables
-	if err := testDB.CreateTable(
-		testDB.AddTable(nova.Hypervisor{}),
-		testDB.AddTable(nova.Aggregate{}),
-	); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// Insert mock data into the hypervisors and traits tables
-	hypervisors := []any{
-		&nova.Hypervisor{ID: "uuid1", ServiceHost: "host1"},
-		&nova.Hypervisor{ID: "uuid2", ServiceHost: "host2"},
-		&nova.Hypervisor{ID: "uuid3", ServiceHost: "host3"},
-		&nova.Hypervisor{ID: "uuid4", ServiceHost: "host4"},
-	}
-
-	if err := testDB.Insert(hypervisors...); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	aggregates := []any{
-		// Test to find the first aggregate for computeHost1 with availability_zone != null
-		&nova.Aggregate{UUID: "agg1", Name: "something_else", AvailabilityZone: nil, ComputeHost: new("host1"), Metadata: "{}"},
-		&nova.Aggregate{UUID: "agg2", Name: "az1", AvailabilityZone: new("az1"), ComputeHost: new("host1"), Metadata: "{}"},
-		// Test to check that we get null when there is an aggregate for computeHost2 but without availability_zone
-		&nova.Aggregate{UUID: "agg3", Name: "something_else_again", AvailabilityZone: nil, ComputeHost: new("host2"), Metadata: "{}"},
-		// No aggregate for computeHost3
-		// Should find an availability zone for computeHost4
-		&nova.Aggregate{UUID: "agg4", Name: "az2", AvailabilityZone: new("az2"), ComputeHost: new("host4"), Metadata: "{}"},
-	}
-
-	if err := testDB.Insert(aggregates...); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	extractor := &HostAZExtractor{}
-	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, nil, config); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	features, err := extractor.Extract()
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	expectedHostAZs := []HostAZ{
+	tests := []struct {
+		name     string
+		in       HostAZInputs
+		expected []HostAZ
+	}{
 		{
-			ComputeHost:      "host1",
-			AvailabilityZone: new("az1"),
-		},
-		// Aggregate without availability_zone provided for host
-		{
-			ComputeHost:      "host2",
-			AvailabilityZone: nil,
-		},
-		// No aggregate provided for host
-		{
-			ComputeHost:      "host3",
-			AvailabilityZone: nil,
+			name: "resolves availability zones from aggregates",
+			in: HostAZInputs{
+				Hypervisors: []nova.Hypervisor{
+					{ID: "uuid4", ServiceHost: "host4"},
+					{ID: "uuid1", ServiceHost: "host1"},
+					{ID: "uuid2", ServiceHost: "host2"},
+					{ID: "uuid3", ServiceHost: "host3"},
+				},
+				Aggregates: []nova.Aggregate{
+					// Aggregates without availability zone are ignored.
+					{UUID: "agg1", Name: "something_else", ComputeHost: new("host1"), Metadata: "{}"},
+					{UUID: "agg2", Name: "az1", AvailabilityZone: new("az1"), ComputeHost: new("host1"), Metadata: "{}"},
+					// Only an aggregate without availability zone for host2.
+					{UUID: "agg3", Name: "something_else_again", ComputeHost: new("host2"), Metadata: "{}"},
+					// No aggregate for host3.
+					{UUID: "agg4", Name: "az2", AvailabilityZone: new("az2"), ComputeHost: new("host4"), Metadata: "{}"},
+					// Aggregates without compute host are ignored.
+					{UUID: "agg5", Name: "az3", AvailabilityZone: new("az3"), Metadata: "{}"},
+				},
+			},
+			expected: []HostAZ{
+				{ComputeHost: "host1", AvailabilityZone: new("az1")},
+				{ComputeHost: "host2"},
+				{ComputeHost: "host3"},
+				{ComputeHost: "host4", AvailabilityZone: new("az2")},
+			},
 		},
 		{
-			ComputeHost:      "host4",
-			AvailabilityZone: new("az2"),
+			name: "uses the lexicographically smallest of multiple availability zones",
+			in: HostAZInputs{
+				Hypervisors: []nova.Hypervisor{{ID: "uuid1", ServiceHost: "host1"}},
+				Aggregates: []nova.Aggregate{
+					{UUID: "agg1", AvailabilityZone: new("az-b"), ComputeHost: new("host1")},
+					{UUID: "agg2", AvailabilityZone: new("az-a"), ComputeHost: new("host1")},
+					{UUID: "agg3", AvailabilityZone: new("az-c"), ComputeHost: new("host1")},
+				},
+			},
+			expected: []HostAZ{{ComputeHost: "host1", AvailabilityZone: new("az-a")}},
+		},
+		{
+			name:     "no hypervisors",
+			in:       HostAZInputs{Aggregates: []nova.Aggregate{{UUID: "agg1", AvailabilityZone: new("az1"), ComputeHost: new("host1")}}},
+			expected: []HostAZ{},
 		},
 	}
-
-	if len(features) != len(expectedHostAZs) {
-		t.Errorf("expected %d host AZs, got %d", len(expectedHostAZs), len(features))
-	}
-
-	for idx, f := range features {
-		hostAZ := f.(HostAZ)
-		if !reflect.DeepEqual(hostAZ, expectedHostAZs[idx]) {
-			t.Errorf("expected host AZ for %s to be %+v, got %+v", hostAZ.ComputeHost, expectedHostAZs[idx], hostAZ)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			features, err := (&HostAZExtractor{}).Extract(t.Context(), tt.in)
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			if !reflect.DeepEqual(features, tt.expected) {
+				t.Errorf("expected %+v, got %+v", tt.expected, features)
+			}
+		})
 	}
 }

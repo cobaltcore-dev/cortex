@@ -6,40 +6,51 @@ package v1alpha1
 import (
 	"encoding/json"
 
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
-// Dependencies required for extracting the knowledge.
-type KnowledgeDependenciesSpec struct {
-	// Datasources required for extracting this knowledge.
-	// If provided, all datasources must have the same database secret reference
-	// so the knowledge can be joined across multiple database tables.
-	// +kubebuilder:validation:Optional
-	Datasources []corev1.ObjectReference `json:"datasources,omitempty"`
-
-	// Other knowledges this knowledge depends on.
-	// +kubebuilder:validation:Optional
-	Knowledges []corev1.ObjectReference `json:"knowledges,omitempty"`
-}
-
 type KnowledgeExtractorSpec struct {
-	// The name of the extractor.
-	Name string `json:"name,omitempty"`
+	// The name of the go extractor registered in cortex.
+	Name string `json:"name"`
 
 	// Additional configuration for the extractor.
 	// +kubebuilder:validation:Optional
 	Config runtime.RawExtension `json:"config"`
 }
 
+type KnowledgeExpressionSpec struct {
+	// Expression (https://expr-lang.org) evaluated over the inputs, which are
+	// available as variables named by their var. Fields of input objects are
+	// accessed by their go field names. The expression must return a list.
+	Run string `json:"run"`
+
+	// Name of the registered go type of a single output feature. The output
+	// of the expression is strictly decoded into a list of this type, so
+	// consumers can unbox the knowledge with the same type.
+	Output string `json:"output"`
+}
+
+// +kubebuilder:validation:XValidation:rule="has(self.extractor) != has(self.expression)",message="exactly one of extractor or expression must be set"
 type KnowledgeSpec struct {
 	// SchedulingDomain defines in which scheduling domain this knowledge
 	// is used (e.g., nova, cinder, manila).
 	SchedulingDomain SchedulingDomain `json:"schedulingDomain"`
 
-	// The feature extractor to use for extracting this knowledge.
-	Extractor KnowledgeExtractorSpec `json:"extractor,omitempty"`
+	// The go feature extractor to use for extracting this knowledge.
+	// +kubebuilder:validation:Optional
+	Extractor *KnowledgeExtractorSpec `json:"extractor,omitempty"`
+
+	// The expression to use for extracting this knowledge.
+	// +kubebuilder:validation:Optional
+	Expression *KnowledgeExpressionSpec `json:"expression,omitempty"`
+
+	// Inputs passed to the extractor or expression. Changes to the referenced
+	// datasources and knowledges trigger a re-extraction of this knowledge.
+	// +kubebuilder:validation:Optional
+	// +listType=map
+	// +listMapKey=var
+	Inputs []InputSpec `json:"inputs,omitempty"`
 
 	// The desired recency of this knowledge, i.e. how old it can be until
 	// it needs to be re-extracted.
@@ -49,10 +60,6 @@ type KnowledgeSpec struct {
 	// A human-readable description of the knowledge to be extracted.
 	// +kubebuilder:validation:Optional
 	Description string `json:"description,omitempty"`
-
-	// Dependencies required for extracting this knowledge.
-	// +kubebuilder:validation:Optional
-	Dependencies KnowledgeDependenciesSpec `json:"dependencies"`
 }
 
 // Convert raw features to a list of strongly typed feature structs.

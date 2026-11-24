@@ -4,99 +4,49 @@
 package storage
 
 import (
+	"slices"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/manila"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/prometheus"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/internal/knowledge/db/testing"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/manila"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/prometheus"
 )
 
-func TestStoragePoolCPUUsageExtractor_Init(t *testing.T) {
-	extractor := &StoragePoolCPUUsageExtractor{}
-	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(nil, nil, config); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-}
-
 func TestStoragePoolCPUUsageExtractor_Extract(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-	// Create dependency tables
-	if err := testDB.CreateTable(
-		testDB.AddTable(manila.StoragePool{}),
-		testDB.AddTable(prometheus.NetAppAggregateLabelsMetric{}),
-		testDB.AddTable(prometheus.NetAppNodeMetric{}),
-	); err != nil {
-		t.Fatalf("expected no error, got %v", err)
+	in := StoragePoolCPUUsageInputs{
+		StoragePools: []manila.StoragePool{
+			{Name: "pool2", Pool: "aggr2"},
+			{Name: "pool1", Pool: "aggr1"},
+			// Aggregate spanning multiple nodes yields one feature per node.
+			{Name: "pool3", Pool: "aggr3"},
+			// Pools without aggregate labels are skipped.
+			{Name: "pool4", Pool: "aggr4"},
+		},
+		AggregateLabels: []prometheus.NetAppAggregateLabelsMetric{
+			{Aggregate: "aggr1", Node: "node1"},
+			{Aggregate: "aggr2", Node: "node2"},
+			{Aggregate: "aggr3", Node: "node1"},
+			{Aggregate: "aggr3", Node: "node2"},
+			// Duplicate labels are ignored.
+			{Aggregate: "aggr3", Node: "node2"},
+		},
+		NodeCPUBusy: []prometheus.NetAppNodeMetric{
+			{Node: "node1", Value: 10.5},
+			{Node: "node1", Value: 20.0},
+			{Node: "node2", Value: 30.0},
+			{Node: "node2", Value: 40.0},
+		},
 	}
-
-	manilaStoragePools := []any{
-		&manila.StoragePool{Name: "pool1", Pool: "aggr1"},
-		&manila.StoragePool{Name: "pool2", Pool: "aggr2"},
-	}
-	if err := testDB.Insert(manilaStoragePools...); err != nil {
-		t.Fatalf("failed to insert manila storage pools: %v", err)
-	}
-
-	netappAggregateLabels := []any{
-		&prometheus.NetAppAggregateLabelsMetric{Aggregate: "aggr1", Node: "node1"},
-		&prometheus.NetAppAggregateLabelsMetric{Aggregate: "aggr2", Node: "node2"},
-	}
-	if err := testDB.Insert(netappAggregateLabels...); err != nil {
-		t.Fatalf("failed to insert netapp_aggregate_labels_metrics: %v", err)
-	}
-
-	netAppNodeMetrics := []any{
-		&prometheus.NetAppNodeMetric{Node: "node1", Name: "netapp_node_cpu_busy", Value: 10.5},
-		&prometheus.NetAppNodeMetric{Node: "node1", Name: "netapp_node_cpu_busy", Value: 20.0},
-		&prometheus.NetAppNodeMetric{Node: "node2", Name: "netapp_node_cpu_busy", Value: 30.0},
-		&prometheus.NetAppNodeMetric{Node: "node2", Name: "netapp_node_cpu_busy", Value: 40.0},
-		&prometheus.NetAppNodeMetric{Node: "node2", Name: "other_metric", Value: 99.0},
-	}
-	if err := testDB.Insert(netAppNodeMetrics...); err != nil {
-		t.Fatalf("failed to insert netapp_node_metrics: %v", err)
-	}
-
-	extractor := &StoragePoolCPUUsageExtractor{}
-	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, nil, config); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	features, err := extractor.Extract()
+	features, err := (&StoragePoolCPUUsageExtractor{}).Extract(t.Context(), in)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-
-	var cpuUsages []StoragePoolCPUUsage
-	for _, f := range features {
-		cpuUsages = append(cpuUsages, f.(StoragePoolCPUUsage))
-	}
-
 	expected := []StoragePoolCPUUsage{
 		{StoragePoolName: "pool1", AvgCPUUsagePct: 15.25, MaxCPUUsagePct: 20.0},
 		{StoragePoolName: "pool2", AvgCPUUsagePct: 35.0, MaxCPUUsagePct: 40.0},
+		{StoragePoolName: "pool3", AvgCPUUsagePct: 15.25, MaxCPUUsagePct: 20.0},
+		{StoragePoolName: "pool3", AvgCPUUsagePct: 35.0, MaxCPUUsagePct: 40.0},
 	}
-
-	if len(cpuUsages) != len(expected) {
-		t.Errorf("expected %d rows, got %d", len(expected), len(cpuUsages))
-	}
-
-	for _, exp := range expected {
-		found := false
-		for _, got := range cpuUsages {
-			if got.StoragePoolName == exp.StoragePoolName &&
-				got.AvgCPUUsagePct == exp.AvgCPUUsagePct &&
-				got.MaxCPUUsagePct == exp.MaxCPUUsagePct {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("expected %+v, got %+v", exp, cpuUsages)
-		}
+	if !slices.Equal(features, expected) {
+		t.Errorf("expected %+v, got %+v", expected, features)
 	}
 }

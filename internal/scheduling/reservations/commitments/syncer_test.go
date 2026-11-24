@@ -86,7 +86,7 @@ func createFlavorGroupKnowledge(t *testing.T, groups map[string]FlavorGroupData)
 		},
 		Spec: v1alpha1.KnowledgeSpec{
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
-			Extractor: v1alpha1.KnowledgeExtractorSpec{
+			Extractor: &v1alpha1.KnowledgeExtractorSpec{
 				Name: "flavor_groups",
 			},
 		},

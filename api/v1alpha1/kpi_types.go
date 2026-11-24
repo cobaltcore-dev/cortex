@@ -4,24 +4,9 @@
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
-
-// Dependencies required for extracting the kpi.
-// If provided, all datasources and knowledges must have the same
-// database secret reference so the kpi can be joined across multiple
-// database tables.
-type KPIDependenciesSpec struct {
-	// Datasources required for extracting this kpi.
-	// +kubebuilder:validation:Optional
-	Datasources []corev1.ObjectReference `json:"datasources,omitempty"`
-
-	// Knowledges this kpi depends on.
-	// +kubebuilder:validation:Optional
-	Knowledges []corev1.ObjectReference `json:"knowledges,omitempty"`
-}
 
 type KPISpec struct {
 	// SchedulingDomain defines in which scheduling domain this kpi
@@ -33,9 +18,12 @@ type KPISpec struct {
 	// Additional configuration for the extractor that can be used
 	// +kubebuilder:validation:Optional
 	Opts runtime.RawExtension `json:"opts,omitempty"`
-	// Dependencies required for extracting this kpi.
+	// Inputs passed to the kpi. The kpi is only registered once all
+	// referenced datasources and knowledges are ready.
 	// +kubebuilder:validation:Optional
-	Dependencies KPIDependenciesSpec `json:"dependencies"`
+	// +listType=map
+	// +listMapKey=var
+	Inputs []InputSpec `json:"inputs,omitempty"`
 	// Additional description of the kpi which helps understand its purpose
 	// and decisions made by it.
 	// +kubebuilder:validation:Optional

@@ -58,3 +58,19 @@ type Parameter struct {
 // multiple parameters for filters, weighers, and other resources that need
 // flexible but limited configuration.
 type Parameters []Parameter
+
+// InputSpec references a datasource or another knowledge whose objects are
+// passed to a knowledge extractor or kpi under the given variable name.
+// +kubebuilder:validation:XValidation:rule="has(self.datasource) != has(self.knowledge)",message="exactly one of datasource or knowledge must be set"
+type InputSpec struct {
+	// Name under which the input objects are passed, e.g. to an expression
+	// or to the struct field tagged with `input:"<var>"` in a go extractor.
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z_][a-zA-Z0-9_]*$`
+	Var string `json:"var"`
+	// Name of the datasource providing the input objects.
+	// +kubebuilder:validation:Optional
+	Datasource string `json:"datasource,omitempty"`
+	// Name of the knowledge providing its extracted features as input objects.
+	// +kubebuilder:validation:Optional
+	Knowledge string `json:"knowledge,omitempty"`
+}

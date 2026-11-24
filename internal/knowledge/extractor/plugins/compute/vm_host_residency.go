@@ -4,12 +4,15 @@
 package compute
 
 import (
-	_ "embed"
-	"errors"
+	"cmp"
+	"context"
+	"slices"
 	"strings"
+	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/math"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/extractor"
 	"github.com/prometheus/client_golang/prometheus"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -31,13 +34,17 @@ type VMHostResidencyHistogramBucket struct {
 	Sum float64 `db:"sum"`
 }
 
+// Inputs of the vm host residency extractor.
+type VMHostResidencyInputs struct {
+	Migrations []nova.Migration `input:"migrations"`
+	Servers    []nova.Server    `input:"servers"`
+	Flavors    []nova.Flavor    `input:"flavors"`
+}
+
 // Extractor that extracts the time elapsed until the first migration of a virtual machine.
 type VMHostResidencyExtractor struct {
 	// Common base for all extractors that provides standard functionality.
-	plugins.BaseExtractor[
-		struct{},                       // No options passed through yaml config
-		VMHostResidencyHistogramBucket, // Feature model
-	]
+	extractor.BaseExtractor[struct{}]
 }
 
 type VMHostResidencyRaw struct {
@@ -47,22 +54,59 @@ type VMHostResidencyRaw struct {
 	FlavorName string `db:"flavor_name"`
 }
 
-//go:embed vm_host_residency.sql
-var vmHostResidencyQuery string
-
-// Extract the time elapsed until the first migration of a virtual machine.
-// Depends on the OpenStack servers and migrations to be synced.
-func (e *VMHostResidencyExtractor) Extract() ([]plugins.Feature, error) {
-	// This can happen when no datasource is provided that connects to a database.
-	if e.DB == nil {
-		return nil, errors.New("database connection is not initialized")
+// Calculate how long the vm of each migration stayed on its host: since its
+// previous migration, or since its creation if there is none. Durations are
+// 0 and flavors "unknown" when they can't be determined, e.g. because the
+// server vanished already.
+func vmHostResidencies(in VMHostResidencyInputs) []VMHostResidencyRaw {
+	servers := make(map[string]nova.Server, len(in.Servers))
+	for _, s := range in.Servers {
+		servers[s.ID] = s
 	}
-	var hostResidencies []VMHostResidencyRaw
-	if _, err := e.DB.Select(&hostResidencies, vmHostResidencyQuery); err != nil {
-		return nil, err
+	flavorNames := make(map[string]struct{}, len(in.Flavors))
+	for _, f := range in.Flavors {
+		flavorNames[f.Name] = struct{}{}
 	}
+	type migration struct {
+		nova.Migration
+		createdAt time.Time
+		valid     bool
+	}
+	byInstance := make(map[string][]migration)
+	for _, m := range in.Migrations {
+		createdAt, err := parseTimestamp(m.CreatedAt)
+		byInstance[m.InstanceUUID] = append(byInstance[m.InstanceUUID], migration{m, createdAt, err == nil})
+	}
+	residencies := make([]VMHostResidencyRaw, 0, len(in.Migrations))
+	for _, migrations := range byInstance {
+		slices.SortStableFunc(migrations, func(a, b migration) int {
+			return a.createdAt.Compare(b.createdAt)
+		})
+		for i, m := range migrations {
+			residency := VMHostResidencyRaw{FlavorName: "unknown"}
+			server, serverFound := servers[m.InstanceUUID]
+			if _, ok := flavorNames[server.FlavorName]; serverFound && ok {
+				residency.FlavorName = server.FlavorName
+			}
+			if m.valid {
+				if i > 0 && migrations[i-1].valid {
+					residency.Duration = secondsBetween(migrations[i-1].createdAt, m.createdAt)
+				} else if serverFound {
+					if created, err := parseTimestamp(server.Created); err == nil {
+						residency.Duration = secondsBetween(created, m.createdAt)
+					}
+				}
+			}
+			residencies = append(residencies, residency)
+		}
+	}
+	return residencies
+}
 
-	// Calculate the histogram based on the extracted features.
+// Extract a histogram of how long vms stayed on their hosts until they were
+// migrated, by flavor and across all flavors.
+func (e *VMHostResidencyExtractor) Extract(_ context.Context, in VMHostResidencyInputs) ([]VMHostResidencyHistogramBucket, error) {
+	hostResidencies := vmHostResidencies(in)
 	buckets := prometheus.ExponentialBucketsRange(5, 365*24*60*60, 30)
 	keysFunc := func(hostResidency VMHostResidencyRaw) []string {
 		return []string{hostResidency.FlavorName, "all"}
@@ -89,11 +133,14 @@ func (e *VMHostResidencyExtractor) Extract() ([]plugins.Feature, error) {
 			})
 		}
 	}
-	return e.Extracted(features)
+	slices.SortFunc(features, func(a, b VMHostResidencyHistogramBucket) int {
+		return cmp.Or(cmp.Compare(a.FlavorName, b.FlavorName), cmp.Compare(a.Bucket, b.Bucket))
+	})
+	return features, nil
 }
 
 func init() {
-	plugins.Index["vm_host_residency_extractor"] = func() plugins.FeatureExtractor {
+	extractor.Register("vm_host_residency_extractor", func() extractor.Extractor[VMHostResidencyInputs, VMHostResidencyHistogramBucket] {
 		return &VMHostResidencyExtractor{}
-	}
+	})
 }

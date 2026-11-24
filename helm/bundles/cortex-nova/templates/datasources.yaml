@@ -5,9 +5,12 @@ metadata:
   name: vrops-virtualmachine-cpu-demand-ratio
 spec:
   schedulingDomain: nova
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: cortex-nova-postgres
+        namespace: {{ .Release.Namespace }}
   {{- if .Values.prometheus.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-prometheus-sso
@@ -28,9 +31,12 @@ metadata:
   name: vrops-hostsystem-cpu-contention-long-term-percentage
 spec:
   schedulingDomain: nova
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: cortex-nova-postgres
+        namespace: {{ .Release.Namespace }}
   {{- if .Values.prometheus.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-prometheus-sso
@@ -51,9 +57,12 @@ metadata:
   name: vrops-hostsystem-cpu-contention-short-term-percentage
 spec:
   schedulingDomain: nova
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: cortex-nova-postgres
+        namespace: {{ .Release.Namespace }}
   {{- if .Values.prometheus.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-prometheus-sso
@@ -77,9 +86,12 @@ metadata:
   name: nova-servers
 spec:
   schedulingDomain: nova
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: cortex-nova-postgres
+        namespace: {{ .Release.Namespace }}
   {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
@@ -101,9 +113,12 @@ metadata:
   name: nova-deleted-servers
 spec:
   schedulingDomain: nova
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: cortex-nova-postgres
+        namespace: {{ .Release.Namespace }}
   {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
@@ -125,9 +140,12 @@ metadata:
   name: nova-hypervisors
 spec:
   schedulingDomain: nova
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: cortex-nova-postgres
+        namespace: {{ .Release.Namespace }}
   {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
@@ -149,9 +167,12 @@ metadata:
   name: nova-flavors
 spec:
   schedulingDomain: nova
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: cortex-nova-postgres
+        namespace: {{ .Release.Namespace }}
   {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
@@ -173,9 +194,12 @@ metadata:
   name: nova-migrations
 spec:
   schedulingDomain: nova
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: cortex-nova-postgres
+        namespace: {{ .Release.Namespace }}
   {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
@@ -197,9 +221,12 @@ metadata:
   name: nova-aggregates
 spec:
   schedulingDomain: nova
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: cortex-nova-postgres
+        namespace: {{ .Release.Namespace }}
   {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
@@ -221,9 +248,12 @@ metadata:
   name: placement-resource-providers
 spec:
   schedulingDomain: nova
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: cortex-nova-postgres
+        namespace: {{ .Release.Namespace }}
   {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
@@ -245,9 +275,12 @@ metadata:
   name: placement-resource-provider-traits
 spec:
   schedulingDomain: nova
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: cortex-nova-postgres
+        namespace: {{ .Release.Namespace }}
   {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
@@ -269,9 +302,12 @@ metadata:
   name: placement-resource-provider-inventory-usages
 spec:
   schedulingDomain: nova
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: cortex-nova-postgres
+        namespace: {{ .Release.Namespace }}
   {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
@@ -293,9 +329,12 @@ metadata:
   name: identity-domains
 spec:
   schedulingDomain: nova
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: cortex-nova-postgres
+        namespace: {{ .Release.Namespace }}
   {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
@@ -317,9 +356,12 @@ metadata:
   name: identity-projects
 spec:
   schedulingDomain: nova
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: cortex-nova-postgres
+        namespace: {{ .Release.Namespace }}
   {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso
@@ -341,9 +383,12 @@ metadata:
   name: limes-project-commitments
 spec:
   schedulingDomain: nova
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: cortex-nova-postgres
+        namespace: {{ .Release.Namespace }}
   {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-openstack-sso

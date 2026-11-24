@@ -23,6 +23,7 @@ type PrometheusDatasource struct {
 	// under which the table will be stored in the database.
 	// Additionally, this alias is used to reference the metric in the
 	// feature extractors as dependency.
+	// +kubebuilder:validation:MinLength=1
 	Alias string `json:"alias"`
 	// The type of the metric, mapping directly to a metric model supported
 	// by cortex. Note that the metrics are fetched as time series, not instant.
@@ -182,6 +183,34 @@ type OpenStackDatasource struct {
 	SecretRef corev1.SecretReference `json:"secretRef"`
 }
 
+type StorageType string
+
+const (
+	// StorageTypePostgres stores datasource objects in a postgres database.
+	StorageTypePostgres StorageType = "postgres"
+)
+
+type PostgresStorage struct {
+	// Database credentials to use for the datasource.
+	// The secret should contain the following keys:
+	// - "user": The database user.
+	// - "password": The database password.
+	// - "host": The database host.
+	// - "port": The database port.
+	// - "database": The database name.
+	SecretRef corev1.SecretReference `json:"secretRef"`
+}
+
+// +kubebuilder:validation:XValidation:rule="self.type != 'postgres' || has(self.postgres)",message="postgres storage requires the postgres field"
+type StorageSpec struct {
+	// The type of the storage backend.
+	// +kubebuilder:validation:Enum=postgres
+	Type StorageType `json:"type"`
+	// Postgres storage configuration, required if type is "postgres".
+	// +kubebuilder:validation:Optional
+	Postgres *PostgresStorage `json:"postgres,omitempty"`
+}
+
 type DatasourceType string
 
 const (
@@ -208,14 +237,8 @@ type DatasourceSpec struct {
 	// The type of the datasource.
 	Type DatasourceType `json:"type"`
 
-	// Database credentials to use for the datasource.
-	// The secret should contain the following keys:
-	// - "username": The database username.
-	// - "password": The database password.
-	// - "host": The database host.
-	// - "port": The database port.
-	// - "database": The database name.
-	DatabaseSecretRef corev1.SecretReference `json:"databaseSecretRef"`
+	// Storage backend in which the datasource objects are stored.
+	Storage StorageSpec `json:"storage"`
 
 	// Kubernetes secret ref for an optional sso certificate to access the host.
 	// The secret should contain two keys: "cert" and "key".
