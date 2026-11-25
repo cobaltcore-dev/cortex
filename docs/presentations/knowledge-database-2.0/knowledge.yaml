@@ -1,0 +1,26 @@
+# Copyright SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: cortex.cloud/v1alpha1
+kind: Knowledge
+metadata:
+  name: host-cpu-contention
+spec:
+  schedulingDomain: nova
+  recency: 60s
+  inputs:
+    - {datasource: nova-hypervisors, var: hypervisors}
+    - {datasource: host-cpu-metrics, var: metrics}
+  expression:
+    run: |
+      let byHost = groupBy(metrics, .Node);
+      hypervisors
+      | filter(len(byHost[.Hostname] ?? []) > 0)
+      | map(let h = #; {
+          ComputeHost: h.ServiceHost,
+          AvgCPUContention:
+            mean(map(byHost[h.Hostname], .Value)),
+          MaxCPUContention:
+            max(map(byHost[h.Hostname], .Value)),
+        })
+      | sortBy(.AvgCPUContention)
