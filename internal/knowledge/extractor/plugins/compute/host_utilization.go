@@ -3,12 +3,6 @@
 
 package compute
 
-import (
-	_ "embed"
-
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
-)
-
 // Feature that maps how many resources are utilized on a compute host.
 type HostUtilization struct {
 	// Name of the OpenStack compute host.
@@ -28,28 +22,4 @@ type HostUtilization struct {
 	DiskUsedGB             float64 `db:"disk_used_gb" json:"diskUsedGB"`
 	DiskUtilizedPct        float64 `db:"disk_utilized_pct" json:"diskUtilizedPct"`
 	TotalDiskAllocatableGB float64 `db:"total_disk_allocatable_gb" json:"totalDiskAllocatableGB"`
-}
-
-// Extractor that extracts the utilization on a compute host.
-type HostUtilizationExtractor struct {
-	// Common base for all extractors that provides standard functionality.
-	plugins.BaseExtractor[
-		struct{},        // No options passed through yaml config
-		HostUtilization, // Feature model
-	]
-}
-
-//go:embed host_utilization.sql
-var hostUtilizationQuery string
-
-// Extract the utilization on a compute host.
-// Depends on the OpenStack hypervisors to be synced.
-func (e *HostUtilizationExtractor) Extract() ([]plugins.Feature, error) {
-	return e.ExtractSQL(hostUtilizationQuery)
-}
-
-func init() {
-	plugins.Index["host_utilization_extractor"] = func() plugins.FeatureExtractor {
-		return &HostUtilizationExtractor{}
-	}
 }

@@ -61,26 +61,6 @@ spec:
           spec:
             description: spec defines the desired state of Datasource
             properties:
-              databaseSecretRef:
-                description: |-
-                  Database credentials to use for the datasource.
-                  The secret should contain the following keys:
-                  - "username": The database username.
-                  - "password": The database password.
-                  - "host": The database host.
-                  - "port": The database port.
-                  - "database": The database name.
-                properties:
-                  name:
-                    description: name is unique within a namespace to reference a
-                      secret resource.
-                    type: string
-                  namespace:
-                    description: namespace defines the space within which the secret
-                      name must be unique.
-                    type: string
-                type: object
-                x-kubernetes-map-type: atomic
               openstack:
                 description: |-
                   If given, configures an OpenStack datasource to fetch.
@@ -202,6 +182,7 @@ spec:
                       under which the table will be stored in the database.
                       Additionally, this alias is used to reference the metric in the
                       feature extractors as dependency.
+                    minLength: 1
                     type: string
                   interval:
                     default: 86400s
@@ -267,12 +248,53 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              storage:
+                description: Storage backend in which the datasource objects are stored.
+                properties:
+                  postgres:
+                    description: Postgres storage configuration, required if type
+                      is "postgres".
+                    properties:
+                      secretRef:
+                        description: |-
+                          Database credentials to use for the datasource.
+                          The secret should contain the following keys:
+                          - "user": The database user.
+                          - "password": The database password.
+                          - "host": The database host.
+                          - "port": The database port.
+                          - "database": The database name.
+                        properties:
+                          name:
+                            description: name is unique within a namespace to reference
+                              a secret resource.
+                            type: string
+                          namespace:
+                            description: namespace defines the space within which
+                              the secret name must be unique.
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                    required:
+                    - secretRef
+                    type: object
+                  type:
+                    description: The type of the storage backend.
+                    enum:
+                    - postgres
+                    type: string
+                required:
+                - type
+                type: object
+                x-kubernetes-validations:
+                - message: postgres storage requires the postgres field
+                  rule: self.type != 'postgres' || has(self.postgres)
               type:
                 description: The type of the datasource.
                 type: string
             required:
-            - databaseSecretRef
             - schedulingDomain
+            - storage
             - type
             type: object
           status:

@@ -5,19 +5,29 @@ metadata:
   name: vmware-resolved-hostsystems
 spec:
   schedulingDomain: nova
-  extractor:
-    name: vrops_hostsystem_resolver
+  expression:
+    run: |
+      let serversByID = groupBy(servers, .ID);
+      metrics
+      | filter(len(serversByID[.InstanceUUID] ?? []) > 0)
+      | map(let o = #; {
+          VROpsHostsystem: .HostSystem,
+          NovaComputeHost: last(serversByID[.InstanceUUID]).OSEXTSRVATTRHost,
+        })
+      | filter(.NovaComputeHost != "")
+      | groupBy(.VROpsHostsystem + "\x00" + .NovaComputeHost)
+      | values()
+      | map(#[0])
+      | sortBy(.VROpsHostsystem + "\x00" + .NovaComputeHost)
   description: |
     This knowledge resolves the hostsystem label provided to the vrops
     prometheus metrics to the associated nova hypervisor compute host.
   recency: "1h"
-  dependencies:
-    datasources:
-      - name: nova-hypervisors
-      - name: nova-servers
-      - name: nova-deleted-servers
-      # Any vrops vm metric suffices here.
-      - name: vrops-virtualmachine-cpu-demand-ratio
+  inputs:
+    - var: metrics
+      datasource: vrops-virtualmachine-cpu-demand-ratio
+    - var: servers
+      datasource: nova-servers
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
@@ -25,17 +35,34 @@ metadata:
   name: vmware-project-noisiness
 spec:
   schedulingDomain: nova
-  extractor:
-    name: vrops_project_noisiness_extractor
+  expression:
+    run: |
+      let metricsByProject = groupBy(metrics, .Project);
+      let metricsByServer = groupBy(metrics, .InstanceUUID);
+      let hypervisorsByHostname = groupBy(hypervisors, .Hostname);
+      servers
+      | filter(len(metricsByServer[.ID] ?? []) > 0 && len(metricsByProject[.TenantID] ?? []) > 0)
+      | map(let s = #; (hypervisorsByHostname[s.OSEXTSRVATTRHypervisorHostname] ?? []) | map(let o = #; {
+          Project:         s.TenantID,
+          ComputeHost:     .ServiceHost,
+          AvgCPUOfProject: mean(map(metricsByProject[s.TenantID], .Value)),
+        }))
+      | flatten()
+      | groupBy(.Project + "\x00" + .ComputeHost)
+      | values()
+      | map(#[0])
+      | sortBy(.Project + "\x00" + .ComputeHost)
   description: |
     This knowledge calculates how noisy projects are in terms of CPU contention
     on their VMs' hostsystems.
   recency: "6h"
-  dependencies:
-    datasources:
-      - name: nova-hypervisors
-      - name: nova-servers
-      - name: vrops-virtualmachine-cpu-demand-ratio
+  inputs:
+    - var: metrics
+      datasource: vrops-virtualmachine-cpu-demand-ratio
+    - var: servers
+      datasource: nova-servers
+    - var: hypervisors
+      datasource: nova-hypervisors
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
@@ -43,16 +70,34 @@ metadata:
   name: vmware-long-term-contended-hosts
 spec:
   schedulingDomain: nova
-  extractor:
-    name: vrops_hostsystem_contention_long_term_extractor
+  expression:
+    run: |
+      let computeHostByHostsystem = groupBy(resolvedHostsystems, .VROpsHostsystem);
+      metrics
+      | groupBy(.HostSystem)
+      | values()
+      | filter(len(computeHostByHostsystem[#[0].HostSystem] ?? []) > 0)
+      | map(let o = #; {
+          computeHost: last(computeHostByHostsystem[#[0].HostSystem]).NovaComputeHost,
+          avg: mean(map(#, .Value)),
+          max: max(map(#, .Value)),
+        })
+      | groupBy(.computeHost)
+      | values()
+      | map(let o = #; {
+          ComputeHost:      #[0].computeHost,
+          AvgCPUContention: mean(map(#, .avg)),
+          MaxCPUContention: max(max(map(#, .max)), 0),
+        })
+      | sortBy(.ComputeHost)
   description: |
     This knowledge identifies hostsystems that have been contended for
     long periods of time.
-  dependencies:
-    knowledges:
-      - name: vmware-resolved-hostsystems
-    datasources:
-      - name: vrops-hostsystem-cpu-contention-long-term-percentage
+  inputs:
+    - var: metrics
+      datasource: vrops-hostsystem-cpu-contention-long-term-percentage
+    - var: resolvedHostsystems
+      knowledge: vmware-resolved-hostsystems
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
@@ -60,16 +105,34 @@ metadata:
   name: vmware-short-term-contended-hosts
 spec:
   schedulingDomain: nova
-  extractor:
-    name: vrops_hostsystem_contention_short_term_extractor
+  expression:
+    run: |
+      let computeHostByHostsystem = groupBy(resolvedHostsystems, .VROpsHostsystem);
+      metrics
+      | groupBy(.HostSystem)
+      | values()
+      | filter(len(computeHostByHostsystem[#[0].HostSystem] ?? []) > 0)
+      | map(let o = #; {
+          computeHost: last(computeHostByHostsystem[#[0].HostSystem]).NovaComputeHost,
+          avg: mean(map(#, .Value)),
+          max: max(map(#, .Value)),
+        })
+      | groupBy(.computeHost)
+      | values()
+      | map(let o = #; {
+          ComputeHost:      #[0].computeHost,
+          AvgCPUContention: mean(map(#, .avg)),
+          MaxCPUContention: max(max(map(#, .max)), 0),
+        })
+      | sortBy(.ComputeHost)
   description: |
     This knowledge identifies hostsystems that have been contended for short
     periods of time.
-  dependencies:
-    knowledges:
-      - name: vmware-resolved-hostsystems
-    datasources:
-      - name: vrops-hostsystem-cpu-contention-short-term-percentage
+  inputs:
+    - var: metrics
+      datasource: vrops-hostsystem-cpu-contention-short-term-percentage
+    - var: resolvedHostsystems
+      knowledge: vmware-resolved-hostsystems
 
 
 ---
@@ -85,10 +148,15 @@ spec:
     This knowledge extracts host-to-project pinning relationships from Nova
     aggregates.
   recency: "5m"
-  dependencies:
-    datasources:
-      - name: nova-aggregates
-      - name: nova-hypervisors
+  inputs:
+    - var: aggregates
+      datasource: nova-aggregates
+    - var: hypervisors
+      datasource: nova-hypervisors
+    - var: projects
+      datasource: identity-projects
+    - var: domains
+      datasource: identity-domains
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
@@ -96,16 +164,41 @@ metadata:
   name: host-utilization
 spec:
   schedulingDomain: nova
-  extractor:
-    name: host_utilization_extractor
+  expression:
+    run: |
+      let inventory = groupBy(inventoryUsages, .ResourceProviderUUID + "\x00" + .InventoryClassName);
+      hypervisors
+      | filter(let h = #; all(["MEMORY_MB", "VCPU", "DISK_GB"], len(inventory[h.ID + "\x00" + #] ?? []) > 0))
+      | map(
+          let h = #;
+          let ram = last(inventory[h.ID + "\x00MEMORY_MB"]);
+          let vcpu = last(inventory[h.ID + "\x00VCPU"]);
+          let disk = last(inventory[h.ID + "\x00DISK_GB"]);
+          let ramTotal = (ram.Total - ram.Reserved) * ram.AllocationRatio;
+          let vcpuTotal = (vcpu.Total - vcpu.Reserved) * vcpu.AllocationRatio;
+          let diskTotal = (disk.Total - disk.Reserved) * disk.AllocationRatio;
+          {
+            computeHost:            h.ServiceHost,
+            vcpusUsed:              vcpu.Used,
+            vcpusUtilizedPct:       vcpuTotal == 0 ? 0 : vcpu.Used / vcpuTotal * 100,
+            totalVCPUsAllocatable:  vcpuTotal,
+            ramUsedMB:              ram.Used,
+            ramUtilizedPct:         ramTotal == 0 ? 0 : ram.Used / ramTotal * 100,
+            totalRAMAllocatableMB:  ramTotal,
+            diskUsedGB:             disk.Used,
+            diskUtilizedPct:        diskTotal == 0 ? 0 : disk.Used / diskTotal * 100,
+            totalDiskAllocatableGB: diskTotal,
+          })
+      | sortBy(.computeHost)
   description: |
     This knowledge calculates how much space is available on each host.
     Note that this doesn't consider reservations placed on the hosts.
   recency: "60s"
-  dependencies:
-    datasources:
-      - name: nova-hypervisors
-      - name: placement-resource-provider-inventory-usages
+  inputs:
+    - var: hypervisors
+      datasource: nova-hypervisors
+    - var: inventoryUsages
+      datasource: placement-resource-provider-inventory-usages
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
@@ -113,15 +206,27 @@ metadata:
   name: host-capabilities
 spec:
   schedulingDomain: nova
-  extractor:
-    name: host_capabilities_extractor
+  expression:
+    run: |
+      let traitsByProvider = groupBy(traits, .ResourceProviderUUID);
+      hypervisors
+      | filter(len(traitsByProvider[.ID] ?? []) > 0)
+      | groupBy(.ServiceHost + "\x00" + .HypervisorType)
+      | values()
+      | map(let g = #; {
+          ComputeHost:    g[0].ServiceHost,
+          HypervisorType: g[0].HypervisorType,
+          Traits:         g | map(traitsByProvider[.ID]) | flatten() | map(.Name) | sort() | join(","),
+        })
+      | sortBy(.ComputeHost + "\x00" + .HypervisorType)
   description: |
     This knowledge extracts compute capabilities of each host.
   recency: "60s"
-  dependencies:
-    datasources:
-      - name: nova-hypervisors
-      - name: placement-resource-provider-traits
+  inputs:
+    - var: hypervisors
+      datasource: nova-hypervisors
+    - var: traits
+      datasource: placement-resource-provider-traits
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
@@ -135,11 +240,13 @@ spec:
     This knowledge calculates how long VMs have been running on their host
     until they were migrated away.
   recency: "60s"
-  dependencies:
-    datasources:
-      - name: nova-flavors
-      - name: nova-servers
-      - name: nova-migrations
+  inputs:
+    - var: migrations
+      datasource: nova-migrations
+    - var: servers
+      datasource: nova-servers
+    - var: flavors
+      datasource: nova-flavors
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
@@ -153,11 +260,13 @@ spec:
     This knowledge calculates how long VMs have been running until they were
     deleted. The information is aggregated in histogram buckets.
   recency: "60s"
-  dependencies:
-    datasources:
-      - name: nova-flavors
-      - name: nova-deleted-servers
-      - name: nova-servers
+  inputs:
+    - var: servers
+      datasource: nova-servers
+    - var: deletedServers
+      datasource: nova-deleted-servers
+    - var: flavors
+      datasource: nova-flavors
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
@@ -165,15 +274,25 @@ metadata:
   name: host-az
 spec:
   schedulingDomain: nova
-  extractor:
-    name: host_az_extractor
+  expression:
+    run: |
+      let azsByHost = aggregates
+        | filter(.ComputeHost != nil && .AvailabilityZone != nil)
+        | groupBy(.ComputeHost + "");
+      hypervisors
+      | map(let o = #; {
+          ComputeHost:      .ServiceHost,
+          AvailabilityZone: (azsByHost[.ServiceHost] ?? []) | map(.AvailabilityZone + "") | sort() | first(),
+        })
+      | sortBy(.ComputeHost)
   description: |
     This knowledge extracts which availability zone each host belongs to.
   recency: "60s"
-  dependencies:
-    datasources:
-      - name: nova-hypervisors
-      - name: nova-aggregates
+  inputs:
+    - var: hypervisors
+      datasource: nova-hypervisors
+    - var: aggregates
+      datasource: nova-aggregates
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
@@ -187,8 +306,16 @@ spec:
     This knowledge extracts details of VMware compute hosts. KVM hosts are
     served by a dedicated CRD and ironic hosts are excluded.
   recency: "60s"
-  dependencies:
-    datasources:
-      - name: placement-resource-provider-traits
-      - name: placement-resource-provider-inventory-usages
-      - name: nova-hypervisors
+  inputs:
+    - var: hypervisors
+      datasource: nova-hypervisors
+    - var: traits
+      datasource: placement-resource-provider-traits
+    - var: inventoryUsages
+      datasource: placement-resource-provider-inventory-usages
+    - var: aggregates
+      datasource: nova-aggregates
+    - var: pinnedProjects
+      knowledge: host-pinned-projects
+    - var: hostAZs
+      knowledge: host-az

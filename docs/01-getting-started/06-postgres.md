@@ -34,9 +34,9 @@ identity and a persistent volume.
 ## No migration tool — Go creates the schema
 
 There is deliberately **no SQL migration framework**. The schema is created by the Go code at startup:
-`internal/knowledge/db` maps structs to tables through `gorp`, and a sync plugin calls
-`DB.CreateTable` (backed by `DB.AddTable`) for the tables it owns. A datasource or extractor that needs
-a table ensures it on startup; there is no separate `migrate` step to run.
+`pkg/knowledge/store/postgres` maps structs to tables through `gorp` and creates a model's table the
+first time objects of it are listed or replaced through the store. There is no separate `migrate` step
+to run.
 
 > [!NOTE]
 > Because the tables follow the Go structs, a schema change is a *code* change: edit the struct, and

@@ -6,9 +6,9 @@ metadata:
 spec:
   schedulingDomain: nova
   impl: vmware_host_contention_kpi
-  dependencies:
-    knowledges:
-      - name: vmware-long-term-contended-hosts
+  inputs:
+    - var: vmwareLongTermContendedHosts
+      knowledge: vmware-long-term-contended-hosts
   description: |
     This KPI tracks the number of VMware hostsystems that have experienced
     long-term contention.
@@ -20,9 +20,9 @@ metadata:
 spec:
   schedulingDomain: nova
   impl: vmware_project_noisiness_kpi
-  dependencies:
-    knowledges:
-      - name: vmware-project-noisiness
+  inputs:
+    - var: vmwareProjectNoisiness
+      knowledge: vmware-project-noisiness
   description: |
     This KPI tracks how noisy projects are in terms of CPU contention
     on their VMs' hostsystems.
@@ -34,9 +34,9 @@ metadata:
 spec:
   schedulingDomain: nova
   impl: vm_migration_statistics_kpi
-  dependencies:
-    knowledges:
-      - name: vm-host-residency
+  inputs:
+    - var: vmHostResidency
+      knowledge: vm-host-residency
   description: |
     This KPI tracks statistics about VM migrations.
 ---
@@ -47,9 +47,9 @@ metadata:
 spec:
   schedulingDomain: nova
   impl: vm_life_span_kpi
-  dependencies:
-    knowledges:
-      - name: vm-life-span
+  inputs:
+    - var: vmLifeSpan
+      knowledge: vm-life-span
   description: |
     This KPI tracks the life span of VMs.
 ---
@@ -60,10 +60,11 @@ metadata:
 spec:
   schedulingDomain: nova
   impl: vm_commitments_kpi
-  dependencies:
-    datasources:
-      - name: limes-project-commitments
-      - name: nova-flavors
+  inputs:
+    - var: commitments
+      datasource: limes-project-commitments
+    - var: flavors
+      datasource: nova-flavors
   description: |
     This KPI tracks VM commitments based on project commitments and VM flavors.
 ---
@@ -74,10 +75,11 @@ metadata:
 spec:
   schedulingDomain: nova
   impl: vm_faults_kpi
-  dependencies:
-    datasources:
-      - name: nova-servers
-      - name: nova-flavors
+  inputs:
+    - var: servers
+      datasource: nova-servers
+    - var: flavors
+      datasource: nova-flavors
   description: |
     This kpi tracks vm faults in the datacenter. It exposes helpful information
     about the faults, such as the availability zone, hypervisor type, vm state,
@@ -154,14 +156,17 @@ metadata:
 spec:
   schedulingDomain: nova
   impl: vmware_project_utilization_kpi
-  dependencies:
-    datasources:
-      - name: nova-servers
-      - name: nova-flavors
-      - name: identity-projects
-      - name: identity-domains
-    knowledges:
-      - name: vmware-host-details
+  inputs:
+    - var: servers
+      datasource: nova-servers
+    - var: flavors
+      datasource: nova-flavors
+    - var: projects
+      datasource: identity-projects
+    - var: domains
+      datasource: identity-domains
+    - var: hostDetails
+      knowledge: vmware-host-details
   description: |
     This KPI tracks the resource utilization of projects running VMs on VMware hosts.
 ---
@@ -172,13 +177,17 @@ metadata:
 spec:
   schedulingDomain: nova
   impl: vmware_project_commitments_kpi
-  dependencies:
-    datasources:
-      - name: nova-servers
-      - name: nova-flavors
-      - name: limes-project-commitments
-      - name: identity-domains
-      - name: identity-projects
+  inputs:
+    - var: servers
+      datasource: nova-servers
+    - var: flavors
+      datasource: nova-flavors
+    - var: commitments
+      datasource: limes-project-commitments
+    - var: domains
+      datasource: identity-domains
+    - var: projects
+      datasource: identity-projects
   description: |
     This KPI tracks the resource commitments of projects running VMs on VMware hosts.
 ---
@@ -189,9 +198,10 @@ metadata:
 spec:
   schedulingDomain: nova
   impl: vmware_host_capacity_kpi
-  dependencies:
-    knowledges:
-      - name: vmware-host-details
-      - name: host-utilization
+  inputs:
+    - var: hostDetails
+      knowledge: vmware-host-details
+    - var: hostUtilization
+      knowledge: host-utilization
   description: |
     This KPI tracks the capacity and utilization of VMware hosts in terms of CPU, RAM, and disk resources.

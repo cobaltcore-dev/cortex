@@ -7,7 +7,6 @@ import (
 	"context"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
@@ -26,8 +25,8 @@ func (k *VMwareHostCapacityKPI) GetName() string {
 	return "vmware_host_capacity_kpi"
 }
 
-func (k *VMwareHostCapacityKPI) Init(dbConn *db.DB, c client.Client, opts conf.RawOpts) error {
-	if err := k.BaseKPI.Init(dbConn, c, opts); err != nil {
+func (k *VMwareHostCapacityKPI) Init(inputs plugins.Inputs, c client.Client, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(inputs, c, opts); err != nil {
 		return err
 	}
 	k.capacityUsagePerHost = prometheus.NewDesc(

@@ -8,7 +8,6 @@ import (
 	"strconv"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
@@ -29,8 +28,8 @@ func (VMLifeSpanKPI) GetName() string {
 	return "vm_life_span_kpi"
 }
 
-func (k *VMLifeSpanKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
-	if err := k.BaseKPI.Init(db, client, opts); err != nil {
+func (k *VMLifeSpanKPI) Init(inputs plugins.Inputs, client client.Client, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(inputs, client, opts); err != nil {
 		return err
 	}
 	k.lifeSpanDesc = prometheus.NewDesc(

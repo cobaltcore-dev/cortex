@@ -153,9 +153,9 @@ pattern: each plugin file has a `func init()` that registers a factory function 
 edit. The `Index` maps live in:
 
 - **Scheduling plugins** — `internal/scheduling/<domain>/plugins/filters/`, `.../weighers/`, `.../detectors/`
-- **Knowledge extractors** — `internal/knowledge/extractor/plugins/zz_index.go`
+- **Knowledge extractors** — `pkg/knowledge/extractor/zz_index.go` (registered with `extractor.Register`)
 - **KPIs** — `internal/knowledge/kpis/plugins/zz_index.go`
-- **Datasources** — e.g. `internal/knowledge/datasources/plugins/openstack/zz_index.go`
+- **Datasources** — e.g. `pkg/knowledge/datasources/openstack/zz_index.go`
 
 A per-domain admission webhook validates a `Pipeline` when it is applied: it **rejects** a step whose
 parameters are invalid or a step of the wrong kind for the pipeline type, but an **unknown step name is

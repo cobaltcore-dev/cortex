@@ -7,11 +7,10 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/internal/knowledge/db/testing"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/identity"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/inputs"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -27,53 +26,14 @@ func hanaStackingMetric(computeHost, az, projectID, projectName, domainID, domai
 	return collectedKVMMetric{Name: "cortex_kvm_hana_stacking_ram_bytes", Labels: labels, Value: value}
 }
 
-func setupHanaStackingDB(t *testing.T, servers []nova.Server, projects []identity.Project, domains []identity.Domain, flavors []nova.Flavor) db.DB {
-	t.Helper()
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	t.Cleanup(dbEnv.Close)
-
-	if err := testDB.CreateTable(
-		testDB.AddTable(nova.Server{}),
-		testDB.AddTable(identity.Project{}),
-		testDB.AddTable(identity.Domain{}),
-		testDB.AddTable(nova.Flavor{}),
-	); err != nil {
-		t.Fatalf("failed to create tables: %v", err)
-	}
-
-	var mockData []any
-	for i := range servers {
-		mockData = append(mockData, &servers[i])
-	}
-	for i := range projects {
-		mockData = append(mockData, &projects[i])
-	}
-	for i := range domains {
-		mockData = append(mockData, &domains[i])
-	}
-	for i := range flavors {
-		mockData = append(mockData, &flavors[i])
-	}
-	if len(mockData) > 0 {
-		if err := testDB.Insert(mockData...); err != nil {
-			t.Fatalf("expected no error inserting data, got %v", err)
-		}
-	}
-	return testDB
-}
-
 func TestKVMHanaStackingKPI_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	kpi := &KVMHanaStackingKPI{}
-	if err := kpi.Init(&testDB, nil, conf.NewRawOpts("{}")); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
 
-func TestKVMHanaStackingKPI_queryHanaStacking(t *testing.T) {
+func TestHanaStacking(t *testing.T) {
 	tests := []struct {
 		name     string
 		servers  []nova.Server
@@ -221,18 +181,9 @@ func TestKVMHanaStackingKPI_queryHanaStacking(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			testDB := setupHanaStackingDB(t, tt.servers, tt.projects, tt.domains, tt.flavors)
-
-			kpi := &KVMHanaStackingKPI{}
-			if err := kpi.Init(&testDB, buildKVMHypervisorClient(t, []hv1.Hypervisor{}).Build(), conf.NewRawOpts("{}")); err != nil {
-				t.Fatalf("expected no error on Init, got %v", err)
-			}
-
-			rows, err := kpi.queryHanaStacking()
-			if err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
-
+			rows := hanaStacking(KVMHanaStackingInputs{
+				Servers: tt.servers, Flavors: tt.flavors, Projects: tt.projects, Domains: tt.domains,
+			})
 			if len(rows) != len(tt.expected) {
 				t.Fatalf("expected %d rows, got %d", len(tt.expected), len(rows))
 			}
@@ -361,11 +312,10 @@ func TestKVMHanaStackingKPI_Collect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			testDB := setupHanaStackingDB(t, tt.servers, tt.projects, tt.domains, tt.flavors)
-
+			in := inputs.Static{"servers": tt.servers, "flavors": tt.flavors, "projects": tt.projects, "domains": tt.domains}
 			client := buildKVMHypervisorClient(t, tt.hypervisors)
 			kpi := &KVMHanaStackingKPI{}
-			if err := kpi.Init(&testDB, client.Build(), conf.NewRawOpts("{}")); err != nil {
+			if err := kpi.Init(in, client.Build(), conf.NewRawOpts("{}")); err != nil {
 				t.Fatalf("expected no error on Init, got %v", err)
 			}
 

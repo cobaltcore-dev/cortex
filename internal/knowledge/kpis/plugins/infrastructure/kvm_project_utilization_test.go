@@ -7,11 +7,10 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/internal/knowledge/db/testing"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/identity"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/inputs"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -73,11 +72,8 @@ func buildKVMHypervisorClient(t *testing.T, hvs []hv1.Hypervisor) *fake.ClientBu
 }
 
 func TestKVMProjectUtilizationKPI_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	kpi := &KVMProjectUtilizationKPI{}
-	if err := kpi.Init(&testDB, nil, conf.NewRawOpts("{}")); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
@@ -111,7 +107,7 @@ func TestKVMProjectUtilizationKPI_getKVMHosts(t *testing.T) {
 	}
 }
 
-func TestKVMProjectUtilizationKPI_queryProjectInstanceCount(t *testing.T) {
+func TestProjectInstanceCounts_KVM(t *testing.T) {
 	tests := []struct {
 		name           string
 		servers        []nova.Server
@@ -224,43 +220,7 @@ func TestKVMProjectUtilizationKPI_queryProjectInstanceCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dbEnv := testlibDB.SetupDBEnv(t)
-			testDB := db.DB{DbMap: dbEnv.DbMap}
-			defer dbEnv.Close()
-
-			if err := testDB.CreateTable(
-				testDB.AddTable(nova.Server{}),
-				testDB.AddTable(identity.Project{}),
-				testDB.AddTable(identity.Domain{}),
-			); err != nil {
-				t.Fatalf("failed to create tables: %v", err)
-			}
-
-			var mockData []any
-			for i := range tt.servers {
-				mockData = append(mockData, &tt.servers[i])
-			}
-			for i := range tt.projects {
-				mockData = append(mockData, &tt.projects[i])
-			}
-			for i := range tt.domains {
-				mockData = append(mockData, &tt.domains[i])
-			}
-			if len(mockData) > 0 {
-				if err := testDB.Insert(mockData...); err != nil {
-					t.Fatalf("expected no error, got %v", err)
-				}
-			}
-
-			client := buildKVMHypervisorClient(t, []hv1.Hypervisor{})
-			kpi := &KVMProjectUtilizationKPI{}
-			if err := kpi.Init(&testDB, client.Build(), conf.NewRawOpts("{}")); err != nil {
-				t.Fatalf("expected no error on Init, got %v", err)
-			}
-			counts, err := kpi.queryProjectInstanceCount()
-			if err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
+			counts := projectInstanceCounts(tt.servers, projectDetailsByID(tt.projects, tt.domains), isKVMComputeHost)
 
 			if len(counts) != len(tt.expectedCounts) {
 				t.Fatalf("expected %d counts, got %d", len(tt.expectedCounts), len(counts))
@@ -280,7 +240,7 @@ func TestKVMProjectUtilizationKPI_queryProjectInstanceCount(t *testing.T) {
 	}
 }
 
-func TestKVMProjectUtilizationKPI_queryProjectCapacityUsage(t *testing.T) {
+func TestProjectCapacityUsages_KVM(t *testing.T) {
 	tests := []struct {
 		name           string
 		servers        []nova.Server
@@ -406,47 +366,7 @@ func TestKVMProjectUtilizationKPI_queryProjectCapacityUsage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dbEnv := testlibDB.SetupDBEnv(t)
-			testDB := db.DB{DbMap: dbEnv.DbMap}
-			defer dbEnv.Close()
-
-			if err := testDB.CreateTable(
-				testDB.AddTable(nova.Server{}),
-				testDB.AddTable(identity.Project{}),
-				testDB.AddTable(identity.Domain{}),
-				testDB.AddTable(nova.Flavor{}),
-			); err != nil {
-				t.Fatalf("failed to create tables: %v", err)
-			}
-
-			var mockData []any
-			for i := range tt.servers {
-				mockData = append(mockData, &tt.servers[i])
-			}
-			for i := range tt.projects {
-				mockData = append(mockData, &tt.projects[i])
-			}
-			for i := range tt.domains {
-				mockData = append(mockData, &tt.domains[i])
-			}
-			for i := range tt.flavors {
-				mockData = append(mockData, &tt.flavors[i])
-			}
-			if len(mockData) > 0 {
-				if err := testDB.Insert(mockData...); err != nil {
-					t.Fatalf("expected no error, got %v", err)
-				}
-			}
-
-			client := buildKVMHypervisorClient(t, []hv1.Hypervisor{})
-			kpi := &KVMProjectUtilizationKPI{}
-			if err := kpi.Init(&testDB, client.Build(), conf.NewRawOpts("{}")); err != nil {
-				t.Fatalf("expected no error on Init, got %v", err)
-			}
-			usages, err := kpi.queryProjectCapacityUsage()
-			if err != nil {
-				t.Fatalf("expected no error, got %v", err)
-			}
+			usages := projectCapacityUsages(tt.servers, tt.flavors, projectDetailsByID(tt.projects, tt.domains), isKVMComputeHost)
 
 			if len(usages) != len(tt.expectedUsages) {
 				t.Fatalf("expected %d usages, got %d", len(tt.expectedUsages), len(usages))
@@ -682,41 +602,10 @@ func TestKVMProjectUtilizationKPI_Collect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dbEnv := testlibDB.SetupDBEnv(t)
-			testDB := db.DB{DbMap: dbEnv.DbMap}
-			defer dbEnv.Close()
-
-			if err := testDB.CreateTable(
-				testDB.AddTable(nova.Server{}),
-				testDB.AddTable(identity.Project{}),
-				testDB.AddTable(identity.Domain{}),
-				testDB.AddTable(nova.Flavor{}),
-			); err != nil {
-				t.Fatalf("failed to create tables: %v", err)
-			}
-
-			var mockData []any
-			for i := range tt.servers {
-				mockData = append(mockData, &tt.servers[i])
-			}
-			for i := range tt.projects {
-				mockData = append(mockData, &tt.projects[i])
-			}
-			for i := range tt.domains {
-				mockData = append(mockData, &tt.domains[i])
-			}
-			for i := range tt.flavors {
-				mockData = append(mockData, &tt.flavors[i])
-			}
-			if len(mockData) > 0 {
-				if err := testDB.Insert(mockData...); err != nil {
-					t.Fatalf("expected no error inserting data, got %v", err)
-				}
-			}
-
+			in := inputs.Static{"servers": tt.servers, "flavors": tt.flavors, "projects": tt.projects, "domains": tt.domains}
 			client := buildKVMHypervisorClient(t, tt.hypervisors)
 			kpi := &KVMProjectUtilizationKPI{}
-			if err := kpi.Init(&testDB, client.Build(), conf.NewRawOpts("{}")); err != nil {
+			if err := kpi.Init(in, client.Build(), conf.NewRawOpts("{}")); err != nil {
 				t.Fatalf("expected no error on Init, got %v", err)
 			}
 

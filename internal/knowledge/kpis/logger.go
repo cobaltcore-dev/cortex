@@ -4,7 +4,6 @@
 package kpis
 
 import (
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/prometheus/client_golang/prometheus"
@@ -30,9 +29,9 @@ func (l kpilogger) Collect(ch chan<- prometheus.Metric) {
 	log.Info("kpi: collected", "name", l.kpi.GetName())
 }
 
-func (l kpilogger) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
+func (l kpilogger) Init(inputs plugins.Inputs, client client.Client, opts conf.RawOpts) error {
 	log.Info("kpi: initializing", "name", l.kpi.GetName())
-	return l.kpi.Init(db, client, opts)
+	return l.kpi.Init(inputs, client, opts)
 }
 
 func (l kpilogger) GetName() string {

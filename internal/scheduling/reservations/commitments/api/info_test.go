@@ -108,7 +108,7 @@ func TestHandleInfo_InvalidFlavorMemory(t *testing.T) {
 		ObjectMeta: v1.ObjectMeta{Name: "flavor-groups"},
 		Spec: v1alpha1.KnowledgeSpec{
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
-			Extractor:        v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
+			Extractor:        &v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
 		},
 		Status: v1alpha1.KnowledgeStatus{
 			Conditions:        []v1.Condition{{Type: v1alpha1.KnowledgeConditionReady, Status: "True"}},
@@ -179,7 +179,7 @@ func TestHandleInfo_ResourceFlagsFromConfig(t *testing.T) {
 		ObjectMeta: v1.ObjectMeta{Name: "flavor-groups"},
 		Spec: v1alpha1.KnowledgeSpec{
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
-			Extractor:        v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
+			Extractor:        &v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
 		},
 		Status: v1alpha1.KnowledgeStatus{
 			Conditions:        []v1.Condition{{Type: v1alpha1.KnowledgeConditionReady, Status: "True"}},
@@ -387,7 +387,7 @@ func TestHandleInfo_AllResourcesAZSeparated(t *testing.T) {
 		ObjectMeta: v1.ObjectMeta{Name: "flavor-groups"},
 		Spec: v1alpha1.KnowledgeSpec{
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
-			Extractor:        v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
+			Extractor:        &v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
 		},
 		Status: v1alpha1.KnowledgeStatus{
 			Conditions:        []v1.Condition{{Type: v1alpha1.KnowledgeConditionReady, Status: "True"}},

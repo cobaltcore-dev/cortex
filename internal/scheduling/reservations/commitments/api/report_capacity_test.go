@@ -681,7 +681,7 @@ func createEmptyFlavorGroupKnowledge() *v1alpha1.Knowledge {
 		ObjectMeta: v1.ObjectMeta{Name: "flavor-groups"},
 		Spec: v1alpha1.KnowledgeSpec{
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
-			Extractor:        v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
+			Extractor:        &v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
 		},
 		Status: v1alpha1.KnowledgeStatus{
 			Conditions: []v1.Condition{{Type: v1alpha1.KnowledgeConditionReady, Status: "True"}},
@@ -745,7 +745,7 @@ func createTestFlavorGroupKnowledge(t *testing.T) *v1alpha1.Knowledge {
 		ObjectMeta: v1.ObjectMeta{Name: "flavor-groups"},
 		Spec: v1alpha1.KnowledgeSpec{
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
-			Extractor:        v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
+			Extractor:        &v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
 		},
 		Status: v1alpha1.KnowledgeStatus{
 			Conditions: []v1.Condition{{Type: v1alpha1.KnowledgeConditionReady, Status: "True"}},
@@ -775,7 +775,7 @@ func createVariableRatioFlavorGroupKnowledge(t *testing.T, flavorMemMiB int) *v1
 		ObjectMeta: v1.ObjectMeta{Name: "flavor-groups"},
 		Spec: v1alpha1.KnowledgeSpec{
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
-			Extractor:        v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
+			Extractor:        &v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
 		},
 		Status: v1alpha1.KnowledgeStatus{
 			Conditions: []v1.Condition{{Type: v1alpha1.KnowledgeConditionReady, Status: "True", Reason: "ExtractorSucceeded"}},

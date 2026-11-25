@@ -65,7 +65,7 @@ func newFlavorGroupKnowledge(t *testing.T, groupName string, smallestMemoryMB ui
 		ObjectMeta: metav1.ObjectMeta{Name: "flavor-groups"},
 		Spec: v1alpha1.KnowledgeSpec{
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
-			Extractor:        v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
+			Extractor:        &v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
 		},
 		Status: v1alpha1.KnowledgeStatus{
 			Raw: raw,
@@ -923,7 +923,7 @@ func TestReconcileAll_FlavorGroupsKnowledgeNotReady(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "flavor-groups"},
 		Spec: v1alpha1.KnowledgeSpec{
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
-			Extractor:        v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
+			Extractor:        &v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
 		},
 		Status: v1alpha1.KnowledgeStatus{
 			Conditions: []metav1.Condition{

@@ -569,11 +569,11 @@ func (s *lazyDBVMSource) get(ctx context.Context) (*DBVMSource, error) {
 	if s.inner != nil {
 		return s.inner, nil
 	}
-	postgresReader, err := external.NewPostgresReader(ctx, s.k8sClient, s.datasourceName)
+	storeReader, err := external.NewStoreReader(ctx, s.k8sClient, s.datasourceName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to datasource %s: %w", s.datasourceName, err)
 	}
-	s.inner = NewDBVMSource(external.NewNovaReader(postgresReader))
+	s.inner = NewDBVMSource(external.NewNovaReader(storeReader))
 	return s.inner, nil
 }
 

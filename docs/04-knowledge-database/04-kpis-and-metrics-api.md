@@ -13,11 +13,12 @@ those metrics actually surface, because it is *not* a separate API server.
 
 ## KPIs are Prometheus collectors, not a service
 
-A KPI implements the `KPI` interface (`internal/knowledge/kpis/plugins`): `Init(db, client, opts)`,
+A KPI implements the `KPI` interface (`internal/knowledge/kpis/plugins`): `Init(inputs, client, opts)`,
 `Describe(ch)`, and `Collect(ch)` — the standard Prometheus collector shape — plus `GetName()`. The KPI
-controller (`internal/knowledge/kpis/controller.go`) registers each active KPI directly on
-controller-runtime's shared metrics registry (`sigs.k8s.io/controller-runtime/pkg/metrics`) and unregisters
-it when the resource goes away.
+controller (`internal/knowledge/kpis/controller.go`) registers each KPI once all datasources and knowledges
+in its `spec.inputs` are ready, directly on controller-runtime's shared metrics registry (`sigs.k8s.io/controller-runtime/pkg/metrics`) and unregisters
+it when the resource goes away. On every `Collect`, a KPI resolves its inputs into a struct with
+`input:"<var>"` tagged fields, the same mechanism as [Go extractors](03-feature-extraction.md#go-extractors).
 
 > [!IMPORTANT]
 > There is no dedicated "Metrics API" HTTP server for KPIs. Because the controller registers them on the

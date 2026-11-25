@@ -5,12 +5,12 @@ package infrastructure
 
 import (
 	"context"
+	"strings"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/identity"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -19,15 +19,23 @@ import (
 
 var log = logf.Log.WithName("infrastructure")
 
-const hanaKVMFlavorPattern = "hana_k_%"
+const hanaKVMFlavorPrefix = "hana_k_"
 
 type kvmHanaStackingRow struct {
-	ProjectID   string  `db:"project_id"`
-	ProjectName string  `db:"project_name"`
-	DomainID    string  `db:"domain_id"`
-	DomainName  string  `db:"domain_name"`
-	ComputeHost string  `db:"compute_host"`
-	TotalRAMMB  float64 `db:"total_ram_mb"`
+	ProjectID   string
+	ProjectName string
+	DomainID    string
+	DomainName  string
+	ComputeHost string
+	TotalRAMMB  float64
+}
+
+// Inputs of the kvm hana stacking kpi.
+type KVMHanaStackingInputs struct {
+	Servers  []nova.Server      `input:"servers"`
+	Flavors  []nova.Flavor      `input:"flavors"`
+	Projects []identity.Project `input:"projects"`
+	Domains  []identity.Domain  `input:"domains"`
 }
 
 type KVMHanaStackingKPI struct {
@@ -39,8 +47,8 @@ func (k *KVMHanaStackingKPI) GetName() string {
 	return "kvm_hana_stacking_kpi"
 }
 
-func (k *KVMHanaStackingKPI) Init(dbConn *db.DB, c client.Client, opts conf.RawOpts) error {
-	if err := k.BaseKPI.Init(dbConn, c, opts); err != nil {
+func (k *KVMHanaStackingKPI) Init(inputs plugins.Inputs, c client.Client, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(inputs, c, opts); err != nil {
 		return err
 	}
 	k.ramPerProjectAndHost = prometheus.NewDesc(
@@ -56,17 +64,18 @@ func (k *KVMHanaStackingKPI) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (k *KVMHanaStackingKPI) Collect(ch chan<- prometheus.Metric) {
+	var in KVMHanaStackingInputs
+	if err := k.ResolveInputs(context.Background(), &in); err != nil {
+		log.Error(err, "kvm_hana_stacking: failed to resolve inputs")
+		return
+	}
 	hosts, err := k.getKVMHosts()
 	if err != nil {
 		log.Error(err, "kvm_hana_stacking: failed to get KVM hosts")
 		return
 	}
 
-	rows, err := k.queryHanaStacking()
-	if err != nil {
-		log.Error(err, "kvm_hana_stacking: failed to query HANA stacking")
-		return
-	}
+	rows := hanaStacking(in)
 
 	for _, row := range rows {
 		host, ok := hosts[row.ComputeHost]
@@ -93,29 +102,37 @@ func (k *KVMHanaStackingKPI) getKVMHosts() (map[string]kvmHost, error) {
 	return hosts, nil
 }
 
-func (k *KVMHanaStackingKPI) queryHanaStacking() ([]kvmHanaStackingRow, error) {
-	query := `
-		SELECT
-			s.tenant_id AS project_id,
-			COALESCE(p.name, '') AS project_name,
-			COALESCE(p.domain_id, '') AS domain_id,
-			COALESCE(d.name, '') AS domain_name,
-			s.os_ext_srv_attr_host AS compute_host,
-			COALESCE(SUM(f.ram), 0) AS total_ram_mb
-		FROM ` + nova.Server{}.TableName() + ` s
-		LEFT JOIN ` + nova.Flavor{}.TableName() + ` f ON s.flavor_name = f.name
-		LEFT JOIN ` + identity.Project{}.TableName() + ` p ON p.id = s.tenant_id
-		LEFT JOIN ` + identity.Domain{}.TableName() + ` d ON d.id = p.domain_id
-		WHERE s.status NOT IN ('DELETED', 'ERROR')
-		  AND s.os_ext_srv_attr_host LIKE '` + kvmComputeHostPattern + `'
-		  AND s.flavor_name LIKE '` + hanaKVMFlavorPattern + `'
-		GROUP BY s.tenant_id, p.name, p.domain_id, d.name, s.os_ext_srv_attr_host
-	`
-	var rows []kvmHanaStackingRow
-	if _, err := k.DB.Select(&rows, query); err != nil {
-		return nil, err
+// Sum up the memory of active HANA instances on KVM hosts per project and
+// compute host. Instances with unknown flavors are counted without memory.
+func hanaStacking(in KVMHanaStackingInputs) []kvmHanaStackingRow {
+	projects := projectDetailsByID(in.Projects, in.Domains)
+	flavorsByName := make(map[string]nova.Flavor, len(in.Flavors))
+	for _, f := range in.Flavors {
+		flavorsByName[f.Name] = f
 	}
-	return rows, nil
+	type key struct{ projectID, computeHost string }
+	ramByKey := make(map[key]float64)
+	for _, s := range in.Servers {
+		if !isActiveServer(s) || !isKVMComputeHost(s.OSEXTSRVATTRHost) ||
+			!strings.HasPrefix(s.FlavorName, hanaKVMFlavorPrefix) {
+			continue
+		}
+		k := key{s.TenantID, s.OSEXTSRVATTRHost}
+		ramByKey[k] += float64(flavorsByName[s.FlavorName].RAM)
+	}
+	rows := make([]kvmHanaStackingRow, 0, len(ramByKey))
+	for k, ram := range ramByKey {
+		p := projects[k.projectID]
+		rows = append(rows, kvmHanaStackingRow{
+			ProjectID:   k.projectID,
+			ProjectName: p.ProjectName,
+			DomainID:    p.DomainID,
+			DomainName:  p.DomainName,
+			ComputeHost: k.computeHost,
+			TotalRAMMB:  ram,
+		})
+	}
+	return rows
 }
 
 func init() {

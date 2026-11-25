@@ -7,8 +7,8 @@ import (
 	"context"
 	"fmt"
 
-	identity "github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
-	nova "github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
+	identity "github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/identity"
+	nova "github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
 )
 
 // NovaReaderInterface defines the methods needed to read Nova data.
@@ -29,137 +29,142 @@ type NovaReaderInterface interface {
 	GetProjectDomainNames(ctx context.Context) (map[string]string, error)
 }
 
-// NovaReader provides read access to Nova data stored in the database.
-// It uses a PostgresReader to connect to the database.
+// NovaReader provides read access to Nova data persisted in a store.
 type NovaReader struct {
-	*PostgresReader
+	*StoreReader
 }
 
-// NewNovaReader creates a new NovaReader from a PostgresReader.
-func NewNovaReader(reader *PostgresReader) *NovaReader {
-	return &NovaReader{PostgresReader: reader}
+// NewNovaReader creates a new NovaReader from a StoreReader.
+func NewNovaReader(reader *StoreReader) *NovaReader {
+	return &NovaReader{StoreReader: reader}
 }
 
-// GetAllServers returns all Nova servers from the database.
+// GetAllServers returns all Nova servers.
 func (r *NovaReader) GetAllServers(ctx context.Context) ([]nova.Server, error) {
-	var servers []nova.Server
-	query := "SELECT * FROM " + nova.Server{}.TableName()
-	if err := r.Select(ctx, &servers, query); err != nil {
-		return nil, fmt.Errorf("failed to query servers: %w", err)
+	servers, err := listAll[nova.Server](ctx, r.StoreReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list servers: %w", err)
 	}
 	return servers, nil
 }
 
-// GetAllFlavors returns all Nova flavors from the database.
+// GetAllFlavors returns all Nova flavors.
 func (r *NovaReader) GetAllFlavors(ctx context.Context) ([]nova.Flavor, error) {
-	var flavors []nova.Flavor
-	query := "SELECT * FROM " + nova.Flavor{}.TableName()
-	if err := r.Select(ctx, &flavors, query); err != nil {
-		return nil, fmt.Errorf("failed to query flavors: %w", err)
+	flavors, err := listAll[nova.Flavor](ctx, r.StoreReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list flavors: %w", err)
 	}
 	return flavors, nil
 }
 
-// GetAllHypervisors returns all Nova hypervisors from the database.
+// GetAllHypervisors returns all Nova hypervisors.
 func (r *NovaReader) GetAllHypervisors(ctx context.Context) ([]nova.Hypervisor, error) {
-	var hypervisors []nova.Hypervisor
-	query := "SELECT * FROM " + nova.Hypervisor{}.TableName()
-	if err := r.Select(ctx, &hypervisors, query); err != nil {
-		return nil, fmt.Errorf("failed to query hypervisors: %w", err)
+	hypervisors, err := listAll[nova.Hypervisor](ctx, r.StoreReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list hypervisors: %w", err)
 	}
 	return hypervisors, nil
 }
 
-// GetAllMigrations returns all Nova migrations from the database.
+// GetAllMigrations returns all Nova migrations.
 func (r *NovaReader) GetAllMigrations(ctx context.Context) ([]nova.Migration, error) {
-	var migrations []nova.Migration
-	query := "SELECT * FROM " + nova.Migration{}.TableName()
-	if err := r.Select(ctx, &migrations, query); err != nil {
-		return nil, fmt.Errorf("failed to query migrations: %w", err)
+	migrations, err := listAll[nova.Migration](ctx, r.StoreReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list migrations: %w", err)
 	}
 	return migrations, nil
 }
 
-// GetAllAggregates returns all Nova aggregates from the database.
+// GetAllAggregates returns all Nova aggregates.
 func (r *NovaReader) GetAllAggregates(ctx context.Context) ([]nova.Aggregate, error) {
-	var aggregates []nova.Aggregate
-	query := "SELECT * FROM " + nova.Aggregate{}.TableName()
-	if err := r.Select(ctx, &aggregates, query); err != nil {
-		return nil, fmt.Errorf("failed to query aggregates: %w", err)
+	aggregates, err := listAll[nova.Aggregate](ctx, r.StoreReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list aggregates: %w", err)
 	}
 	return aggregates, nil
 }
 
 // GetServersByProject returns all Nova servers belonging to a specific project.
 func (r *NovaReader) GetServersByProject(ctx context.Context, projectID string) ([]nova.Server, error) {
-	var servers []nova.Server
-	query := "SELECT * FROM " + nova.Server{}.TableName() + " WHERE tenant_id = $1"
-	if err := r.Select(ctx, &servers, query, projectID); err != nil {
-		return nil, fmt.Errorf("failed to query servers by project: %w", err)
+	servers, err := r.GetAllServers(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return servers, nil
+	var result []nova.Server
+	for _, s := range servers {
+		if s.TenantID == projectID {
+			result = append(result, s)
+		}
+	}
+	return result, nil
 }
 
 // GetServerByID returns a Nova server by its ID.
 // Returns nil, nil if the server is not found.
 func (r *NovaReader) GetServerByID(ctx context.Context, serverID string) (*nova.Server, error) {
-	var servers []nova.Server
-	query := "SELECT * FROM " + nova.Server{}.TableName() + " WHERE id = $1"
-	if err := r.Select(ctx, &servers, query, serverID); err != nil {
-		return nil, fmt.Errorf("failed to query server by ID: %w", err)
+	servers, err := r.GetAllServers(ctx)
+	if err != nil {
+		return nil, err
 	}
-	if len(servers) == 0 {
-		return nil, nil
+	for _, s := range servers {
+		if s.ID == serverID {
+			return &s, nil
+		}
 	}
-	return &servers[0], nil
+	return nil, nil
 }
 
 // GetFlavorByName returns a Nova flavor by its name.
 // Returns nil, nil if the flavor is not found.
 func (r *NovaReader) GetFlavorByName(ctx context.Context, flavorName string) (*nova.Flavor, error) {
-	var flavors []nova.Flavor
-	query := "SELECT * FROM " + nova.Flavor{}.TableName() + " WHERE name = $1"
-	if err := r.Select(ctx, &flavors, query, flavorName); err != nil {
-		return nil, fmt.Errorf("failed to query flavor by name: %w", err)
+	flavors, err := r.GetAllFlavors(ctx)
+	if err != nil {
+		return nil, err
 	}
-	if len(flavors) == 0 {
-		return nil, nil
+	for _, f := range flavors {
+		if f.Name == flavorName {
+			return &f, nil
+		}
 	}
-	return &flavors[0], nil
+	return nil, nil
 }
 
-// GetDeletedServerByID returns a deleted Nova server by its ID from the deleted_servers table.
-// Returns nil, nil if the server is not found in the deleted_servers table.
+// GetDeletedServerByID returns a deleted Nova server by its ID.
+// Returns nil, nil if the server is not found among the deleted servers.
 func (r *NovaReader) GetDeletedServerByID(ctx context.Context, serverID string) (*nova.DeletedServer, error) {
-	var servers []nova.DeletedServer
-	query := "SELECT * FROM " + nova.DeletedServer{}.TableName() + " WHERE id = $1"
-	if err := r.Select(ctx, &servers, query, serverID); err != nil {
-		return nil, fmt.Errorf("failed to query deleted server by ID: %w", err)
+	servers, err := listAll[nova.DeletedServer](ctx, r.StoreReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list deleted servers: %w", err)
 	}
-	if len(servers) == 0 {
-		return nil, nil
+	for _, s := range servers {
+		if s.ID == serverID {
+			return &s, nil
+		}
 	}
-	return &servers[0], nil
+	return nil, nil
 }
 
 // GetProjectDomainNames returns a map of project ID to its domain name by joining
-// the identity projects and domains tables. Projects whose domain cannot be
-// resolved are omitted from the map.
+// the identity projects and domains. Projects whose domain cannot be resolved are
+// omitted from the map.
 func (r *NovaReader) GetProjectDomainNames(ctx context.Context) (map[string]string, error) {
-	type row struct {
-		ProjectID  string `db:"project_id"`
-		DomainName string `db:"domain_name"`
+	projects, err := listAll[identity.Project](ctx, r.StoreReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list projects: %w", err)
 	}
-	var rows []row
-	query := "SELECT p.id AS project_id, d.name AS domain_name FROM " +
-		identity.Project{}.TableName() + " p JOIN " +
-		identity.Domain{}.TableName() + " d ON p.domain_id = d.id"
-	if err := r.Select(ctx, &rows, query); err != nil {
-		return nil, fmt.Errorf("failed to query project domain names: %w", err)
+	domains, err := listAll[identity.Domain](ctx, r.StoreReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list domains: %w", err)
 	}
-	result := make(map[string]string, len(rows))
-	for _, row := range rows {
-		result[row.ProjectID] = row.DomainName
+	domainNames := make(map[string]string, len(domains))
+	for _, d := range domains {
+		domainNames[d.ID] = d.Name
+	}
+	result := make(map[string]string, len(projects))
+	for _, p := range projects {
+		if name, ok := domainNames[p.DomainID]; ok {
+			result[p.ID] = name
+		}
 	}
 	return result, nil
 }
