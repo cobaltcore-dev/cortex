@@ -9,8 +9,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources"
-	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store/postgres"
-	testlibDB "github.com/cobaltcore-dev/cortex/pkg/knowledge/store/postgres/testing"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store/memory"
 )
 
 type mockCinderAPI struct{}
@@ -22,14 +21,11 @@ func (m *mockCinderAPI) GetAllStoragePools(ctx context.Context) ([]StoragePool, 
 }
 
 func TestCinderSyncer_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	mon := datasources.Monitor{}
 	conf := v1alpha1.CinderDatasource{Type: v1alpha1.CinderDatasourceTypeStoragePools}
 
 	syncer := &CinderSyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: memory.New(),
 		Mon:   mon,
 		Conf:  conf,
 		API:   &mockCinderAPI{},
@@ -41,14 +37,11 @@ func TestCinderSyncer_Init(t *testing.T) {
 }
 
 func TestCinderSyncer_Sync(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	mon := datasources.Monitor{}
 	conf := v1alpha1.CinderDatasource{Type: v1alpha1.CinderDatasourceTypeStoragePools}
 
 	syncer := &CinderSyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: memory.New(),
 		Mon:   mon,
 		Conf:  conf,
 		API:   &mockCinderAPI{},
@@ -65,14 +58,11 @@ func TestCinderSyncer_Sync(t *testing.T) {
 }
 
 func TestCinderSyncer_SyncAllStoragePools(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	mon := datasources.Monitor{}
 	conf := v1alpha1.CinderDatasource{Type: v1alpha1.CinderDatasourceTypeStoragePools}
 
 	syncer := &CinderSyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: memory.New(),
 		Mon:   mon,
 		Conf:  conf,
 		API:   &mockCinderAPI{},

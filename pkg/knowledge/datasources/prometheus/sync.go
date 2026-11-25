@@ -209,7 +209,8 @@ func (s *syncer[M]) fetch(start, end time.Time) (*prometheusTimelineData[M], err
 // with the current time. Metrics outside of the time range are dropped.
 func (s *syncer[M]) Sync(ctx context.Context) (nResults int64, nextSync time.Time, err error) {
 	existing, err := store.ListAll[M](ctx, s.store, s.alias)
-	if err != nil {
+	stored := !errors.Is(err, store.ErrNotFound)
+	if err != nil && stored {
 		return 0, time.Time{}, fmt.Errorf("failed to list stored metrics: %w", err)
 	}
 	start := time.Now().Add(-s.syncTimeRange)
@@ -254,7 +255,9 @@ func (s *syncer[M]) Sync(ctx context.Context) (nResults int64, nextSync time.Tim
 		}
 	}
 	nDropped := len(existing) + len(fetched) - len(metrics)
-	if len(fetched) > 0 || nDropped > 0 {
+	// Also write if nothing changed but the metrics were not stored yet, so
+	// that readers can tell a synced but empty datasource from a missing one.
+	if len(fetched) > 0 || nDropped > 0 || !stored {
 		if err := store.ReplaceAll(ctx, s.store, s.alias, metrics); err != nil {
 			return 0, time.Time{}, fmt.Errorf("failed to store metrics: %w", err)
 		}

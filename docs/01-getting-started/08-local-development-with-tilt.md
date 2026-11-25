@@ -105,7 +105,7 @@ Verify from another terminal:
 kubectl get pods
 ```
 
-Expected — a running Cortex manager pod (and Postgres):
+Expected — a running Cortex manager pod (and Valkey):
 
 ```
 NAME                                                    READY   STATUS    RESTARTS   AGE
@@ -135,7 +135,7 @@ kind delete cluster --name cortex-dev
 
 Tilt is just an orchestrator over the same artifacts the rest of the book describes: it runs the
 [Make targets](05-make-targets.md) to build the manager, installs the [bundles](04-helm-charts.md)
-you select with `ACTIVE_DEPLOYMENTS`, and brings up the [Postgres](06-postgres.md) they
+you select with `ACTIVE_DEPLOYMENTS`, and brings up the [Valkey](06-valkey.md) they
 depend on. Once you have this loop, you are ready to read how the scheduler actually makes decisions.
 When you want to add a pipeline step, extractor, or KPI, see
 [Extend Cortex](../02-external-scheduler-api/07-extending-cortex.md); for a multi-cluster local setup, the

@@ -35,7 +35,7 @@ var log = ctrl.Log.WithName("quota-controller").WithValues("module", "quota-hand
 
 // QuotaController manages quota usage tracking for projects.
 // It provides three reconciliation modes:
-// - Periodic full reconcile: recomputes all TotalUsage from Postgres
+// - Periodic full reconcile: recomputes all TotalUsage from the knowledge store
 // - Incremental HV diff: delta-updates TotalUsage on HV instance changes
 // - PaygUsage-only recompute: triggered by CR or ProjectQuota spec changes
 type QuotaController struct {
@@ -66,7 +66,7 @@ func NewQuotaController(
 // ============================================================================
 
 // ReconcilePeriodic performs a full reconcile of all project quota usage.
-// It reads all VMs from Postgres, computes TotalUsage per project/AZ/resource,
+// It reads all VMs from the knowledge store, computes TotalUsage per project/AZ/resource,
 // then derives PaygUsage = TotalUsage - CRUsage for each existing ProjectQuota CRD.
 func (c *QuotaController) ReconcilePeriodic(ctx context.Context) error {
 	ctx = WithNewGlobalRequestID(ctx)
@@ -88,7 +88,7 @@ func (c *QuotaController) ReconcilePeriodic(ctx context.Context) error {
 		"flavorGroups", len(flavorGroups),
 		"totalFlavorsInMap", len(flavorToGroup))
 
-	// Fetch all VMs using VMSource (reads from Postgres via DBVMSource)
+	// Fetch all VMs using VMSource (reads from the knowledge store via DBVMSource)
 	vms, err := c.VMSource.ListVMs(ctx)
 	if err != nil {
 		logger.Error(err, "failed to list VMs")
@@ -175,7 +175,7 @@ func (c *QuotaController) ReconcilePeriodic(ctx context.Context) error {
 // Triggered by: CR Status.UsedAmount changes or ProjectQuota spec changes.
 //
 // Behavior depends on what changed:
-// - Spec change (Generation > ObservedGeneration): recomputes TotalUsage from Postgres + PaygUsage
+// - Spec change (Generation > ObservedGeneration): recomputes TotalUsage from the knowledge store + PaygUsage
 // - CR UsedAmount change (Generation == ObservedGeneration): reads persisted TotalUsage, recomputes PaygUsage only
 func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	ctx = WithNewGlobalRequestID(ctx)
@@ -200,8 +200,8 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 	var totalUsage map[string]map[string]int64
 	if specChanged {
-		// Spec changed (new CRD or quota update) — recompute TotalUsage from Postgres
-		logger.V(1).Info("spec changed, recomputing TotalUsage from Postgres",
+		// Spec changed (new CRD or quota update) — recompute TotalUsage from the knowledge store
+		logger.V(1).Info("spec changed, recomputing TotalUsage from the knowledge store",
 			"generation", pq.Generation, "observedGeneration", pq.Status.ObservedGeneration)
 		var err error
 		totalUsage, err = c.computeTotalUsageForProject(ctx, projectID)
@@ -262,7 +262,7 @@ func (c *QuotaController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 }
 
 // computeTotalUsageForProject computes TotalUsage for a single project by reading
-// all VMs from Postgres and filtering to the target project. Used as bootstrap when
+// all VMs from the knowledge store and filtering to the target project. Used as bootstrap when
 // a ProjectQuota is first created and has no persisted TotalUsage yet.
 func (c *QuotaController) computeTotalUsageForProject(ctx context.Context, projectID string) (map[string]map[string]int64, error) {
 	// Fetch flavor groups from Knowledge CRD
@@ -454,9 +454,9 @@ func (c *QuotaController) accumulateAddedVM(
 // Returns true if the VM is new and should be incrementally added to TotalUsage.
 // Returns false if the VM already existed at the last full reconcile (migration, not new).
 //
-// NOTE: There is a known timing gap -- the postgres servers table is only refreshed every
+// NOTE: There is a known timing gap -- the nova servers datasource is only refreshed every
 // N minutes by the datasource poller. A VM that was created shortly BEFORE the last reconcile
-// might not have been visible in postgres yet (sync delay), so the full reconcile may have
+// might not have been visible in the store yet (sync delay), so the full reconcile may have
 // missed it. In that case we would also skip the increment here (CreatedAt <= LastReconcileAt)
 // and the VM would only be counted on the NEXT full reconcile cycle. This is acceptable for
 // now and will be resolved when we move to a CRD-based VM source with real-time events.

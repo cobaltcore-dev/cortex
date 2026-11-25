@@ -64,8 +64,7 @@ import (
 	_ "github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/placement"
 	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/prometheus"
 	"github.com/cobaltcore-dev/cortex/pkg/knowledge/extractor"
-	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store/postgres"
-	_ "github.com/cobaltcore-dev/cortex/pkg/knowledge/store/postgres"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store/valkey"
 
 	"github.com/cobaltcore-dev/cortex/internal/scheduling/external"
 
@@ -415,7 +414,7 @@ func Run() {
 	}
 
 	// TODO: Remove me after scheduling pipeline steps don't require DB connections anymore.
-	metrics.Registry.MustRegister(&postgres.Monitor)
+	metrics.Registry.MustRegister(&valkey.Monitor)
 
 	// API endpoint.
 	mux := http.NewServeMux()
@@ -429,11 +428,11 @@ func Run() {
 	detectorPipelineMonitor := schedulinglib.NewDetectorPipelineMonitor()
 	metrics.Registry.MustRegister(&detectorPipelineMonitor)
 
-	// Initialize commitments API for LIQUID interface (Postgres-backed usage reporting).
+	// Initialize commitments API for LIQUID interface (store-backed usage reporting).
 	commitmentsConfig := conf.GetConfigOrDie[commitments.Config]()
 	var commitmentsVMSource reservations.VMSource
 	if commitmentsConfig.DatasourceName != "" {
-		commitmentsVMSource = reservations.NewPostgresVMSource(multiclusterClient, commitmentsConfig.DatasourceName)
+		commitmentsVMSource = reservations.NewStoreVMSource(multiclusterClient, commitmentsConfig.DatasourceName)
 	}
 	if slices.Contains(mainConfig.EnabledControllers, "committed-resource-reservations-controller") {
 		commitmentsAPI := commitmentsapi.NewAPIWithConfig(multiclusterClient, commitmentsConfig.API, commitmentsVMSource)
@@ -801,7 +800,7 @@ func Run() {
 			// This runs after the cache is started
 			storeReader, err := external.NewStoreReader(ctx, multiclusterClient, failoverConfig.DatasourceName)
 			if err != nil {
-				setupLog.Error(err, "unable to create postgres reader for failover controller",
+				setupLog.Error(err, "unable to create store reader for failover controller",
 					"datasourceName", failoverConfig.DatasourceName)
 				return err
 			}
@@ -921,12 +920,12 @@ func Run() {
 
 		quotaMetrics := quota.NewQuotaMetrics(metrics.Registry)
 
-		// Defer initialization until the manager starts (cache must be ready for postgres reader)
+		// Defer initialization until the manager starts (cache must be ready for store reader)
 		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 			// Create StoreReader from the configured Datasource CRD
 			storeReader, err := external.NewStoreReader(ctx, multiclusterClient, datasourceName)
 			if err != nil {
-				setupLog.Error(err, "unable to create postgres reader for quota controller",
+				setupLog.Error(err, "unable to create store reader for quota controller",
 					"datasourceName", datasourceName)
 				return err
 			}

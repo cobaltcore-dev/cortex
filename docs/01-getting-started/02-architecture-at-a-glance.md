@@ -97,7 +97,7 @@ flowchart LR
     R[Reservation] -.->|reserved capacity| P
 ```
 
-- A **Datasource** declares where raw facts come from and lands them in Postgres.
+- A **Datasource** declares where raw facts come from and lands them in Valkey.
 - A **Knowledge** resource declares a feature extraction over those facts.
 - A **Pipeline** wires ordered filter/weigher (or detector) steps that consume features and produces
   **Decision** / **Descheduling** outputs.

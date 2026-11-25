@@ -44,7 +44,7 @@ Testing:
 - If applicable, use struct based test cases, but limit yourself to the most relevant cases
 
 Helm charts:
-- Note the `# from: file://../../library/cortex-postgres` comment in `Chart.yaml` files, this is required and should point to the local chart path
+- Note the `# from: file://../../library/cortex` comment in `Chart.yaml` files, this is required and should point to the local chart path
 
 ## Repository Structure
 
@@ -55,7 +55,7 @@ Code:
 - `api/external` contains messages sent to cortex via http from external openstack services
 - `internal/scheduling` contains the logic for scheduling in different cloud domains
 - `internal/knowledge` has cortex's own feature extractors and kpis
-- `pkg/knowledge` is the public knowledge framework: datasources (raw data downloads from sources like prometheus and openstack), the storage abstraction (`store`, with the `postgres` backend), input resolution (`inputs`) and the extractor API and controller (`extractor`)
+- `pkg/knowledge` is the public knowledge framework: datasources (raw data downloads from sources like prometheus and openstack), the storage abstraction (`store`, with the `valkey` backend and an in-memory backend for tests), input resolution (`inputs`) and the extractor API and controller (`extractor`)
 - `pkg/manager` runs the cortex manager and can be used to build custom manager binaries with additional plugins
 - `pkg` is the code that is very non-cortex-specific and can be used across other projects as well
 

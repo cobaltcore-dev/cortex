@@ -10,8 +10,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources"
-	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store/postgres"
-	testlibDB "github.com/cobaltcore-dev/cortex/pkg/knowledge/store/postgres/testing"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store/memory"
 )
 
 type mockNovaAPI struct{}
@@ -56,12 +55,9 @@ func (m *mockNovaAPI) GetAllAggregates(ctx context.Context) ([]Aggregate, error)
 }
 
 func TestNovaSyncer_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	mon := datasources.Monitor{}
 	syncer := &NovaSyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: memory.New(),
 		Mon:   mon,
 		Conf:  v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeServers},
 		API:   &mockNovaAPI{},
@@ -73,12 +69,9 @@ func TestNovaSyncer_Init(t *testing.T) {
 }
 
 func TestNovaSyncer_Sync(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	mon := datasources.Monitor{}
 	syncer := &NovaSyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: memory.New(),
 		Mon:   mon,
 		Conf:  v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeServers},
 		API:   &mockNovaAPI{},
@@ -95,12 +88,9 @@ func TestNovaSyncer_Sync(t *testing.T) {
 }
 
 func TestNovaSyncer_SyncServers(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	mon := datasources.Monitor{}
 	syncer := &NovaSyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: memory.New(),
 		Mon:   mon,
 		Conf:  v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeServers},
 		API:   &mockNovaAPI{},
@@ -138,13 +128,9 @@ func TestNovaSyncer_SyncDeletedServers(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.Name, func(t *testing.T) {
-			dbEnv := testlibDB.SetupDBEnv(t)
-			testDB := postgres.DB{DbMap: dbEnv.DbMap}
-			defer dbEnv.Close()
-
 			mon := datasources.Monitor{}
 			syncer := &NovaSyncer{
-				Store: postgres.NewStore(&testDB),
+				Store: memory.New(),
 				Mon:   mon,
 				Conf: v1alpha1.NovaDatasource{
 					Type:                              v1alpha1.NovaDatasourceTypeDeletedServers,
@@ -169,12 +155,9 @@ func TestNovaSyncer_SyncDeletedServers(t *testing.T) {
 }
 
 func TestNovaSyncer_SyncHypervisors(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	mon := datasources.Monitor{}
 	syncer := &NovaSyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: memory.New(),
 		Mon:   mon,
 		Conf:  v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeHypervisors},
 		API:   &mockNovaAPI{},
@@ -194,12 +177,9 @@ func TestNovaSyncer_SyncHypervisors(t *testing.T) {
 }
 
 func TestNovaSyncer_SyncFlavors(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	mon := datasources.Monitor{}
 	syncer := &NovaSyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: memory.New(),
 		Mon:   mon,
 		Conf:  v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeFlavors},
 		API:   &mockNovaAPI{},
@@ -219,12 +199,9 @@ func TestNovaSyncer_SyncFlavors(t *testing.T) {
 }
 
 func TestNovaSyncer_SyncMigrations(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	mon := datasources.Monitor{}
 	syncer := &NovaSyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: memory.New(),
 		Mon:   mon,
 		Conf:  v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeMigrations},
 		API:   &mockNovaAPI{},
@@ -244,12 +221,9 @@ func TestNovaSyncer_SyncMigrations(t *testing.T) {
 }
 
 func TestNovaSyncer_SyncAggregates(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	mon := datasources.Monitor{}
 	syncer := &NovaSyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: memory.New(),
 		Mon:   mon,
 		Conf:  v1alpha1.NovaDatasource{Type: v1alpha1.NovaDatasourceTypeAggregates},
 		API:   &mockNovaAPI{},

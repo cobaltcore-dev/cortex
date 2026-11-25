@@ -6,10 +6,10 @@ metadata:
 spec:
   schedulingDomain: cinder
   storage:
-    type: postgres
-    postgres:
+    type: valkey
+    valkey:
       secretRef:
-        name: cortex-cinder-postgres
+        name: cortex-cinder-valkey
         namespace: {{ .Release.Namespace }}
   {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:

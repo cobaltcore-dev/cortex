@@ -20,7 +20,9 @@ flowchart BT
     subgraph lib["helm/library/ (library charts)"]
         L1[cortex]
         L2[cortex-shim]
-        L3[cortex-postgres]
+    end
+    subgraph up["upstream charts"]
+        U1[valkey]
     end
     subgraph bun["helm/bundles/ (deployables)"]
         B1[cortex-nova]
@@ -35,22 +37,24 @@ flowchart BT
         D1[cortex-prometheus-operator]
     end
     B1 --> L1
-    B1 --> L3
+    B1 --> U1
     B2 --> L1
-    B2 --> L3
+    B2 --> U1
     B3 --> L1
-    B3 --> L3
+    B3 --> U1
     B4 --> L1
     B5 --> L1
     B6 --> L2
     B7 --> L1
 ```
 
-- **`helm/library/`** holds the *library charts* — `cortex` (the manager), `cortex-shim`, and
-  `cortex-postgres`. These carry the shared templates and defaults; you never install them directly.
+- **`helm/library/`** holds the *library charts* — `cortex` (the manager) and `cortex-shim`.
+  These carry the shared templates and defaults; you never install them directly.
 - **`helm/bundles/`** holds the *bundles* — the charts you actually install. Each bundle depends on
   one or more library charts and stylizes them for a domain: `cortex-nova`, `cortex-cinder`,
   `cortex-manila`, `cortex-ironcore`, `cortex-pods`, `cortex-placement-shim`, and `cortex-crds`.
+  `cortex-nova`, `cortex-cinder` and `cortex-manila` also depend on the upstream
+  [valkey chart](https://valkey.io/valkey-helm/) for their [Valkey](06-valkey.md) store.
 - **`helm/dev/`** holds charts used only for local development (e.g. `cortex-prometheus-operator`).
 
 > [!IMPORTANT]
@@ -98,7 +102,7 @@ different `enabledControllers`. `cortex-nova` is the clearest example:
 
 ```yaml
 dependencies:
-  - name: cortex-postgres
+  - name: valkey
     # ...
   - name: cortex
     alias: cortex-knowledge-controllers   # one manager: datasource/knowledge/kpi
@@ -107,7 +111,7 @@ dependencies:
 ```
 
 So a `cortex-nova` install brings up **two** manager Deployments (a knowledge manager and a scheduling
-manager) plus a Postgres, all from the one bundle. Values for each manager are set under its subchart
+manager) plus a Valkey, all from the one bundle. Values for each manager are set under its subchart
 alias — for example `cortex-scheduling-controllers.conf.enabledControllers`. This is why the values
 reference talks about `<subchart>.conf` rather than a single top-level `conf`.
 

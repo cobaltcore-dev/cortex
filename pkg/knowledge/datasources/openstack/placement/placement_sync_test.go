@@ -10,8 +10,8 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	testlibKeystone "github.com/cobaltcore-dev/cortex/pkg/keystone/testing"
 	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources"
-	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store/postgres"
-	testlibDB "github.com/cobaltcore-dev/cortex/pkg/knowledge/store/postgres/testing"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store/memory"
 )
 
 type mockPlacementAPI struct{}
@@ -31,15 +31,12 @@ func (m *mockPlacementAPI) GetAllInventoryUsages(ctx context.Context, providers 
 }
 
 func TestPlacementSyncer_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	mon := datasources.Monitor{}
 	pc := &testlibKeystone.MockKeystoneClient{}
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviders}
 
 	syncer := &PlacementSyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: memory.New(),
 		Mon:   mon,
 		Conf:  conf,
 		API:   NewPlacementAPI(mon, pc, conf),
@@ -51,14 +48,11 @@ func TestPlacementSyncer_Init(t *testing.T) {
 }
 
 func TestPlacementSyncer_Sync(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	mon := datasources.Monitor{}
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviders}
 
 	syncer := &PlacementSyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: memory.New(),
 		Mon:   mon,
 		Conf:  conf,
 		API:   &mockPlacementAPI{},
@@ -75,14 +69,11 @@ func TestPlacementSyncer_Sync(t *testing.T) {
 }
 
 func TestPlacementSyncer_SyncResourceProviders(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	mon := datasources.Monitor{}
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviders}
 
 	syncer := &PlacementSyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: memory.New(),
 		Mon:   mon,
 		Conf:  conf,
 		API:   &mockPlacementAPI{},
@@ -102,23 +93,18 @@ func TestPlacementSyncer_SyncResourceProviders(t *testing.T) {
 }
 
 func TestPlacementSyncer_SyncTraits(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	mon := datasources.Monitor{}
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviderTraits}
 
 	rps := []ResourceProvider{{UUID: "1", Name: "rp1"}}
-	if err := testDB.CreateTable(testDB.AddTable(ResourceProvider{})); err != nil {
-		t.Fatalf("failed to create resource provider table: %v", err)
-	}
-	err := postgres.ReplaceAll(testDB, rps...)
+	st := memory.New()
+	err := store.ReplaceAll(t.Context(), st, "", rps)
 	if err != nil {
 		t.Fatalf("failed to insert resource providers: %v", err)
 	}
 
 	syncer := &PlacementSyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: st,
 		Mon:   mon,
 		Conf:  conf,
 		API:   &mockPlacementAPI{},
@@ -140,23 +126,18 @@ func TestPlacementSyncer_SyncTraits(t *testing.T) {
 }
 
 func TestPlacementSyncer_SyncInventoryUsages(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	mon := datasources.Monitor{}
 	conf := v1alpha1.PlacementDatasource{Type: v1alpha1.PlacementDatasourceTypeResourceProviderInventoryUsages}
 
 	rps := []ResourceProvider{{UUID: "1", Name: "rp1"}}
-	if err := testDB.CreateTable(testDB.AddTable(ResourceProvider{})); err != nil {
-		t.Fatalf("failed to create resource provider table: %v", err)
-	}
-	err := postgres.ReplaceAll(testDB, rps...)
+	st := memory.New()
+	err := store.ReplaceAll(t.Context(), st, "", rps)
 	if err != nil {
 		t.Fatalf("failed to insert resource providers: %v", err)
 	}
 
 	syncer := &PlacementSyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: st,
 		Mon:   mon,
 		Conf:  conf,
 		API:   &mockPlacementAPI{},

@@ -22,21 +22,21 @@ flowchart LR
         OS[OpenStack APIs]
         PM[Prometheus]
     end
-    DS[Datasource] -->|caches raw facts| DB[(Postgres)]
+    DS[Datasource] -->|caches raw facts| DB[(Valkey)]
     OS --> DS
     PM --> DS
     DB --> K[Knowledge]
-    K -->|writes features| DB
     DB --> KPI[KPI]
+    K -->|features in status| KPI
     KPI --> M[Prometheus metrics]
     K -.->|features consumed by| PIPE[pipelines & reservations]
     KPI -.-> DASH[dashboards]
 ```
 
 1. A **Datasource** declares where raw facts come from — an OpenStack API or Prometheus — and caches them
-   into Postgres on a sync interval. Covered in [Datasources](02-datasources.md).
-2. A **Knowledge** resource declares a named *extractor* that reads those raw rows and writes enriched
-   **features** back to Postgres. Covered in [Feature extraction](03-feature-extraction.md).
+   into [Valkey](../01-getting-started/06-valkey.md) on a sync interval. Covered in [Datasources](02-datasources.md).
+2. A **Knowledge** resource declares a named *extractor* that reads those raw objects and stores enriched
+   **features** in its own status. Covered in [Feature extraction](03-feature-extraction.md).
 3. A **KPI** turns features into Prometheus gauges for dashboards and alerts. Covered in
    [KPIs and the Metrics API](04-kpis-and-metrics-api.md).
 
@@ -57,7 +57,7 @@ re-deriving it.
 The three controllers form a chain, each reacting to the resource before it (the general pattern from
 [Architecture at a glance](../01-getting-started/02-architecture-at-a-glance.md)):
 
-1. A `Datasource` reconcile ingests raw facts on its sync schedule, writing rows to Postgres.
+1. A `Datasource` reconcile ingests raw facts on its sync schedule, writing them to Valkey.
 2. Knowledge controllers re-run affected extractors, writing fresh features.
 3. KPIs re-publish, and pipeline/detector steps pick up the new features on their next run.
 

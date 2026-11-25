@@ -47,12 +47,12 @@ type FailoverConfig struct {
 	MaxFailuresForShortInterval *int `json:"maxFailuresForShortInterval"`
 
 	// TrustHypervisorLocation when true, uses the hypervisor CRD as the source of truth
-	// for VM location instead of postgres (OSEXTSRVATTRHost). This is useful when there
+	// for VM location instead of the nova servers datasource (OSEXTSRVATTRHost). This is useful when there
 	// are data sync issues between nova and the hypervisor operator.
 	// When enabled:
 	// - VM location comes from hypervisor CRD (which hypervisor lists the VM in its instances)
-	// - VM size/flavor still comes from postgres (needed for scheduling)
-	// Default: false (use postgres OSEXTSRVATTRHost for location)
+	// - VM size/flavor still comes from the nova datasources (needed for scheduling)
+	// Default: false (use the datasource OSEXTSRVATTRHost for location)
 	TrustHypervisorLocation bool `json:"trustHypervisorLocation"`
 
 	// RevalidationInterval is how often to re-validate acknowledged failover reservations.
@@ -134,7 +134,7 @@ func DefaultConfig() FailoverConfig {
 		MaxFailuresForShortInterval:         intPtr(99),
 		MaxVMsToProcess:                     30,
 		Creator:                             "cortex-failover-controller",
-		DatasourceName:                      "nova-servers", // we have the server and flavor data source (both store in same postgres and same secret but still)
+		DatasourceName:                      "nova-servers", // we have the server and flavor data source (both are in the same store)
 		TrustHypervisorLocation:             false,
 		RevalidationInterval:                metav1.Duration{Duration: 30 * time.Minute},
 		LimitOneNewReservationPerHypervisor: true,

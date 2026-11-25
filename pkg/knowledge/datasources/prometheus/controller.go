@@ -52,7 +52,7 @@ type PrometheusDatasourceReconciler struct {
 	// Monitor for tracking the datasource syncs.
 	Monitor datasources.Monitor
 	// Tracks datasources that have completed at least one reconcile this process lifetime.
-	// On first reconcile the timestamp skip is bypassed, so a DB wipe + operator restart
+	// On first reconcile the timestamp skip is bypassed, so a store wipe + operator restart
 	// forces an immediate re-sync of all datasources.
 	reconciledOnce sync.Map
 }
@@ -73,10 +73,20 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 	if datasource.Status.NextSyncTime.After(time.Now()) && datasource.Status.NumberOfObjects != nil {
 		if _, seen := r.reconciledOnce.Load(req.NamespacedName); seen {
-			log.V(1).Info("skipping datasource sync, not yet time", "name", datasource.Name)
-			return ctrl.Result{RequeueAfter: time.Until(datasource.Status.NextSyncTime.Time)}, nil
+			stored, err := datasources.IsStored(ctx, r.Client, *datasource)
+			if err != nil {
+				// Check again on the next requeue rather than syncing unnecessarily.
+				log.Error(err, "failed to check if datasource objects are stored", "name", datasource.Name)
+				stored = true
+			}
+			if stored {
+				log.V(1).Info("skipping datasource sync, not yet time", "name", datasource.Name)
+				return ctrl.Result{RequeueAfter: min(time.Until(datasource.Status.NextSyncTime.Time), datasources.StoreCheckInterval)}, nil
+			}
+			log.Info("stored objects of datasource are missing, forcing sync", "name", datasource.Name)
+		} else {
+			log.V(1).Info("first reconcile this process lifetime, forcing sync despite timestamp", "name", datasource.Name)
 		}
-		log.V(1).Info("first reconcile this process lifetime, forcing sync despite timestamp", "name", datasource.Name)
 	}
 
 	newSyncerFunc, ok := Index[datasource.Spec.Prometheus.Type]
@@ -210,7 +220,8 @@ func (r *PrometheusDatasourceReconciler) Reconcile(ctx context.Context, req ctrl
 
 	// Calculate the next sync time based on the configured sync interval.
 	r.reconciledOnce.Store(req.NamespacedName, struct{}{})
-	return ctrl.Result{RequeueAfter: time.Until(nextSync)}, nil
+	// Come back early to check that the synced objects are still stored.
+	return ctrl.Result{RequeueAfter: min(time.Until(nextSync), datasources.StoreCheckInterval)}, nil
 }
 
 func (r *PrometheusDatasourceReconciler) SetupWithManager(mgr manager.Manager, mcl *multicluster.Client) error {

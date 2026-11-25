@@ -48,55 +48,9 @@
       "matchStrings": ["GOTESTSUM_VERSION \\?= (?<currentValue>v[\\d.]+)"],
       "depNameTemplate": "gotest.tools/gotestsum",
       "datasourceTemplate": "go"
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
-        "/^postgres/Dockerfile$/"
-      ],
-      "matchStrings": ["FROM (?<depName>[^:\\n]+):(?<currentValue>[^@\\n]+)@(?<currentDigest>sha256:[a-f0-9]+)"],
-      "datasourceTemplate": "docker",
-      "autoReplaceStringTemplate": "FROM {{{depName}}}:{{{newValue}}}@{{{newDigest}}}"
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
-        "/^postgres/Dockerfile$/"
-      ],
-      "matchStrings": ["ENV PG_VERSION (?<currentValue>\\d+\\.\\d+-\\d+\\.pgdg\\d+\\+\\d+)"],
-      "depNameTemplate": "postgresql-18",
-      "datasourceTemplate": "deb",
-      "registryUrlTemplate": "https://apt.postgresql.org/pub/repos/apt?suite=trixie-pgdg&components=main&binaryArch=amd64",
-      "versioningTemplate": "deb",
-      "autoReplaceStringTemplate": "ENV PG_VERSION {{{newValue}}}"
     }
   ],
   "packageRules": [
-    {
-      "matchPackageNames": [
-        "postgresql-18"
-      ],
-      "matchFileNames": [
-        "postgres/Dockerfile"
-      ],
-      "groupName": "postgres Dockerfile"
-    },
-    {
-      "matchFileNames": [
-        "postgres/Dockerfile"
-      ],
-      "matchDatasources": [
-        "docker"
-      ],
-      "matchUpdateTypes": [
-        "digest",
-        "pinDigest"
-      ],
-      "groupName": "postgres Dockerfile base image",
-      "schedule": [
-        "at any time"
-      ]
-    },
     {
       "matchPackageNames": [
         "/^github\\.com\\/sapcc\\/.*/"
@@ -107,7 +61,6 @@
     {
       "matchPackageNames": [
         "!/^github\\.com\\/sapcc\\/.*/",
-        "!postgresql-18",
         "/.*/"
       ],
       "matchUpdateTypes": [

@@ -9,8 +9,7 @@ import (
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources"
-	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store/postgres"
-	testlibDB "github.com/cobaltcore-dev/cortex/pkg/knowledge/store/postgres/testing"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store/memory"
 )
 
 type mockIdentityAPI struct{}
@@ -26,12 +25,9 @@ func (m *mockIdentityAPI) GetAllProjects(ctx context.Context) ([]Project, error)
 }
 
 func TestIdentitySyncer_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	mon := datasources.Monitor{}
 	syncer := &IdentitySyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: memory.New(),
 		Mon:   mon,
 		Conf:  v1alpha1.IdentityDatasource{Type: v1alpha1.IdentityDatasourceTypeDomains},
 		API:   &mockIdentityAPI{},
@@ -43,12 +39,9 @@ func TestIdentitySyncer_Init(t *testing.T) {
 }
 
 func TestIdentitySyncer_Sync(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	mon := datasources.Monitor{}
 	syncer := &IdentitySyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: memory.New(),
 		Mon:   mon,
 		Conf:  v1alpha1.IdentityDatasource{Type: v1alpha1.IdentityDatasourceTypeProjects},
 		API:   &mockIdentityAPI{},
@@ -65,12 +58,9 @@ func TestIdentitySyncer_Sync(t *testing.T) {
 }
 
 func TestIdentitySyncer_SyncProjects(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	mon := datasources.Monitor{}
 	syncer := &IdentitySyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: memory.New(),
 		Mon:   mon,
 		Conf:  v1alpha1.IdentityDatasource{Type: v1alpha1.IdentityDatasourceTypeProjects},
 		API:   &mockIdentityAPI{},
@@ -90,12 +80,9 @@ func TestIdentitySyncer_SyncProjects(t *testing.T) {
 }
 
 func TestIdentitySyncer_SyncDomains(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	mon := datasources.Monitor{}
 	syncer := &IdentitySyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: memory.New(),
 		Mon:   mon,
 		Conf:  v1alpha1.IdentityDatasource{Type: v1alpha1.IdentityDatasourceTypeDomains},
 		API:   &mockIdentityAPI{},

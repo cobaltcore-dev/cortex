@@ -22,8 +22,5 @@ cortex:
     enabled: false
   prometheus:
     enable: false
-cortex-postgres:
-  prometheus:
-    enable: false
 alerts:
   enabled: false

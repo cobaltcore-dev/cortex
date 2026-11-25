@@ -12,8 +12,8 @@ import (
 	testlibKeystone "github.com/cobaltcore-dev/cortex/pkg/keystone/testing"
 	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources"
 	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/identity"
-	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store/postgres"
-	testlibDB "github.com/cobaltcore-dev/cortex/pkg/knowledge/store/postgres/testing"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store/memory"
 )
 
 type mockLimesAPI struct{}
@@ -45,15 +45,12 @@ func (m *mockLimesAPI) GetAllCommitments(ctx context.Context, projects []identit
 }
 
 func TestLimesSyncer_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	mon := datasources.Monitor{}
 	k := &testlibKeystone.MockKeystoneClient{}
 	conf := v1alpha1.LimesDatasource{Type: v1alpha1.LimesDatasourceTypeProjectCommitments}
 
 	syncer := &LimesSyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: memory.New(),
 		Mon:   mon,
 		Conf:  conf,
 		API:   NewLimesAPI(mon, k, conf),
@@ -65,20 +62,14 @@ func TestLimesSyncer_Init(t *testing.T) {
 }
 
 func TestLimesSyncer_Sync(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	// Insert a test project for the sync to use
 	project := identity.Project{
 		ID:       "test-project-id",
 		DomainID: "test-domain-id",
 		Name:     "test-project",
 	}
-	testDB.AddTable(identity.Project{})
-	if err := testDB.CreateTable(testDB.AddTable(identity.Project{})); err != nil {
-		t.Fatalf("failed to create project table: %v", err)
-	}
-	if err := testDB.Insert(&project); err != nil {
+	st := memory.New()
+	if err := store.ReplaceAll(t.Context(), st, "", []identity.Project{project}); err != nil {
 		t.Fatalf("failed to insert test project: %v", err)
 	}
 
@@ -87,7 +78,7 @@ func TestLimesSyncer_Sync(t *testing.T) {
 	conf := v1alpha1.LimesDatasource{Type: v1alpha1.LimesDatasourceTypeProjectCommitments}
 
 	syncer := &LimesSyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: st,
 		Mon:   mon,
 		Conf:  conf,
 		API:   NewLimesAPI(mon, k, conf),
@@ -107,20 +98,14 @@ func TestLimesSyncer_Sync(t *testing.T) {
 }
 
 func TestLimesSyncer_SyncCommitments(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	// Insert a test project for the sync to use
 	project := identity.Project{
 		ID:       "test-project-id",
 		DomainID: "test-domain-id",
 		Name:     "test-project",
 	}
-	testDB.AddTable(identity.Project{})
-	if err := testDB.CreateTable(testDB.AddTable(identity.Project{})); err != nil {
-		t.Fatalf("failed to create project table: %v", err)
-	}
-	if err := testDB.Insert(&project); err != nil {
+	st := memory.New()
+	if err := store.ReplaceAll(t.Context(), st, "", []identity.Project{project}); err != nil {
 		t.Fatalf("failed to insert test project: %v", err)
 	}
 
@@ -128,7 +113,7 @@ func TestLimesSyncer_SyncCommitments(t *testing.T) {
 	conf := v1alpha1.LimesDatasource{Type: v1alpha1.LimesDatasourceTypeProjectCommitments}
 
 	syncer := &LimesSyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: st,
 		Mon:   mon,
 		Conf:  conf,
 		API:   &mockLimesAPI{},
@@ -149,13 +134,10 @@ func TestLimesSyncer_SyncCommitments(t *testing.T) {
 }
 
 func TestLimesSyncer_SyncCommitments_NoProjects(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := postgres.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-	// Create project table but don't insert any projects
-	testDB.AddTable(identity.Project{})
-	if err := testDB.CreateTable(testDB.AddTable(identity.Project{})); err != nil {
-		t.Fatalf("failed to create project table: %v", err)
+	// Store an empty project list.
+	st := memory.New()
+	if err := store.ReplaceAll(t.Context(), st, "", []identity.Project{}); err != nil {
+		t.Fatalf("failed to store projects: %v", err)
 	}
 
 	mon := datasources.Monitor{}
@@ -163,7 +145,7 @@ func TestLimesSyncer_SyncCommitments_NoProjects(t *testing.T) {
 	conf := v1alpha1.LimesDatasource{Type: v1alpha1.LimesDatasourceTypeProjectCommitments}
 
 	syncer := &LimesSyncer{
-		Store: postgres.NewStore(&testDB),
+		Store: st,
 		Mon:   mon,
 		Conf:  conf,
 		API:   NewLimesAPI(mon, k, conf),

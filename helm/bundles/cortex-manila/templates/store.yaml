@@ -1,0 +1,11 @@
+# Connection to the valkey store, used by the datasources (host, port,
+# password) and by the valkey chart for the default user's password.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cortex-manila-valkey
+type: Opaque
+data:
+  host: {{ .Values.store.host | b64enc | quote }}
+  port: {{ .Values.store.port | b64enc | quote }}
+  password: {{ .Values.store.password | b64enc | quote }}

@@ -7,6 +7,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -14,7 +15,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// ErrNotFound is returned when a scope was never written, e.g. because its
+// datasource wasn't synced yet or the store lost its data on a restart.
+var ErrNotFound = errors.New("no objects stored for this scope yet")
+
 // Model is a go type of which objects are persisted in a store.
+//
+// Objects are persisted by the columns given in the `db` struct tags of the
+// model. Fields tagged with the `primarykey` option, e.g. `db:"id,primarykey"`,
+// identify an object within its scope. Models without primary key fields are
+// identified by their content.
 type Model interface {
 	// Name of the table/collection the objects are stored in.
 	TableName() string
@@ -42,10 +52,15 @@ type Scope struct {
 type Store interface {
 	// ListAll objects in the scope into out, which must be a pointer to a
 	// slice of the scope's model type. The order of the objects is undefined.
+	// Returns ErrNotFound if the scope was never written. Listed objects may
+	// be shared with other readers and must be treated as read-only.
 	ListAll(ctx context.Context, scope Scope, out any) error
 	// ReplaceAll objects in the scope atomically with objs, which must be a
-	// slice of the scope's model type.
+	// slice of the scope's model type. Objects with the same primary key
+	// are rejected, identical objects of models without one are merged.
 	ReplaceAll(ctx context.Context, scope Scope, objs any) error
+	// Exists reports whether the scope was written, even if empty.
+	Exists(ctx context.Context, scope Scope) (bool, error)
 }
 
 // ListAll objects of the given model and partition.

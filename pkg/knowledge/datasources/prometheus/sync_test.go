@@ -15,8 +15,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources"
 	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store"
-	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store/postgres"
-	testlibDB "github.com/cobaltcore-dev/cortex/pkg/knowledge/store/postgres/testing"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store/memory"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -201,9 +200,7 @@ func TestSyncerFetch(t *testing.T) {
 }
 
 func TestSyncerSync(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	defer dbEnv.Close()
-	st := postgres.NewStore(&postgres.DB{DbMap: dbEnv.DbMap})
+	st := memory.New()
 	ctx := t.Context()
 
 	now := time.Now().Truncate(time.Second)
@@ -284,9 +281,7 @@ func TestSyncerSync(t *testing.T) {
 }
 
 func TestSyncerSyncEmptyStore(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	defer dbEnv.Close()
-	st := postgres.NewStore(&postgres.DB{DbMap: dbEnv.DbMap})
+	st := memory.New()
 
 	calls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -322,6 +317,11 @@ func TestSyncerSyncEmptyStore(t *testing.T) {
 	}
 	if nResults != 0 {
 		t.Errorf("expected 0 results, got %d", nResults)
+	}
+	// Synced but empty datasources are stored, so readers can tell them
+	// apart from datasources that were never synced.
+	if ok, err := st.Exists(t.Context(), store.Scope{Model: mockMetric{}, Partition: "test_metric"}); err != nil || !ok {
+		t.Errorf("expected empty scope to be stored, got %v, %v", ok, err)
 	}
 }
 

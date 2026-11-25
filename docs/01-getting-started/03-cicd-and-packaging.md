@@ -14,14 +14,13 @@ open a pull request.
 
 ## What gets built
 
-Cortex publishes three container images to the GitHub Container Registry (`ghcr.io`), one per
+Cortex publishes two container images to the GitHub Container Registry (`ghcr.io`), one per
 component introduced on the [previous pages](02-architecture-at-a-glance.md):
 
 | Image | Built from | Contains |
 |---|---|---|
 | `ghcr.io/cobaltcore-dev/cortex` | `cmd/manager` | The `manager` binary (all controllers, extractors, pipelines). |
 | `ghcr.io/cobaltcore-dev/cortex-shim` | `cmd/shim` | The `shim` binary. |
-| `ghcr.io/cobaltcore-dev/cortex-postgres` | `postgres/` | The custom Postgres image (see [Postgres](06-postgres.md)). |
 
 Each image is published with a build-provenance attestation (`actions/attest-build-provenance`), so a
 consumer can verify the image was built by this repository's CI rather than substituted.
@@ -47,8 +46,7 @@ deployed into production and audited environments**; the images built on every p
 development and testing, and are not audited artifacts on their own.
 
 - **`push-images.yaml`** runs on every push to **`main`** and builds the container images. The
-  Postgres and shim images are only rebuilt when their own paths change; the manager image builds each
-  time.
+  shim image is only rebuilt when its own paths change; the manager image builds each time.
 - **`push-charts.yaml`** runs on pushes to the **`release`** branch and packages and publishes the
   Helm charts (library charts and bundles), keyed off which `Chart.yaml` files changed.
 - **`update-appversion.yml`** bridges the two: after images publish, it bumps the charts' `appVersion`
@@ -65,7 +63,7 @@ Several workflows run on pull requests and act as gates. The ones worth knowing 
 
 | Workflow | Runs | Checks |
 |---|---|---|
-| `test.yaml` | push to `main` and PRs | `go test` with coverage over `./internal/...`, using a real Postgres container. |
+| `test.yaml` | push to `main` and PRs | `go test` with coverage over `./internal/...`. |
 | `lint.yaml` | push to `main`, PRs, manual | Runs `make crds deepcopy lint-fix` and **fails if it produces a git diff** — i.e. generated code and CRDs must be committed and up to date — then `golangci-lint`. |
 | `reuse.yaml` | push and PRs | [REUSE](https://reuse.software/) license compliance: every file must carry an SPDX license header. |
 | `codeql.yaml` | push/PR to `main`, weekly | CodeQL security analysis of the Go code. |
@@ -77,9 +75,7 @@ Several workflows run on pull requests and act as gates. The ones worth knowing 
 > Likewise, every new file needs the SPDX header (the four-line comment block at the top of this file)
 > or `reuse.yaml` will fail.
 
-A couple of workflows are pure automation rather than gates: `rebuild-postgres.yaml` rebuilds the
-Postgres image daily and opens a PR if doing so reduces CVEs, and the `claude-*` workflows run
-assistant automation. There is no separate DCO / sign-off gate in this repository.
+The `claude-*` workflows are pure automation rather than gates: they run assistant automation. There is no separate DCO / sign-off gate in this repository.
 
 The pipeline is the bridge between the source tree you edit and the artifacts you deploy in later
 chapters. When [Install a domain bundle](09-installing-a-domain-bundle.md) tells you to

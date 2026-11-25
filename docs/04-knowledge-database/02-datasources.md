@@ -7,7 +7,7 @@
 # Datasources
 
 A `Datasource` is the first stage of the knowledge flow: it declares where raw facts come from and caches
-them into Postgres so the rest of Cortex can work from a local, query-fast copy rather than hammering the
+them into Valkey so the rest of Cortex can work from a local, query-fast copy rather than hammering the
 source. This page covers the two source families — OpenStack and Prometheus — the sync model, and how a
 datasource is authored.
 
@@ -16,8 +16,9 @@ datasource is authored.
 Cortex does not query OpenStack or Prometheus during a placement request; that would put a slow, external
 dependency on the hot path. Instead, each `Datasource` periodically pulls its source and writes the results
 into the storage backend configured in `spec.storage`, and everything downstream reads from there. Storage
-is abstracted behind `pkg/knowledge/store`, which only lists and replaces all objects of a datasource;
-`postgres` (`pkg/knowledge/store/postgres`) is currently the only backend. Extractors and KPIs never query
+is abstracted behind `pkg/knowledge/store`, which only lists, replaces and checks for all objects of a
+datasource; `valkey` (`pkg/knowledge/store/valkey`) is currently the only backend, see
+[Valkey](../01-getting-started/06-valkey.md). Extractors and KPIs never query
 the store directly — they receive the objects of their inputs as typed Go lists. The `Datasource`
 CRD sets a `syncInterval` controlling how often the pull runs.
 
@@ -41,10 +42,10 @@ metadata:
 spec:
   schedulingDomain: nova
   storage:
-    type: postgres
-    postgres:
+    type: valkey
+    valkey:
       secretRef:
-        name: cortex-nova-postgres
+        name: cortex-nova-valkey
         namespace: cortex
   type: openstack
   openstack:
@@ -112,7 +113,7 @@ dispatch and implementing its ingestion, then referencing it from a `Datasource`
 [Extend Cortex](../02-external-scheduler-api/07-extending-cortex.md).
 
 Datasources are the intake of the [knowledge flow](01-knowledge-flow-overview.md): they populate the
-Postgres rows that [feature extraction](03-feature-extraction.md) reads, which in turn feed every pipeline
+Valkey objects that [feature extraction](03-feature-extraction.md) reads, which in turn feed every pipeline
 and reservation. They are also what the failover controller points its `datasourceName` at
 ([Failover reservations](../03-reservations-and-inventory/03-failover-reservations.md)). The next page turns
 those raw rows into features.

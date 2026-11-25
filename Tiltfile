@@ -155,7 +155,9 @@ docker_build('ghcr.io/cobaltcore-dev/cortex-shim', '.',
 local('sh helm/sync.sh helm/library/cortex-shim')
 
 ########### Cortex Bundles
-docker_build('ghcr.io/cobaltcore-dev/cortex-postgres', 'postgres')
+# Remove charts of the former postgres knowledge store left over from previous
+# runs, since helm deploys all charts found in a bundle's charts directory.
+local('rm -f helm/bundles/*/charts/cortex-postgres-*.tgz')
 
 # Package the lib charts locally and sync them to the bundle charts. In this way
 # we can bump the lib charts locally and test them before pushing them to the OCI registry.
@@ -174,23 +176,18 @@ dep_charts = {
         ('helm/library/cortex', 'cortex'),
     ],
     'cortex-nova': [
-        ('helm/library/cortex-postgres', 'cortex-postgres'),
         ('helm/library/cortex', 'cortex'),
     ],
     'cortex-manila': [
-        ('helm/library/cortex-postgres', 'cortex-postgres'),
         ('helm/library/cortex', 'cortex'),
     ],
     'cortex-cinder': [
-        ('helm/library/cortex-postgres', 'cortex-postgres'),
         ('helm/library/cortex', 'cortex'),
     ],
     'cortex-ironcore': [
-        ('helm/library/cortex-postgres', 'cortex-postgres'),
         ('helm/library/cortex', 'cortex'),
     ],
     'cortex-pods': [
-        ('helm/library/cortex-postgres', 'cortex-postgres'),
         ('helm/library/cortex', 'cortex'),
     ],
     'cortex-placement-shim': [
@@ -206,7 +203,7 @@ for (bundle_chart_path, bundle_chart_name) in bundle_charts:
         pkg_out = str(local('helm package ' + dep_chart_path)).strip()
         gen_tgz = os.path.basename(pkg_out)
         # Always remove stale old versions of this chart (e.g. cortex-0.5.1.tgz when current is 0.9.0).
-        # Uses [0-9] prefix so cortex-[0-9]*.tgz does not accidentally match cortex-postgres-*.tgz.
+        # Uses [0-9] prefix so cortex-[0-9]*.tgz does not accidentally match other cortex-*.tgz charts.
         local('find ' + bundle_chart_path + '/charts/ -maxdepth 1 -name "' + dep_chart_name + '-[0-9]*.tgz" ! -name "' + gen_tgz + '" -delete')
         # If the file isn't there yet, copy it over.
         if not os.path.exists(bundle_chart_path + '/charts/' + gen_tgz):
@@ -251,8 +248,8 @@ k8s_yaml(helm('./helm/bundles/cortex-crds', name='cortex-crds', set=crd_extra_va
 if 'nova' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Nova bundle")
     k8s_yaml(helm('./helm/bundles/cortex-nova', name='cortex-nova', values=tilt_values, set=env_set_overrides))
-    k8s_resource('cortex-nova-postgresql-v18-g0', labels=['Cortex-Nova'], port_forwards=[
-        port_forward(8000, 5432),
+    k8s_resource('cortex-nova-valkey', labels=['Cortex-Nova'], port_forwards=[
+        port_forward(8000, 6379),
     ])
     k8s_resource('cortex-nova-scheduling-controller-manager', labels=['Cortex-Nova'], port_forwards=[
         port_forward(8001, 8080),
@@ -276,8 +273,8 @@ if 'nova' in ACTIVE_DEPLOYMENTS:
 if 'manila' in ACTIVE_DEPLOYMENTS:
     print("Activating Cortex Manila bundle")
     k8s_yaml(helm('./helm/bundles/cortex-manila', name='cortex-manila', values=tilt_values, set=env_set_overrides))
-    k8s_resource('cortex-manila-postgresql-v18-g0', labels=['Cortex-Manila'], port_forwards=[
-        port_forward(8002, 5432),
+    k8s_resource('cortex-manila-valkey', labels=['Cortex-Manila'], port_forwards=[
+        port_forward(8002, 6379),
     ])
     k8s_resource('cortex-manila-scheduling-controller-manager', labels=['Cortex-Manila'], port_forwards=[
             port_forward(8003, 8080),
@@ -293,8 +290,8 @@ if 'manila' in ACTIVE_DEPLOYMENTS:
 
 if 'cinder' in ACTIVE_DEPLOYMENTS:
     k8s_yaml(helm('./helm/bundles/cortex-cinder', name='cortex-cinder', values=tilt_values, set=env_set_overrides))
-    k8s_resource('cortex-cinder-postgresql-v18-g0', labels=['Cortex-Cinder'], port_forwards=[
-        port_forward(8004, 5432),
+    k8s_resource('cortex-cinder-valkey', labels=['Cortex-Cinder'], port_forwards=[
+        port_forward(8004, 6379),
     ])
     k8s_resource('cortex-cinder-scheduling-controller-manager', labels=['Cortex-Cinder'], port_forwards=[
         port_forward(8005, 8080),

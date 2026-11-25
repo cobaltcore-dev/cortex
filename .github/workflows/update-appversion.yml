@@ -43,7 +43,6 @@ jobs:
           {
             bash .github/scripts/bump-chart.sh helm/library/cortex          cortex
             bash .github/scripts/bump-chart.sh helm/library/cortex-shim     cortex-shim
-            bash .github/scripts/bump-chart.sh helm/library/cortex-postgres cortex-postgres
           } | tee /tmp/bump.log
 
       - name: Summarize bump

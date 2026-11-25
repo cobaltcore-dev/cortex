@@ -4,14 +4,21 @@
 package openstack
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store/memory"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
@@ -144,9 +151,9 @@ func TestOpenStackDatasourceSpec(t *testing.T) {
 			},
 		},
 		Storage: v1alpha1.StorageSpec{
-			Type: v1alpha1.StorageTypePostgres,
-			Postgres: &v1alpha1.PostgresStorage{SecretRef: corev1.SecretReference{
-				Name:      "db-credentials",
+			Type: v1alpha1.StorageTypeValkey,
+			Valkey: &v1alpha1.ValkeyStorage{SecretRef: corev1.SecretReference{
+				Name:      "valkey-credentials",
 				Namespace: "default",
 			}},
 		},
@@ -545,5 +552,72 @@ func TestUpdatePredicateIgnoresStatusConditionChanges(t *testing.T) {
 				t.Errorf("expected %v, got %v", tt.expected, result)
 			}
 		})
+	}
+}
+
+type resyncTestModel struct {
+	ID string `db:"id,primarykey"`
+}
+
+func (resyncTestModel) TableName() string            { return "resync_test_models" }
+func (resyncTestModel) Indexes() map[string][]string { return nil }
+
+func TestReconcileResyncsLostStoreData(t *testing.T) {
+	st := memory.New()
+	storageType := v1alpha1.StorageType("openstack-resync-test")
+	store.Register(storageType, func(context.Context, client.Client, v1alpha1.StorageSpec) (store.Store, error) {
+		return st, nil
+	})
+	dsType := v1alpha1.OpenStackDatasourceType("resync-test")
+	datasources.RegisterScope(func(spec v1alpha1.DatasourceSpec) (store.Scope, bool) {
+		return store.Scope{Model: resyncTestModel{}}, spec.OpenStack.Type == dsType
+	})
+
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	ds := &v1alpha1.Datasource{
+		ObjectMeta: metav1.ObjectMeta{Name: "ds"},
+		Spec: v1alpha1.DatasourceSpec{
+			Type: v1alpha1.DatasourceTypeOpenStack,
+			OpenStack: v1alpha1.OpenStackDatasource{
+				Type:         dsType,
+				SyncInterval: metav1.Duration{Duration: time.Hour},
+				SecretRef:    corev1.SecretReference{Name: "missing-keystone-secret"},
+			},
+			Storage: v1alpha1.StorageSpec{Type: storageType},
+		},
+		Status: v1alpha1.DatasourceStatus{
+			NextSyncTime:    metav1.NewTime(time.Now().Add(time.Hour)),
+			NumberOfObjects: new(int64(1)),
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds).WithStatusSubresource(ds).Build()
+	r := &OpenStackDatasourceReconciler{Client: c, Scheme: scheme}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "ds"}}
+	r.reconciledOnce.Store(req.NamespacedName, struct{}{})
+	ctx := t.Context()
+
+	// Stored and not yet due: skip, but check the store again soon.
+	if err := store.ReplaceAll(ctx, st, "", []resyncTestModel{{ID: "1"}}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := r.Reconcile(ctx, req)
+	if err != nil || res.RequeueAfter != datasources.StoreCheckInterval {
+		t.Fatalf("expected skip with requeue after %v, got %v, %v", datasources.StoreCheckInterval, res, err)
+	}
+
+	// The store lost its data: sync right away, which fails here at keystone.
+	st.Clear()
+	if _, err := r.Reconcile(ctx, req); err == nil {
+		t.Fatal("expected a sync attempt")
+	}
+	if err := c.Get(ctx, req.NamespacedName, ds); err != nil {
+		t.Fatal(err)
+	}
+	cond := meta.FindStatusCondition(ds.Status.Conditions, v1alpha1.DatasourceConditionReady)
+	if cond == nil || cond.Reason != "KeystoneAuthenticationFailed" {
+		t.Fatalf("expected sync attempt to fail at keystone, got %+v", cond)
 	}
 }

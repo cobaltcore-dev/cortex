@@ -67,12 +67,13 @@ sharedSSOCert: &sharedSSOCert
   # If true, the certificate is not verified.
   selfSigned: "false"
 
-postgres:
-  host: cortex-nova-postgresql-v18-g0
-  user: postgres
+# Connection to the valkey server in which the datasources store their objects.
+# Rendered into the secret cortex-nova-valkey, which also provides the password
+# of the valkey default user.
+store:
+  host: cortex-nova-valkey
+  port: "6379"
   password: secret
-  database: postgres
-  port: "5432"
 
 prometheus:
   url: "https://path-to-your-prometheus"
@@ -366,7 +367,7 @@ cortex-scheduling-controllers:
     minSuccessForShortInterval: 0
     # Maximum failures allowed to still use short interval
     maxFailuresForShortInterval: 99
-    # If true, uses hypervisor CRD as source of truth for VM location instead of postgres
+    # If true, uses hypervisor CRD as source of truth for VM location instead of the nova servers datasource
     trustHypervisorLocation: true
     # How often to re-validate acknowledged failover reservations
     revalidationInterval: 30m
@@ -438,7 +439,16 @@ cortex-knowledge-controllers:
       - kpis-controller
     enabledTasks: []
 
-# Custom configuration for the cortex postgres chart.
-cortex-postgres:
-  fullnameOverride: cortex-nova-postgresql
-  major: "18"
+# Custom configuration for the valkey chart, see https://valkey.io/valkey-helm/.
+valkey:
+  fullnameOverride: cortex-nova-valkey
+  auth:
+    enabled: true
+    usersExistingSecret: cortex-nova-valkey
+    aclUsers:
+      default:
+        permissions: "~* &* +@all"
+        passwordKey: password
+  # Datasources sync again when valkey lost its data, so no volume is needed.
+  persistence:
+    enabled: false

@@ -35,7 +35,7 @@ and `cmd/shim`, and the Helm defaults under `helm/`.
 3. [CI/CD and packaging](01-getting-started/03-cicd-and-packaging.md)
 4. [The Helm charts](01-getting-started/04-helm-charts.md)
 5. [Make targets](01-getting-started/05-make-targets.md)
-6. [Postgres](01-getting-started/06-postgres.md)
+6. [Valkey](01-getting-started/06-valkey.md)
 7. [Developer and operator tooling](01-getting-started/07-tooling.md)
 8. [Local development with Tilt](01-getting-started/08-local-development-with-tilt.md)
 9. [Install a domain bundle](01-getting-started/09-installing-a-domain-bundle.md)

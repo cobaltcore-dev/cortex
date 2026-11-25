@@ -14,7 +14,7 @@ import (
 // QuotaControllerConfig defines the configuration for the quota controller.
 type QuotaControllerConfig struct {
 	// FullReconcileInterval is the periodic full reconcile interval.
-	// Full reconcile re-reads all VMs from Postgres and recomputes all usage. Default: 5m.
+	// Full reconcile re-reads all VMs from the knowledge store and recomputes all usage. Default: 5m.
 	FullReconcileInterval metav1.Duration `json:"fullReconcileInterval"`
 
 	// CRStateFilter defines which CommittedResource states to include

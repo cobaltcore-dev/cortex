@@ -64,16 +64,12 @@ Output exactly this format. No preamble, no closing remarks.
 
 ### Changed Charts
 - cortex appVersion: <value>
-- cortex-postgres appVersion: <value>
 - cortex-shim appVersion: <value>
 (only the library charts whose appVersion actually changed)
 
 ### Commits by Component
 
 #### cortex core
-- <sha> <subject>
-
-#### cortex postgres
 - <sha> <subject>
 
 #### cortex shim

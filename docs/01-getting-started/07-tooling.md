@@ -139,6 +139,10 @@ Audits failover/committed `Reservation`s against the VMs actually present on hyp
 with Nova's Postgres. It renders once and exits. Postgres features degrade gracefully if the database is
 unreachable — you still get the cluster-side view.
 
+> [!NOTE]
+> The tool still reads the Postgres datastore that [Valkey](06-valkey.md) replaced, so its Postgres
+> features stay unavailable until it is ported to the new store.
+
 ```
 go run tools/visualize-reservations/main.go --sort res-host --views summary
 ```
@@ -207,10 +211,10 @@ moved to the repo-root `dashboards/` directory and are covered in
 [The infrastructure dashboard](../04-knowledge-database/05-infrastructure-dashboard.md).
 
 These utilities sit beside Cortex rather than inside it: none is shipped in the Helm charts, and each
-reads the same CRDs, logs, and [Postgres](06-postgres.md) datastore the rest of the book describes —
+reads the same CRDs and logs the rest of the book describes —
 they are windows onto a running system, useful once you have one up. The next page gets you there,
 running Cortex locally with Tilt.
 
 ## Next
 
-[Prev: Postgres](06-postgres.md) · [Next: Local development with Tilt »](08-local-development-with-tilt.md)
+[Prev: Valkey](06-valkey.md) · [Next: Local development with Tilt »](08-local-development-with-tilt.md)

@@ -10,7 +10,6 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 
 	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources"
-	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store/postgres"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -124,9 +123,9 @@ func TestDatasourceSpec(t *testing.T) {
 			},
 		},
 		Storage: v1alpha1.StorageSpec{
-			Type: v1alpha1.StorageTypePostgres,
-			Postgres: &v1alpha1.PostgresStorage{SecretRef: corev1.SecretReference{
-				Name:      "db-credentials",
+			Type: v1alpha1.StorageTypeValkey,
+			Valkey: &v1alpha1.ValkeyStorage{SecretRef: corev1.SecretReference{
+				Name:      "valkey-credentials",
 				Namespace: "default",
 			}},
 		},
@@ -152,8 +151,8 @@ func TestDatasourceSpec(t *testing.T) {
 		t.Errorf("Expected alias 'node_exporter_host_cpu_usage', got %s", spec.Prometheus.Alias)
 	}
 
-	if spec.Storage.Postgres.SecretRef.Name != "db-credentials" {
-		t.Errorf("Expected storage secret name 'db-credentials', got %s", spec.Storage.Postgres.SecretRef.Name)
+	if spec.Storage.Valkey.SecretRef.Name != "valkey-credentials" {
+		t.Errorf("Expected storage secret name 'valkey-credentials', got %s", spec.Storage.Valkey.SecretRef.Name)
 	}
 
 	if spec.SSOSecretRef == nil {
@@ -194,11 +193,9 @@ func TestMetricTypeMapping(t *testing.T) {
 func TestNewTypedSyncerFunctionExists(t *testing.T) {
 	// Test that we can create a typed syncer (even though it's internal)
 	// We can't directly test the internal functions, but we can test the types
-	mockDB := &postgres.DB{}
 	monitor := datasources.Monitor{}
 
 	// These should not panic when called
-	_ = mockDB
 	_ = monitor
 
 	// Test that we can create a prometheus datasource

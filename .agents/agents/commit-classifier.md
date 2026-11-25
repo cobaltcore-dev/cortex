@@ -1,6 +1,6 @@
 ---
 name: commit-classifier
-description: Read-only investigator that takes a list of commit SHAs and classifies each one by component (cortex core / postgres / shim / general) and whether it introduces a breaking change. Returns one row per commit with a short reason. Reusable wherever commits need bucketing — release digests, weekly reviews, security reviews.
+description: Read-only investigator that takes a list of commit SHAs and classifies each one by component (cortex core / shim / general) and whether it introduces a breaking change. Returns one row per commit with a short reason. Reusable wherever commits need bucketing — release digests, weekly reviews, security reviews.
 tools: Bash, Read
 model: inherit
 ---
@@ -38,11 +38,10 @@ You need both the changed-paths list (for component classification) and the diff
 Pick exactly one component per commit based on which paths it touches:
 
 - **cortex shim** — `internal/shim/...` or `cmd/shim/...`
-- **cortex postgres** — the postgres image (`postgres/`) or its helm chart (`helm/library/cortex-postgres/...`)
-- **cortex core** — anything else under the manager or external scheduler that isn't shim/postgres
+- **cortex core** — anything else under the manager or external scheduler that isn't shim
 - **general** — CI, tooling, docs (`docs/`, `.github/`, `Makefile`, etc.), or other non-code changes
 
-A commit that touches multiple components: prefer the most specific one (shim/postgres beats core, code-bearing components beat general). If two equally-specific components are touched, list the commit under both rather than picking one arbitrarily.
+A commit that touches multiple components: prefer the most specific one (shim beats core, code-bearing components beat general). If two equally-specific components are touched, list the commit under both rather than picking one arbitrarily.
 
 ## Step 3: Classify breaking-vs-not
 
@@ -69,7 +68,7 @@ Return exactly this structure. The caller parses it line-by-line.
 | sha     | component       | breaking | reason                                          |
 | ------- | --------------- | -------- | ----------------------------------------------- |
 | abc1234 | cortex core     | no       | refactor of internal scheduler queue            |
-| def5678 | cortex postgres | yes      | renamed values.yaml key replication.replicas    |
+| def5678 | cortex shim     | yes      | renamed values.yaml key replication.replicas    |
 | ...     |                 |          |                                                 |
 ```
 
@@ -81,7 +80,7 @@ After the table, append a short summary:
 ### Summary
 - Total commits: N
 - Breaking: N
-- By component: cortex core: N, cortex postgres: N, cortex shim: N, general: N
+- By component: cortex core: N, cortex shim: N, general: N
 ```
 
 No preamble, no closing remarks — return the table and summary only.

@@ -17,8 +17,7 @@ is running. It rounds out Getting Started by turning the chart structure of
 - A Kubernetes cluster and `kubectl` pointed at it.
 - Helm 3.
 - Access to the Cortex chart directory (`helm/`) or a chart repository hosting the bundles.
-- A reachable Postgres, or use the Postgres the bundle deploys by default (via its `cortex-postgres`
-  subchart — see [Postgres](06-postgres.md)).
+- Nothing else: the bundle deploys its own Valkey via its `valkey` subchart — see [Valkey](06-valkey.md).
 
 ## Step 1 — Install the CRDs first
 
@@ -66,9 +65,9 @@ Each domain has its own bundle. Pick the one for your platform:
 | `cortex-pods` | Kubernetes pods |
 
 Provide your configuration under the subchart's `conf` block and the credential blocks (`openstack`,
-`postgres`, `prometheus`) — the config keys are the `conf` struct each manager loads via `pkg/conf`,
-and the chart values live in `helm/library/**/values.yaml`. By default the bundle deploys its own
-Postgres via the `cortex-postgres` subchart:
+`store`, `prometheus`) — the config keys are the `conf` struct each manager loads via `pkg/conf`,
+and the chart values live in `helm/library/**/values.yaml`. The bundle deploys its own
+Valkey via the `valkey` subchart:
 
 ```bash
 helm install cortex-nova helm/bundles/cortex-nova \
@@ -112,7 +111,7 @@ kubectl logs deploy/cortex-nova-scheduling-controller-manager | grep -i "startin
 ## Deploy order recap
 
 1. `cortex-crds` (once per cluster).
-2. Postgres (deployed by the bundle's `cortex-postgres` subchart, or external).
+2. Valkey (deployed by the bundle's `valkey` subchart).
 3. The domain bundle(s).
 
 Install additional domains by repeating step 2 with a different bundle in the same cluster; the CRDs

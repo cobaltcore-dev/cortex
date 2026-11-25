@@ -8,10 +8,10 @@ type: application
 version: 0.0.118
 appVersion: 0.1.0
 dependencies:
-  # from: file://../../library/cortex-postgres
-  - name: cortex-postgres
-    repository: oci://ghcr.io/cobaltcore-dev/cortex/charts
-    version: 0.6.36
+  # Valkey in which the datasources store their objects.
+  - name: valkey
+    repository: https://valkey.io/valkey-helm/
+    version: 1.0.0
 
   # from: file://../../library/cortex
   - name: cortex

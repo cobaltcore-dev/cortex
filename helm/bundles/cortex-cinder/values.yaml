@@ -54,12 +54,13 @@ sharedSSOCert: &sharedSSOCert
   # If true, the certificate is not verified.
   selfSigned: "false"
 
-postgres:
-  host: cortex-cinder-postgresql-v18-g0
-  user: postgres
+# Connection to the valkey server in which the datasources store their objects.
+# Rendered into the secret cortex-cinder-valkey, which also provides the password
+# of the valkey default user.
+store:
+  host: cortex-cinder-valkey
+  port: "6379"
   password: secret
-  database: postgres
-  port: "5432"
 
 prometheus:
   url: "https://path-to-your-prometheus"
@@ -148,7 +149,16 @@ cortex-knowledge-controllers:
       - knowledge-controllers
       - kpis-controller
 
-# Custom configuration for the cortex postgres chart.
-cortex-postgres:
-  fullnameOverride: cortex-cinder-postgresql
-  major: "18"
+# Custom configuration for the valkey chart, see https://valkey.io/valkey-helm/.
+valkey:
+  fullnameOverride: cortex-cinder-valkey
+  auth:
+    enabled: true
+    usersExistingSecret: cortex-cinder-valkey
+    aclUsers:
+      default:
+        permissions: "~* &* +@all"
+        passwordKey: password
+  # Datasources sync again when valkey lost its data, so no volume is needed.
+  persistence:
+    enabled: false

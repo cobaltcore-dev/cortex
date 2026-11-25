@@ -11,8 +11,7 @@ import (
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
 	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources"
 	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store"
-	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store/postgres"
-	testlibDB "github.com/cobaltcore-dev/cortex/pkg/knowledge/store/postgres/testing"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/store/memory"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -158,9 +157,7 @@ func TestKnowledgeReconciler_Reconcile(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dbEnv := testlibDB.SetupDBEnv(t)
-			defer dbEnv.Close()
-			testStore = postgres.NewStore(&postgres.DB{DbMap: dbEnv.DbMap})
+			testStore = memory.New()
 			ctx := t.Context()
 			if err := store.ReplaceAll(ctx, testStore, "", []testModel{{"a", 1}, {"b", 2}}); err != nil {
 				t.Fatal(err)

@@ -54,12 +54,13 @@ sharedSSOCert: &sharedSSOCert
   # If true, the certificate is not verified.
   selfSigned: "false"
 
-postgres:
-  host: cortex-manila-postgresql-v18-g0
-  user: postgres
+# Connection to the valkey server in which the datasources store their objects.
+# Rendered into the secret cortex-manila-valkey, which also provides the password
+# of the valkey default user.
+store:
+  host: cortex-manila-valkey
+  port: "6379"
   password: secret
-  database: postgres
-  port: "5432"
 
 prometheus:
   url: "https://path-to-your-prometheus"
@@ -148,7 +149,16 @@ cortex-knowledge-controllers:
       - knowledge-controllers
       - kpis-controller
 
-# Custom configuration for the cortex postgres chart.
-cortex-postgres:
-  fullnameOverride: cortex-manila-postgresql
-  major: "18"
+# Custom configuration for the valkey chart, see https://valkey.io/valkey-helm/.
+valkey:
+  fullnameOverride: cortex-manila-valkey
+  auth:
+    enabled: true
+    usersExistingSecret: cortex-manila-valkey
+    aclUsers:
+      default:
+        permissions: "~* &* +@all"
+        passwordKey: password
+  # Datasources sync again when valkey lost its data, so no volume is needed.
+  persistence:
+    enabled: false

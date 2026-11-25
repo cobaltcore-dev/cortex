@@ -179,7 +179,7 @@ spec:
                   alias:
                     description: |-
                       Especially when a more complex query is used, we need an alias
-                      under which the table will be stored in the database.
+                      under which the metrics will be stored in the store.
                       Additionally, this alias is used to reference the metric in the
                       feature extractors as dependency.
                     minLength: 1
@@ -251,19 +251,24 @@ spec:
               storage:
                 description: Storage backend in which the datasource objects are stored.
                 properties:
-                  postgres:
-                    description: Postgres storage configuration, required if type
-                      is "postgres".
+                  type:
+                    description: The type of the storage backend.
+                    enum:
+                    - valkey
+                    type: string
+                  valkey:
+                    description: Valkey storage configuration, required if type is
+                      "valkey".
                     properties:
                       secretRef:
                         description: |-
-                          Database credentials to use for the datasource.
+                          Connection details of the valkey server.
                           The secret should contain the following keys:
-                          - "user": The database user.
-                          - "password": The database password.
-                          - "host": The database host.
-                          - "port": The database port.
-                          - "database": The database name.
+                          - "host": The valkey host.
+                          - "port": The valkey port.
+                          - "password": The valkey password (optional).
+                          - "username": The valkey ACL user (optional).
+                          - "db": The valkey database number (optional, default 0).
                         properties:
                           name:
                             description: name is unique within a namespace to reference
@@ -278,17 +283,12 @@ spec:
                     required:
                     - secretRef
                     type: object
-                  type:
-                    description: The type of the storage backend.
-                    enum:
-                    - postgres
-                    type: string
                 required:
                 - type
                 type: object
                 x-kubernetes-validations:
-                - message: postgres storage requires the postgres field
-                  rule: self.type != 'postgres' || has(self.postgres)
+                - message: valkey storage requires the valkey field
+                  rule: self.type != 'valkey' || has(self.valkey)
               type:
                 description: The type of the datasource.
                 type: string

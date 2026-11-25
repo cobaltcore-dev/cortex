@@ -179,7 +179,7 @@ spec:
           significantly.
 
     - alert: CortexNovaTooManyDBConnectionAttempts
-      expr: rate(cortex_db_connection_attempts_total{service="cortex-nova-metrics"}[5m]) > 0.1
+      expr: rate(cortex_valkey_connection_attempts_total{service="cortex-nova-metrics"}[5m]) > 0.1
       for: 5m
       labels:
 {{- if .Values.alerts.persesDashboardBaseURL }}
@@ -191,10 +191,11 @@ spec:
         support_group: workload-management
         playbook: docs/support/playbook/cortex/alerts/database
       annotations:
-        summary: "`{{ "{{" }} $labels.component {{ "}}" }}` is trying to connect to the database too often"
+        summary: "`{{ "{{" }} $labels.component {{ "}}" }}` is trying to connect to valkey too often"
         description: >
-          `{{ "{{" }} $labels.component {{ "}}" }}` is trying to connect to the database too often. This may happen
-          when the database is down or the connection parameters are misconfigured.
+          `{{ "{{" }} $labels.component {{ "}}" }}` is trying to connect to valkey too often. This may happen
+          when valkey is down or the connection parameters in the cortex-nova-valkey
+          secret are misconfigured.
 
     - alert: CortexNovaSyncNotSuccessful
       expr: cortex_sync_request_processed_total{service="cortex-nova-metrics"} - cortex_sync_request_duration_seconds_count{service="cortex-nova-metrics"} > 0

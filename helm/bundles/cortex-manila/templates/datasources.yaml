@@ -6,10 +6,10 @@ metadata:
 spec:
   schedulingDomain: manila
   storage:
-    type: postgres
-    postgres:
+    type: valkey
+    valkey:
       secretRef:
-        name: cortex-manila-postgres
+        name: cortex-manila-valkey
         namespace: {{ .Release.Namespace }}
   {{- if .Values.prometheus.sso.enabled }}
   ssoSecretRef:
@@ -32,10 +32,10 @@ metadata:
 spec:
   schedulingDomain: manila
   storage:
-    type: postgres
-    postgres:
+    type: valkey
+    valkey:
       secretRef:
-        name: cortex-manila-postgres
+        name: cortex-manila-valkey
         namespace: {{ .Release.Namespace }}
   {{- if .Values.prometheus.sso.enabled }}
   ssoSecretRef:
@@ -58,10 +58,10 @@ metadata:
 spec:
   schedulingDomain: manila
   storage:
-    type: postgres
-    postgres:
+    type: valkey
+    valkey:
       secretRef:
-        name: cortex-manila-postgres
+        name: cortex-manila-valkey
         namespace: {{ .Release.Namespace }}
   {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:

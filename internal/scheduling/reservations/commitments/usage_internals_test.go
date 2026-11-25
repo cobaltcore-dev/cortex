@@ -193,7 +193,7 @@ func TestBuildVMAttributes(t *testing.T) {
 
 		for _, absent := range []string{"metadata", "tags"} {
 			if _, present := attrs[absent]; present {
-				t.Errorf("%s must not appear in output (not available from Postgres cache)", absent)
+				t.Errorf("%s must not appear in output (not available from the knowledge store)", absent)
 			}
 		}
 

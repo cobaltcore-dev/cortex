@@ -64,7 +64,7 @@ type VMSource interface {
 	ListVMsByProject(ctx context.Context, projectID string) ([]VM, error)
 	// ListVMsOnHypervisors returns VMs that are on the given hypervisors.
 	// If trustHypervisorLocation is true, uses hypervisor CRD as source of truth for VM location.
-	// If trustHypervisorLocation is false, uses postgres as source of truth but filters to VMs on known hypervisors.
+	// If trustHypervisorLocation is false, uses the nova servers datasource as source of truth but filters to VMs on known hypervisors.
 	ListVMsOnHypervisors(ctx context.Context, hypervisorList *hv1.HypervisorList, trustHypervisorLocation bool) ([]VM, error)
 	// GetVM returns a specific VM by UUID.
 	// Returns nil, nil if the VM is not found.
@@ -381,14 +381,14 @@ func normalizeOSType(osType string) string {
 	return osType
 }
 
-func buildVMsFromHypervisors(hypervisorList *hv1.HypervisorList, postgresVMs []VM) []VM {
-	vmDataByUUID := make(map[string]VM, len(postgresVMs))
-	for _, vm := range postgresVMs {
+func buildVMsFromHypervisors(hypervisorList *hv1.HypervisorList, storeVMs []VM) []VM {
+	vmDataByUUID := make(map[string]VM, len(storeVMs))
+	for _, vm := range storeVMs {
 		vmDataByUUID[vm.UUID] = vm
 	}
 
 	var result []VM
-	var enrichedCount, notInPostgresCount, duplicateCount int
+	var enrichedCount, notInStoreCount, duplicateCount int
 	seen := make(map[string]string)
 
 	for _, hv := range hypervisorList.Items {
@@ -406,9 +406,9 @@ func buildVMsFromHypervisors(hypervisorList *hv1.HypervisorList, postgresVMs []V
 			}
 			seen[inst.ID] = hv.Name
 
-			pgVM, existsInPostgres := vmDataByUUID[inst.ID]
-			if !existsInPostgres {
-				notInPostgresCount++
+			pgVM, existsInStore := vmDataByUUID[inst.ID]
+			if !existsInStore {
+				notInStoreCount++
 				continue
 			}
 
@@ -433,9 +433,9 @@ func buildVMsFromHypervisors(hypervisorList *hv1.HypervisorList, postgresVMs []V
 	}
 
 	vmSourceLog.V(1).Info("buildVMsFromHypervisors statistics",
-		"totalHypervisorInstances", enrichedCount+notInPostgresCount+duplicateCount,
-		"enrichedWithPostgresData", enrichedCount,
-		"notInPostgres", notInPostgresCount,
+		"totalHypervisorInstances", enrichedCount+notInStoreCount+duplicateCount,
+		"enrichedWithStoreData", enrichedCount,
+		"notInStore", notInStoreCount,
 		"duplicatesSkipped", duplicateCount)
 
 	return result
@@ -546,8 +546,8 @@ func warnUnknownVMsOnHypervisors(hypervisors *hv1.HypervisorList, vms []VM) {
 	}
 }
 
-// lazyDBVMSource is a VMSource that defers Postgres connection until first use.
-// Postgres connection requires the manager cache to be ready (Datasource CRD lookup),
+// lazyDBVMSource is a VMSource that defers the store connection until first use.
+// The store connection requires the manager cache to be ready (Datasource CRD lookup),
 // so this type is safe to construct during setup before the manager starts.
 type lazyDBVMSource struct {
 	k8sClient      client.Client
@@ -556,10 +556,10 @@ type lazyDBVMSource struct {
 	inner          *DBVMSource
 }
 
-// NewPostgresVMSource creates a VMSource backed by the named Datasource CRD.
-// The Postgres connection is established on first use, so this is safe to call
+// NewStoreVMSource creates a VMSource backed by the store of the named Datasource CRD.
+// The store connection is established on first use, so this is safe to call
 // before the manager cache is ready.
-func NewPostgresVMSource(k8sClient client.Client, datasourceName string) VMSource {
+func NewStoreVMSource(k8sClient client.Client, datasourceName string) VMSource {
 	return &lazyDBVMSource{k8sClient: k8sClient, datasourceName: datasourceName}
 }
 

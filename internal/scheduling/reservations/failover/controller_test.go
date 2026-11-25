@@ -568,13 +568,13 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 		},
 		// ====================================================================
 		// Safeguard: VM missing from VM source but still on a hypervisor
-		// (e.g. postgres data loss). Allocations must be preserved.
+		// (e.g. knowledge store data loss). Allocations must be preserved.
 		// ====================================================================
 		{
 			name: "safeguard: VM missing from VM source but still on hypervisor - keep allocation",
 			vms: []reservations.VM{
 				newTestVM("vm-1", "host1"),
-				// vm-2 missing from VM source (postgres lost data)
+				// vm-2 missing from VM source (store lost data)
 			},
 			vmsOnHypervisor: map[string]string{
 				"vm-1": "host1",
@@ -595,7 +595,7 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 		{
 			name: "safeguard: VM source completely empty but VMs still on hypervisors - keep all allocations",
 			vms:  []reservations.VM{
-				// VM source returns nothing (postgres wiped)
+				// VM source returns nothing (store wiped)
 			},
 			vmsOnHypervisor: map[string]string{
 				"vm-1": "host1",
@@ -622,7 +622,7 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 			name: "safeguard: only some missing VMs are still on hypervisor - remove only fully gone ones",
 			vms: []reservations.VM{
 				newTestVM("vm-1", "host1"),
-				// vm-2 missing from postgres but on hypervisor
+				// vm-2 missing from the store but on hypervisor
 				// vm-3 missing from both
 			},
 			vmsOnHypervisor: map[string]string{
@@ -644,10 +644,10 @@ func TestReconcileRemoveInvalidVMFromReservations(t *testing.T) {
 			},
 		},
 		{
-			name: "safeguard does not protect against hypervisor mismatch (VM is in postgres on different host)",
+			name: "safeguard does not protect against hypervisor mismatch (VM is in the store on different host)",
 			vms: []reservations.VM{
 				newTestVM("vm-1", "host1"),
-				newTestVM("vm-2", "host5"), // moved to host5 in postgres
+				newTestVM("vm-2", "host5"), // moved to host5 in the store
 			},
 			vmsOnHypervisor: map[string]string{
 				"vm-1": "host1",

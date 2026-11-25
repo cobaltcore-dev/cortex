@@ -275,11 +275,11 @@ func TestBuildVMsFromHypervisors(t *testing.T) {
 	tests := []struct {
 		name           string
 		hypervisorList *hv1.HypervisorList
-		postgresVMs    []VM
+		storeVMs       []VM
 		wantCount      int
 	}{
 		{
-			name: "empty postgres VMs",
+			name: "empty store VMs",
 			hypervisorList: &hv1.HypervisorList{
 				Items: []hv1.Hypervisor{
 					{
@@ -292,13 +292,13 @@ func TestBuildVMsFromHypervisors(t *testing.T) {
 					},
 				},
 			},
-			postgresVMs: []VM{},
-			wantCount:   0,
+			storeVMs:  []VM{},
+			wantCount: 0,
 		},
 		{
 			name:           "nil hypervisor items",
 			hypervisorList: &hv1.HypervisorList{Items: nil},
-			postgresVMs:    []VM{},
+			storeVMs:       []VM{},
 			wantCount:      0,
 		},
 	}
@@ -311,7 +311,7 @@ func TestBuildVMsFromHypervisors(t *testing.T) {
 				}
 			}()
 
-			result := buildVMsFromHypervisors(tt.hypervisorList, tt.postgresVMs)
+			result := buildVMsFromHypervisors(tt.hypervisorList, tt.storeVMs)
 
 			if len(result) != tt.wantCount {
 				t.Errorf("expected %d VMs, got %d", tt.wantCount, len(result))

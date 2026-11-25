@@ -25,8 +25,8 @@ helm/
 │   ├── cortex-ironcore/         # IronCore scheduling domain
 │   └── cortex-crds/             # CRDs for all operators
 ├── library/                   # Shared library charts
-│   ├── cortex-postgres/         # PostgreSQL database
-|   └── cortex/                  # Core cortex library
+│   ├── cortex-shim/             # Cortex shims
+│   └── cortex/                  # Core cortex library
 └── dev/                       # Development-only charts
     └── cortex-prometheus-operator/  # Local monitoring stack
 ```
@@ -52,7 +52,10 @@ Library charts provide **shared, reusable components** that are consumed by bund
 **Available library charts:**
 
 - `cortex` - [Kubebuilder](https://book.kubebuilder.io/reference/generating-crd) scaffold including CRDs and the cortex manager
-- `cortex-postgres` - PostgreSQL database deployment with monitoring
+- `cortex-shim` - Shims exposing cortex capabilities over REST endpoints
+
+The `cortex-nova`, `cortex-manila` and `cortex-cinder` bundles additionally depend on the upstream
+[valkey chart](https://valkey.io/valkey-helm/), which deploys the knowledge store of their datasources.
 
 **Integration with bundles:**
 

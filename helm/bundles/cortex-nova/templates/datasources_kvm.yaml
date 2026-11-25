@@ -7,10 +7,10 @@ metadata:
 spec:
   schedulingDomain: nova
   storage:
-    type: postgres
-    postgres:
+    type: valkey
+    valkey:
       secretRef:
-        name: cortex-nova-postgres
+        name: cortex-nova-valkey
         namespace: {{ .Release.Namespace }}
   {{- if .Values.prometheus.sso.enabled }}
   ssoSecretRef:

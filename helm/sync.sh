@@ -70,8 +70,12 @@ for dep in $DEPS; do
       echo "No repository specified for $NAME, skipping pull."
       continue
     fi
-    # Pull the chart
-    helm pull "$REPO/$NAME" --version "$VERSION" -d "$CHARTS_DIR"
+    # Pull the chart, either from an oci registry or a classic chart repository.
+    if [[ "$REPO" == oci://* ]]; then
+      helm pull "$REPO/$NAME" --version "$VERSION" -d "$CHARTS_DIR"
+    else
+      helm pull "$NAME" --repo "$REPO" --version "$VERSION" -d "$CHARTS_DIR"
+    fi
     if [ $? -ne 0 ]; then
       echo "Failed to pull $NAME from $REPO"
       exit 1

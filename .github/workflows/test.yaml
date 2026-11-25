@@ -29,7 +29,6 @@ jobs:
       - name: Run tests and calculate coverage
         run: |
           export GITHUB_ACTIONS=1
-          export POSTGRES_CONTAINER=1
 
           echo "Running tests..."
           go test -v \

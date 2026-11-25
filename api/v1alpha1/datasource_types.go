@@ -20,7 +20,7 @@ type PrometheusDatasource struct {
 	// The query to use to fetch the metric.
 	Query string `json:"query"`
 	// Especially when a more complex query is used, we need an alias
-	// under which the table will be stored in the database.
+	// under which the metrics will be stored in the store.
 	// Additionally, this alias is used to reference the metric in the
 	// feature extractors as dependency.
 	// +kubebuilder:validation:MinLength=1
@@ -186,29 +186,29 @@ type OpenStackDatasource struct {
 type StorageType string
 
 const (
-	// StorageTypePostgres stores datasource objects in a postgres database.
-	StorageTypePostgres StorageType = "postgres"
+	// StorageTypeValkey stores datasource objects in valkey.
+	StorageTypeValkey StorageType = "valkey"
 )
 
-type PostgresStorage struct {
-	// Database credentials to use for the datasource.
+type ValkeyStorage struct {
+	// Connection details of the valkey server.
 	// The secret should contain the following keys:
-	// - "user": The database user.
-	// - "password": The database password.
-	// - "host": The database host.
-	// - "port": The database port.
-	// - "database": The database name.
+	// - "host": The valkey host.
+	// - "port": The valkey port.
+	// - "password": The valkey password (optional).
+	// - "username": The valkey ACL user (optional).
+	// - "db": The valkey database number (optional, default 0).
 	SecretRef corev1.SecretReference `json:"secretRef"`
 }
 
-// +kubebuilder:validation:XValidation:rule="self.type != 'postgres' || has(self.postgres)",message="postgres storage requires the postgres field"
+// +kubebuilder:validation:XValidation:rule="self.type != 'valkey' || has(self.valkey)",message="valkey storage requires the valkey field"
 type StorageSpec struct {
 	// The type of the storage backend.
-	// +kubebuilder:validation:Enum=postgres
+	// +kubebuilder:validation:Enum=valkey
 	Type StorageType `json:"type"`
-	// Postgres storage configuration, required if type is "postgres".
+	// Valkey storage configuration, required if type is "valkey".
 	// +kubebuilder:validation:Optional
-	Postgres *PostgresStorage `json:"postgres,omitempty"`
+	Valkey *ValkeyStorage `json:"valkey,omitempty"`
 }
 
 type DatasourceType string
