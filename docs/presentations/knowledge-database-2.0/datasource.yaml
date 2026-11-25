@@ -15,8 +15,8 @@ spec:
       name: openstack
       namespace: cortex
   storage:
-    type: postgres
-    postgres:
+    type: valkey
+    valkey:
       secretRef:
-        name: postgres
+        name: cortex-nova-valkey
         namespace: cortex

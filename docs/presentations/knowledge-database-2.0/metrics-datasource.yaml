@@ -9,10 +9,10 @@ spec:
   schedulingDomain: nova
   type: prometheus
   storage:
-    type: postgres
-    postgres:
+    type: valkey
+    valkey:
       secretRef:
-        name: postgres
+        name: cortex-nova-valkey
         namespace: cortex
   prometheus:
     alias: host_cpu_contention_pct
