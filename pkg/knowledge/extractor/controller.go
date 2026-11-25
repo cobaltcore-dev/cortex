@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/expression"
 	"github.com/cobaltcore-dev/cortex/pkg/knowledge/inputs"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -135,11 +136,11 @@ func (r *KnowledgeReconciler) extract(ctx context.Context, knowledge *v1alpha1.K
 		if err != nil {
 			return nil, inputError(err)
 		}
-		timeout := defaultExpressionTimeout
+		timeout := expression.DefaultTimeout
 		if r.Conf.ExpressionTimeoutSeconds > 0 {
 			timeout = time.Duration(r.Conf.ExpressionTimeoutSeconds) * time.Second
 		}
-		memoryBudget := defaultExpressionMemoryBudget
+		memoryBudget := expression.DefaultMemoryBudget
 		if r.Conf.ExpressionMemoryBudget > 0 {
 			memoryBudget = r.Conf.ExpressionMemoryBudget
 		}

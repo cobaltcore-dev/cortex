@@ -65,6 +65,54 @@ and the pipeline's `All Steps Known` (`AllStepsIndexed`) condition stays `False`
 result, is the signal your step was picked up. See
 [Inspecting and editing a pipeline](01-the-scheduling-engine.md#inspecting-and-editing-a-pipeline).
 
+## Filter with an expression (no code)
+
+Nova ships a built-in `filter_expression` step that filters hosts with an [expr](https://expr-lang.org)
+expression instead of Go code, mirroring
+[expression knowledges](../04-knowledge-database/03-feature-extraction.md#expression-knowledges). This lets
+you add a new knowledge and filter on top of it without building a new binary.
+
+The expression is evaluated **once per host** and must return a boolean — a host is kept when it returns
+`true` and removed when it returns `false`. The host name is available as `host`, the placement request as
+`request`, and each referenced knowledge as a variable holding its features as generic maps (keyed by the
+JSON field names the producing expression wrote).
+
+```yaml
+apiVersion: cortex.cobaltcore.dev/v1alpha1
+kind: Knowledge
+metadata:
+  name: blocked-hosts
+spec:
+  schedulingDomain: nova
+  expression:
+    run: | # produce a list of {computeHost, blocked} features
+      hypervisors | map({computeHost: .ServiceHost, blocked: .State == "down"})
+  inputs:
+    - var: hypervisors
+      datasource: nova-hypervisors
+---
+apiVersion: cortex.cobaltcore.dev/v1alpha1
+kind: Pipeline
+metadata:
+  name: nova
+spec:
+  schedulingDomain: nova
+  type: filter-weigher
+  filters:
+    - name: filter_expression
+      params:
+        - key: run
+          stringValue: none(blocked, .computeHost == host && .blocked)
+        - key: knowledges # map the expression var to the knowledge name
+          stringListMapValue:
+            blocked: [blocked-hosts]
+```
+
+Each `knowledges` entry maps an expression variable to exactly one knowledge name; the step checks those
+knowledges are `Ready` and non-empty at init. A broken expression is rejected at compile time (surfaced as
+an admission warning by the pipeline webhook). Evaluation is bounded by the same default timeout and memory
+budget as expression knowledges.
+
 ## Add a knowledge extractor or KPI
 
 1. Implement the extractor/KPI. Extractors declare an inputs struct with `input:"<var>"` tagged fields
