@@ -1,0 +1,35 @@
+{
+  "pipeline": "nova-expression-demo",
+  "context": {
+    "request_id": "expression-filter-demo-1"
+  },
+  "spec": {
+    "data": {
+      "instance_uuid": "expression-filter-demo-0001",
+      "flavor": {
+        "data": {
+          "name": "m1.small",
+          "memory_mb": 2048,
+          "vcpus": 1,
+          "extra_specs": {
+            "capabilities:hypervisor_type": "CH"
+          }
+        }
+      }
+    }
+  },
+  "hosts": [
+    { "host": "node004-bb086" },
+    { "host": "node006-bb086" },
+    { "host": "node007-bb086" },
+    { "host": "node002-bb086" },
+    { "host": "node001-bb086" }
+  ],
+  "weights": {
+    "node004-bb086": 0,
+    "node006-bb086": 0,
+    "node007-bb086": 0,
+    "node002-bb086": 0,
+    "node001-bb086": 0
+  }
+}

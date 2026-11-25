@@ -1,0 +1,17 @@
+# Copyright SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+# A baseline pipeline with no filters: it keeps every candidate host. Used by
+# the demo to contrast the host list returned without the expression filter
+# against the one returned with it (see pipeline.yaml).
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: nova-expression-demo-baseline
+spec:
+  schedulingDomain: nova
+  type: filter-weigher
+  description: |
+    Baseline for the expression filter demo. Runs no filters, so all candidate
+    hosts are returned. Compare against the nova-expression-demo pipeline.
+  filters: []

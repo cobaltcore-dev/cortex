@@ -1,0 +1,35 @@
+# Copyright SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+# A simple expression knowledge that counts how many nova VMs are currently
+# placed on each compute host. Only KVM hypervisors are considered (Cloud-
+# Hypervisor "CH" and QEMU), so VMware and Ironic hosts are excluded. KVM hosts
+# without any VMs appear with vms: 0, so every KVM hypervisor is represented.
+apiVersion: cortex.cloud/v1alpha1
+kind: Knowledge
+metadata:
+  name: vms-per-host
+spec:
+  schedulingDomain: nova
+  description: |
+    Number of nova VMs currently placed on each KVM (Cloud-Hypervisor/QEMU)
+    compute host, derived by counting servers grouped by their compute host
+    over the hypervisor list. VMware and Ironic hypervisors are filtered out.
+  recency: "60s"
+  expression:
+    run: |
+      let byHost = groupBy(filter(servers, .OSEXTSRVATTRHost != ""), .OSEXTSRVATTRHost);
+      hypervisors
+      | filter(let t = lower(.HypervisorType); t == "ch" || t == "qemu")
+      | groupBy(.ServiceHost)
+      | values()
+      | map(let g = #; {
+          computeHost: g[0].ServiceHost,
+          vms:         len(byHost[g[0].ServiceHost] ?? []),
+        })
+      | sortBy(.computeHost)
+  inputs:
+    - var: servers
+      datasource: nova-servers
+    - var: hypervisors
+      datasource: nova-hypervisors
