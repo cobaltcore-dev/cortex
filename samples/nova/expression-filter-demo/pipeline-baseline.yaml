@@ -7,11 +7,11 @@
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
-  name: nova-expression-demo-baseline
+  name: nova-contention-demo-baseline
 spec:
   schedulingDomain: nova
   type: filter-weigher
   description: |
-    Baseline for the expression filter demo. Runs no filters, so all candidate
-    hosts are returned. Compare against the nova-expression-demo pipeline.
+    Baseline for the contention filter demo. Runs no filters, so all candidate
+    hosts are returned. Compare against the nova-contention-demo pipeline.
   filters: []

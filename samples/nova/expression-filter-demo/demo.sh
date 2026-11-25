@@ -3,30 +3,31 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Demo for the nova filter_expression step on top of a dynamically added
-# knowledge. It applies a "vms-per-host" knowledge and a pipeline that excludes
-# the ~1/3 most heavily used hypervisors, then sends a scheduling request to the
-# external scheduler and shows the returned hosts once without the filter
-# (baseline pipeline) and once with it.
+# knowledge. It applies a "host-cpu-contention" knowledge (synthetic demo data)
+# and a pipeline that keeps only hosts with low CPU contention, then sends a
+# scheduling request to the external scheduler and shows the returned hosts once
+# without the filter (baseline pipeline) and once with it. Mirrors the
+# Knowledge DB 2.0 slide example.
 #
 # Prerequisites:
-#   - Tilt is up with the cortex-nova bundle pointed at a real OpenStack, so the
-#     nova-servers and nova-hypervisors datasources have data.
-#   - kubectl is configured for the Tilt cluster. jq and curl are installed.
-#   - The scheduler is reachable (the Tiltfile forwards localhost:8001 -> 8080).
+#   - A cortex-nova deployment (e.g. under Tilt) reachable via kubectl.
+#   - jq and curl are installed.
+#   - The scheduler is reachable (under Tilt, localhost:8001 -> pod 8080).
 #
 # Usage:
 #   ./demo.sh [command]
 #
 # Commands:
-#   all        Apply everything, then compare baseline vs filtered (default).
-#   knowledge  Apply only the vms-per-host knowledge and wait for it.
-#   pipelines  Apply only the baseline and filtered pipelines.
-#   apply      Apply the knowledge and both pipelines.
-#   counts     Print the VM count per host from the knowledge.
-#   schedule   Send a request and print the returned hosts. Args:
-#                ./demo.sh schedule <pipeline-name> [request.json]
-#   compare    Send the request to the baseline and filtered pipelines and diff.
-#   clean      Delete all demo resources to start over.
+#   all          Apply everything, then compare baseline vs filtered (default).
+#   knowledge    Apply only the host-cpu-contention knowledge and wait for it.
+#   pipelines    Apply only the baseline and filtered pipelines.
+#   apply        Apply the knowledge and both pipelines.
+#   counts       Print the avg CPU contention per host from the knowledge.
+#   schedule     Send a request and print the returned hosts. Args:
+#                  ./demo.sh schedule <pipeline-name> [request.json]
+#   compare      Send the request to the baseline and filtered pipelines and diff.
+#   walkthrough  Guided, narrated run of the whole demo (pauses for Enter).
+#   clean        Delete all demo resources to start over.
 #
 # Environment:
 #   SCHEDULER_URL   External scheduler endpoint (default localhost:8001).
@@ -37,9 +38,10 @@ cd "$(dirname "$0")"
 
 SCHEDULER_URL="${SCHEDULER_URL:-http://localhost:8001/scheduler/nova/external}"
 
-KNOWLEDGE_NAME="vms-per-host"
-PIPELINE_FILTERED="nova-expression-demo"
-PIPELINE_BASELINE="nova-expression-demo-baseline"
+KNOWLEDGE_NAME="host-cpu-contention"
+METRICS_KNOWLEDGE_NAME="host-cpu-metrics"
+PIPELINE_FILTERED="nova-contention-demo"
+PIPELINE_BASELINE="nova-contention-demo-baseline"
 
 SCHEDULER_DEPLOY="deploy/cortex-nova-scheduling-controller-manager"
 # Local port of SCHEDULER_URL, used to offer/auto-start a port-forward.
@@ -111,7 +113,13 @@ kube() {
 }
 
 apply_knowledge() {
-  echo "==> Applying knowledge $KNOWLEDGE_NAME"
+  echo "==> Applying raw metrics knowledge $METRICS_KNOWLEDGE_NAME"
+  echo "    (synthetic demo data — standing in for synced Prometheus CPU-contention metrics)"
+  kube apply -f knowledge-metrics.yaml
+  kube wait --for=condition=Ready "knowledge/$METRICS_KNOWLEDGE_NAME" --timeout=120s
+
+  echo "==> Applying join knowledge $KNOWLEDGE_NAME"
+  echo "    (expr-lang join of the metrics onto the real nova-hypervisors datasource)"
   kube apply -f knowledge.yaml
   echo "==> Applied knowledge spec:"
   kube get knowledge "$KNOWLEDGE_NAME" \
@@ -145,8 +153,7 @@ knowledge_features() {
   local raw
   raw="$(kubectl get knowledge "$KNOWLEDGE_NAME" -o jsonpath='{.status.raw}' 2>/dev/null || true)"
   if [ -z "$raw" ] || [ "$(echo "$raw" | jq '.features | length')" -eq 0 ]; then
-    echo "!! The $KNOWLEDGE_NAME knowledge has no features. Is it applied and are" >&2
-    echo "   the nova datasources populated? Run './demo.sh apply' first." >&2
+    echo "!! The $KNOWLEDGE_NAME knowledge has no features. Run './demo.sh apply' first." >&2
     return 1
   fi
   echo "$raw"
@@ -171,13 +178,13 @@ print_counts() {
   feats="$(knowledge_features)" || return 1
   total="$(echo "$feats" | jq '.features | length')"
   if [ "$top" -le 0 ] || [ "$top" -ge "$total" ]; then
-    echo "==> VM count per host (from $KNOWLEDGE_NAME), all $total:"
-    echo "$feats" | jq -r '.features | sort_by(-.vms)[] | "    \(.vms)\t\(.computeHost)"'
+    echo "==> Avg CPU contention per host (from $KNOWLEDGE_NAME), all $total:"
+    echo "$feats" | jq -r '.features | sort_by(-.AvgCPUContention)[] | "    \(.AvgCPUContention)%\t\(.ComputeHost)"'
     return 0
   fi
-  echo "==> VM count per host (from $KNOWLEDGE_NAME), top $top of $total:"
+  echo "==> Avg CPU contention per host (from $KNOWLEDGE_NAME), top $top of $total:"
   echo "$feats" | jq -r --argjson top "$top" \
-    '.features | sort_by(-.vms)[:$top][] | "    \(.vms)\t\(.computeHost)"'
+    '.features | sort_by(-.AvgCPUContention)[:$top][] | "    \(.AvgCPUContention)%\t\(.ComputeHost)"'
   echo "    ... $((total - top)) more (run 'COUNTS_TOP=0 ./demo.sh counts' for all)"
 }
 
@@ -201,8 +208,8 @@ build_request() {
       spec: { data: { instance_uuid: "expression-filter-demo-0001",
         flavor: { data: { name: "m1.small", memory_mb: 2048, vcpus: 1,
           extra_specs: { "capabilities:hypervisor_type": "CH" } } } } },
-      hosts: [ .features[] | { host: .computeHost } ],
-      weights: ( .features | map({ key: .computeHost, value: 0 }) | from_entries )
+      hosts: [ .features[] | { host: .ComputeHost } ],
+      weights: ( .features | map({ key: .ComputeHost, value: 0 }) | from_entries )
     }'
   fi
 }
@@ -262,14 +269,14 @@ cmd_compare() {
   echo "==> Hosts returned WITH the filter ($PIPELINE_FILTERED):"
   echo "$filtered" | sed 's/^/    /'
 
-  echo "==> Excluded by the filter step (busiest ~1/3):"
+  echo "==> Excluded by the filter step (CPU contention >= 50%):"
   comm -23 <(echo "$baseline" | sort) <(echo "$filtered" | sort) | sed 's/^/    /'
 }
 
 cmd_clean() {
   echo "==> Deleting demo resources"
   kube delete -f pipeline.yaml -f pipeline-baseline.yaml -f knowledge.yaml \
-    --ignore-not-found=true
+    -f knowledge-metrics.yaml --ignore-not-found=true
 }
 
 cmd_all() {
@@ -305,14 +312,14 @@ cmd_walkthrough() {
   echo
   echo "This walks through:"
   echo "  1. a clean start"
-  echo "  2. applying the vms-per-host knowledge (and its result)"
+  echo "  2. applying the metrics + host-cpu-contention knowledges (and the result)"
   echo "  3. applying the empty and empty+filter_expression pipelines"
   echo "  4. comparing which hosts each returns for the same request"
   echo "  5. cleaning up"
   echo
   echo "For KVM the scheduler ranks the whole fleet, then limits the response"
-  echo "to the request's hosts; the filter drops the ~1/3 of hosts with the"
-  echo "most VMs."
+  echo "to the request's hosts; the filter keeps only hosts whose average CPU"
+  echo "contention is below 50%."
   pause
 
   echo
@@ -321,12 +328,12 @@ cmd_walkthrough() {
   cmd_clean
 
   echo
-  echo ">>> Step 2/5: apply the knowledge and show what it extracted"
+  echo ">>> Step 2/5: apply the knowledges (fake metrics + expr-lang join) and show the result"
   pause
   apply_knowledge
   echo
   echo "    In the cluster now:"
-  kube get knowledge "$KNOWLEDGE_NAME" 2>&1 | sed 's/^/    /'
+  kube get knowledge "$METRICS_KNOWLEDGE_NAME" "$KNOWLEDGE_NAME" 2>&1 | sed 's/^/    /'
 
   echo
   echo ">>> Step 3/5: apply the two pipelines (empty baseline, empty+filter)"
@@ -363,10 +370,10 @@ Usage: ./demo.sh [command]
 Commands:
   all                            Apply everything, then compare baseline vs
                                  filtered (default).
-  knowledge                      Apply only the vms-per-host knowledge and wait.
+  knowledge                      Apply only the host-cpu-contention knowledge.
   pipelines                      Apply only the baseline and filtered pipelines.
   apply                          Apply the knowledge and both pipelines.
-  counts                         Print the VM count per host from the knowledge.
+  counts                         Print the avg CPU contention per host.
   schedule <pipeline> [req.json] Send a request and print the returned hosts.
   compare [req.json]             Schedule baseline and filtered and diff them.
   walkthrough [req.json]         Guided, narrated run of the whole demo with a

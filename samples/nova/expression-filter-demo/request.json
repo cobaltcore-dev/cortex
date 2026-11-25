@@ -1,5 +1,5 @@
 {
-  "pipeline": "nova-expression-demo",
+  "pipeline": "nova-contention-demo",
   "context": {
     "request_id": "expression-filter-demo-1"
   },
@@ -20,16 +20,16 @@
   },
   "hosts": [
     { "host": "node004-bb086" },
-    { "host": "node006-bb086" },
+    { "host": "node003-bb088" },
     { "host": "node007-bb086" },
-    { "host": "node002-bb086" },
-    { "host": "node001-bb086" }
+    { "host": "node006-bb086" },
+    { "host": "node002-bb086" }
   ],
   "weights": {
     "node004-bb086": 0,
-    "node006-bb086": 0,
+    "node003-bb088": 0,
     "node007-bb086": 0,
-    "node002-bb086": 0,
-    "node001-bb086": 0
+    "node006-bb086": 0,
+    "node002-bb086": 0
   }
 }

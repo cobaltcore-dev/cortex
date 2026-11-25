@@ -1,37 +1,36 @@
 # Copyright SAP SE
 # SPDX-License-Identifier: Apache-2.0
 
-# A demo pipeline with no built-in filters plus a single expression filter that
-# excludes the ~33% of hosts with the most VMs, read from the vms-per-host
-# knowledge. It is the "empty + filter_expression" counterpart of the empty
-# baseline pipeline (pipeline-baseline.yaml), so a comparison isolates exactly
-# what the expression filter removes.
+# Demo pipeline with no built-in filters plus a single expression filter that
+# keeps only hosts whose average CPU contention is below a threshold, read from
+# the host-cpu-contention knowledge. It is the "empty + filter_expression"
+# counterpart of the empty baseline pipeline (pipeline-baseline.yaml), so a
+# comparison isolates exactly what the expression filter removes. Mirrors the
+# Knowledge DB 2.0 slide example.
 apiVersion: cortex.cloud/v1alpha1
 kind: Pipeline
 metadata:
-  name: nova-expression-demo
+  name: nova-contention-demo
 spec:
   schedulingDomain: nova
   type: filter-weigher
   description: |
     Demo pipeline showing the filter_expression step on top of a dynamically
-    added knowledge (vms-per-host). It drops the ~1/3 of loaded hosts with the
-    most VMs and keeps the rest.
+    added knowledge (host-cpu-contention). It drops hosts whose average CPU
+    contention is at or above the threshold and keeps the rest.
   filters:
     - name: filter_expression
       description: |
-        Exclude the ~1/3 of hosts with the most VMs. Only hosts that actually
-        run VMs are ranked; a host is dropped when its VM count is at or above
-        the count of the host at the 1/3 cutoff (busiest third). Idle hosts, and
-        hosts not present in the knowledge, are always kept.
+        Keep a host only when its average CPU contention is below 50%. The host
+        name is available as `host`; the contention features are available as
+        `contention`. Hosts without a contention feature are dropped by this
+        rule (no matching entry), matching the slide example.
       params:
         - key: run
           stringValue: |
-            let loadedCounts = sort(map(filter(vms, int(.vms) > 0), int(.vms)), "desc");
-            let k = int((len(loadedCounts) + 2) / 3);
-            let cut = loadedCounts[k - 1];
-            let mine = int(sum(map(filter(vms, .computeHost == host), .vms)));
-            mine == 0 || mine < cut
+            any(contention,
+              .ComputeHost == host &&
+              .AvgCPUContention < 50)
         - key: knowledges
           stringListMapValue:
-            vms: [vms-per-host]
+            contention: [host-cpu-contention]
