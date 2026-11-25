@@ -1,0 +1,31 @@
+# Copyright SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: cortex.cloud/v1alpha1
+kind: Datasource
+metadata:
+  name: host-cpu-metrics
+spec:
+  schedulingDomain: nova
+  type: prometheus
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: postgres
+        namespace: cortex
+  prometheus:
+    alias: host_cpu_contention_pct
+    type: node_exporter_metric
+    # CPU waiting pressure is used as a contention signal.
+    # The node label must match Nova Hypervisor.Hostname.
+    query: |
+      max by (node) (
+        100 * rate(node_pressure_cpu_waiting_seconds_total{node!=""}[5m])
+      )
+    timeRange: 300s
+    interval: 60s
+    resolution: 60s
+    secretRef:
+      name: prometheus
+      namespace: cortex

@@ -1,0 +1,151 @@
+<!doctype html>
+<!-- Copyright SAP SE -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101f28">
+  <meta name="description" content="Cortex Knowledge Database 2.0 — a four-slide IPCEI-CIS Hackathon pitch with an animated datasource and expression demo.">
+  <title>Cortex Knowledge Database 2.0 · IPCEI-CIS Hackathon</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="presentation.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#slide-1">Skip to presentation</a>
+  <main id="viewport" aria-label="Pitch presentation">
+    <div id="deck">
+      <section class="slide dark cover active" id="slide-1" data-title="Cortex Knowledge Database 2.0" aria-labelledby="title-1" tabindex="-1">
+        <div class="masthead"><span class="brand"><img class="brand-logo" src="assets/cortex-logo.png" alt="Cortex logo"> cortex<span class="brand-divider"></span>knowledge / 2.0</span><span class="eyebrow">IPCEI-CIS HACKATHON</span></div>
+        <div class="cover-copy">
+          <p class="kicker"><span class="live-dot"></span> OPEN INFRASTRUCTURE. SHARED INTELLIGENCE.</p>
+          <h1 id="title-1">Cortex<br>Knowledge<br>Database <span class="mint">2.0</span></h1>
+          <p class="cover-tagline">Improving the reusability of our<br>data caching and aggregation layer<br><span class="mint">for smart scheduling.</span></p>
+        </div>
+        <div class="hero-visual" aria-label="OpenStack and Prometheus feed Cortex, extended by knowledge.yaml, to produce features">
+          <svg class="hero-lines" viewBox="0 0 680 620" fill="none" aria-hidden="true">
+            <circle cx="360" cy="302" r="208" stroke="currentColor" stroke-dasharray="2 10"/>
+            <path class="hero-wire" d="M172 184H215L268 240M178 420H214L266 367M474 138V188L417 229M449 374L493 433H570V458"/>
+            <path class="hero-pulse pulse-one" d="M172 184H215L268 240"/>
+            <path class="hero-pulse pulse-two" d="M178 420H214L266 367"/>
+            <path class="hero-pulse pulse-three" d="M449 374L493 433H570V458"/>
+          </svg>
+          <img class="hero-logo" src="assets/cortex-logo.png" alt="Cortex">
+          <div class="floating-node source-one"><span class="node-icon">◫</span><div><small>INVENTORY</small><strong>OpenStack</strong></div></div>
+          <div class="floating-node source-two"><span class="node-icon">∿</span><div><small>TELEMETRY</small><strong>Prometheus</strong></div></div>
+          <div class="floating-node manifest"><span class="file-corner"></span><small>YOUR EXTRACTION LOGIC</small><strong>knowledge.yaml</strong><code>inputs → expression</code></div>
+          <div class="floating-node result-node"><span class="live-dot"></span><div><small>SMART SCHEDULING</small><strong>Host contention</strong></div></div>
+          <span class="core-label">ONE SHARED KNOWLEDGE ENGINE</span>
+        </div>
+        <div class="slide-footer"><span>COBALTCORE-DEV / CORTEX</span><a href="https://github.com/cobaltcore-dev/cortex/pull/1556" target="_blank" rel="noopener noreferrer">CODE · PR #1556 ↗</a><span>01 / 04</span></div>
+        <aside class="speaker-notes"><h3>Title · 15 seconds</h3><p>Cortex Knowledge Database 2.0 is about improving the reusability of our data caching and aggregation layer for smart scheduling. We will follow one example: combining CPU contention metrics with Nova hypervisors, then using that knowledge to prefer less contended hosts for new VMs.</p></aside>
+      </section>
+
+      <section class="slide light context-slide" id="slide-2" data-title="Smart scheduling with the Cortex knowledge database" aria-labelledby="title-2" tabindex="-1" hidden>
+        <div class="masthead"><span class="brand"><img class="brand-logo" src="assets/cortex-logo.png" alt="Cortex logo"> cortex</span><span class="eyebrow">CONTEXT / SMART SCHEDULING</span></div>
+        <p class="kicker">CORTEX IS AN OPEN-SOURCE SERVICE FOR SMART WORKLOAD PLACEMENT.</p>
+        <h2 id="title-2">Smart scheduling with the<br><span class="green">Cortex knowledge database.</span></h2>
+        <div class="scheduling-flow">
+          <article class="ingest-stage"><span class="card-index">01 / INGEST & CACHE</span><h3>Ingest the facts.</h3><div class="source-chip"><strong>Prometheus</strong><span>CPU contention metrics</span></div><div class="source-chip"><strong>OpenStack Nova</strong><span>Hypervisors & compute hosts</span></div><p>Inventory + telemetry, cached.</p></article>
+          <span class="flow-arrow" aria-hidden="true">→</span>
+          <article class="combine-stage"><span class="card-index">02 / COMBINE & AGGREGATE</span><h3>Connect the signals.</h3><p>Metrics + hypervisors<br>become contention per host.</p><div class="mini-features"><div class="host-a"><span>compute-01</span><strong>80%</strong><i><b style="--contention:80%"></b></i></div><div class="host-b"><span>compute-02</span><strong>8%</strong><i><b style="--contention:8%"></b></i></div><div class="host-c"><span>compute-03</span><strong>42%</strong><i><b style="--contention:42%"></b></i></div></div></article>
+          <span class="flow-arrow" aria-hidden="true">→</span>
+          <article class="weigh-stage"><span class="card-index">03 / SMART WEIGHING</span><h3>Choose a quieter host.</h3><p>Lower contention gets<br>a higher placement preference.</p><div class="vm-placement"><span class="vm-icon">NEW VM</span><span class="placement-arrow">↓</span><div class="host-target"><span class="rack-icon" aria-hidden="true"><i><b></b><em></em></i><i><b></b><em></em></i></span><strong>compute-02 <small>8% contention</small></strong><span class="placement-check" aria-hidden="true">✓</span></div></div></article>
+        </div>
+        <p class="context-payoff"><strong>Less contended hosts are preferred for new virtual machines.</strong></p>
+        <div class="slide-footer"><span>ILLUSTRATIVE VALUES · CONTENTION IS ONE INPUT TO THE SCHEDULING DECISION</span><span>02 / 04</span></div>
+        <aside class="speaker-notes"><h3>Smart scheduling · 35 seconds</h3><p>There are three steps. First, the knowledge database ingests and caches information from sources such as Prometheus and OpenStack. Second, it combines that information: CPU contention metrics are matched with Nova hypervisors to determine contention per compute host. Third, Cortex smart weighing consumes the extracted data and prefers less contended hosts for new virtual machines.</p><p>Here the illustrative averages are 80%, 8%, and 42%. All else being equal, compute-02 is preferred. Other scheduling constraints and weights still contribute to the final placement decision.</p></aside>
+      </section>
+
+      <section class="slide light problem-slide" id="slide-3" data-title="From forking Cortex to dropping in YAML" aria-labelledby="title-3" tabindex="-1" hidden>
+        <div class="masthead"><span class="brand"><img class="brand-logo" src="assets/cortex-logo.png" alt="Cortex logo"> cortex</span><span class="eyebrow">PROBLEM / REUSABILITY</span></div>
+        <p class="kicker">HOW SHOULD USERS ADD THEIR OWN KNOWLEDGE?</p>
+        <h2 id="title-3">Custom logic should not<br><span class="underline-coral">start with a fork.</span></h2>
+        <div class="adoption-progression">
+          <article class="adoption-old"><span class="card-index">CURRENT APPROACH</span><h3>Fork + build.</h3><div class="adoption-code"><div class="adoption-code-bar"><span>internal/…/custom.go</span><span>GO</span></div><pre><code><span class="code-comment">// Inside your Cortex fork</span>
+<span class="key">func</span> (e *MyExtractor) Extract() (
+  []plugins.Feature, error,
+) {
+  <span class="key">return</span> e.<span class="fn">ExtractSQL</span>(query)
+}</code></pre></div><p class="code-caption">Custom Go code. Custom image.</p></article>
+          <span class="flow-arrow" aria-hidden="true">→</span>
+          <article class="adoption-better"><span class="card-index">BETTER</span><h3>Import Cortex.</h3><div class="adoption-code"><div class="adoption-code-bar"><span>your-project/main.go</span><span>GO</span></div><pre><code><span class="key">import</span> (
+<span class="import-path">  "github.com/cobaltcore-dev/cortex/pkg/manager"</span>
+  _ <span class="fn">"example.com/my/extractors"</span>
+)
+
+<span class="key">func</span> main() { manager.<span class="fn">Run</span>() }</code></pre></div><p class="code-caption">Your project. Cortex as a dependency.</p></article>
+          <span class="flow-arrow" aria-hidden="true">→</span>
+          <article class="adoption-best"><span class="card-index">EVEN BETTER</span><h3>Drop in YAML.</h3><div class="adoption-code yaml-ticket"><div class="adoption-code-bar"><span>Knowledge · spec</span><span>YAML</span></div><pre><code id="adoption-yaml"><span class="key">spec:</span>
+  <span class="key">inputs:</span>
+    - <span class="key">datasource:</span> nova-hypervisors
+      <span class="key">var:</span> hypervisors
+  <span class="key">expression:</span>
+    <span class="key">run:</span> |
+      <span class="fn">map</span>(hypervisors, .ServiceHost)</code></pre></div><p class="code-caption">No Go coding. No image rebuild.</p></article>
+        </div>
+        <div class="slide-footer"><span>MAKE CUSTOMIZATION EASY TO OWN — AND EASY TO DEPLOY</span><span>03 / 04</span></div>
+        <aside class="speaker-notes"><h3>Reusability · 35 seconds</h3><p>The left card shows the pre-refactor Go extractor pattern: extraction calls ExtractSQL from code inside a Cortex fork. Receiver definitions, the query, and registration are omitted from this short excerpt.</p><p>The middle card shows the documented custom-manager approach. Your own project imports Cortex's public manager and your extractor package for self-registration. The bundled manager still includes built-in domain integrations; new Go plugins still need your own build.</p><p>The right card shows a Knowledge spec that reads cached Nova hypervisors and extracts their compute host names. It needs no Go plugin or image rebuild. This is a compact spec excerpt; a full resource also supplies apiVersion, kind, metadata, and its scheduling domain. The next slide demonstrates the richer two-input contention expression.</p></aside>
+      </section>
+
+      <section class="slide dark demo-slide" id="slide-4" data-title="Demo: host contention without changing Cortex code" aria-labelledby="title-4" tabindex="-1" hidden>
+        <div class="masthead"><span class="brand"><img class="brand-logo" src="assets/cortex-logo.png" alt="Cortex logo"> cortex</span><span class="eyebrow">DEMO / ANIMATED WALKTHROUGH</span></div>
+        <p class="kicker">PROMETHEUS METRICS + NOVA HYPERVISORS → HOST CONTENTION → SMART WEIGHING</p><span class="loop-status" id="demo-loop-status">∞ AUTOPLAY / LOOP</span>
+        <h2 id="title-4">Host contention. <span class="mint">Zero Cortex code changes.</span></h2>
+        <div class="demo-workspace" id="demo" data-step="5" data-playing="false">
+          <div class="demo-sources"><article class="source-fixture" data-highlight="1"><div class="fixture-title"><span class="tiny-label">PROMETHEUS</span><a href="metrics-datasource.yaml" download title="Download metrics datasource">YAML ↓</a></div><h3>CPU contention metrics</h3><div class="fixture-columns"><span>Node</span><span>Value (%)</span></div><div class="fixture-row host-a" data-pair="a"><code>node-a</code><span>74, 86</span></div><div class="fixture-row host-b" data-pair="b"><code>node-b</code><span>6, 10</span></div><div class="fixture-row host-c" data-pair="c"><code>node-c</code><span>38, 46</span></div></article><article class="source-fixture" data-highlight="1"><div class="fixture-title"><span class="tiny-label">OPENSTACK NOVA</span><a href="datasource.yaml" download title="Download Nova datasource">YAML ↓</a></div><h3>Hypervisors</h3><div class="fixture-columns"><span>Hostname</span><span>ServiceHost</span></div><div class="fixture-row host-a" data-pair="a"><code>node-a</code><span>compute-01</span></div><div class="fixture-row host-b" data-pair="b"><code>node-b</code><span>compute-02</span></div><div class="fixture-row host-c" data-pair="c"><code>node-c</code><span>compute-03</span></div></article></div>
+          <div class="code-window knowledge-window"><div class="window-bar"><span><i></i><i></i><i></i></span><a href="knowledge.yaml" download>knowledge.yaml · spec ↓</a><span class="resource-tag">EXPRESSION</span></div><pre><code id="knowledge-code"><span class="key">spec:</span>
+  <span class="key">schedulingDomain:</span> nova
+  <span class="key">recency:</span> 60s
+<mark data-highlight="2">  <span class="key">inputs:</span>
+    - {<span class="key">datasource:</span> nova-hypervisors, <span class="key">var:</span> hypervisors}
+    - {<span class="key">datasource:</span> host-cpu-metrics, <span class="key">var:</span> metrics}</mark>
+  <span class="key">expression:</span>
+    <span class="key">run:</span> |
+<mark data-highlight="2">      let byHost = <span class="fn">groupBy</span>(metrics, .Node);
+      hypervisors
+      | <span class="fn">filter</span>(len(byHost[.Hostname] ?? []) > 0)</mark>
+<mark data-highlight="3">      | <span class="fn">map</span>(let h = #; {
+          ComputeHost: h.ServiceHost,
+          AvgCPUContention:
+            <span class="fn">mean</span>(map(byHost[h.Hostname], .Value)),
+          MaxCPUContention:
+            <span class="fn">max</span>(map(byHost[h.Hostname], .Value)),
+        })
+      | <span class="fn">sortBy</span>(.AvgCPUContention)</mark></code></pre></div>
+          <div class="demo-result-panel">
+            <div class="demo-pipeline" aria-label="Cache, expression, smart weighing"><span data-pipeline="1">Cache</span><i aria-hidden="true"><b></b></i><span data-pipeline="2">Expr</span><i aria-hidden="true"><b></b></i><span data-pipeline="5">Weigh</span></div>
+            <div class="data-heading"><span class="tiny-label" id="data-label">KNOWLEDGE / HOST CONTENTION</span><span id="object-count">3 features</span></div>
+            <div class="result-views"><div class="result-chart"><div class="data-table"><div class="data-columns"><span>ComputeHost</span><span id="value-field">Avg. contention</span></div><div class="data-rows"><div class="data-row host-a" data-host="0" style="--slot:2"><span>compute-01</span><span class="contention-cell"><code data-host-value>80%</code><i><b style="--contention:80%"></b></i></span></div><div class="data-row host-b preferred" data-host="1" style="--slot:0"><span>compute-02</span><span class="contention-cell"><code data-host-value>8%</code><i><b style="--contention:8%"></b></i></span></div><div class="data-row host-c" data-host="2" style="--slot:1"><span>compute-03</span><span class="contention-cell"><code data-host-value>42%</code><i><b style="--contention:42%"></b></i></span></div></div></div><div class="result-moment"><div class="aggregation-equation" aria-label="Average of 6 and 10 equals 8 percent"><span>(</span><b>6</b><span>+</span><b>10</b><span>) / 2 →</span><strong>8%</strong></div></div></div><pre class="result-status" aria-label="Resulting Knowledge status YAML"><code id="status-code"><span class="key">status:</span>
+  <span class="key">rawLength:</span> 3
+  <span class="key">raw:</span>
+    <span class="key">features:</span>
+<span class="preferred-feature">      - ComputeHost: compute-02
+        AvgCPUContention: 8
+        MaxCPUContention: 10</span>
+      - ComputeHost: compute-03
+        AvgCPUContention: 42
+        MaxCPUContention: 46
+      - ComputeHost: compute-01
+        AvgCPUContention: 80
+        MaxCPUContention: 86</code></pre></div>
+            <div class="result-narrative"><div class="demo-status" id="demo-status"><span class="live-dot"></span><strong>Lower contention → higher preference</strong></div><p class="demo-caption" id="demo-caption">Cortex smart weighing can consume these features to prefer a less contended host.</p><div class="placement-outcome"><span class="vm-icon">NEW VM</span><span>→</span><strong>compute-02 <small>8% avg. contention · preferred</small></strong></div></div>
+            <span class="fixture-label">SAMPLE DATA · ILLUSTRATIVE WEIGHING</span>
+          </div>
+        </div>
+        <div class="demo-controls"><div class="playback-buttons"><button type="button" id="demo-play">Ⅱ Pause demo</button><button type="button" id="demo-replay" aria-label="Restart demo loop" title="Restart loop (R)">↻</button></div><div class="demo-timeline" role="group" aria-label="Demo steps"><button type="button" data-step-button="1"><span>1</span> Ingest<i class="step-progress" aria-hidden="true"></i></button><button type="button" data-step-button="2"><span>2</span> Join hosts<i class="step-progress" aria-hidden="true"></i></button><button type="button" data-step-button="3"><span>3</span> Aggregate<i class="step-progress" aria-hidden="true"></i></button><button type="button" data-step-button="4"><span>4</span> Status YAML<i class="step-progress" aria-hidden="true"></i></button><button type="button" data-step-button="5"><span>5</span> Smart weighing<i class="step-progress" aria-hidden="true"></i></button></div></div>
+        <div class="demo-announcement visually-hidden" role="status" aria-live="polite"></div>
+        <div class="slide-footer"><span>NO CORTEX CODE CHANGES · EXTRACTED KNOWLEDGE FOR SMART SCHEDULING</span><a href="https://github.com/cobaltcore-dev/cortex/pull/1556" target="_blank" rel="noopener noreferrer">TRY IT · PR #1556 ↗</a><span>04 / 04</span></div>
+        <aside class="speaker-notes"><h3>Animated demo · 45–60 seconds</h3><p>The demo autoplays and loops. Press P or Space to pause, R to restart, or 1–5 to select a step. Step 4 highlights the resulting status YAML; step 5 keeps that YAML visible and highlights the preferred host while placing an illustrative VM.</p><p>We have two datasources: CPU contention signals from Prometheus and hypervisors from Nova. The Knowledge expression groups metrics by Node and joins them to each hypervisor's Hostname. It then calculates average and maximum contention per ComputeHost. For the sample data, compute-01 averages 80%, compute-02 averages 8%, and compute-03 averages 42%.</p><p>The final frame illustrates how a consumer could prefer compute-02 for a new VM. The extraction needs no Cortex code changes. Applying the Knowledge creates features; a compatible consumer must reference and use them. This page is an animated fixture walkthrough, not a live cluster or scheduler connection.</p><p>The downloadable Prometheus datasource uses node_exporter_metric and CPU waiting pressure as a contention signal. It expects a node label matching the Nova Hypervisor.Hostname. Hypervisors with no matching samples are omitted rather than assigned zero contention. Existing VMware contention bundles use their own hostsystem resolution; this is a standalone example.</p><p>Download the two datasource manifests and complete Knowledge manifest from their headers. Configure the openstack, prometheus, and postgres Secrets in namespace cortex, and use the controller and CRDs from PR #1556.</p></aside>
+      </section>
+    </div>
+  </main>
+
+  <footer class="player" aria-label="Presentation controls"><div class="player-brand">CORTEX <span>/</span> KNOWLEDGE 2.0</div><div class="player-tools"><button type="button" id="overview-button" title="Slide overview (O)" aria-label="Slide overview">▦ <span>Overview</span></button><button type="button" id="notes-button" title="Speaker notes (N)" aria-label="Speaker notes">≡ <span>Notes</span></button><button type="button" id="fullscreen-button" title="Fullscreen (F)" aria-label="Toggle fullscreen">⛶</button><button type="button" id="help-button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button></div><nav class="slide-navigation" aria-label="Slide navigation"><button type="button" id="previous-button" aria-label="Previous slide">←</button><span id="slide-counter">01 / 04</span><button type="button" id="next-button" aria-label="Next slide">→</button></nav></footer>
+  <div class="progress-track" aria-hidden="true"><div id="progress-bar"></div></div><div id="announcement" class="visually-hidden" role="status" aria-live="polite"></div><div id="toast" role="status" hidden></div>
+  <dialog id="overview-dialog" aria-labelledby="overview-title"><div class="dialog-header"><div><p class="kicker">FOUR SLIDES · ONE STORY</p><h2 id="overview-title">The whole story.</h2></div><button type="button" class="close-dialog" aria-label="Close overview">×</button></div><div id="overview-grid"></div></dialog>
+  <dialog id="notes-dialog" aria-labelledby="notes-title"><div class="dialog-header"><div><p class="kicker" id="notes-position"></p><h2 id="notes-title">Speaker notes</h2></div><button type="button" class="close-dialog" aria-label="Close speaker notes">×</button></div><div id="notes-content"></div><div class="notes-navigation"><button type="button" id="notes-previous">← Previous</button><span>← / → to move between slides</span><button type="button" id="notes-next">Next →</button></div></dialog>
+  <dialog id="help-dialog" aria-labelledby="help-title"><div class="dialog-header"><h2 id="help-title">Presentation controls</h2><button type="button" class="close-dialog" aria-label="Close keyboard shortcuts">×</button></div><dl class="shortcuts"><div><dt>Next / previous slide</dt><dd>→ / ← · Space / Shift+Space</dd></div><div><dt>First / last slide</dt><dd>Home / End</dd></div><div><dt>Pause / resume demo loop</dt><dd>Space or P · on slide 4</dd></div><div><dt>Restart / choose demo step</dt><dd>R / 1–5 · on slide 4</dd></div><div><dt>Overview / notes / fullscreen</dt><dd>O / N / F</dd></div><div><dt>Close a panel</dt><dd>Esc</dd></div></dl><p>Slide 4 autoplays and loops. Selecting a step pauses playback. Reduced motion starts with a still result. The PDF includes the status YAML and final placement.</p><button class="print-button" id="print-button" type="button">Print / Save as PDF</button></dialog>
+  <noscript><div class="noscript-message">JavaScript is disabled. All four slides are shown with the demo's final result.</div></noscript>
+</body>
+</html>
