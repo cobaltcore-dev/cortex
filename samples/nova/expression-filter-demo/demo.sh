@@ -97,6 +97,13 @@ ensure_scheduler_reachable() {
 
 # --- building blocks --------------------------------------------------------
 
+# Sort a list of host names (one per line, on stdin) grouped by their building
+# block (the "bb<NN>" suffix after the last dash), then by node name within each
+# block. Hosts without a "-bb" suffix sort after, by name.
+sort_hosts() {
+  sort -t- -k2,2 -k1,1V
+}
+
 # Run kubectl, echoing the command first so the audience sees exactly what is
 # being executed against k8s. Arguments with spaces or shell-special characters
 # are quoted so the echoed line is copy-pasteable. Output is indented.
@@ -235,14 +242,33 @@ cmd_pipelines() { apply_pipelines; }
 cmd_apply()     { apply_knowledge; apply_pipelines; }
 cmd_counts()    { print_counts; }
 
+# Print a human-readable summary of a request body, plus the equivalent curl.
+print_request() {
+  local body="$1"
+  echo "==> Request sent to the external scheduler:"
+  echo "$body" | jq -r '
+    "    pipeline:   \(.pipeline)",
+    "    instance:   \(.spec.data.instance_uuid)",
+    "    flavor:     \(.spec.data.flavor.data.name) (hypervisor_type=\(.spec.data.flavor.data.extra_specs["capabilities:hypervisor_type"] // "-"))"'
+  local hosts count
+  hosts="$(echo "$body" | jq -r '.hosts[].host' | sort_hosts | paste -sd, - | sed 's/,/, /g')"
+  count="$(echo "$body" | jq '.hosts | length')"
+  echo "    hosts ($count): $hosts"
+  echo "    equivalent curl:"
+  echo "      curl -sS -X POST $SCHEDULER_URL \\"
+  echo "        -H 'Content-Type: application/json' \\"
+  echo "        -d '$(echo "$body" | jq -c .)'"
+}
+
 cmd_schedule() {
   local pipeline="${1:-$PIPELINE_FILTERED}" request_file="${2:-}"
   require_pipeline_ready "$pipeline" || return 1
   local body
   body="$(build_request "$pipeline" "$request_file")"
+  print_request "$body"
   echo "==> Scheduling against pipeline '$pipeline' ($SCHEDULER_URL)"
   echo "==> Returned hosts:"
-  post_request "$body" | sed 's/^/    /'
+  post_request "$body" | sort_hosts | sed 's/^/    /'
 }
 
 cmd_compare() {
@@ -254,10 +280,12 @@ cmd_compare() {
   # header reflects exactly which hosts are sent.
   local reqbody
   reqbody="$(build_request "$PIPELINE_BASELINE" "$request_file")" || return 1
-  local hosts
-  hosts="$(echo "$reqbody" | jq -r '.hosts[].host')"
-  echo "==> Request: $(echo "$hosts" | grep -c .) host(s) sent:"
-  echo "$hosts" | sed 's/^/    /'
+  echo "==> Request sent to both pipelines:"
+  echo "$reqbody" | jq -r '
+    "    instance:   \(.spec.data.instance_uuid)",
+    "    flavor:     \(.spec.data.flavor.data.name) (hypervisor_type=\(.spec.data.flavor.data.extra_specs["capabilities:hypervisor_type"] // "-"))",
+    "    hosts (\(.hosts | length)):"'
+  echo "$reqbody" | jq -r '.hosts[].host' | sort_hosts | sed 's/^/      /'
   echo
 
   local baseline filtered
@@ -265,12 +293,12 @@ cmd_compare() {
   filtered="$(post_request "$(build_request "$PIPELINE_FILTERED" "$request_file")")"
 
   echo "==> Hosts returned WITHOUT the filter ($PIPELINE_BASELINE):"
-  echo "$baseline" | sed 's/^/    /'
+  echo "$baseline" | sort_hosts | sed 's/^/    /'
   echo "==> Hosts returned WITH the filter ($PIPELINE_FILTERED):"
-  echo "$filtered" | sed 's/^/    /'
+  echo "$filtered" | sort_hosts | sed 's/^/    /'
 
   echo "==> Excluded by the filter step (CPU contention >= 50%):"
-  comm -23 <(echo "$baseline" | sort) <(echo "$filtered" | sort) | sed 's/^/    /'
+  comm -23 <(echo "$baseline" | sort) <(echo "$filtered" | sort) | sort_hosts | sed 's/^/    /'
 }
 
 cmd_clean() {
