@@ -67,6 +67,11 @@ The official Cortex logo is copied unchanged from `docs/assets/Cortex_Logo_black
 
 ## Optional end-to-end terminal demo
 
+For the prepared demo on `knowledge-db-2.0-and-expr-filter`, follow the existing
+[expression filter demo walkthrough](../../../samples/nova/expression-filter-demo/README.md).
+It uses synthetic metric samples and the deployment's Nova hypervisor datasource. The
+presentation transfer leaves that demo unchanged; Valkey is covered by the separate storage PR.
+
 Use matching controller and CRDs containing the relevant changes above, with the corresponding controllers enabled. Configure these Secret references in namespace `cortex`:
 
 - `openstack`: Keystone credentials.

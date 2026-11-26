@@ -12,7 +12,7 @@ const help = document.getElementById("help-dialog");
 const dialogs = [overview, notes, help];
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const downloads = [...document.querySelectorAll("a[download]")].map(link => ({ link, href: link.getAttribute("href") }));
-const publicSource = "https://github.com/cobaltcore-dev/cortex/blob/knowledge-db-2.0/docs/presentations/knowledge-database-2.0/";
+const publicSource = "https://github.com/cobaltcore-dev/cortex/blob/knowledge-db-2.0-and-expr-filter/docs/presentations/knowledge-database-2.0/";
 const comparisons = [...document.querySelectorAll(".comparison")].map(root => ({ root, slide: root.closest(".slide"), view: "after" }));
 const scenes = comparisons.filter(item => item.root.dataset.phase).map(item => ({
   ...item,
