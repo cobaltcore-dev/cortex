@@ -86,7 +86,7 @@ and `cmd/shim`, and the Helm defaults under `helm/`.
 ## Presentations
 
 - [Cortex Knowledge Database 2.0 — IPCEI-CIS Hackathon](presentations/knowledge-database-2.0/README.md)
-  ([PDF](presentations/knowledge-database-2.0/cortex-knowledge-2.0.pdf)): framework reuse, dynamic Knowledge and Pipeline expressions, and a Valkey storage deep-dive.
+  ([PDF](presentations/knowledge-database-2.0/cortex-knowledge-2.0.pdf)): the Cortex flow and interactive before/after views of Valkey caching, Knowledge expressions, and scheduling pipeline expressions.
 
 ## Who this book is for
 
