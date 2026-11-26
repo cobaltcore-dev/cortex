@@ -5,12 +5,12 @@ package kpis
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/inputs"
 	// Register all supported kpis through their func init().
 	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/compute"
 	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/deployment"
@@ -18,7 +18,6 @@ import (
 	_ "github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins/storage"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
@@ -148,89 +147,48 @@ func (c *Controller) InitAllKPIs(ctx context.Context) error {
 	return nil
 }
 
-// Find a joint database connection for all given datasources.
-// The returned database can be nil if no database is needed.
-func (c *Controller) getJointDB(
-	ctx context.Context,
-	datasources []corev1.ObjectReference,
-) (*db.DB, error) {
-	// Check if all datasources configured share the same database secret ref.
-	var databaseSecretRef *corev1.SecretReference
-	for _, dsRef := range datasources {
-		ds := &v1alpha1.Datasource{}
-		if err := c.Get(ctx, client.ObjectKey{
-			Namespace: dsRef.Namespace,
-			Name:      dsRef.Name,
-		}, ds); err != nil {
-			if client.IgnoreNotFound(err) == nil {
-				continue
-			}
-			return nil, err
-		}
-		if databaseSecretRef == nil {
-			databaseSecretRef = &ds.Spec.DatabaseSecretRef
-		} else if databaseSecretRef.Name != ds.Spec.DatabaseSecretRef.Name ||
-			databaseSecretRef.Namespace != ds.Spec.DatabaseSecretRef.Namespace {
-			return nil, errors.New("datasources have different database secret refs")
-		}
-	}
-	// When we have datasources reading from a database, connect to it.
-	var authenticatedDB *db.DB
-	if databaseSecretRef != nil {
-		var err error
-		authenticatedDB, err = db.Connector{Client: c.Client}.
-			FromSecretRef(ctx, *databaseSecretRef)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return authenticatedDB, nil
+// Resolves the inputs configured for a kpi.
+type kpiInputs struct {
+	resolver inputs.Resolver
+	specs    []v1alpha1.InputSpec
+}
+
+func (i kpiInputs) Resolve(ctx context.Context, target any) error {
+	return i.resolver.Resolve(ctx, i.specs, target)
 }
 
 // Handle changes to a kpi resource.
 func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) error {
 	log := ctrl.LoggerFrom(ctx)
 
-	// Track if any datasource requires a database connection.
-	var datasourcesWithDB int
+	datasourceNames, knowledgeNames := inputs.References(obj.Spec.Inputs)
 
 	// Get all the datasources this kpi depends on, if any.
 	var datasourcesReady int
-	for _, dsRef := range obj.Spec.Dependencies.Datasources {
+	for _, name := range datasourceNames {
 		ds := &v1alpha1.Datasource{}
-		if err := c.Get(ctx, client.ObjectKey{
-			Namespace: dsRef.Namespace,
-			Name:      dsRef.Name,
-		}, ds); err != nil {
+		if err := c.Get(ctx, client.ObjectKey{Name: name}, ds); err != nil {
 			if client.IgnoreNotFound(err) == nil {
 				continue
 			}
-			log.Error(err, "failed to get datasource dependency", "datasource", dsRef)
+			log.Error(err, "failed to get datasource dependency", "datasource", name)
 			return err
 		}
 		// Check if datasource is ready
 		if meta.IsStatusConditionTrue(ds.Status.Conditions, v1alpha1.DatasourceConditionReady) {
 			datasourcesReady++
 		}
-
-		// Check if datasource requires a database connection.
-		if ds.Spec.DatabaseSecretRef.Name != "" {
-			datasourcesWithDB++
-		}
 	}
 
 	// Get all knowledges this kpi depends on, if any.
 	var knowledgesReady int
-	for _, knRef := range obj.Spec.Dependencies.Knowledges {
+	for _, name := range knowledgeNames {
 		kn := &v1alpha1.Knowledge{}
-		if err := c.Get(ctx, client.ObjectKey{
-			Namespace: knRef.Namespace,
-			Name:      knRef.Name,
-		}, kn); err != nil {
+		if err := c.Get(ctx, client.ObjectKey{Name: name}, kn); err != nil {
 			if client.IgnoreNotFound(err) == nil {
 				continue
 			}
-			log.Error(err, "failed to get knowledge dependency", "knowledge", knRef)
+			log.Error(err, "failed to get knowledge dependency", "knowledge", name)
 			return err
 		}
 		// Check if knowledge is ready
@@ -240,8 +198,7 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 	}
 
 	dependenciesReadyTotal := datasourcesReady + knowledgesReady
-	dependenciesTotal := len(obj.Spec.Dependencies.Datasources) +
-		len(obj.Spec.Dependencies.Knowledges)
+	dependenciesTotal := len(datasourceNames) + len(knowledgeNames)
 	registeredKPI, registered := c.registeredKPIsByResourceName[obj.Name]
 
 	// If all dependencies are ready but the kpi is not registered yet,
@@ -253,19 +210,12 @@ func (c *Controller) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) err
 			return fmt.Errorf("kpi %s not supported", obj.Name)
 		}
 		registeredKPI = &kpilogger{kpi: newKPI()}
-		// Get joint database connection for all dependencies.
-		jointDB, err := c.getJointDB(ctx, obj.Spec.Dependencies.Datasources)
-		if err != nil {
-			return fmt.Errorf("failed to get joint database for kpi %s: %w", obj.Name, err)
-		}
-		if jointDB == nil && datasourcesWithDB > 0 {
-			return fmt.Errorf("kpi %s has datasources requiring database but no connection available", obj.Name)
-		}
 		rawOpts := conf.NewRawOpts(`{}`)
 		if len(obj.Spec.Opts.Raw) > 0 {
 			rawOpts = conf.NewRawOptsBytes(obj.Spec.Opts.Raw)
 		}
-		if err := registeredKPI.Init(jointDB, c.Client, rawOpts); err != nil {
+		resolver := kpiInputs{resolver: inputs.Resolver{Client: c.Client}, specs: obj.Spec.Inputs}
+		if err := registeredKPI.Init(resolver, c.Client, rawOpts); err != nil {
 			return fmt.Errorf("failed to initialize kpi %s: %w", obj.Name, err)
 		}
 		if err := metrics.Registry.Register(registeredKPI); err != nil {
@@ -324,15 +274,9 @@ func (c *Controller) handleDatasourceChange(
 		return
 	}
 	for _, kpi := range kpis.Items {
-		for _, dsRef := range kpi.Spec.Dependencies.Datasources {
-			if dsRef.Name == obj.Name && dsRef.Namespace == obj.Namespace {
-				queue.Add(reconcile.Request{
-					NamespacedName: client.ObjectKey{
-						Name: kpi.Name,
-					},
-				})
-				break
-			}
+		datasourceNames, _ := inputs.References(kpi.Spec.Inputs)
+		if slices.Contains(datasourceNames, obj.Name) {
+			queue.Add(reconcile.Request{NamespacedName: client.ObjectKey{Name: kpi.Name}})
 		}
 	}
 }
@@ -389,15 +333,9 @@ func (c *Controller) handleKnowledgeChange(
 		return
 	}
 	for _, kpi := range kpis.Items {
-		for _, knRef := range kpi.Spec.Dependencies.Knowledges {
-			if knRef.Name == obj.Name && knRef.Namespace == obj.Namespace {
-				queue.Add(reconcile.Request{
-					NamespacedName: client.ObjectKey{
-						Name: kpi.Name,
-					},
-				})
-				break
-			}
+		_, knowledgeNames := inputs.References(kpi.Spec.Inputs)
+		if slices.Contains(knowledgeNames, obj.Name) {
+			queue.Add(reconcile.Request{NamespacedName: client.ObjectKey{Name: kpi.Name}})
 		}
 	}
 }

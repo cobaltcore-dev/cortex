@@ -1,0 +1,21 @@
+# Copyright SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: nova-contention-demo
+spec:
+  schedulingDomain: nova
+  type: filter-weigher
+  filters:
+    - name: filter_expression
+      params:
+        - key: run
+          stringValue: |
+            any(contention,
+              .ComputeHost == host &&
+              .AvgCPUContention < 50)
+        - key: knowledges
+          stringListMapValue:
+            contention: [host-cpu-contention]

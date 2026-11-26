@@ -4,30 +4,17 @@
 package compute
 
 import (
+	"slices"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/internal/knowledge/db/testing"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
 )
 
 func TestFlavorGroupExtractor_Extract(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	defer dbEnv.Close()
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-
-	// Setup test data - create flavors table
-	if err := testDB.CreateTable(
-		testDB.AddTable(nova.Flavor{}),
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	// Insert test flavors with quota:hw_version in extra_specs
+	// Test flavors with quota:hw_version in extra_specs
 	// Mix of KVM flavors (should be included) and VMware flavors (should be excluded)
-	flavors := []any{
-		&nova.Flavor{
+	flavors := []nova.Flavor{
+		{
 			ID:         "1",
 			Name:       "hana_c30_m480_v2",
 			VCPUs:      30,
@@ -36,7 +23,7 @@ func TestFlavorGroupExtractor_Extract(t *testing.T) {
 			Ephemeral:  0,
 			ExtraSpecs: `{"capabilities:hypervisor_type":"qemu","hw:cpu_policy":"dedicated","quota:hw_version":"v2"}`,
 		},
-		&nova.Flavor{
+		{
 			ID:         "2",
 			Name:       "hana_c60_m960_v2",
 			VCPUs:      60,
@@ -45,7 +32,7 @@ func TestFlavorGroupExtractor_Extract(t *testing.T) {
 			Ephemeral:  0,
 			ExtraSpecs: `{"capabilities:hypervisor_type":"qemu","hw:cpu_policy":"dedicated","quota:hw_version":"v2"}`,
 		},
-		&nova.Flavor{
+		{
 			ID:         "3",
 			Name:       "hana_c240_m3840_v2",
 			VCPUs:      240,
@@ -54,7 +41,7 @@ func TestFlavorGroupExtractor_Extract(t *testing.T) {
 			Ephemeral:  0,
 			ExtraSpecs: `{"capabilities:hypervisor_type":"qemu","hw:cpu_policy":"dedicated","hw:numa_nodes":"4","quota:hw_version":"v2"}`,
 		},
-		&nova.Flavor{
+		{
 			ID:         "4",
 			Name:       "gp_c8_m32_v2",
 			VCPUs:      8,
@@ -63,7 +50,7 @@ func TestFlavorGroupExtractor_Extract(t *testing.T) {
 			Ephemeral:  10,
 			ExtraSpecs: `{"capabilities:hypervisor_type":"qemu","quota:hw_version":"v2"}`,
 		},
-		&nova.Flavor{
+		{
 			ID:         "5",
 			Name:       "gp_c16_m64_v2",
 			VCPUs:      16,
@@ -72,8 +59,8 @@ func TestFlavorGroupExtractor_Extract(t *testing.T) {
 			Ephemeral:  20,
 			ExtraSpecs: `{"capabilities:hypervisor_type":"qemu","quota:hw_version":"v2"}`,
 		},
-		// VMware flavor - should be excluded from results (filtered by SQL query)
-		&nova.Flavor{
+		// VMware flavor - should be excluded from results
+		{
 			ID:         "6",
 			Name:       "vmwa_c32_m512_v1",
 			VCPUs:      32,
@@ -83,7 +70,7 @@ func TestFlavorGroupExtractor_Extract(t *testing.T) {
 			ExtraSpecs: `{"capabilities:hypervisor_type":"VMware vCenter Server","quota:hw_version":"v1"}`,
 		},
 		// Cloud-Hypervisor flavor - should be included (case insensitive)
-		&nova.Flavor{
+		{
 			ID:         "7",
 			Name:       "gp_c4_m16_ch",
 			VCPUs:      4,
@@ -93,7 +80,7 @@ func TestFlavorGroupExtractor_Extract(t *testing.T) {
 			ExtraSpecs: `{"capabilities:hypervisor_type":"CH","quota:hw_version":"ch"}`,
 		},
 		// Corner case: Same memory as gp_c8_m32_v2 but MORE VCPUs (should come last, after fewer-VCPUs flavor)
-		&nova.Flavor{
+		{
 			ID:         "8",
 			Name:       "gp_c12_m32_v2",
 			VCPUs:      12,
@@ -103,7 +90,7 @@ func TestFlavorGroupExtractor_Extract(t *testing.T) {
 			ExtraSpecs: `{"capabilities:hypervisor_type":"qemu","quota:hw_version":"v2"}`,
 		},
 		// Corner case: Same memory AND same VCPUs as gp_c12_m32_v2 (tests name sorting)
-		&nova.Flavor{
+		{
 			ID:         "9",
 			Name:       "gp_c12_m32_alt",
 			VCPUs:      12,
@@ -114,18 +101,7 @@ func TestFlavorGroupExtractor_Extract(t *testing.T) {
 		},
 	}
 
-	if err := testDB.Insert(flavors...); err != nil {
-		t.Fatal(err)
-	}
-
-	// Create and run extractor
-	extractor := &FlavorGroupExtractor{}
-	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, nil, config); err != nil {
-		t.Fatal(err)
-	}
-
-	features, err := extractor.Extract()
+	features, err := (&FlavorGroupExtractor{}).Extract(t.Context(), FlavorGroupInputs{Flavors: flavors})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,12 +115,11 @@ func TestFlavorGroupExtractor_Extract(t *testing.T) {
 	// Convert to typed features for easier testing
 	var v2Group, chGroup *FlavorGroupFeature
 	for _, f := range features {
-		fg := f.(FlavorGroupFeature)
-		switch fg.Name {
+		switch f.Name {
 		case "v2":
-			v2Group = &fg
+			v2Group = &f
 		case "ch":
-			chGroup = &fg
+			chGroup = &f
 		}
 	}
 
@@ -212,9 +187,7 @@ func TestFlavorGroupExtractor_Extract(t *testing.T) {
 
 	// Generic check: Verify all flavor groups have correctly ordered flavors
 	// Flavors must be sorted descending by memory (largest first), with VCPUs as tiebreaker
-	for _, f := range features {
-		fg := f.(FlavorGroupFeature)
-
+	for _, fg := range features {
 		// Check that flavors are sorted in descending order
 		for i := range len(fg.Flavors) - 1 {
 			current := fg.Flavors[i]
@@ -247,8 +220,7 @@ func TestFlavorGroupExtractor_Extract(t *testing.T) {
 	}
 
 	// Verify that VMware flavor was filtered out
-	for _, f := range features {
-		fg := f.(FlavorGroupFeature)
+	for _, fg := range features {
 		for _, flavor := range fg.Flavors {
 			if flavor.Name == "vmwa_c32_m512_v1" {
 				t.Errorf("VMware flavor should have been filtered out but was found in group %s", fg.Name)
@@ -315,19 +287,9 @@ func TestFlavorGroupExtractor_Extract(t *testing.T) {
 }
 
 func TestFlavorGroupExtractor_RamCoreRatio_FixedRatio(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	defer dbEnv.Close()
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-
-	if err := testDB.CreateTable(
-		testDB.AddTable(nova.Flavor{}),
-	); err != nil {
-		t.Fatal(err)
-	}
-
 	// Insert flavors with same RAM/core ratio (4096 MiB/vCPU)
-	flavors := []any{
-		&nova.Flavor{
+	flavors := []nova.Flavor{
+		{
 			ID:         "1",
 			Name:       "fixed_c2_m8",
 			VCPUs:      2,
@@ -335,7 +297,7 @@ func TestFlavorGroupExtractor_RamCoreRatio_FixedRatio(t *testing.T) {
 			Disk:       50,
 			ExtraSpecs: `{"capabilities:hypervisor_type":"qemu","quota:hw_version":"fixed"}`,
 		},
-		&nova.Flavor{
+		{
 			ID:         "2",
 			Name:       "fixed_c4_m16",
 			VCPUs:      4,
@@ -343,7 +305,7 @@ func TestFlavorGroupExtractor_RamCoreRatio_FixedRatio(t *testing.T) {
 			Disk:       50,
 			ExtraSpecs: `{"capabilities:hypervisor_type":"qemu","quota:hw_version":"fixed"}`,
 		},
-		&nova.Flavor{
+		{
 			ID:         "3",
 			Name:       "fixed_c8_m32",
 			VCPUs:      8,
@@ -353,16 +315,7 @@ func TestFlavorGroupExtractor_RamCoreRatio_FixedRatio(t *testing.T) {
 		},
 	}
 
-	if err := testDB.Insert(flavors...); err != nil {
-		t.Fatal(err)
-	}
-
-	extractor := &FlavorGroupExtractor{}
-	if err := extractor.Init(&testDB, nil, v1alpha1.KnowledgeSpec{}); err != nil {
-		t.Fatal(err)
-	}
-
-	features, err := extractor.Extract()
+	features, err := (&FlavorGroupExtractor{}).Extract(t.Context(), FlavorGroupInputs{Flavors: flavors})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -371,7 +324,7 @@ func TestFlavorGroupExtractor_RamCoreRatio_FixedRatio(t *testing.T) {
 		t.Fatalf("expected 1 flavor group, got %d", len(features))
 	}
 
-	fg := features[0].(FlavorGroupFeature)
+	fg := features[0]
 	if fg.Name != "fixed" {
 		t.Errorf("expected group name 'fixed', got %s", fg.Name)
 	}
@@ -389,6 +342,32 @@ func TestFlavorGroupExtractor_RamCoreRatio_FixedRatio(t *testing.T) {
 	}
 	if fg.RamCoreRatioMax != nil {
 		t.Errorf("expected RamCoreRatioMax=nil for fixed ratio, got %d", *fg.RamCoreRatioMax)
+	}
+}
+
+func TestFlavorGroupExtractor_KVMFilter(t *testing.T) {
+	flavors := []nova.Flavor{
+		// Parsed extra specs match regardless of json formatting and case.
+		{ID: "1", Name: "spaced", VCPUs: 2, RAM: 4096, ExtraSpecs: `{"capabilities:hypervisor_type": "QEMU", "quota:hw_version": "spaced"}`},
+		{ID: "2", Name: "ch", VCPUs: 2, RAM: 4096, ExtraSpecs: `{"capabilities:hypervisor_type":"Ch","quota:hw_version":"ch"}`},
+		// Only exact hypervisor types are KVM.
+		{ID: "3", Name: "qemu-kvm", VCPUs: 2, RAM: 4096, ExtraSpecs: `{"capabilities:hypervisor_type":"qemu-kvm","quota:hw_version":"qemu-kvm"}`},
+		{ID: "4", Name: "no-type", VCPUs: 2, RAM: 4096, ExtraSpecs: `{"quota:hw_version":"no-type"}`},
+		{ID: "5", Name: "no-specs", VCPUs: 2, RAM: 4096},
+		{ID: "6", Name: "invalid", VCPUs: 2, RAM: 4096, ExtraSpecs: `{invalid`},
+		// KVM flavors without hw_version are skipped.
+		{ID: "7", Name: "no-hw-version", VCPUs: 2, RAM: 4096, ExtraSpecs: `{"capabilities:hypervisor_type":"qemu"}`},
+	}
+	features, err := (&FlavorGroupExtractor{}).Extract(t.Context(), FlavorGroupInputs{Flavors: flavors})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, fg := range features {
+		names = append(names, fg.Name)
+	}
+	if expected := []string{"ch", "spaced"}; !slices.Equal(names, expected) {
+		t.Errorf("expected flavor groups %v, got %v", expected, names)
 	}
 }
 

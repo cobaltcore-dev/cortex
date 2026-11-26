@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/prometheus/client_golang/prometheus"
@@ -49,8 +48,8 @@ func (DatasourceStateKPI) GetName() string { return "datasource_state_kpi" }
 // Init initializes the kpi, e.g. by creating the necessary Prometheus
 // descriptors. The base kpi is also initialized with the provided database,
 // client and options.
-func (k *DatasourceStateKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
-	if err := k.BaseKPI.Init(db, client, opts); err != nil {
+func (k *DatasourceStateKPI) Init(inputs plugins.Inputs, client client.Client, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(inputs, client, opts); err != nil {
 		return err
 	}
 	k.counter = prometheus.NewDesc("cortex_datasource_state",

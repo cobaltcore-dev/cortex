@@ -25,9 +25,9 @@ package-level `Index` map they register into:
 | Plugin | Registration | Referenced by |
 |---|---|---|
 | Filter / weigher / detector | Self-register via `init()` into a package-level `Index` map of factory functions (e.g. `internal/scheduling/nova/plugins/filters/`) | `Pipeline` CRD step name |
-| Knowledge extractor | Self-register via `init()` into the `Index` map in `internal/knowledge/extractor/plugins/zz_index.go` | `Knowledge` CRD |
+| Knowledge extractor | Self-register via `extractor.Register` in `init()` (`pkg/knowledge/extractor/zz_index.go`), or no code at all with an expression | `Knowledge` CRD |
 | KPI | Self-register via `init()` into the `Index` map in `internal/knowledge/kpis/plugins/zz_index.go` | `KPI` CRD |
-| Datasource | Self-register via `init()` into the `Index` map in the datasource plugin package (e.g. `internal/knowledge/datasources/plugins/openstack/zz_index.go`) | `Datasource` CRD |
+| Datasource | Self-register via `init()` into the `Index` map in the datasource plugin package (e.g. `pkg/knowledge/datasources/openstack/zz_index.go`) | `Datasource` CRD |
 
 ## Add a scheduling step (filter / weigher / detector)
 
@@ -65,20 +65,87 @@ and the pipeline's `All Steps Known` (`AllStepsIndexed`) condition stays `False`
 result, is the signal your step was picked up. See
 [Inspecting and editing a pipeline](01-the-scheduling-engine.md#inspecting-and-editing-a-pipeline).
 
+## Filter with an expression (no code)
+
+Nova ships a built-in `filter_expression` step that filters hosts with an [expr](https://expr-lang.org)
+expression instead of Go code, mirroring
+[expression knowledges](../04-knowledge-database/03-feature-extraction.md#expression-knowledges). This lets
+you add a new knowledge and filter on top of it without building a new binary.
+
+The expression is evaluated **once per host** and must return a boolean — a host is kept when it returns
+`true` and removed when it returns `false`. The host name is available as `host`, the placement request as
+`request`, and each referenced knowledge as a variable holding its features as generic maps (keyed by the
+JSON field names the producing expression wrote).
+
+```yaml
+apiVersion: cortex.cobaltcore.dev/v1alpha1
+kind: Knowledge
+metadata:
+  name: blocked-hosts
+spec:
+  schedulingDomain: nova
+  expression:
+    run: | # produce a list of {computeHost, blocked} features
+      hypervisors | map({computeHost: .ServiceHost, blocked: .State == "down"})
+  inputs:
+    - var: hypervisors
+      datasource: nova-hypervisors
+---
+apiVersion: cortex.cobaltcore.dev/v1alpha1
+kind: Pipeline
+metadata:
+  name: nova
+spec:
+  schedulingDomain: nova
+  type: filter-weigher
+  filters:
+    - name: filter_expression
+      params:
+        - key: run
+          stringValue: none(blocked, .computeHost == host && .blocked)
+        - key: knowledges # map the expression var to the knowledge name
+          stringListMapValue:
+            blocked: [blocked-hosts]
+```
+
+Each `knowledges` entry maps an expression variable to exactly one knowledge name; the step checks those
+knowledges are `Ready` and non-empty at init. A broken expression is rejected at compile time (surfaced as
+an admission warning by the pipeline webhook). Evaluation is bounded by the same default timeout and memory
+budget as expression knowledges.
+
 ## Add a knowledge extractor or KPI
 
-1. Implement the extractor/KPI in the appropriate plugin subdirectory.
-2. Add a `func init()` at the bottom of the file that registers a factory function into the
-   package-level `Index` map (declared in `zz_index.go`) — for example:
+1. Implement the extractor/KPI. Extractors declare an inputs struct with `input:"<var>"` tagged fields
+   and return typed features, see [Feature extraction](../04-knowledge-database/03-feature-extraction.md#go-extractors).
+   For simple derivations, an [expression knowledge](../04-knowledge-database/03-feature-extraction.md#expression-knowledges)
+   needs no Go code at all.
+2. Add a `func init()` at the bottom of the file that registers a factory function — for example:
 
    ```go
    func init() {
-       plugins.Index["my_extractor"] = func() plugins.FeatureExtractor { return &MyExtractor{} }
+       extractor.Register("my_extractor", func() extractor.Extractor[MyInputs, MyFeature] { return &MyExtractor{} })
    }
    ```
 
+   KPIs register into the `Index` map in `internal/knowledge/kpis/plugins/zz_index.go` the same way.
    Because registration happens in `init()`, importing the package is enough — no central list to edit.
-3. Reference it from a `Knowledge` or `KPI` resource.
+3. Reference it from a `Knowledge` or `KPI` resource, binding each input var to a datasource or knowledge
+   in `spec.inputs`.
+
+Extractors don't need to live in the cortex repository: the extractor API (`pkg/knowledge/extractor`),
+the datasource models (`pkg/knowledge/datasources/...`) and the manager (`pkg/manager`) are public
+packages. A custom manager binary imports its extractor packages and runs the cortex manager:
+
+```go
+package main
+
+import (
+	"github.com/cobaltcore-dev/cortex/pkg/manager"
+	_ "example.com/my/extractors" // registers via extractor.Register
+)
+
+func main() { manager.Run() }
+```
 
 Verify with the feature/KPI metrics:
 
@@ -90,11 +157,13 @@ cortex_kpi_state{name="my-kpi"} 1
 ## Add a datasource kind
 
 Datasources self-register via `init()` into the `Index` map in their plugin package. Add the new kind
-by implementing its ingestion and registering a factory function in `init()`, then reference it from a
+by implementing its ingestion and registering a factory function in `init()`, persist its objects with
+`store.ReplaceAll`, and register its Go model with `datasources.RegisterScope` (or
+`openstack.RegisterModels`) so knowledges can consume it as typed input. Then reference it from a
 `Datasource` resource. The datasource types are the `DatasourceType` / `OpenStackDatasourceType`
 constants in `api/v1alpha1/datasource_types.go`, and the `Index` maps are in
-`internal/knowledge/datasources/plugins/openstack/zz_index.go` and
-`internal/knowledge/datasources/plugins/prometheus/zz_index.go`.
+`pkg/knowledge/datasources/openstack/zz_index.go` and
+`pkg/knowledge/datasources/prometheus/zz_index.go`.
 
 ## Build and test locally
 

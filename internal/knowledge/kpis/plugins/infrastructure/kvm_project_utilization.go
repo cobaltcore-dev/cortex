@@ -6,37 +6,25 @@ package infrastructure
 import (
 	"context"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/identity"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type kvmProjectInstanceCount struct {
-	ProjectID        string  `db:"project_id"`
-	ProjectName      string  `db:"project_name"`
-	DomainID         string  `db:"domain_id"`
-	DomainName       string  `db:"domain_name"`
-	ComputeHost      string  `db:"compute_host"`
-	FlavorName       string  `db:"flavor_name"`
-	AvailabilityZone string  `db:"availability_zone"`
-	InstanceCount    float64 `db:"instance_count"`
-}
+type kvmProjectInstanceCount = projectInstanceCount
 
-type kvmProjectCapacityUsage struct {
-	ProjectID        string  `db:"project_id"`
-	ProjectName      string  `db:"project_name"`
-	DomainID         string  `db:"domain_id"`
-	DomainName       string  `db:"domain_name"`
-	ComputeHost      string  `db:"compute_host"`
-	AvailabilityZone string  `db:"availability_zone"`
-	TotalVCPUs       float64 `db:"total_vcpus"`
-	TotalRAMMB       float64 `db:"total_ram_mb"`
-	TotalDiskGB      float64 `db:"total_disk_gb"`
+type kvmProjectCapacityUsage = projectCapacityUsage
+
+// Inputs of the kvm project utilization kpi.
+type KVMProjectUtilizationInputs struct {
+	Servers  []nova.Server      `input:"servers"`
+	Flavors  []nova.Flavor      `input:"flavors"`
+	Projects []identity.Project `input:"projects"`
+	Domains  []identity.Domain  `input:"domains"`
 }
 
 type KVMProjectUtilizationKPI struct {
@@ -54,8 +42,8 @@ func (k *KVMProjectUtilizationKPI) GetName() string {
 	return "kvm_project_utilization_kpi"
 }
 
-func (k *KVMProjectUtilizationKPI) Init(dbConn *db.DB, c client.Client, opts conf.RawOpts) error {
-	if err := k.BaseKPI.Init(dbConn, c, opts); err != nil {
+func (k *KVMProjectUtilizationKPI) Init(inputs plugins.Inputs, c client.Client, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(inputs, c, opts); err != nil {
 		return err
 	}
 
@@ -78,6 +66,11 @@ func (k *KVMProjectUtilizationKPI) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (k *KVMProjectUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
+	var in KVMProjectUtilizationInputs
+	if err := k.ResolveInputs(context.Background(), &in); err != nil {
+		log.Error(err, "kvm_project_utilization: failed to resolve inputs")
+		return
+	}
 	hosts, err := k.getKVMHosts()
 	if err != nil {
 		log.Error(err, "kvm_project_utilization: failed to get KVM hosts")
@@ -85,11 +78,8 @@ func (k *KVMProjectUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	// Export project x flavor x compute_host instance count metric
-	projectInstanceCounts, err := k.queryProjectInstanceCount()
-	if err != nil {
-		log.Error(err, "kvm_project_utilization: Failed to query project instance count for project utilization KPI")
-		return
-	}
+	projects := projectDetailsByID(in.Projects, in.Domains)
+	projectInstanceCounts := projectInstanceCounts(in.Servers, projects, isKVMComputeHost)
 	for _, projectInstanceCount := range projectInstanceCounts {
 		host, ok := hosts[projectInstanceCount.ComputeHost]
 		if !ok {
@@ -102,11 +92,7 @@ func (k *KVMProjectUtilizationKPI) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	// Export project x compute_host x resource capacity usage metric
-	projectCapacityUsages, err := k.queryProjectCapacityUsage()
-	if err != nil {
-		log.Error(err, "kvm_project_utilization: Failed to query project capacity usage for project utilization KPI")
-		return
-	}
+	projectCapacityUsages := projectCapacityUsages(in.Servers, in.Flavors, projects, isKVMComputeHost)
 	for _, projectCapacityUsage := range projectCapacityUsages {
 		host, ok := hosts[projectCapacityUsage.ComputeHost]
 		if !ok {
@@ -135,71 +121,6 @@ func (k *KVMProjectUtilizationKPI) getKVMHosts() (map[string]kvmHost, error) {
 		hosts[host.Name] = host
 	}
 	return hosts, nil
-}
-
-// queryProjectInstanceCount retrieves the number of running instances per project, hypervisor, and flavor on KVM from the database.
-func (k *KVMProjectUtilizationKPI) queryProjectCapacityUsage() ([]kvmProjectCapacityUsage, error) {
-	// This query will fetch all active instances. It will perform a join with the openstack projects to get the project name.
-	// It will also join with the flavors table to get the flavor information, which is needed for the capacity usage metrics.
-	// The results will be grouped by project, compute host, and availability zone to get the total capacity usage per project and hypervisor.
-	// We will filter the results to only include instances that are running on KVM hypervisors by checking the compute host name pattern.
-	// This assumes that all KVM hypervisors have a compute host name that follows the pattern "nodeXXX-bbYYY",
-	// which is a naming convention in SAP Cloud Infrastructure and may need to be adjusted based on the actual environment.
-	query := `
-		SELECT
-			s.tenant_id AS project_id,
-			COALESCE(p.name, '') AS project_name,
-			COALESCE(p.domain_id, '') AS domain_id,
-			COALESCE(d.name, '') AS domain_name,
-			s.os_ext_srv_attr_host AS compute_host,
-			s.os_ext_az_availability_zone AS availability_zone,
-			COALESCE(SUM(f.vcpus), 0) AS total_vcpus,
-			COALESCE(SUM(f.ram), 0) AS total_ram_mb,
-			COALESCE(SUM(f.disk), 0) AS total_disk_gb
-		FROM ` + nova.Server{}.TableName() + ` s
-		LEFT JOIN ` + nova.Flavor{}.TableName() + ` f ON s.flavor_name = f.name
-		LEFT JOIN ` + identity.Project{}.TableName() + ` p ON p.id = s.tenant_id
-		LEFT JOIN ` + identity.Domain{}.TableName() + ` d ON d.id = p.domain_id
-		WHERE s.status NOT IN ('DELETED', 'ERROR')
-		  AND s.os_ext_srv_attr_host LIKE '` + kvmComputeHostPattern + `'
-		GROUP BY s.tenant_id, p.name, p.domain_id, d.name, s.os_ext_srv_attr_host, s.os_ext_az_availability_zone
-	`
-	var usages []kvmProjectCapacityUsage
-	if _, err := k.DB.Select(&usages, query); err != nil {
-		return nil, err
-	}
-	return usages, nil
-}
-
-// queryProjectInstanceCount retrieves the number of running instances per project, hypervisor, and flavor on KVM.
-func (k *KVMProjectUtilizationKPI) queryProjectInstanceCount() ([]kvmProjectInstanceCount, error) {
-	// This query will fetch all active instances. It will perform a join with the openstack projects to get the project name.
-	// The results will be grouped by project, hypervisor, flavor, and availability zone to get the instance count.
-	// We will filter the results to only include instances that are running on KVM hypervisors by checking the compute host name pattern.
-	// This assumes that all KVM hypervisors have a compute host name that follows the pattern "nodeXXX-bbYYY",
-	// which is a naming convention in SAP Cloud Infrastructure and may need to be adjusted based on the actual environment.
-	query := `
-		SELECT
-			s.tenant_id AS project_id,
-			COALESCE(p.name, '') AS project_name,
-			COALESCE(p.domain_id, '') AS domain_id,
-			COALESCE(d.name, '') AS domain_name,
-			s.os_ext_srv_attr_host AS compute_host,
-			s.os_ext_az_availability_zone AS availability_zone,
-			s.flavor_name,
-			COUNT(*) AS instance_count
-		FROM ` + nova.Server{}.TableName() + ` s
-		LEFT JOIN ` + identity.Project{}.TableName() + ` p ON p.id = s.tenant_id
-		LEFT JOIN ` + identity.Domain{}.TableName() + ` d ON d.id = p.domain_id
-		WHERE s.status NOT IN ('DELETED', 'ERROR')
-		  AND s.os_ext_srv_attr_host LIKE '` + kvmComputeHostPattern + `'
-		GROUP BY s.tenant_id, p.name, p.domain_id, d.name, s.os_ext_srv_attr_host, s.flavor_name, s.os_ext_az_availability_zone
-	`
-	var usages []kvmProjectInstanceCount
-	if _, err := k.DB.Select(&usages, query); err != nil {
-		return nil, err
-	}
-	return usages, nil
 }
 
 func init() {

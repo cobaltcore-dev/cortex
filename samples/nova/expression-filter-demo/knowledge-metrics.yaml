@@ -1,0 +1,34 @@
+# Copyright SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+# Fake raw CPU-contention metric samples, standing in for a Prometheus
+# datasource. In the Knowledge DB 2.0 slides these come from the
+# host-cpu-metrics Prometheus datasource (node_pressure_cpu_waiting). Here they
+# are hard-coded as a literal-list expression so the demo is self-contained and
+# offline. Each sample has {Node, Value}; Node matches the nova hypervisor's
+# Hostname. The host-cpu-contention knowledge joins these onto the real
+# nova-hypervisors datasource.
+apiVersion: cortex.cloud/v1alpha1
+kind: Knowledge
+metadata:
+  name: host-cpu-metrics
+spec:
+  schedulingDomain: nova
+  description: |
+    Synthetic raw CPU-contention metric samples (%), one row per scrape, keyed
+    by node. Stands in for a Prometheus datasource so the demo runs offline.
+  recency: "60s"
+  expression:
+    run: |
+      [
+        {Node: "node004-bb086", Value: 74.0},
+        {Node: "node004-bb086", Value: 86.0},
+        {Node: "node003-bb088", Value: 58.0},
+        {Node: "node003-bb088", Value: 70.0},
+        {Node: "node007-bb086", Value: 38.0},
+        {Node: "node007-bb086", Value: 46.0},
+        {Node: "node006-bb086", Value: 18.0},
+        {Node: "node006-bb086", Value: 26.0},
+        {Node: "node002-bb086", Value: 6.0},
+        {Node: "node002-bb086", Value: 10.0},
+      ]

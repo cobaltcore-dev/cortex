@@ -1,0 +1,22 @@
+# Copyright SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: cortex.cloud/v1alpha1
+kind: Datasource
+metadata:
+  name: nova-hypervisors
+spec:
+  schedulingDomain: nova
+  type: openstack
+  openstack:
+    type: nova
+    nova: {type: hypervisors}
+    secretRef:
+      name: openstack
+      namespace: cortex
+  storage:
+    type: valkey
+    valkey:
+      secretRef:
+        name: cortex-nova-valkey
+        namespace: cortex

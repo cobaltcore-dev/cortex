@@ -1,128 +1,92 @@
 // Copyright SAP SE
 // SPDX-License-Identifier: Apache-2.0
 
-// Copyright SAP SE
-// SPDX-License-Identifier: Apache-2.0
-
 package compute
 
 import (
-	"os"
+	"cmp"
+	"slices"
 	"testing"
+	"time"
 
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/internal/knowledge/db/testing"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
 )
 
-func TestVMLifeSpanExtractor_Init(t *testing.T) {
-	extractor := &VMLifeSpanHistogramExtractor{}
-	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(nil, nil, config); err != nil {
-		t.Fatalf("expected no error during initialization, got %v", err)
+func TestVMLifeSpans(t *testing.T) {
+	in := VMLifeSpanInputs{
+		DeletedServers: []nova.DeletedServer{
+			{ID: "server1", FlavorName: "small", Created: "2025-01-01T00:00:00Z", Updated: "2025-01-03T00:00:00Z"},
+			{ID: "server2", FlavorName: "medium", Created: "2025-01-02T00:00:00", Updated: "2025-01-04 00:00:00.000000"},
+			// Servers with invalid timestamps are skipped.
+			{ID: "server3", FlavorName: "small", Created: "2025-01-02T00:00:00Z", Updated: "invalid"},
+		},
+		Servers: []nova.Server{
+			{ID: "server4", FlavorName: "small", Created: "2025-01-05T00:00:00Z"},
+			{ID: "server5", FlavorName: "nonexistent", Created: "2025-01-06T00:00:00Z"},
+			{ID: "server6", FlavorName: "small", Created: "invalid"},
+		},
+		Flavors: []nova.Flavor{{ID: "flavor1", Name: "small"}, {ID: "flavor2", Name: "medium"}},
+	}
+	now := time.Date(2025, 1, 10, 0, 0, 0, 0, time.UTC)
+	expected := []VMLifeSpanRaw{
+		{Duration: 2 * 86400, FlavorName: "small", Deleted: true},
+		{Duration: 2 * 86400, FlavorName: "medium", Deleted: true},
+		{Duration: 5 * 86400, FlavorName: "small", Deleted: false},
+		{Duration: 4 * 86400, FlavorName: "unknown", Deleted: false},
+	}
+	if got := vmLifeSpans(in, now); !slices.Equal(got, expected) {
+		t.Errorf("expected %+v, got %+v", expected, got)
 	}
 }
 
-func TestVMLifeSpanExtractor_Extract(t *testing.T) {
-	// We're using postgres specific syntax here.
-	if os.Getenv("POSTGRES_CONTAINER") != "1" {
-		t.Skip("skipping test; set POSTGRES_CONTAINER=1 to run")
+func TestVMLifeSpanHistogramExtractor_Extract(t *testing.T) {
+	in := VMLifeSpanInputs{
+		DeletedServers: []nova.DeletedServer{
+			{ID: "server1", FlavorName: "small", Created: "2025-01-01T00:00:00Z", Updated: "2025-01-03T00:00:00Z"},
+			{ID: "server2", FlavorName: "medium", Created: "2025-01-02T00:00:00Z", Updated: "2025-01-04T00:00:00Z"},
+		},
+		Servers: []nova.Server{
+			{ID: "server3", FlavorName: "small", Created: "2025-01-05T00:00:00Z", Status: "ACTIVE"},
+			{ID: "server4", FlavorName: "medium", Created: "2025-01-06T00:00:00Z", Status: "SHUTOFF"},
+		},
+		Flavors: []nova.Flavor{{ID: "flavor1", Name: "small"}, {ID: "flavor2", Name: "medium"}},
 	}
-
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-	// Create dependency tables
-	if err := testDB.CreateTable(
-		testDB.AddTable(nova.Server{}),
-		testDB.AddTable(nova.DeletedServer{}),
-		testDB.AddTable(nova.Flavor{}),
-	); err != nil {
-		t.Fatalf("failed to create dependency tables: %v", err)
-	}
-
-	data := []any{
-		// Deleted openstack servers
-		&nova.DeletedServer{ID: "server1", FlavorName: "small", Created: "2025-01-01T00:00:00Z", Status: "DELETED", Updated: "2025-01-03T00:00:00Z"},
-		&nova.DeletedServer{ID: "server2", FlavorName: "medium", Created: "2025-01-02T00:00:00Z", Status: "DELETED", Updated: "2025-01-04T00:00:00Z"},
-
-		// Non deleted openstack servers
-		&nova.Server{ID: "server3", FlavorName: "small", Created: "2025-01-05T00:00:00Z", Status: "ACTIVE"},
-		&nova.Server{ID: "server4", FlavorName: "medium", Created: "2025-01-06T00:00:00Z", Status: "SHUTOFF"},
-
-		// Flavors
-		&nova.Flavor{ID: "flavor1", Name: "small"},
-		&nova.Flavor{ID: "flavor2", Name: "medium"},
-	}
-	if err := testDB.Insert(data...); err != nil {
-		t.Fatalf("failed to insert servers: %v", err)
-	}
-
-	extractor := &VMLifeSpanHistogramExtractor{}
-	config := v1alpha1.KnowledgeSpec{}
-	if err := extractor.Init(&testDB, nil, config); err != nil {
-		t.Fatalf("expected no error during initialization, got %v", err)
-	}
-
-	features, err := extractor.Extract()
+	features, err := (&VMLifeSpanHistogramExtractor{}).Extract(t.Context(), in)
 	if err != nil {
-		t.Fatalf("expected no error during extraction, got %v", err)
+		t.Fatalf("expected no error, got %v", err)
 	}
-
-	// We expect 30 buckets for each flavor + "all" category
-	// 2 flavors + "all" = 3 categories
-	// 'detected' and 'running' = 2 states
-	expectedLength := 30 * (2 + 1) * 2
-
-	if len(features) != expectedLength {
-		t.Errorf("expected %d features, got %d", expectedLength, len(features))
+	// 30 buckets for each of (small, medium, all) x (deleted, running).
+	if len(features) != 30*3*2 {
+		t.Fatalf("expected %d features, got %d", 30*3*2, len(features))
 	}
-
-	// Check the actual values of the features
-	foundSmallDeleted := false
-	foundMediumDeleted := false
-	foundSmallRunning := false
-	foundMediumRunning := false
-
+	type key struct {
+		flavor  string
+		deleted bool
+	}
+	counts := make(map[key]uint64)
 	for _, f := range features {
-		bucketFeature, ok := f.(VMLifeSpanHistogramBucket)
-		if !ok {
-			t.Errorf("feature is not of type VMLifeSpanHistogramBucket: %T", f)
-			continue
-		}
-
-		if bucketFeature.FlavorName == "small" && bucketFeature.Deleted {
-			foundSmallDeleted = true
-		}
-		if bucketFeature.FlavorName == "medium" && bucketFeature.Deleted {
-			foundMediumDeleted = true
-		}
-		if bucketFeature.FlavorName == "small" && !bucketFeature.Deleted {
-			foundSmallRunning = true
-		}
-		if bucketFeature.FlavorName == "medium" && !bucketFeature.Deleted {
-			foundMediumRunning = true
-		}
-
-		// Check that count and sum are greater than zero for non-empty buckets
-		if bucketFeature.Count == 0 {
-			t.Errorf("expected count > 0 for flavor 'medium', got %d", bucketFeature.Count)
-		}
-		if bucketFeature.Sum < 1 {
-			t.Errorf("expected sum > 0 for flavor 'medium', got %f", bucketFeature.Sum)
+		counts[key{f.FlavorName, f.Deleted}] = f.Count
+	}
+	expected := map[key]uint64{
+		{"all", false}: 2, {"all", true}: 2,
+		{"medium", false}: 1, {"medium", true}: 1,
+		{"small", false}: 1, {"small", true}: 1,
+	}
+	for k, count := range expected {
+		if counts[k] != count {
+			t.Errorf("expected count %d for %+v, got %d", count, k, counts[k])
 		}
 	}
-	if !foundSmallDeleted {
-		t.Errorf("expected feature for flavor 'small' not found")
+	deletedSmallSum := 2 * 86400.0
+	for _, f := range features {
+		if f.FlavorName == "small" && f.Deleted && f.Sum != deletedSmallSum {
+			t.Errorf("expected sum %f for deleted small vms, got %f", deletedSmallSum, f.Sum)
+		}
 	}
-	if !foundMediumDeleted {
-		t.Errorf("expected feature for flavor 'medium' not found")
-	}
-	if !foundSmallRunning {
-		t.Errorf("expected feature for flavor 'small' not found")
-	}
-	if !foundMediumRunning {
-		t.Errorf("expected feature for flavor 'medium' not found")
+	isSorted := slices.IsSortedFunc(features, func(a, b VMLifeSpanHistogramBucket) int {
+		return cmp.Or(cmp.Compare(a.FlavorName, b.FlavorName), compareBool(a.Deleted, b.Deleted), cmp.Compare(a.Bucket, b.Bucket))
+	})
+	if !isSorted {
+		t.Error("expected features to be sorted by flavor, deleted and bucket")
 	}
 }

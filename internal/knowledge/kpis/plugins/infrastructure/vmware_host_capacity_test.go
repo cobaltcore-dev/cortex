@@ -8,8 +8,6 @@ import (
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/internal/knowledge/db/testing"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/prometheus/client_golang/prometheus"
@@ -45,11 +43,8 @@ func buildHostCapacityClient(t *testing.T, hostDetails []compute.VMwareHostDetai
 }
 
 func TestVMwareHostCapacityKPI_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	kpi := &VMwareHostCapacityKPI{}
-	if err := kpi.Init(&testDB, nil, conf.NewRawOpts("{}")); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
@@ -237,13 +232,9 @@ func TestVMwareHostCapacityKPI_Collect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dbEnv := testlibDB.SetupDBEnv(t)
-			testDB := db.DB{DbMap: dbEnv.DbMap}
-			defer dbEnv.Close()
-
 			client := buildHostCapacityClient(t, tt.hostDetails, tt.utilizations)
 			kpi := &VMwareHostCapacityKPI{}
-			if err := kpi.Init(&testDB, client.Build(), conf.NewRawOpts("{}")); err != nil {
+			if err := kpi.Init(nil, client.Build(), conf.NewRawOpts("{}")); err != nil {
 				t.Fatalf("expected no error on Init, got %v", err)
 			}
 

@@ -4,7 +4,8 @@
 package plugins
 
 import (
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
+	"context"
+
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -12,9 +13,9 @@ import (
 
 // Each kpi plugin must conform to this interface.
 type KPI interface {
-	// Configure the kpi with a database, options, and the
-	// registry to publish metrics on.
-	Init(db *db.DB, client client.Client, opts conf.RawOpts) error
+	// Configure the kpi with its inputs, a kubernetes client, options,
+	// and the registry to publish metrics on.
+	Init(inputs Inputs, client client.Client, opts conf.RawOpts) error
 	// Collect the kpi from the given data.
 	Collect(ch chan<- prometheus.Metric)
 	// Describe this metric.
@@ -23,4 +24,11 @@ type KPI interface {
 	// This name is used to identify the kpi in metrics, config, logs, etc.
 	// Should be something like: "my_cool_kpi".
 	GetName() string
+}
+
+// Inputs resolves the objects of the inputs configured for a kpi.
+type Inputs interface {
+	// Resolve fills the fields of target, a pointer to a struct, tagged with
+	// `input:"<var>"` with the objects of the configured input with that var.
+	Resolve(ctx context.Context, target any) error
 }

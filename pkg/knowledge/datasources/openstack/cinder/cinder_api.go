@@ -1,0 +1,94 @@
+// Copyright SAP SE
+// SPDX-License-Identifier: Apache-2.0
+
+package cinder
+
+import (
+	"context"
+
+	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
+	"github.com/cobaltcore-dev/cortex/pkg/keystone"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/schedulerstats"
+	"github.com/gophercloud/gophercloud/v2/pagination"
+	"github.com/prometheus/client_golang/prometheus"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+)
+
+var log = logf.Log.WithName("cinder")
+
+type CinderAPI interface {
+	// Int the cinder API.
+	Init(ctx context.Context) error
+	// Get all cinder storage pools.
+	GetAllStoragePools(ctx context.Context) ([]StoragePool, error)
+}
+
+type cinderAPI struct {
+	// Monitor to track the api.
+	mon datasources.Monitor
+	// Keystone api to authenticate against.
+	keystoneClient keystone.KeystoneClient
+	// Cinder configuration.
+	conf v1alpha1.CinderDatasource
+	// Authenticated OpenStack service client to fetch the data.
+	sc *gophercloud.ServiceClient
+}
+
+func NewCinderAPI(mon datasources.Monitor, k keystone.KeystoneClient, conf v1alpha1.CinderDatasource) CinderAPI {
+	return &cinderAPI{
+		mon:            mon,
+		keystoneClient: k,
+		conf:           conf,
+	}
+}
+
+func (api *cinderAPI) Init(ctx context.Context) error {
+	if err := api.keystoneClient.Authenticate(ctx); err != nil {
+		return err
+	}
+
+	// Automatically fetch the cinder endpoint from the keystone service catalog
+	provider := api.keystoneClient.Client()
+	serviceType := "volumev3"
+	sameAsKeystone := api.keystoneClient.Availability()
+	url, err := api.keystoneClient.FindEndpoint(sameAsKeystone, serviceType)
+	if err != nil {
+		return err
+	}
+	log.Info("using cinder endpoint", "url", url)
+	api.sc = &gophercloud.ServiceClient{
+		ProviderClient: provider,
+		Endpoint:       url,
+		Type:           serviceType,
+		Microversion:   "3.70",
+	}
+	return nil
+}
+
+func (api *cinderAPI) GetAllStoragePools(ctx context.Context) ([]StoragePool, error) {
+	label := StoragePool{}.TableName()
+	log.V(1).Info("fetching cinder data", "label", label)
+	// Fetch all pages.
+	pages, err := func() (pagination.Page, error) {
+		if api.mon.RequestTimer != nil {
+			hist := api.mon.RequestTimer.WithLabelValues(label)
+			timer := prometheus.NewTimer(hist)
+			defer timer.ObserveDuration()
+		}
+		return schedulerstats.List(api.sc, schedulerstats.ListOpts{Detail: true}).AllPages(ctx)
+	}()
+	if err != nil {
+		return nil, err
+	}
+	// Parse the json data into our custom model.
+	var data = &struct {
+		Pools []StoragePool `json:"pools"`
+	}{}
+	if err := pages.(schedulerstats.StoragePoolPage).ExtractInto(data); err != nil {
+		return nil, err
+	}
+	log.V(1).Info("fetched", "label", label, "count", len(data.Pools))
+	return data.Pools, nil
+}

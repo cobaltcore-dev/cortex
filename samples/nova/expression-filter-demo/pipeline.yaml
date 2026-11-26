@@ -1,0 +1,36 @@
+# Copyright SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+# Demo pipeline with no built-in filters plus a single expression filter that
+# keeps only hosts whose average CPU contention is below a threshold, read from
+# the host-cpu-contention knowledge. It is the "empty + filter_expression"
+# counterpart of the empty baseline pipeline (pipeline-baseline.yaml), so a
+# comparison isolates exactly what the expression filter removes. Mirrors the
+# Knowledge DB 2.0 slide example.
+apiVersion: cortex.cloud/v1alpha1
+kind: Pipeline
+metadata:
+  name: nova-contention-demo
+spec:
+  schedulingDomain: nova
+  type: filter-weigher
+  description: |
+    Demo pipeline showing the filter_expression step on top of a dynamically
+    added knowledge (host-cpu-contention). It drops hosts whose average CPU
+    contention is at or above the threshold and keeps the rest.
+  filters:
+    - name: filter_expression
+      description: |
+        Keep a host only when its average CPU contention is below 50%. The host
+        name is available as `host`; the contention features are available as
+        `contention`. Hosts without a contention feature are dropped by this
+        rule (no matching entry), matching the slide example.
+      params:
+        - key: run
+          stringValue: |
+            any(contention,
+              .ComputeHost == host &&
+              .AvgCPUContention < 50)
+        - key: knowledges
+          stringListMapValue:
+            contention: [host-cpu-contention]

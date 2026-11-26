@@ -73,7 +73,7 @@ func newTestFlavorKnowledge() *v1alpha1.Knowledge {
 		ObjectMeta: metav1.ObjectMeta{Name: "flavor-groups"},
 		Spec: v1alpha1.KnowledgeSpec{
 			SchedulingDomain: v1alpha1.SchedulingDomainNova,
-			Extractor:        v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
+			Extractor:        &v1alpha1.KnowledgeExtractorSpec{Name: "flavor_groups"},
 		},
 		Status: v1alpha1.KnowledgeStatus{
 			Raw:       runtime.RawExtension{Raw: raw},

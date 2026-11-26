@@ -5,9 +5,12 @@ metadata:
   name: netapp-aggr-labels-manila
 spec:
   schedulingDomain: manila
-  databaseSecretRef:
-    name: cortex-manila-postgres
-    namespace: {{ .Release.Namespace }}
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: cortex-manila-postgres
+        namespace: {{ .Release.Namespace }}
   {{- if .Values.prometheus.sso.enabled }}
   ssoSecretRef:
     name: cortex-manila-prometheus-sso
@@ -28,9 +31,12 @@ metadata:
   name: netapp-node-cpu-busy-manila
 spec:
   schedulingDomain: manila
-  databaseSecretRef:
-    name: cortex-manila-postgres
-    namespace: {{ .Release.Namespace }}
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: cortex-manila-postgres
+        namespace: {{ .Release.Namespace }}
   {{- if .Values.prometheus.sso.enabled }}
   ssoSecretRef:
     name: cortex-manila-prometheus-sso
@@ -51,9 +57,12 @@ metadata:
   name: manila-storage-pools
 spec:
   schedulingDomain: manila
-  databaseSecretRef:
-    name: cortex-manila-postgres
-    namespace: {{ .Release.Namespace }}
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: cortex-manila-postgres
+        namespace: {{ .Release.Namespace }}
   {{- if .Values.openstack.sso.enabled }}
   ssoSecretRef:
     name: cortex-manila-openstack-sso

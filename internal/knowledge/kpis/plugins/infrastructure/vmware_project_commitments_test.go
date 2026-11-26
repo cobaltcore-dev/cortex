@@ -6,39 +6,22 @@ package infrastructure
 import (
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/identity"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/limes"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/internal/knowledge/db/testing"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/identity"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/limes"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/inputs"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
-func setupProjectCommitmentsDB(t *testing.T) (testDB *db.DB, cleanup func()) {
-	t.Helper()
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB = &db.DB{DbMap: dbEnv.DbMap}
-	if err := testDB.CreateTable(
-		testDB.AddTable(limes.Commitment{}),
-		testDB.AddTable(nova.Server{}),
-		testDB.AddTable(nova.Flavor{}),
-		testDB.AddTable(identity.Project{}),
-		testDB.AddTable(identity.Domain{}),
-	); err != nil {
-		t.Fatalf("failed to create tables: %v", err)
-	}
-	return testDB, dbEnv.Close
-}
-
 // collectProjectCommitmentsMetrics runs the KPI and returns all emitted metrics keyed by
 // "metricName|az|cpu_architecture|resource|project_id|project_name|domain_id|domain_name".
 // GP metrics have an empty cpu_architecture segment since the descriptor does not include that label.
-func collectProjectCommitmentsMetrics(t *testing.T, testDB *db.DB) map[string]float64 {
+func collectProjectCommitmentsMetrics(t *testing.T, in inputs.Static) map[string]float64 {
 	t.Helper()
 	kpi := &VMwareProjectCommitmentsKPI{}
-	if err := kpi.Init(testDB, nil, conf.NewRawOpts("{}")); err != nil {
+	if err := kpi.Init(in, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("failed to init KPI: %v", err)
 	}
 	ch := make(chan prometheus.Metric, 200)
@@ -74,11 +57,8 @@ func hKey(az, cpuArch, resource string, p projectWithDomain) string {
 }
 
 func TestVMwareProjectCommitmentsKPI_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	kpi := &VMwareProjectCommitmentsKPI{}
-	if err := kpi.Init(&testDB, nil, conf.NewRawOpts("{}")); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
@@ -306,32 +286,10 @@ func TestVMwareProjectCommitmentsKPI_Collect_GeneralPurpose(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			testDB, cleanup := setupProjectCommitmentsDB(t)
-			defer cleanup()
-
-			var rows []any
-			for i := range tt.commitments {
-				rows = append(rows, &tt.commitments[i])
-			}
-			for i := range tt.servers {
-				rows = append(rows, &tt.servers[i])
-			}
-			for i := range tt.flavors {
-				rows = append(rows, &tt.flavors[i])
-			}
-			for i := range tt.projects {
-				rows = append(rows, &tt.projects[i])
-			}
-			for i := range tt.domains {
-				rows = append(rows, &tt.domains[i])
-			}
-			if len(rows) > 0 {
-				if err := testDB.Insert(rows...); err != nil {
-					t.Fatalf("failed to insert test data: %v", err)
-				}
-			}
-
-			got := collectProjectCommitmentsMetrics(t, testDB)
+			got := collectProjectCommitmentsMetrics(t, inputs.Static{
+				"servers": tt.servers, "flavors": tt.flavors, "commitments": tt.commitments,
+				"projects": tt.projects, "domains": tt.domains,
+			})
 
 			if len(got) != len(tt.want) {
 				t.Errorf("expected %d metrics, got %d: %v", len(tt.want), len(got), got)
@@ -562,32 +520,10 @@ func TestVMwareProjectCommitmentsKPI_Collect_HANA(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			testDB, cleanup := setupProjectCommitmentsDB(t)
-			defer cleanup()
-
-			var rows []any
-			for i := range tt.commitments {
-				rows = append(rows, &tt.commitments[i])
-			}
-			for i := range tt.servers {
-				rows = append(rows, &tt.servers[i])
-			}
-			for i := range tt.flavors {
-				rows = append(rows, &tt.flavors[i])
-			}
-			for i := range tt.projects {
-				rows = append(rows, &tt.projects[i])
-			}
-			for i := range tt.domains {
-				rows = append(rows, &tt.domains[i])
-			}
-			if len(rows) > 0 {
-				if err := testDB.Insert(rows...); err != nil {
-					t.Fatalf("failed to insert test data: %v", err)
-				}
-			}
-
-			got := collectProjectCommitmentsMetrics(t, testDB)
+			got := collectProjectCommitmentsMetrics(t, inputs.Static{
+				"servers": tt.servers, "flavors": tt.flavors, "commitments": tt.commitments,
+				"projects": tt.projects, "domains": tt.domains,
+			})
 
 			if len(got) != len(tt.want) {
 				t.Errorf("expected %d metrics, got %d: %v", len(tt.want), len(got), got)

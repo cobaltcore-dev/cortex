@@ -1,0 +1,36 @@
+# Copyright SAP SE
+# SPDX-License-Identifier: Apache-2.0
+
+# CPU-contention knowledge, matching the slide example (Knowledge DB 2.0). It
+# joins raw CPU-contention metrics onto the OpenStack nova hypervisors with an
+# expr-lang expression and aggregates per compute host. The metrics come from
+# the host-cpu-metrics knowledge (synthetic stand-in for a Prometheus
+# datasource); the hypervisors come from the real nova-hypervisors datasource.
+# No Go code — the join is pure expression.
+apiVersion: cortex.cloud/v1alpha1
+kind: Knowledge
+metadata:
+  name: host-cpu-contention
+spec:
+  schedulingDomain: nova
+  description: |
+    Average and maximum CPU contention (%) per compute host, derived by joining
+    CPU-contention metrics (by node) onto the nova hypervisors (by hostname) and
+    aggregating per service host. See the Knowledge DB 2.0 slides.
+  recency: "60s"
+  expression:
+    run: |
+      let byHost = groupBy(metrics, .Node);
+      hypervisors
+      | filter(len(byHost[.Hostname] ?? []) > 0)
+      | map(let h = #; {
+          ComputeHost: h.ServiceHost,
+          AvgCPUContention: mean(map(byHost[h.Hostname], .Value)),
+          MaxCPUContention: max(map(byHost[h.Hostname], .Value)),
+        })
+      | sortBy(.AvgCPUContention)
+  inputs:
+    - var: hypervisors
+      datasource: nova-hypervisors
+    - var: metrics
+      knowledge: host-cpu-metrics

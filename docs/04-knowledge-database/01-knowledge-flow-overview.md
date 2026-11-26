@@ -61,9 +61,8 @@ The three controllers form a chain, each reacting to the resource before it (the
 2. Knowledge controllers re-run affected extractors, writing fresh features.
 3. KPIs re-publish, and pipeline/detector steps pick up the new features on their next run.
 
-A `Knowledge` resource names its input datasources in `dependencies.datasources`, and those datasources
-must exist and be Ready before the extractor runs — the dependency is explicit, so the chain is
-deterministic.
+A `Knowledge` resource names its input datasources and knowledges in `spec.inputs`, and receives their
+objects as typed lists when it is extracted — the dependency is explicit, so the chain is deterministic.
 
 This flow is the supply side for every decision in the book: the weighers of
 [Chapter 2](../02-external-scheduler-api/readme.md) read features, the reservation controllers of

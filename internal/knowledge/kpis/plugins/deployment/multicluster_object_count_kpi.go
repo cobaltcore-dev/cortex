@@ -9,7 +9,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/cobaltcore-dev/cortex/pkg/multicluster"
@@ -53,8 +52,8 @@ type MulticlusterObjectCountKPI struct {
 
 func (MulticlusterObjectCountKPI) GetName() string { return "multicluster_object_count_kpi" }
 
-func (k *MulticlusterObjectCountKPI) Init(_ *db.DB, c client.Client, opts conf.RawOpts) error {
-	if err := k.BaseKPI.Init(nil, c, opts); err != nil {
+func (k *MulticlusterObjectCountKPI) Init(inputs plugins.Inputs, c client.Client, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(inputs, c, opts); err != nil {
 		return err
 	}
 	mcl, ok := c.(*multicluster.Client)

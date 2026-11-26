@@ -7,7 +7,6 @@ import (
 	"context"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/storage"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/math"
@@ -31,8 +30,8 @@ func (NetAppStoragePoolCPUUsageKPI) GetName() string {
 	return "netapp_storage_pool_cpu_usage_kpi"
 }
 
-func (k *NetAppStoragePoolCPUUsageKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
-	if err := k.BaseKPI.Init(db, client, opts); err != nil {
+func (k *NetAppStoragePoolCPUUsageKPI) Init(inputs plugins.Inputs, client client.Client, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(inputs, client, opts); err != nil {
 		return err
 	}
 	k.storagePoolCPUUsageMax = prometheus.NewDesc(
