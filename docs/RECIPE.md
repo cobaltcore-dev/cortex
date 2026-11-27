@@ -24,7 +24,7 @@ reference dump of every field.
   it describes (a new CRD Kind, component, config key, capability, or a removed one).
 - **Derive from code, never invent.** Every command, column, field path, flag, metric, and
   step name shown must exist in the repository. Do not invent example names — reuse real ones
-  (e.g. `filter_has_enough_capacity`, `kvm_binpack`, `host_utilization_extractor`). If you
+  (e.g. `filter_has_enough_capacity`, `kvm_binpack`, `vm_host_residency_extractor`). If you
   cannot ground a detail in source, omit it.
 
 ## §2 Vendor-neutral, upstream voice

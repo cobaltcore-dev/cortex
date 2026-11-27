@@ -7,10 +7,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/internal/knowledge/db/testing"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/inputs"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
 )
@@ -23,12 +22,8 @@ func TestVMFaultsKPI_GetName(t *testing.T) {
 }
 
 func TestVMFaultsKPI_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-
 	kpi := &VMFaultsKPI{}
-	if err := kpi.Init(&testDB, nil, conf.NewRawOpts("{}")); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if kpi.vmFaultsDesc == nil {
@@ -52,13 +47,13 @@ func TestVMFaultsKPI_Describe(t *testing.T) {
 	}
 }
 
-func TestVMFaultsKPI_Collect_NoDB(t *testing.T) {
+func TestVMFaultsKPI_Collect_NoInputs(t *testing.T) {
 	kpi := &VMFaultsKPI{}
 	if err := kpi.Init(nil, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Collect should not panic when no database is provided
+	// Collect should not panic when no inputs are provided
 	ch := make(chan prometheus.Metric, 100)
 	kpi.Collect(ch)
 	close(ch)
@@ -68,39 +63,28 @@ func TestVMFaultsKPI_Collect_NoDB(t *testing.T) {
 		count++
 	}
 	if count != 0 {
-		t.Errorf("expected 0 metrics when no DB, got %d", count)
+		t.Errorf("expected 0 metrics when no inputs, got %d", count)
 	}
 }
 
 func TestVMFaultsKPI_Collect(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-
-	if err := testDB.CreateTable(
-		testDB.AddTable(nova.Server{}),
-		testDB.AddTable(nova.Flavor{}),
-	); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
 	// Insert mock flavors with different hypervisor types
-	flavors := []any{
-		&nova.Flavor{
+	flavors := []nova.Flavor{
+		{
 			ID:         "flavor-qemu",
 			Name:       "qemu-small",
 			VCPUs:      2,
 			RAM:        4096,
 			ExtraSpecs: `{"capabilities:hypervisor_type":"QEMU"}`,
 		},
-		&nova.Flavor{
+		{
 			ID:         "flavor-vmware",
 			Name:       "vmware-medium",
 			VCPUs:      4,
 			RAM:        8192,
 			ExtraSpecs: `{"capabilities:hypervisor_type":"VMware vCenter Server"}`,
 		},
-		&nova.Flavor{
+		{
 			ID:         "flavor-unspecified",
 			Name:       "generic-large",
 			VCPUs:      8,
@@ -108,14 +92,11 @@ func TestVMFaultsKPI_Collect(t *testing.T) {
 			ExtraSpecs: `{}`,
 		},
 	}
-	if err := testDB.Insert(flavors...); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
 
 	// Insert mock servers
-	servers := []any{
+	servers := []nova.Server{
 		// Normal server without fault
-		&nova.Server{
+		{
 			ID:                    "server-1",
 			Name:                  "normal-vm",
 			Status:                "ACTIVE",
@@ -123,7 +104,7 @@ func TestVMFaultsKPI_Collect(t *testing.T) {
 			OSEXTAvailabilityZone: "az1",
 		},
 		// Server with fault code and message
-		&nova.Server{
+		{
 			ID:                    "server-2",
 			Name:                  "faultyvm",
 			Status:                "ERROR",
@@ -133,7 +114,7 @@ func TestVMFaultsKPI_Collect(t *testing.T) {
 			FaultMessage:          new("Internal error"),
 		},
 		// Another faulty server in different AZ
-		&nova.Server{
+		{
 			ID:                    "server-3",
 			Name:                  "another-faulty",
 			Status:                "ERROR",
@@ -143,7 +124,7 @@ func TestVMFaultsKPI_Collect(t *testing.T) {
 			FaultMessage:          new("Bad request"),
 		},
 		// Server with only fault message (no code)
-		&nova.Server{
+		{
 			ID:                    "server-4",
 			Name:                  "partial-fault",
 			Status:                "BUILD",
@@ -152,7 +133,7 @@ func TestVMFaultsKPI_Collect(t *testing.T) {
 			FaultMessage:          new("Some warning"),
 		},
 		// Server with flavor that doesn't exist (should be skipped)
-		&nova.Server{
+		{
 			ID:                    "server-5",
 			Name:                  "orphan-vm",
 			Status:                "ACTIVE",
@@ -160,12 +141,9 @@ func TestVMFaultsKPI_Collect(t *testing.T) {
 			OSEXTAvailabilityZone: "az1",
 		},
 	}
-	if err := testDB.Insert(servers...); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
 
 	kpi := &VMFaultsKPI{}
-	if err := kpi.Init(&testDB, nil, conf.NewRawOpts("{}")); err != nil {
+	if err := kpi.Init(inputs.Static{"servers": servers, "flavors": flavors}, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -271,20 +249,9 @@ func TestVMFaultsKPI_Collect(t *testing.T) {
 }
 
 func TestVMFaultsKPI_Collect_InvalidExtraSpecs(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-
-	if err := testDB.CreateTable(
-		testDB.AddTable(nova.Server{}),
-		testDB.AddTable(nova.Flavor{}),
-	); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
 	// Insert flavor with invalid extra specs JSON
-	flavors := []any{
-		&nova.Flavor{
+	flavors := []nova.Flavor{
+		{
 			ID:         "flavor-bad",
 			Name:       "bad-flavor",
 			VCPUs:      2,
@@ -292,12 +259,9 @@ func TestVMFaultsKPI_Collect_InvalidExtraSpecs(t *testing.T) {
 			ExtraSpecs: `invalid-json`,
 		},
 	}
-	if err := testDB.Insert(flavors...); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
 
-	servers := []any{
-		&nova.Server{
+	servers := []nova.Server{
+		{
 			ID:                    "server-bad",
 			Name:                  "bad-vm",
 			Status:                "ACTIVE",
@@ -305,12 +269,9 @@ func TestVMFaultsKPI_Collect_InvalidExtraSpecs(t *testing.T) {
 			OSEXTAvailabilityZone: "az1",
 		},
 	}
-	if err := testDB.Insert(servers...); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
 
 	kpi := &VMFaultsKPI{}
-	if err := kpi.Init(&testDB, nil, conf.NewRawOpts("{}")); err != nil {
+	if err := kpi.Init(inputs.Static{"servers": servers, "flavors": flavors}, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -330,19 +291,8 @@ func TestVMFaultsKPI_Collect_InvalidExtraSpecs(t *testing.T) {
 }
 
 func TestVMFaultsKPI_Collect_MultipleSameLabels(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-
-	if err := testDB.CreateTable(
-		testDB.AddTable(nova.Server{}),
-		testDB.AddTable(nova.Flavor{}),
-	); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	flavors := []any{
-		&nova.Flavor{
+	flavors := []nova.Flavor{
+		{
 			ID:         "flavor-1",
 			Name:       "small",
 			VCPUs:      2,
@@ -350,27 +300,24 @@ func TestVMFaultsKPI_Collect_MultipleSameLabels(t *testing.T) {
 			ExtraSpecs: `{"capabilities:hypervisor_type":"QEMU"}`,
 		},
 	}
-	if err := testDB.Insert(flavors...); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
 
 	// Insert multiple servers that should aggregate to same metric
-	servers := []any{
-		&nova.Server{
+	servers := []nova.Server{
+		{
 			ID:                    "server-1",
 			Name:                  "vm-1",
 			Status:                "ACTIVE",
 			FlavorName:            "small",
 			OSEXTAvailabilityZone: "az1",
 		},
-		&nova.Server{
+		{
 			ID:                    "server-2",
 			Name:                  "vm-2",
 			Status:                "ACTIVE",
 			FlavorName:            "small",
 			OSEXTAvailabilityZone: "az1",
 		},
-		&nova.Server{
+		{
 			ID:                    "server-3",
 			Name:                  "vm-3",
 			Status:                "ACTIVE",
@@ -378,12 +325,9 @@ func TestVMFaultsKPI_Collect_MultipleSameLabels(t *testing.T) {
 			OSEXTAvailabilityZone: "az1",
 		},
 	}
-	if err := testDB.Insert(servers...); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
 
 	kpi := &VMFaultsKPI{}
-	if err := kpi.Init(&testDB, nil, conf.NewRawOpts("{}")); err != nil {
+	if err := kpi.Init(inputs.Static{"servers": servers, "flavors": flavors}, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

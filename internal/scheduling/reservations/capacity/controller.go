@@ -50,7 +50,7 @@ var flavorGroupsKnowledgePredicate = predicate.NewPredicateFuncs(func(obj client
 	if !ok {
 		return false
 	}
-	return k.Spec.Extractor.Name == "flavor_groups"
+	return k.Spec.Extractor != nil && k.Spec.Extractor.Name == "flavor_groups"
 })
 
 // hvCapacityChangePredicate fires only when Allocation, EffectiveCapacity, or Capacity

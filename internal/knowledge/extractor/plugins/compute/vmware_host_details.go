@@ -5,18 +5,19 @@ package compute
 
 import (
 	"context"
-	_ "embed"
-	"errors"
+	gomath "math"
+	"slices"
+	"strconv"
 	"strings"
 
-	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/placement"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/extractor"
 )
 
 // VMwareHostDetails describes a single VMware compute host. Only VMware hosts
 // are extracted here (KVM hosts are served by a dedicated CRD, and ironic hosts
-// are excluded); the extractor SQL filters everything else out.
+// are excluded); the extractor filters everything else out.
 type VMwareHostDetails struct {
 	// Name of the OpenStack compute host.
 	ComputeHost string `db:"compute_host"`
@@ -51,94 +52,153 @@ type VMwareHostDetails struct {
 	VCenter string `db:"vcenter"`
 }
 
-type VMwareHostDetailsExtractor struct {
-	// Common base for all extractors that provides standard functionality.
-	plugins.BaseExtractor[
-		struct{},          // No options passed through yaml config
-		VMwareHostDetails, // Feature model
-	]
+// Inputs of the vmware host details extractor.
+type VMwareHostDetailsInputs struct {
+	Hypervisors     []nova.Hypervisor          `input:"hypervisors"`
+	Traits          []placement.Trait          `input:"traits"`
+	InventoryUsages []placement.InventoryUsage `input:"inventoryUsages"`
+	Aggregates      []nova.Aggregate           `input:"aggregates"`
+	// Features of the host pinned projects knowledge.
+	PinnedProjects []HostPinnedProjects `input:"pinnedProjects"`
+	// Features of the host availability zone knowledge.
+	HostAZs []HostAZ `input:"hostAZs"`
 }
 
-//go:embed vmware_host_details.sql
-var vmwareHostDetailsQuery string
+type VMwareHostDetailsExtractor struct {
+	// Common base for all extractors that provides standard functionality.
+	extractor.BaseExtractor[struct{}]
+}
 
-// Extract the details of the VMware compute hosts from the database.
-func (e *VMwareHostDetailsExtractor) Extract() ([]plugins.Feature, error) {
-	if e.DB == nil {
-		return nil, errors.New("database connection is not initialized")
+// Extract the details of the VMware compute hosts. Only hypervisors whose
+// service host matches the VMware naming convention (nova-compute-*) are
+// considered, while ironic ones (nova-compute-ironic-*) are dropped.
+func (e *VMwareHostDetailsExtractor) Extract(_ context.Context, in VMwareHostDetailsInputs) ([]VMwareHostDetails, error) {
+	traitsByProvider := make(map[string][]string)
+	for _, t := range in.Traits {
+		traitsByProvider[t.ResourceProviderUUID] = append(traitsByProvider[t.ResourceProviderUUID], t.Name)
 	}
-	var hostDetails []VMwareHostDetails
-	if _, err := e.DB.Select(&hostDetails, vmwareHostDetailsQuery); err != nil {
-		return nil, err
+	memoryByProvider := make(map[string]placement.InventoryUsage)
+	for _, i := range in.InventoryUsages {
+		if i.InventoryClassName == "MEMORY_MB" {
+			memoryByProvider[i.ResourceProviderUUID] = i
+		}
 	}
-
-	// Add the pinned projects to the host details.
-	pinnedProjectsKnowledge := &v1alpha1.Knowledge{}
-	if err := e.Client.Get(
-		context.Background(),
-		client.ObjectKey{Name: "host-pinned-projects"},
-		pinnedProjectsKnowledge,
-	); err != nil {
-		return nil, err
+	// VCenter of the building block, derived from the aggregate whose name
+	// starts with "vc-". If a host is member of multiple such aggregates,
+	// the lowest name is used.
+	vcenterByHost := make(map[string]string)
+	for _, a := range in.Aggregates {
+		if a.ComputeHost == nil || !strings.HasPrefix(a.Name, "vc-") {
+			continue
+		}
+		if vc, ok := vcenterByHost[*a.ComputeHost]; !ok || a.Name < vc {
+			vcenterByHost[*a.ComputeHost] = a.Name
+		}
 	}
-	pinnedProjects, err := v1alpha1.
-		UnboxFeatureList[HostPinnedProjects](pinnedProjectsKnowledge.Status.Raw)
-	if err != nil {
-		return nil, err
-	}
-	pinnedProjectsByComputeHost := make(map[string][]string)
-	for _, pp := range pinnedProjects {
+	pinnedProjectsByHost := make(map[string][]string)
+	for _, pp := range in.PinnedProjects {
 		if pp.ComputeHost != nil && pp.Label != nil {
-			pinnedProjectsByComputeHost[*pp.ComputeHost] = append(
-				pinnedProjectsByComputeHost[*pp.ComputeHost],
-				*pp.Label,
-			)
+			pinnedProjectsByHost[*pp.ComputeHost] = append(pinnedProjectsByHost[*pp.ComputeHost], *pp.Label)
 		}
 	}
-	for i, hd := range hostDetails {
-		pps, ok := pinnedProjectsByComputeHost[hd.ComputeHost]
-		if !ok {
-			// No pinned projects for this host.
-			continue
+	azByHost := make(map[string]string)
+	for _, hostAZ := range in.HostAZs {
+		if hostAZ.AvailabilityZone != nil {
+			azByHost[hostAZ.ComputeHost] = *hostAZ.AvailabilityZone
 		}
-		joined := strings.Join(pps, ",")
-		hostDetails[i].PinnedProjects = &joined
 	}
 
-	// Add the availability zones to the host details.
-	azKnowledge := &v1alpha1.Knowledge{}
-	if err := e.Client.Get(
-		context.Background(),
-		client.ObjectKey{Name: "host-az"},
-		azKnowledge,
-	); err != nil {
-		return nil, err
-	}
-	hostAZs, err := v1alpha1.
-		UnboxFeatureList[HostAZ](azKnowledge.Status.Raw)
-	if err != nil {
-		return nil, err
-	}
-	azByComputeHost := make(map[string]string)
-	for _, hostAZ := range hostAZs {
-		if hostAZ.AvailabilityZone == nil {
+	var features []VMwareHostDetails
+	for _, h := range in.Hypervisors {
+		if !strings.HasPrefix(h.ServiceHost, "nova-compute-") ||
+			strings.HasPrefix(h.ServiceHost, "nova-compute-ironic-") {
 			continue
 		}
-		azByComputeHost[hostAZ.ComputeHost] = *hostAZ.AvailabilityZone
-	}
-	for i, hd := range hostDetails {
-		az, ok := azByComputeHost[hd.ComputeHost]
-		if !ok {
-			hostDetails[i].AvailabilityZone = "unknown"
-			continue
+		traits := traitsByProvider[h.ID]
+		hasTrait := func(name string) bool { return slices.Contains(traits, name) }
+		details := VMwareHostDetails{
+			ComputeHost:      h.ServiceHost,
+			AvailabilityZone: "unknown",
+			CPUArchitecture:  "cascade-lake",
+			RunningVMs:       h.RunningVMs,
+			WorkloadType:     "general-purpose",
+			Decommissioned:   hasTrait("CUSTOM_DECOMMISSIONING"),
+			ExternalCustomer: hasTrait("CUSTOM_EXTERNAL_CUSTOMER_EXCLUSIVE"),
+			Enabled:          true,
+			PhysicalHostSize: "unknown",
+			VCenter:          "unknown",
 		}
-		hostDetails[i].AvailabilityZone = az
+		if hasTrait("CUSTOM_HW_SAPPHIRE_RAPIDS") {
+			details.CPUArchitecture = "sapphire-rapids"
+		}
+		if hasTrait("CUSTOM_HANA_EXCLUSIVE_HOST") {
+			details.WorkloadType = "hana"
+		}
+		reason := "--"
+		if h.ServiceDisabledReason != nil {
+			reason = *h.ServiceDisabledReason
+		}
+		var disabledReason string
+		switch {
+		case hasTrait("COMPUTE_STATUS_DISABLED"), h.Status != "enabled":
+			disabledReason = "[disabled] " + reason
+		case h.State != "up":
+			disabledReason = "[down] " + reason
+		}
+		if disabledReason != "" {
+			details.Enabled = false
+			details.DisabledReason = &disabledReason
+		}
+		if memory, ok := memoryByProvider[h.ID]; ok {
+			if size, ok := physicalHostSize(memory); ok {
+				details.PhysicalHostSize = size
+			}
+		}
+		if vc, ok := vcenterByHost[h.ServiceHost]; ok {
+			details.VCenter = vc
+		}
+		if pps, ok := pinnedProjectsByHost[h.ServiceHost]; ok {
+			joined := strings.Join(pps, ",")
+			details.PinnedProjects = &joined
+		}
+		if az, ok := azByHost[h.ServiceHost]; ok {
+			details.AvailabilityZone = az
+		}
+		features = append(features, details)
 	}
-	return e.Extracted(hostDetails)
+	slices.SortStableFunc(features, func(a, b VMwareHostDetails) int {
+		return strings.Compare(a.ComputeHost, b.ComputeHost)
+	})
+	return features, nil
+}
+
+// Physical host size category of a single host inside a VMware building block.
+//
+// A building block pools multiple physical hosts into one resource provider,
+// so the per-host memory size is recovered from the pooled memory inventory:
+//
+//	amount_hosts        = (total - reserved) / max_unit
+//	physical_host_size  = max_unit + reserved / amount_hosts   (in MiB)
+//
+// The size is first rounded to whole GiB; if that is at least 1024 GiB it is
+// reported in TiB, otherwise in GiB. Rounding to GiB first avoids a value like
+// 1023.6 GiB being shown as "1024GiB" instead of "1TiB". Values are rounded
+// half to even.
+func physicalHostSize(memory placement.InventoryUsage) (string, bool) {
+	if memory.MaxUnit <= 0 || memory.Total-memory.Reserved <= 0 {
+		return "", false
+	}
+	amountHosts := float64(memory.Total-memory.Reserved) / float64(memory.MaxUnit)
+	sizeMB := float64(memory.MaxUnit) + float64(memory.Reserved)/amountHosts
+	sizeGiB := gomath.RoundToEven(sizeMB / 1024)
+	if sizeGiB >= 1024 {
+		return strconv.Itoa(int(gomath.RoundToEven(sizeGiB/1024))) + "TiB", true
+	}
+	return strconv.Itoa(int(sizeGiB)) + "GiB", true
 }
 
 func init() {
-	plugins.Index["vmware_host_details_extractor"] = func() plugins.FeatureExtractor {
+	extractor.Register("vmware_host_details_extractor", func() extractor.Extractor[VMwareHostDetailsInputs, VMwareHostDetails] {
 		return &VMwareHostDetailsExtractor{}
-	}
+	})
 }

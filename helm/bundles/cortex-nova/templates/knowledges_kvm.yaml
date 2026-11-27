@@ -13,9 +13,9 @@ spec:
     This knowledge extracts flavor groups from Nova flavors based on the
     hw_version extra_spec. It identifies all flavors belonging to each group
     and determines the largest flavor for reservation slot sizing.
-  dependencies:
-    datasources:
-      - name: nova-flavors
+  inputs:
+    - var: flavors
+      datasource: nova-flavors
 ---
 apiVersion: cortex.cloud/v1alpha1
 kind: Knowledge
@@ -24,13 +24,23 @@ metadata:
 spec:
   schedulingDomain: nova
   recency: "60s"
-  extractor:
-    name: kvm_libvirt_domain_cpu_steal_pct_extractor
+  expression:
+    run: |
+      let metricsByDomain = groupBy(metrics, .Domain);
+      servers
+      | filter(.ID != "" && len(metricsByDomain[.OSEXTSRVATTRInstanceName] ?? []) > 0)
+      | map(let o = #; {
+          InstanceUUID:    .ID,
+          Host:            .OSEXTSRVATTRHost,
+          MaxStealTimePct: max(map(metricsByDomain[.OSEXTSRVATTRInstanceName], .Value)),
+        })
+      | sortBy(.InstanceUUID + "\x00" + .Host)
   description: |
     This knowledge identifies KVM libvirt domains that are experiencing CPU
     steal, i.e. cpu contention or cpu wait.
-  dependencies:
-    datasources:
-      - name: kvm-libvirt-domain-steal-pct
-      - name: nova-servers
+  inputs:
+    - var: metrics
+      datasource: kvm-libvirt-domain-steal-pct
+    - var: servers
+      datasource: nova-servers
 {{- end }}

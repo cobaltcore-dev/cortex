@@ -55,104 +55,6 @@ spec:
           spec:
             description: spec defines the desired state of KPI
             properties:
-              dependencies:
-                description: Dependencies required for extracting this kpi.
-                properties:
-                  datasources:
-                    description: Datasources required for extracting this kpi.
-                    items:
-                      description: ObjectReference contains enough information to
-                        let you inspect or modify the referred object.
-                      properties:
-                        apiVersion:
-                          description: API version of the referent.
-                          type: string
-                        fieldPath:
-                          description: |-
-                            If referring to a piece of an object instead of an entire object, this string
-                            should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                            For example, if the object reference is to a container within a pod, this would take on a value like:
-                            "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                            the event) or if no container name is specified "spec.containers[2]" (container with
-                            index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                            referencing a part of an object.
-                          type: string
-                        kind:
-                          description: |-
-                            Kind of the referent.
-                            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                          type: string
-                        name:
-                          description: |-
-                            Name of the referent.
-                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                          type: string
-                        namespace:
-                          description: |-
-                            Namespace of the referent.
-                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                          type: string
-                        resourceVersion:
-                          description: |-
-                            Specific resourceVersion to which this reference is made, if any.
-                            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                          type: string
-                        uid:
-                          description: |-
-                            UID of the referent.
-                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                          type: string
-                      type: object
-                      x-kubernetes-map-type: atomic
-                    type: array
-                  knowledges:
-                    description: Knowledges this kpi depends on.
-                    items:
-                      description: ObjectReference contains enough information to
-                        let you inspect or modify the referred object.
-                      properties:
-                        apiVersion:
-                          description: API version of the referent.
-                          type: string
-                        fieldPath:
-                          description: |-
-                            If referring to a piece of an object instead of an entire object, this string
-                            should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                            For example, if the object reference is to a container within a pod, this would take on a value like:
-                            "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                            the event) or if no container name is specified "spec.containers[2]" (container with
-                            index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                            referencing a part of an object.
-                          type: string
-                        kind:
-                          description: |-
-                            Kind of the referent.
-                            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                          type: string
-                        name:
-                          description: |-
-                            Name of the referent.
-                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                          type: string
-                        namespace:
-                          description: |-
-                            Namespace of the referent.
-                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                          type: string
-                        resourceVersion:
-                          description: |-
-                            Specific resourceVersion to which this reference is made, if any.
-                            More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                          type: string
-                        uid:
-                          description: |-
-                            UID of the referent.
-                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                          type: string
-                      type: object
-                      x-kubernetes-map-type: atomic
-                    type: array
-                type: object
               description:
                 description: |-
                   Additional description of the kpi which helps understand its purpose
@@ -161,6 +63,38 @@ spec:
               impl:
                 description: The name of the kpi in the cortex implementation.
                 type: string
+              inputs:
+                description: |-
+                  Inputs passed to the kpi. The kpi is only registered once all
+                  referenced datasources and knowledges are ready.
+                items:
+                  description: |-
+                    InputSpec references a datasource or another knowledge whose objects are
+                    passed to a knowledge extractor or kpi under the given variable name.
+                  properties:
+                    datasource:
+                      description: Name of the datasource providing the input objects.
+                      type: string
+                    knowledge:
+                      description: Name of the knowledge providing its extracted features
+                        as input objects.
+                      type: string
+                    var:
+                      description: |-
+                        Name under which the input objects are passed, e.g. to an expression
+                        or to the struct field tagged with `input:"<var>"` in a go extractor.
+                      pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
+                      type: string
+                  required:
+                  - var
+                  type: object
+                  x-kubernetes-validations:
+                  - message: exactly one of datasource or knowledge must be set
+                    rule: has(self.datasource) != has(self.knowledge)
+                type: array
+                x-kubernetes-list-map-keys:
+                - var
+                x-kubernetes-list-type: map
               opts:
                 description: Additional configuration for the extractor that can be
                   used

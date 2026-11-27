@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	nova "github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
+	nova "github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
 	hv1 "github.com/cobaltcore-dev/openstack-hypervisor-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

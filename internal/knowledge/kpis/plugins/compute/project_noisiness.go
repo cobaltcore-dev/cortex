@@ -7,7 +7,6 @@ import (
 	"context"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins/compute"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/math"
@@ -27,8 +26,8 @@ func (VMwareProjectNoisinessKPI) GetName() string {
 	return "vmware_project_noisiness_kpi"
 }
 
-func (k *VMwareProjectNoisinessKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
-	if err := k.BaseKPI.Init(db, client, opts); err != nil {
+func (k *VMwareProjectNoisinessKPI) Init(inputs plugins.Inputs, client client.Client, opts conf.RawOpts) error {
+	if err := k.BaseKPI.Init(inputs, client, opts); err != nil {
 		return err
 	}
 	k.projectNoisinessDesc = prometheus.NewDesc(

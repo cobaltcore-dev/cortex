@@ -6,995 +6,168 @@ package kpis
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/cobaltcore-dev/cortex/api/v1alpha1"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/kpis/plugins"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
 	"github.com/prometheus/client_golang/prometheus"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
-// Mock KPI implementation for testing
 type mockKPI struct {
-	name       string
-	initError  error
-	initCalled bool
+	name      string
+	initError error
+	inputs    plugins.Inputs
 }
 
-func (m *mockKPI) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
-	m.initCalled = true
+func (m *mockKPI) Init(inputs plugins.Inputs, _ client.Client, _ conf.RawOpts) error {
+	m.inputs = inputs
 	return m.initError
 }
+func (m *mockKPI) Collect(chan<- prometheus.Metric) {}
+func (m *mockKPI) Describe(chan<- *prometheus.Desc) {}
+func (m *mockKPI) GetName() string                  { return m.name }
 
-func (m *mockKPI) Collect(ch chan<- prometheus.Metric) {}
-
-func (m *mockKPI) Describe(ch chan<- *prometheus.Desc) {}
-
-func (m *mockKPI) GetName() string {
-	return m.name
+func readyCondition(ready bool) []metav1.Condition {
+	status := metav1.ConditionFalse
+	if ready {
+		status = metav1.ConditionTrue
+	}
+	return []metav1.Condition{{Type: "Ready", Status: status, Reason: "Test"}}
 }
 
-// Mock KPI logger implementation for testing (equivalent to kpilogger)
-type mockKPILogger struct {
-	kpi plugins.KPI
+func newTestClient(t *testing.T, objs ...client.Object) client.Client {
+	s := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(s); err != nil {
+		t.Fatal(err)
+	}
+	return fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).WithStatusSubresource(&v1alpha1.KPI{}).Build()
 }
 
-func (l *mockKPILogger) Init(db *db.DB, client client.Client, opts conf.RawOpts) error {
-	return l.kpi.Init(db, client, opts)
-}
-
-func (l *mockKPILogger) Collect(ch chan<- prometheus.Metric) {
-	l.kpi.Collect(ch)
-}
-
-func (l *mockKPILogger) Describe(ch chan<- *prometheus.Desc) {
-	l.kpi.Describe(ch)
-}
-
-func (l *mockKPILogger) GetName() string {
-	return l.kpi.GetName()
-}
-
-// Mock controller with overridable getJointDB method
-type mockController struct {
-	Controller
-	mockDB    *db.DB
-	mockError error
-}
-
-func (mc *mockController) getJointDB(
-	ctx context.Context,
-	datasources []corev1.ObjectReference,
-	knowledges []corev1.ObjectReference,
-) (*db.DB, error) {
-
-	if mc.mockError != nil {
-		return nil, mc.mockError
-	}
-	// If no dependencies, return nil database
-	if len(datasources) == 0 && len(knowledges) == 0 {
-		return nil, nil
-	}
-	// For test cases that need to simulate mismatched database secrets,
-	// we can check the datasource names and return error
-	if len(datasources) >= 2 {
-		// Simulate checking for mismatched database secrets
-		firstDS := &v1alpha1.Datasource{}
-		if err := mc.Get(ctx, client.ObjectKey{
-			Namespace: datasources[0].Namespace,
-			Name:      datasources[0].Name,
-		}, firstDS); err != nil {
-			if client.IgnoreNotFound(err) != nil {
-				return nil, err
-			}
-		}
-		secondDS := &v1alpha1.Datasource{}
-		if err := mc.Get(ctx, client.ObjectKey{
-			Namespace: datasources[1].Namespace,
-			Name:      datasources[1].Name,
-		}, secondDS); err != nil {
-			if client.IgnoreNotFound(err) != nil {
-				return nil, err
-			}
-		}
-		// Check if they have different database secret refs
-		if firstDS.Spec.DatabaseSecretRef.Name != secondDS.Spec.DatabaseSecretRef.Name ||
-			firstDS.Spec.DatabaseSecretRef.Namespace != secondDS.Spec.DatabaseSecretRef.Namespace {
-			return nil, errors.New("datasources have different database secret refs")
-		}
-	}
-	return mc.mockDB, nil
-}
-
-// Override Reconcile to use the mock handleKPIChange
-func (mc *mockController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := ctrl.LoggerFrom(ctx)
-	kpi := &v1alpha1.KPI{}
-
-	if err := mc.Get(ctx, req.NamespacedName, kpi); err != nil {
-		// Remove the kpi if it was deleted.
-		if client.IgnoreNotFound(err) != nil {
-			return ctrl.Result{}, err
-		}
-		var kpis v1alpha1.KPIList
-		if err := mc.List(ctx, &kpis); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to list kpis: %w", err)
-		}
-		if existingKPI, ok := mc.registeredKPIsByResourceName[req.Name]; ok {
-			metrics.Registry.Unregister(existingKPI)
-			delete(mc.registeredKPIsByResourceName, req.Name)
-			log.Info("kpi: unregistered deleted kpi", "name", req.Name)
-			return ctrl.Result{}, nil
-		}
-		return ctrl.Result{}, nil
-	}
-
-	// If this kpi is not supported, ignore it.
-	if _, ok := mc.supportedKPIs[kpi.Spec.Impl]; !ok {
-		log.Info("kpi: unsupported kpi, ignoring", "name", req.Name)
-		return ctrl.Result{}, nil
-	}
-
-	// Reconcile the kpi using mock method.
-	old := kpi.DeepCopy()
-	err := mc.handleKPIChange(ctx, kpi)
-	if err != nil {
-		meta.SetStatusCondition(&kpi.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.KPIConditionReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "ReconciliationFailed",
-			Message: err.Error(),
-		})
-	}
-	// Note: handleKPIChange already sets the Ready condition based on dependencies,
-	// so we don't override it here when err is nil
-	patch := client.MergeFrom(old)
-	if err := mc.Status().Patch(ctx, kpi, patch); err != nil {
-		log.Error(err, "failed to patch kpi status after reconciliation error", "name", kpi.Name)
-	}
-	return ctrl.Result{}, nil
-}
-
-// Override handleKPIChange to use the mock getJointDB
-func (mc *mockController) handleKPIChange(ctx context.Context, obj *v1alpha1.KPI) error {
-	log := ctrl.LoggerFrom(ctx)
-
-	// Get all the datasources this kpi depends on, if any.
-	var datasourcesReady int
-	for _, dsRef := range obj.Spec.Dependencies.Datasources {
-		ds := &v1alpha1.Datasource{}
-		if err := mc.Get(ctx, client.ObjectKey{
-			Namespace: dsRef.Namespace,
-			Name:      dsRef.Name,
-		}, ds); err != nil {
-			if client.IgnoreNotFound(err) == nil {
-				continue
-			}
-			log.Error(err, "failed to get datasource dependency", "datasource", dsRef)
-			return err
-		}
-		// Check if datasource is ready
-		if meta.IsStatusConditionTrue(ds.Status.Conditions, v1alpha1.DatasourceConditionReady) {
-			datasourcesReady++
-		}
-	}
-
-	// Get all knowledges this kpi depends on, if any.
-	var knowledgesReady int
-	for _, knRef := range obj.Spec.Dependencies.Knowledges {
-		kn := &v1alpha1.Knowledge{}
-		if err := mc.Get(ctx, client.ObjectKey{
-			Namespace: knRef.Namespace,
-			Name:      knRef.Name,
-		}, kn); err != nil {
-			if client.IgnoreNotFound(err) == nil {
-				continue
-			}
-			log.Error(err, "failed to get knowledge dependency", "knowledge", knRef)
-			return err
-		}
-		// Check if knowledge is ready
-		if meta.IsStatusConditionTrue(kn.Status.Conditions, v1alpha1.KnowledgeConditionReady) {
-			knowledgesReady++
-		}
-	}
-
-	dependenciesReadyTotal := datasourcesReady + knowledgesReady
-	dependenciesTotal := len(obj.Spec.Dependencies.Datasources) +
-		len(obj.Spec.Dependencies.Knowledges)
-	registeredKPI, registered := mc.registeredKPIsByResourceName[obj.Name]
-
-	// If all dependencies are ready but the kpi is not registered yet,
-	// initialize and register it now.
-	if dependenciesReadyTotal == dependenciesTotal && !registered {
-		log.Info("kpi: registering new kpi", "name", obj.Name)
-		newKPI, ok := mc.supportedKPIs[obj.Spec.Impl]
-		if !ok {
-			return fmt.Errorf("kpi %s not supported", obj.Name)
-		}
-		// Create a wrapper that logs operations (equivalent to kpilogger)
-		registeredKPI = &mockKPILogger{kpi: newKPI()}
-		// Get joint database connection for all dependencies using mock method.
-		jointDB, err := mc.getJointDB(ctx,
-			obj.Spec.Dependencies.Datasources,
-			obj.Spec.Dependencies.Knowledges)
-		if err != nil {
-			return fmt.Errorf("failed to get joint database for kpi %s: %w", obj.Name, err)
-		}
-		if jointDB == nil && dependenciesTotal > 0 {
-			return fmt.Errorf("kpi %s requires at least one datasource or knowledge with a database", obj.Name)
-		}
-		rawOpts := conf.NewRawOpts(`{}`)
-		if len(obj.Spec.Opts.Raw) > 0 {
-			rawOpts = conf.NewRawOptsBytes(obj.Spec.Opts.Raw)
-		}
-		if err := registeredKPI.Init(jointDB, mc.Client, rawOpts); err != nil {
-			return fmt.Errorf("failed to initialize kpi %s: %w", obj.Name, err)
-		}
-		if err := metrics.Registry.Register(registeredKPI); err != nil {
-			return fmt.Errorf("failed to register kpi %s metrics: %w", obj.Name, err)
-		}
-		mc.registeredKPIsByResourceName[obj.Name] = registeredKPI
-	}
-
-	// If the dependencies are not all ready but the kpi is registered, unregister it.
-	if dependenciesReadyTotal < dependenciesTotal && registered {
-		log.Info("kpi: unregistering kpi due to unready dependencies", "name", obj.Name)
-		metrics.Registry.Unregister(registeredKPI)
-		delete(mc.registeredKPIsByResourceName, obj.Name)
-	}
-
-	// Update the status to ready and populate the ready dependencies.
-	if dependenciesReadyTotal == dependenciesTotal {
-		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.KPIConditionReady,
-			Status:  metav1.ConditionTrue,
-			Reason:  "AllDependenciesReady",
-			Message: "all dependencies are ready",
-		})
-	} else {
-		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
-			Type:    v1alpha1.KPIConditionReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "DependenciesNotReady",
-			Message: "not all dependencies are ready",
-		})
-	}
-	obj.Status.ReadyDependencies = dependenciesReadyTotal
-	obj.Status.TotalDependencies = dependenciesTotal
-	obj.Status.DependenciesReadyFrac = "ready"
-	if dependenciesTotal > 0 {
-		obj.Status.DependenciesReadyFrac = fmt.Sprintf("%d/%d",
-			dependenciesReadyTotal, dependenciesTotal)
-	}
-	log.Info("kpi: successfully reconciled kpi", "name", obj.Name)
-	return nil
-}
-
-func TestController_Reconcile(t *testing.T) {
-	testScheme := runtime.NewScheme()
-	if err := scheme.AddToScheme(testScheme); err != nil {
-		t.Fatalf("Failed to add core scheme: %v", err)
-	}
-	if err := v1alpha1.AddToScheme(testScheme); err != nil {
-		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
-	}
-
+func TestController_handleKPIChange(t *testing.T) {
+	inputs := []v1alpha1.InputSpec{{Var: "objs", Datasource: "ds"}, {Var: "feats", Knowledge: "k"}}
 	tests := []struct {
-		name           string
-		kpi            *v1alpha1.KPI
-		datasources    []v1alpha1.Datasource
-		knowledges     []v1alpha1.Knowledge
-		secrets        []corev1.Secret
-		expectedReady  bool
-		expectedError  bool
-		shouldRegister bool
+		name            string
+		inputs          []v1alpha1.InputSpec
+		datasourceReady bool
+		knowledgeReady  bool
+		initError       error
+		wantErr         bool
+		wantRegistered  bool
+		wantReadyFrac   string
+		wantReason      string
 	}{
-		{
-			name: "KPI with ready dependencies",
-			kpi: &v1alpha1.KPI{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-kpi",
-				},
-				Spec: v1alpha1.KPISpec{
-					SchedulingDomain: "test-operator",
-					Impl:             "test_kpi",
-					Dependencies: v1alpha1.KPIDependenciesSpec{
-						Datasources: []corev1.ObjectReference{
-							{Name: "test-datasource", Namespace: "default"},
-						},
-					},
-				},
-			},
-			datasources: []v1alpha1.Datasource{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-datasource",
-						Namespace: "default",
-					},
-					Spec: v1alpha1.DatasourceSpec{
-						SchedulingDomain: "test-operator",
-						DatabaseSecretRef: corev1.SecretReference{
-							Name:      "db-secret",
-							Namespace: "default",
-						},
-					},
-					Status: v1alpha1.DatasourceStatus{
-						NumberOfObjects: new(int64(1)),
-						Conditions: []metav1.Condition{
-							{
-								Type:   v1alpha1.DatasourceConditionReady,
-								Status: metav1.ConditionTrue,
-								Reason: "DatasourceSynced",
-							},
-						},
-					},
-				},
-			},
-			secrets: []corev1.Secret{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "db-secret",
-						Namespace: "default",
-					},
-					Data: map[string][]byte{
-						"host":     []byte("localhost"),
-						"port":     []byte("5432"),
-						"database": []byte("testdb"),
-						"user":     []byte("testuser"),
-						"password": []byte("testpass"),
-					},
-				},
-			},
-			expectedReady:  true,
-			expectedError:  false,
-			shouldRegister: true,
-		},
-		{
-			name: "KPI with unready dependencies",
-			kpi: &v1alpha1.KPI{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-kpi-unready",
-				},
-				Spec: v1alpha1.KPISpec{
-					SchedulingDomain: "test-operator",
-					Impl:             "test_kpi",
-					Dependencies: v1alpha1.KPIDependenciesSpec{
-						Datasources: []corev1.ObjectReference{
-							{Name: "unready-datasource", Namespace: "default"},
-						},
-					},
-				},
-			},
-			datasources: []v1alpha1.Datasource{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "unready-datasource",
-						Namespace: "default",
-					},
-					Spec: v1alpha1.DatasourceSpec{
-						SchedulingDomain: "test-operator",
-						DatabaseSecretRef: corev1.SecretReference{
-							Name:      "db-secret",
-							Namespace: "default",
-						},
-					},
-					Status: v1alpha1.DatasourceStatus{
-						NumberOfObjects: new(int64(0)),
-						Conditions: []metav1.Condition{
-							{
-								Type:   v1alpha1.DatasourceConditionReady,
-								Status: metav1.ConditionFalse,
-								Reason: "DatasourceNotSynced",
-							},
-						},
-					},
-				},
-			},
-			expectedReady:  false,
-			expectedError:  false,
-			shouldRegister: false,
-		},
-		{
-			name: "unsupported KPI implementation",
-			kpi: &v1alpha1.KPI{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "unsupported-kpi",
-				},
-				Spec: v1alpha1.KPISpec{
-					SchedulingDomain: "test-operator",
-					Impl:             "unsupported_kpi",
-				},
-			},
-			expectedReady:  false,
-			expectedError:  false,
-			shouldRegister: false,
-		},
-		{
-			name: "KPI with no dependencies",
-			kpi: &v1alpha1.KPI{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "no-deps-kpi",
-				},
-				Spec: v1alpha1.KPISpec{
-					SchedulingDomain: "test-operator",
-					Impl:             "test_kpi",
-				},
-			},
-			expectedReady:  true,
-			expectedError:  false,
-			shouldRegister: true,
-		},
+		{"no inputs", nil, false, false, nil, false, true, "ready", "AllDependenciesReady"},
+		{"all inputs ready", inputs, true, true, nil, false, true, "2/2", "AllDependenciesReady"},
+		{"knowledge not ready", inputs, true, false, nil, false, false, "1/2", "UnreadyDependencies"},
+		{"init fails", inputs, true, true, errors.New("init failed"), true, false, "", ""},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create objects slice
-			var objects []client.Object
-			objects = append(objects, tt.kpi)
-			for i := range tt.datasources {
-				objects = append(objects, &tt.datasources[i])
+			kpi := &v1alpha1.KPI{
+				ObjectMeta: metav1.ObjectMeta{Name: "kpi-" + t.Name()},
+				Spec:       v1alpha1.KPISpec{Impl: "test_kpi", Inputs: tt.inputs},
 			}
-			for i := range tt.knowledges {
-				objects = append(objects, &tt.knowledges[i])
-			}
-			for i := range tt.secrets {
-				objects = append(objects, &tt.secrets[i])
-			}
-
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(testScheme).
-				WithObjects(objects...).
-				WithStatusSubresource(&v1alpha1.KPI{}, &v1alpha1.Datasource{}, &v1alpha1.Knowledge{}).
-				Build()
-
-			mockKPIInstance := &mockKPI{name: "test_kpi"}
-			baseController := Controller{
-				Client: fakeClient,
-				Config: ControllerConfig{SchedulingDomain: "test-operator"},
-				supportedKPIs: map[string]func() plugins.KPI{
-					"test_kpi": func() plugins.KPI { return mockKPIInstance },
+			c := newTestClient(t,
+				&v1alpha1.Datasource{
+					ObjectMeta: metav1.ObjectMeta{Name: "ds"},
+					Status:     v1alpha1.DatasourceStatus{Conditions: readyCondition(tt.datasourceReady)},
 				},
-				registeredKPIsByResourceName: make(map[string]plugins.KPI),
-			}
-
-			// Use mock controller to avoid real database connections
-			controller := &mockController{
-				Controller: baseController,
-				mockDB:     &db.DB{}, // Mock database instance
-			}
-
-			req := ctrl.Request{
-				NamespacedName: types.NamespacedName{
-					Name: tt.kpi.Name,
+				&v1alpha1.Knowledge{
+					ObjectMeta: metav1.ObjectMeta{Name: "k"},
+					Status:     v1alpha1.KnowledgeStatus{Conditions: readyCondition(tt.knowledgeReady)},
 				},
+			)
+			instance := &mockKPI{name: "test_kpi_" + tt.name, initError: tt.initError}
+			controller := &Controller{
+				Client:                       c,
+				supportedKPIs:                map[string]func() plugins.KPI{"test_kpi": func() plugins.KPI { return instance }},
+				registeredKPIsByResourceName: map[string]plugins.KPI{},
 			}
+			t.Cleanup(func() {
+				if registered, ok := controller.registeredKPIsByResourceName[kpi.Name]; ok {
+					metrics.Registry.Unregister(registered)
+				}
+			})
 
-			result, err := controller.Reconcile(context.Background(), req)
-			if err != nil {
-				t.Errorf("Reconcile() returned error: %v", err)
+			err := controller.handleKPIChange(t.Context(), kpi)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("expected error %v, got %v", tt.wantErr, err)
 			}
-
-			if result.RequeueAfter > 0 {
-				t.Errorf("Expected no requeue, got %v", result.RequeueAfter)
+			if _, ok := controller.registeredKPIsByResourceName[kpi.Name]; ok != tt.wantRegistered {
+				t.Errorf("expected registered %v, got %v", tt.wantRegistered, ok)
 			}
-
-			// Verify KPI status
-			var updatedKPI v1alpha1.KPI
-			err = fakeClient.Get(context.Background(), req.NamespacedName, &updatedKPI)
-			if err != nil {
-				t.Errorf("Failed to get updated KPI: %v", err)
+			if tt.wantErr {
 				return
 			}
-
-			statusReady := meta.IsStatusConditionTrue(updatedKPI.Status.Conditions, v1alpha1.KPIConditionReady)
-			if statusReady != tt.expectedReady {
-				t.Errorf("Expected status ready %v, got %v", tt.expectedReady, statusReady)
+			if kpi.Status.DependenciesReadyFrac != tt.wantReadyFrac {
+				t.Errorf("expected ready frac %q, got %q", tt.wantReadyFrac, kpi.Status.DependenciesReadyFrac)
 			}
-
-			// expectedError means the reconciliation had an error (ReconciliationFailed reason),
-			// not just that the Ready condition is False
-			if tt.expectedError {
-				cond := meta.FindStatusCondition(updatedKPI.Status.Conditions, v1alpha1.KPIConditionReady)
-				if cond == nil || cond.Reason != "ReconciliationFailed" {
-					t.Errorf("Expected ReconciliationFailed error condition, got: %v", cond)
-				}
+			if cond := meta.FindStatusCondition(kpi.Status.Conditions, v1alpha1.KPIConditionReady); cond == nil || cond.Reason != tt.wantReason {
+				t.Errorf("expected reason %q, got %+v", tt.wantReason, cond)
 			}
-
-			// Verify registration status
-			_, registered := controller.registeredKPIsByResourceName[tt.kpi.Name]
-			if registered != tt.shouldRegister {
-				t.Errorf("Expected registration status %v, got %v", tt.shouldRegister, registered)
-			}
-
-			if tt.shouldRegister && !mockKPIInstance.initCalled {
-				t.Error("Expected KPI to be initialized but Init was not called")
+			if tt.wantRegistered && instance.inputs == nil {
+				t.Error("expected kpi to be initialized with its inputs")
 			}
 		})
 	}
 }
 
 func TestController_Reconcile_KPIDeleted(t *testing.T) {
-	testScheme := runtime.NewScheme()
-	if err := scheme.AddToScheme(testScheme); err != nil {
-		t.Fatalf("Failed to add core scheme: %v", err)
-	}
-	if err := v1alpha1.AddToScheme(testScheme); err != nil {
-		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
-	}
-
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(testScheme).
-		WithStatusSubresource(&v1alpha1.KPI{}).
-		Build()
-
-	mockKPIInstance := &mockKPI{name: "test_kpi"}
+	instance := &mockKPI{name: "deleted_kpi"}
 	controller := &Controller{
-		Client: fakeClient,
-		Config: ControllerConfig{SchedulingDomain: "test-operator"},
-		supportedKPIs: map[string]func() plugins.KPI{
-			"test_kpi": func() plugins.KPI { return mockKPIInstance },
-		},
-		registeredKPIsByResourceName: map[string]plugins.KPI{
-			"deleted-kpi": mockKPIInstance,
-		},
+		Client:                       newTestClient(t),
+		registeredKPIsByResourceName: map[string]plugins.KPI{"deleted-kpi": instance},
 	}
-
-	req := ctrl.Request{
-		NamespacedName: types.NamespacedName{
-			Name: "deleted-kpi",
-		},
+	if _, err := controller.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "deleted-kpi"}}); err != nil {
+		t.Fatal(err)
 	}
-
-	result, err := controller.Reconcile(context.Background(), req)
-	if err != nil {
-		t.Errorf("Reconcile() returned error: %v", err)
-	}
-
-	if result.RequeueAfter > 0 {
-		t.Errorf("Expected no requeue, got %v", result.RequeueAfter)
-	}
-
-	// Verify KPI was unregistered
-	if _, registered := controller.registeredKPIsByResourceName["deleted-kpi"]; registered {
-		t.Error("Expected KPI to be unregistered but it's still registered")
-	}
-}
-
-func TestController_handleKPIChange(t *testing.T) {
-	testScheme := runtime.NewScheme()
-	if err := scheme.AddToScheme(testScheme); err != nil {
-		t.Fatalf("Failed to add core scheme: %v", err)
-	}
-	if err := v1alpha1.AddToScheme(testScheme); err != nil {
-		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
-	}
-
-	tests := []struct {
-		name               string
-		kpi                *v1alpha1.KPI
-		datasources        []v1alpha1.Datasource
-		knowledges         []v1alpha1.Knowledge
-		secrets            []corev1.Secret
-		expectedReady      bool
-		expectedReadyCount int
-		expectedTotalCount int
-		expectedReadyFrac  string
-		mockInitError      error
-		expectedError      bool
-	}{
-		{
-			name: "KPI with mixed ready dependencies",
-			kpi: &v1alpha1.KPI{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "mixed-kpi",
-				},
-				Spec: v1alpha1.KPISpec{
-					Impl: "test_kpi",
-					Dependencies: v1alpha1.KPIDependenciesSpec{
-						Datasources: []corev1.ObjectReference{
-							{Name: "ready-ds", Namespace: "default"},
-							{Name: "unready-ds", Namespace: "default"},
-						},
-						Knowledges: []corev1.ObjectReference{
-							{Name: "ready-kn", Namespace: "default"},
-						},
-					},
-				},
-			},
-			datasources: []v1alpha1.Datasource{
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "ready-ds", Namespace: "default"},
-					Spec: v1alpha1.DatasourceSpec{
-						DatabaseSecretRef: corev1.SecretReference{Name: "db-secret", Namespace: "default"},
-					},
-					Status: v1alpha1.DatasourceStatus{
-						NumberOfObjects: new(int64(1)),
-						Conditions: []metav1.Condition{
-							{
-								Type:   v1alpha1.DatasourceConditionReady,
-								Status: metav1.ConditionTrue,
-								Reason: "DatasourceSynced",
-							},
-						},
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "unready-ds", Namespace: "default"},
-					Spec: v1alpha1.DatasourceSpec{
-						DatabaseSecretRef: corev1.SecretReference{Name: "db-secret", Namespace: "default"},
-					},
-					Status: v1alpha1.DatasourceStatus{
-						NumberOfObjects: new(int64(0)),
-						Conditions: []metav1.Condition{
-							{
-								Type:   v1alpha1.DatasourceConditionReady,
-								Status: metav1.ConditionFalse,
-								Reason: "DatasourceNotSynced",
-							},
-						},
-					},
-				},
-			},
-			knowledges: []v1alpha1.Knowledge{
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "ready-kn", Namespace: "default"},
-					Spec:       v1alpha1.KnowledgeSpec{},
-					Status: v1alpha1.KnowledgeStatus{
-						RawLength: 1,
-						Conditions: []metav1.Condition{
-							{
-								Type:   v1alpha1.KnowledgeConditionReady,
-								Status: metav1.ConditionTrue,
-								Reason: "KnowledgeReady",
-							},
-						},
-					},
-				},
-			},
-			secrets: []corev1.Secret{
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "db-secret", Namespace: "default"},
-					Data: map[string][]byte{
-						"host":     []byte("localhost"),
-						"port":     []byte("5432"),
-						"database": []byte("testdb"),
-						"user":     []byte("user"),
-						"password": []byte("pass"),
-					},
-				},
-			},
-			expectedReady:      false,
-			expectedReadyCount: 2,
-			expectedTotalCount: 3,
-			expectedReadyFrac:  "2/3",
-			expectedError:      false,
-		},
-		{
-			name: "KPI initialization error",
-			kpi: &v1alpha1.KPI{
-				ObjectMeta: metav1.ObjectMeta{Name: "error-kpi"},
-				Spec: v1alpha1.KPISpec{
-					Impl: "test_kpi",
-					Dependencies: v1alpha1.KPIDependenciesSpec{
-						Datasources: []corev1.ObjectReference{
-							{Name: "ready-ds", Namespace: "default"},
-						},
-					},
-				},
-			},
-			datasources: []v1alpha1.Datasource{
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "ready-ds", Namespace: "default"},
-					Spec: v1alpha1.DatasourceSpec{
-						DatabaseSecretRef: corev1.SecretReference{Name: "db-secret", Namespace: "default"},
-					},
-					Status: v1alpha1.DatasourceStatus{
-						NumberOfObjects: new(int64(1)),
-						Conditions: []metav1.Condition{
-							{
-								Type:   v1alpha1.DatasourceConditionReady,
-								Status: metav1.ConditionTrue,
-								Reason: "DatasourceSynced",
-							},
-						},
-					},
-				},
-			},
-			secrets: []corev1.Secret{
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "db-secret", Namespace: "default"},
-					Data: map[string][]byte{
-						"host":     []byte("localhost"),
-						"port":     []byte("5432"),
-						"database": []byte("testdb"),
-						"user":     []byte("user"),
-						"password": []byte("pass"),
-					},
-				},
-			},
-			mockInitError:      errors.New("init failed"),
-			expectedReady:      false,
-			expectedReadyCount: 0,
-			expectedTotalCount: 0,
-			expectedReadyFrac:  "",
-			expectedError:      true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var objects []client.Object
-			objects = append(objects, tt.kpi)
-			for i := range tt.datasources {
-				objects = append(objects, &tt.datasources[i])
-			}
-			for i := range tt.knowledges {
-				objects = append(objects, &tt.knowledges[i])
-			}
-			for i := range tt.secrets {
-				objects = append(objects, &tt.secrets[i])
-			}
-
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(testScheme).
-				WithObjects(objects...).
-				WithStatusSubresource(&v1alpha1.KPI{}, &v1alpha1.Datasource{}, &v1alpha1.Knowledge{}).
-				Build()
-
-			mockKPIInstance := &mockKPI{name: "test_kpi", initError: tt.mockInitError}
-			baseController := Controller{
-				Client: fakeClient,
-				supportedKPIs: map[string]func() plugins.KPI{
-					"test_kpi": func() plugins.KPI { return mockKPIInstance },
-				},
-				registeredKPIsByResourceName: make(map[string]plugins.KPI),
-			}
-
-			// Use mock controller to avoid real database connections
-			controller := &mockController{
-				Controller: baseController,
-				mockDB:     &db.DB{}, // Mock database instance
-			}
-
-			err := controller.handleKPIChange(context.Background(), tt.kpi)
-			hasError := err != nil
-			if hasError != tt.expectedError {
-				t.Errorf("Expected error %v, got %v (error: %v)", tt.expectedError, hasError, err)
-			}
-
-			ready := meta.IsStatusConditionTrue(tt.kpi.Status.Conditions, v1alpha1.KPIConditionReady)
-			if ready != tt.expectedReady {
-				t.Errorf("Expected ready %v, got %v", tt.expectedReady, ready)
-			}
-
-			if tt.kpi.Status.ReadyDependencies != tt.expectedReadyCount {
-				t.Errorf("Expected ready count %d, got %d", tt.expectedReadyCount, tt.kpi.Status.ReadyDependencies)
-			}
-
-			if tt.kpi.Status.TotalDependencies != tt.expectedTotalCount {
-				t.Errorf("Expected total count %d, got %d", tt.expectedTotalCount, tt.kpi.Status.TotalDependencies)
-			}
-
-			if tt.kpi.Status.DependenciesReadyFrac != tt.expectedReadyFrac {
-				t.Errorf("Expected ready frac %q, got %q", tt.expectedReadyFrac, tt.kpi.Status.DependenciesReadyFrac)
-			}
-		})
-	}
-}
-
-func TestController_getJointDB(t *testing.T) {
-	testScheme := runtime.NewScheme()
-	if err := scheme.AddToScheme(testScheme); err != nil {
-		t.Fatalf("Failed to add core scheme: %v", err)
-	}
-	if err := v1alpha1.AddToScheme(testScheme); err != nil {
-		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
-	}
-
-	tests := []struct {
-		name        string
-		datasources []v1alpha1.Datasource
-		knowledges  []v1alpha1.Knowledge
-		secrets     []corev1.Secret
-		dsRefs      []corev1.ObjectReference
-		knRefs      []corev1.ObjectReference
-		expectError bool
-		expectNilDB bool
-	}{
-		{
-			name: "matching database secrets",
-			datasources: []v1alpha1.Datasource{
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "ds1", Namespace: "default"},
-					Spec: v1alpha1.DatasourceSpec{
-						DatabaseSecretRef: corev1.SecretReference{Name: "db-secret", Namespace: "default"},
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "ds2", Namespace: "default"},
-					Spec: v1alpha1.DatasourceSpec{
-						DatabaseSecretRef: corev1.SecretReference{Name: "db-secret", Namespace: "default"},
-					},
-				},
-			},
-			secrets: []corev1.Secret{
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "db-secret", Namespace: "default"},
-					Data: map[string][]byte{
-						"host":     []byte("localhost"),
-						"port":     []byte("5432"),
-						"database": []byte("testdb"),
-						"user":     []byte("user"),
-						"password": []byte("pass"),
-					},
-				},
-			},
-			dsRefs: []corev1.ObjectReference{
-				{Name: "ds1", Namespace: "default"},
-				{Name: "ds2", Namespace: "default"},
-			},
-			expectError: false,
-			expectNilDB: false,
-		},
-		{
-			name: "mismatched database secrets",
-			datasources: []v1alpha1.Datasource{
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "ds1", Namespace: "default"},
-					Spec: v1alpha1.DatasourceSpec{
-						DatabaseSecretRef: corev1.SecretReference{Name: "db-secret1", Namespace: "default"},
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "ds2", Namespace: "default"},
-					Spec: v1alpha1.DatasourceSpec{
-						DatabaseSecretRef: corev1.SecretReference{Name: "db-secret2", Namespace: "default"},
-					},
-				},
-			},
-			dsRefs: []corev1.ObjectReference{
-				{Name: "ds1", Namespace: "default"},
-				{Name: "ds2", Namespace: "default"},
-			},
-			expectError: true,
-			expectNilDB: true,
-		},
-		{
-			name:        "no dependencies",
-			dsRefs:      []corev1.ObjectReference{},
-			knRefs:      []corev1.ObjectReference{},
-			expectError: false,
-			expectNilDB: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var objects []client.Object
-			for i := range tt.datasources {
-				objects = append(objects, &tt.datasources[i])
-			}
-			for i := range tt.knowledges {
-				objects = append(objects, &tt.knowledges[i])
-			}
-			for i := range tt.secrets {
-				objects = append(objects, &tt.secrets[i])
-			}
-
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(testScheme).
-				WithObjects(objects...).
-				Build()
-
-			baseController := Controller{
-				Client: fakeClient,
-			}
-
-			// Use mock controller to avoid real database connections
-			controller := &mockController{
-				Controller: baseController,
-				mockDB:     &db.DB{}, // Mock database instance
-			}
-
-			db, err := controller.getJointDB(context.Background(), tt.dsRefs, tt.knRefs)
-
-			if tt.expectError && err == nil {
-				t.Error("Expected error but got none")
-			}
-			if !tt.expectError && err != nil {
-				t.Errorf("Expected no error but got: %v", err)
-			}
-
-			if tt.expectNilDB && db != nil {
-				t.Error("Expected nil database but got non-nil")
-			}
-			if !tt.expectNilDB && db == nil && !tt.expectError {
-				t.Error("Expected non-nil database but got nil")
-			}
-		})
+	if _, ok := controller.registeredKPIsByResourceName["deleted-kpi"]; ok {
+		t.Error("expected deleted kpi to be unregistered")
 	}
 }
 
 func TestController_InitAllKPIs(t *testing.T) {
-	testScheme := runtime.NewScheme()
-	if err := scheme.AddToScheme(testScheme); err != nil {
-		t.Fatalf("Failed to add core scheme: %v", err)
-	}
-	if err := v1alpha1.AddToScheme(testScheme); err != nil {
-		t.Fatalf("Failed to add v1alpha1 scheme: %v", err)
-	}
-
-	kpis := []v1alpha1.KPI{
-		{
-			ObjectMeta: metav1.ObjectMeta{Name: "kpi1"},
-			Spec: v1alpha1.KPISpec{
-				SchedulingDomain: "test-operator",
-				Impl:             "test_kpi",
-			},
+	c := newTestClient(t,
+		&v1alpha1.KPI{
+			ObjectMeta: metav1.ObjectMeta{Name: "kpi-ready"},
+			Spec:       v1alpha1.KPISpec{SchedulingDomain: "test", Impl: "test_kpi"},
 		},
-		{
-			ObjectMeta: metav1.ObjectMeta{Name: "kpi2"},
-			Spec: v1alpha1.KPISpec{
-				SchedulingDomain: "other-operator",
-				Impl:             "test_kpi",
-			},
+		&v1alpha1.KPI{
+			ObjectMeta: metav1.ObjectMeta{Name: "kpi-missing-input"},
+			Spec: v1alpha1.KPISpec{SchedulingDomain: "test", Impl: "test_kpi",
+				Inputs: []v1alpha1.InputSpec{{Var: "objs", Datasource: "missing"}}},
 		},
-	}
-
-	var objects []client.Object
-	for i := range kpis {
-		objects = append(objects, &kpis[i])
-	}
-
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(testScheme).
-		WithObjects(objects...).
-		WithStatusSubresource(&v1alpha1.KPI{}).
-		Build()
-
-	mockKPIInstance := &mockKPI{name: "test_kpi"}
-	baseController := Controller{
-		Client: fakeClient,
-		Config: ControllerConfig{SchedulingDomain: "test-operator"},
-		supportedKPIs: map[string]func() plugins.KPI{
-			"test_kpi": func() plugins.KPI { return mockKPIInstance },
+		&v1alpha1.KPI{
+			ObjectMeta: metav1.ObjectMeta{Name: "kpi-other-domain"},
+			Spec:       v1alpha1.KPISpec{SchedulingDomain: "other", Impl: "test_kpi"},
 		},
+	)
+	controller := &Controller{
+		Client:        c,
+		Config:        ControllerConfig{SchedulingDomain: "test"},
+		supportedKPIs: map[string]func() plugins.KPI{"test_kpi": func() plugins.KPI { return &mockKPI{name: "init_all_kpi"} }},
 	}
-
-	// Use mock controller to avoid real database connections
-	controller := &mockController{
-		Controller: baseController,
+	t.Cleanup(func() {
+		for _, registered := range controller.registeredKPIsByResourceName {
+			metrics.Registry.Unregister(registered)
+		}
+	})
+	if err := controller.InitAllKPIs(t.Context()); err != nil {
+		t.Fatal(err)
 	}
-
-	err := controller.InitAllKPIs(context.Background())
-	if err != nil {
-		t.Errorf("InitAllKPIs() returned error: %v", err)
-	}
-
-	if controller.registeredKPIsByResourceName == nil {
-		t.Error("Expected registeredKPIsByResourceName to be initialized")
-	}
-
-	// Should register the KPI matching the operator since it has no dependencies (0 == 0)
 	if len(controller.registeredKPIsByResourceName) != 1 {
-		t.Errorf("Expected 1 registered KPI (no dependencies should be registered), got %d", len(controller.registeredKPIsByResourceName))
+		t.Fatalf("expected only the ready kpi to be registered, got %v", controller.registeredKPIsByResourceName)
 	}
-
-	// Verify the correct KPI was registered
-	if _, ok := controller.registeredKPIsByResourceName["kpi1"]; !ok {
-		t.Error("Expected kpi1 to be registered")
+	if _, ok := controller.registeredKPIsByResourceName["kpi-ready"]; !ok {
+		t.Error("expected kpi-ready to be registered")
 	}
 }

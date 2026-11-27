@@ -83,6 +83,11 @@ and `cmd/shim`, and the Helm defaults under `helm/`.
 8. [The `task` package](06-cortex-library/08-task.md)
 9. [The `supervisor` package](06-cortex-library/09-supervisor.md)
 
+## Presentations
+
+- [Cortex Knowledge Database 2.0 — IPCEI-CIS Hackathon](presentations/knowledge-database-2.0/README.md)
+  ([PDF](presentations/knowledge-database-2.0/cortex-knowledge-2.0.pdf)): the Cortex flow and interactive before/after views of Valkey caching, Knowledge expressions, and scheduling pipeline expressions.
+
 ## Who this book is for
 
 - **Operators** deploy and run Cortex — install per domain, configure via Helm values and CRDs, wire

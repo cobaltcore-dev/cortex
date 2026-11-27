@@ -54,7 +54,9 @@ Code:
 - `api/v1alpha1` is where the CRD specs of cortex lives
 - `api/external` contains messages sent to cortex via http from external openstack services
 - `internal/scheduling` contains the logic for scheduling in different cloud domains
-- `internal/knowledge` has all the logic for feature extraction and raw data downloads from sources like prometheus and openstack
+- `internal/knowledge` has cortex's own feature extractors and kpis
+- `pkg/knowledge` is the public knowledge framework: datasources (raw data downloads from sources like prometheus and openstack), the storage abstraction (`store`, with the `postgres` backend), input resolution (`inputs`) and the extractor API and controller (`extractor`)
+- `pkg/manager` runs the cortex manager and can be used to build custom manager binaries with additional plugins
 - `pkg` is the code that is very non-cortex-specific and can be used across other projects as well
 
 Deployment:

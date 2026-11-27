@@ -4,14 +4,15 @@
 package compute
 
 import (
-	_ "embed"
+	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/extractor"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -100,48 +101,27 @@ func (f *FlavorGroupFeature) GiBToDeclaredUnits(gib int64) int64 {
 	return gib * 1024 / int64(f.RAMUnitMiB()) //nolint:gosec
 }
 
-// flavorRow represents a row from the SQL query.
-type flavorRow struct {
-	Name        string `db:"name"`
-	VCPUs       uint64 `db:"vcpus"`
-	MemoryMB    uint64 `db:"memory_mb"`
-	DiskGB      uint64 `db:"disk"`
-	EphemeralGB uint64 `db:"ephemeral"`
-	ExtraSpecs  string `db:"extra_specs"`
+// Inputs of the flavor group extractor.
+type FlavorGroupInputs struct {
+	Flavors []nova.Flavor `input:"flavors"`
 }
 
-// FlavorGroupExtractor extracts flavor group information from the database.
+// FlavorGroupExtractor extracts flavor groups from the nova flavors.
 type FlavorGroupExtractor struct {
 	// Common base for all extractors that provides standard functionality.
-	plugins.BaseExtractor[
-		struct{},           // No options passed through yaml config
-		FlavorGroupFeature, // Feature model
-	]
+	extractor.BaseExtractor[struct{}]
 }
-
-//go:embed flavor_groups.sql
-var flavorGroupsQuery string
 
 var flavorGroupLog = ctrl.Log.WithName("flavor_group_extractor")
 
-// Extract flavor groups from the database.
-func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
-	if e.DB == nil {
-		return nil, errors.New("database connection is not initialized")
-	}
-
-	// Query all flavors from database
-	var rows []flavorRow
-	if _, err := e.DB.Select(&rows, flavorGroupsQuery); err != nil {
-		flavorGroupLog.Error(err, "failed to query flavors")
-		return nil, err
-	}
-
+// Extract flavor groups of KVM flavors (QEMU and Cloud-Hypervisor), grouped
+// by their hw_version extra spec.
+func (e *FlavorGroupExtractor) Extract(_ context.Context, in FlavorGroupInputs) ([]FlavorGroupFeature, error) {
 	// Group flavors by flavorGroupIdentifierName
 	groupMap := make(map[string][]FlavorInGroup)
-	var skippedParseErr, skippedNoHWVersion int
+	var skippedParseErr, skippedNoHWVersion, nKVMFlavors int
 
-	for _, row := range rows {
+	for _, row := range in.Flavors {
 		// Parse extra_specs JSON
 		var extraSpecs map[string]string
 		if row.ExtraSpecs != "" {
@@ -151,6 +131,13 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 				continue
 			}
 		}
+
+		// Only include KVM flavors.
+		hypervisorType := extraSpecs["capabilities:hypervisor_type"]
+		if !strings.EqualFold(hypervisorType, "qemu") && !strings.EqualFold(hypervisorType, "ch") {
+			continue
+		}
+		nKVMFlavors++
 
 		hwVersion, exists := extraSpecs["quota:hw_version"]
 		if !exists || hwVersion == "" {
@@ -163,9 +150,9 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 		flavor := FlavorInGroup{
 			Name:        row.Name,
 			VCPUs:       row.VCPUs,
-			MemoryMB:    row.MemoryMB,
-			DiskGB:      row.DiskGB,
-			EphemeralGB: row.EphemeralGB,
+			MemoryMB:    row.RAM,
+			DiskGB:      row.Disk,
+			EphemeralGB: row.Ephemeral,
 			ExtraSpecs:  extraSpecs,
 		}
 		if val, ok := extraSpecs["hw_video:ram_max_mb"]; ok {
@@ -259,17 +246,18 @@ func (e *FlavorGroupExtractor) Extract() ([]plugins.Feature, error) {
 	})
 
 	flavorGroupLog.Info("flavor group extraction complete",
-		"totalFlavors", len(rows),
+		"totalFlavors", len(in.Flavors),
+		"kvmFlavors", nKVMFlavors,
 		"skippedParseError", skippedParseErr,
 		"skippedNoHWVersion", skippedNoHWVersion,
 		"skippedInvalidGroup", skippedInvalidGroup,
 		"groups", len(features))
 
-	return e.Extracted(features)
+	return features, nil
 }
 
 func init() {
-	plugins.Index["flavor_groups"] = func() plugins.FeatureExtractor {
+	extractor.Register("flavor_groups", func() extractor.Extractor[FlavorGroupInputs, FlavorGroupFeature] {
 		return &FlavorGroupExtractor{}
-	}
+	})
 }

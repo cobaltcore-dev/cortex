@@ -4,12 +4,15 @@
 package compute
 
 import (
-	_ "embed"
-	"errors"
+	"cmp"
+	"context"
+	"slices"
 	"strings"
+	"time"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/extractor/plugins"
 	"github.com/cobaltcore-dev/cortex/internal/knowledge/math"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/extractor"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -41,10 +44,7 @@ type VMLifeSpanHistogramBucket struct {
 // Extractor that extracts the time elapsed until the vm was deleted.
 type VMLifeSpanHistogramExtractor struct {
 	// Common base for all extractors that provides standard functionality.
-	plugins.BaseExtractor[
-		struct{},                  // No options passed through yaml config
-		VMLifeSpanHistogramBucket, // Feature model
-	]
+	extractor.BaseExtractor[struct{}]
 }
 
 // Extract histogram buckets from raw life span data based on whether the VMs are deleted or still running.
@@ -88,30 +88,89 @@ func extractHistogramBuckets(lifeSpansRaw []VMLifeSpanRaw, deleted bool) []VMLif
 	return features
 }
 
-//go:embed vm_life_span.sql
-var vmLifeSpanQuery string
+// Inputs of the vm life span extractor.
+type VMLifeSpanInputs struct {
+	Servers        []nova.Server        `input:"servers"`
+	DeletedServers []nova.DeletedServer `input:"deletedServers"`
+	Flavors        []nova.Flavor        `input:"flavors"`
+}
 
-// Extract the time elapsed until the first migration of a virtual machine.
-// Depends on the OpenStack servers and migrations to be synced.
-func (e *VMLifeSpanHistogramExtractor) Extract() ([]plugins.Feature, error) {
-	// This can happen when no datasource is provided that connects to a database.
-	if e.DB == nil {
-		return nil, errors.New("database connection is not initialized")
+// Calculate the life span of deleted servers from creation until their last
+// update, and of running servers from creation until now. Servers with
+// invalid timestamps are skipped. Flavors are "unknown" if they don't exist.
+func vmLifeSpans(in VMLifeSpanInputs, now time.Time) []VMLifeSpanRaw {
+	flavorNames := make(map[string]struct{}, len(in.Flavors))
+	for _, f := range in.Flavors {
+		flavorNames[f.Name] = struct{}{}
 	}
-	var lifeSpansRaw []VMLifeSpanRaw
-	if _, err := e.DB.Select(&lifeSpansRaw, vmLifeSpanQuery); err != nil {
-		return nil, err
+	flavorName := func(name string) string {
+		if _, ok := flavorNames[name]; ok {
+			return name
+		}
+		return "unknown"
 	}
+	lifeSpans := make([]VMLifeSpanRaw, 0, len(in.Servers)+len(in.DeletedServers))
+	for _, s := range in.DeletedServers {
+		created, err := parseTimestamp(s.Created)
+		if err != nil {
+			continue
+		}
+		updated, err := parseTimestamp(s.Updated)
+		if err != nil {
+			continue
+		}
+		lifeSpans = append(lifeSpans, VMLifeSpanRaw{
+			Duration:   secondsBetween(created, updated),
+			FlavorName: flavorName(s.FlavorName),
+			Deleted:    true,
+		})
+	}
+	for _, s := range in.Servers {
+		created, err := parseTimestamp(s.Created)
+		if err != nil {
+			continue
+		}
+		lifeSpans = append(lifeSpans, VMLifeSpanRaw{
+			Duration:   secondsBetween(created, now),
+			FlavorName: flavorName(s.FlavorName),
+			Deleted:    false,
+		})
+	}
+	return lifeSpans
+}
 
-	deletedVMLifeSpansBuckets := extractHistogramBuckets(lifeSpansRaw, true)
-	runningVMLifeSpansBuckets := extractHistogramBuckets(lifeSpansRaw, false)
+// Extract histograms of how long vms existed, by flavor and across all
+// flavors, separately for deleted and running vms.
+func (e *VMLifeSpanHistogramExtractor) Extract(_ context.Context, in VMLifeSpanInputs) ([]VMLifeSpanHistogramBucket, error) {
+	lifeSpansRaw := vmLifeSpans(in, time.Now())
+	features := slices.Concat(
+		extractHistogramBuckets(lifeSpansRaw, true),
+		extractHistogramBuckets(lifeSpansRaw, false),
+	)
+	slices.SortFunc(features, func(a, b VMLifeSpanHistogramBucket) int {
+		return cmp.Or(
+			cmp.Compare(a.FlavorName, b.FlavorName),
+			compareBool(a.Deleted, b.Deleted),
+			cmp.Compare(a.Bucket, b.Bucket),
+		)
+	})
+	return features, nil
+}
 
-	deletedVMLifeSpansBuckets = append(deletedVMLifeSpansBuckets, runningVMLifeSpansBuckets...)
-	return e.Extracted(deletedVMLifeSpansBuckets)
+// Compare two booleans, ordering false first.
+func compareBool(a, b bool) int {
+	switch {
+	case a == b:
+		return 0
+	case !a:
+		return -1
+	default:
+		return 1
+	}
 }
 
 func init() {
-	plugins.Index["vm_life_span_histogram_extractor"] = func() plugins.FeatureExtractor {
+	extractor.Register("vm_life_span_histogram_extractor", func() extractor.Extractor[VMLifeSpanInputs, VMLifeSpanHistogramBucket] {
 		return &VMLifeSpanHistogramExtractor{}
-	}
+	})
 }

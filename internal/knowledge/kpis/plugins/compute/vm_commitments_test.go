@@ -6,20 +6,16 @@ package compute
 import (
 	"testing"
 
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/limes"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/datasources/plugins/openstack/nova"
-	"github.com/cobaltcore-dev/cortex/internal/knowledge/db"
-	testlibDB "github.com/cobaltcore-dev/cortex/internal/knowledge/db/testing"
 	"github.com/cobaltcore-dev/cortex/pkg/conf"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/limes"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/datasources/openstack/nova"
+	"github.com/cobaltcore-dev/cortex/pkg/knowledge/inputs"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
 func TestVMCommitmentsKPI_Init(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
 	kpi := &VMCommitmentsKPI{}
-	if err := kpi.Init(&testDB, nil, conf.NewRawOpts("{}")); err != nil {
+	if err := kpi.Init(nil, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -73,31 +69,14 @@ func TestConvertLimesMemory(t *testing.T) {
 }
 
 func TestVMCommitmentsKPI_Collect(t *testing.T) {
-	dbEnv := testlibDB.SetupDBEnv(t)
-	testDB := db.DB{DbMap: dbEnv.DbMap}
-	defer dbEnv.Close()
-	// Create dependency tables
-	if err := testDB.CreateTable(
-		testDB.AddTable(limes.Commitment{}),
-		testDB.AddTable(nova.Flavor{}),
-	); err != nil {
-		t.Fatalf("expected no error, got %v", err)
+	flavors := []nova.Flavor{
+		{ID: "1", Name: "small", VCPUs: 2, RAM: 4096},  // 4GB RAM
+		{ID: "2", Name: "medium", VCPUs: 4, RAM: 8192}, // 8GB RAM
+		{ID: "3", Name: "large", VCPUs: 8, RAM: 16384}, // 16GB RAM
 	}
-
-	// Insert mock flavors
-	flavors := []any{
-		&nova.Flavor{ID: "1", Name: "small", VCPUs: 2, RAM: 4096},  // 4GB RAM
-		&nova.Flavor{ID: "2", Name: "medium", VCPUs: 4, RAM: 8192}, // 8GB RAM
-		&nova.Flavor{ID: "3", Name: "large", VCPUs: 8, RAM: 16384}, // 16GB RAM
-	}
-	if err := testDB.Insert(flavors...); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// Insert mock commitments
-	commitments := []any{
+	commitments := []limes.Commitment{
 		// Instance commitments
-		&limes.Commitment{
+		{
 			ID:               1,
 			ServiceType:      "compute",
 			ResourceName:     "instances_small",
@@ -105,7 +84,7 @@ func TestVMCommitmentsKPI_Collect(t *testing.T) {
 			Amount:           2,
 			Status:           "confirmed",
 		},
-		&limes.Commitment{
+		{
 			ID:               2,
 			ServiceType:      "compute",
 			ResourceName:     "instances_medium",
@@ -114,7 +93,7 @@ func TestVMCommitmentsKPI_Collect(t *testing.T) {
 			Status:           "pending",
 		},
 		// Core commitments
-		&limes.Commitment{
+		{
 			ID:               3,
 			ServiceType:      "compute",
 			ResourceName:     "cores",
@@ -123,7 +102,7 @@ func TestVMCommitmentsKPI_Collect(t *testing.T) {
 			Status:           "confirmed",
 		},
 		// RAM commitments
-		&limes.Commitment{
+		{
 			ID:               4,
 			ServiceType:      "compute",
 			ResourceName:     "ram",
@@ -132,7 +111,7 @@ func TestVMCommitmentsKPI_Collect(t *testing.T) {
 			Unit:             "GiB",
 			Status:           "confirmed",
 		},
-		&limes.Commitment{
+		{
 			ID:               5,
 			ServiceType:      "compute",
 			ResourceName:     "ram",
@@ -142,7 +121,7 @@ func TestVMCommitmentsKPI_Collect(t *testing.T) {
 			Status:           "pending",
 		},
 		// Non-compute service (should be ignored)
-		&limes.Commitment{
+		{
 			ID:               6,
 			ServiceType:      "storage",
 			ResourceName:     "volumes",
@@ -151,7 +130,7 @@ func TestVMCommitmentsKPI_Collect(t *testing.T) {
 			Status:           "confirmed",
 		},
 		// Unknown flavor (should be ignored with warning)
-		&limes.Commitment{
+		{
 			ID:               7,
 			ServiceType:      "compute",
 			ResourceName:     "instances_unknown",
@@ -160,7 +139,7 @@ func TestVMCommitmentsKPI_Collect(t *testing.T) {
 			Status:           "confirmed",
 		},
 		// Unknown resource name (should be ignored with warning)
-		&limes.Commitment{
+		{
 			ID:               8,
 			ServiceType:      "compute",
 			ResourceName:     "unknown_resource",
@@ -169,12 +148,8 @@ func TestVMCommitmentsKPI_Collect(t *testing.T) {
 			Status:           "confirmed",
 		},
 	}
-	if err := testDB.Insert(commitments...); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
 	kpi := &VMCommitmentsKPI{}
-	if err := kpi.Init(&testDB, nil, conf.NewRawOpts("{}")); err != nil {
+	if err := kpi.Init(inputs.Static{"commitments": commitments, "flavors": flavors}, nil, conf.NewRawOpts("{}")); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 

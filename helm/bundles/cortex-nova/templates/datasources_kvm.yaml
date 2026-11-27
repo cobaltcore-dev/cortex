@@ -6,9 +6,12 @@ metadata:
   name: kvm-libvirt-domain-steal-pct
 spec:
   schedulingDomain: nova
-  databaseSecretRef:
-    name: cortex-nova-postgres
-    namespace: {{ .Release.Namespace }}
+  storage:
+    type: postgres
+    postgres:
+      secretRef:
+        name: cortex-nova-postgres
+        namespace: {{ .Release.Namespace }}
   {{- if .Values.prometheus.sso.enabled }}
   ssoSecretRef:
     name: cortex-nova-prometheus-sso
