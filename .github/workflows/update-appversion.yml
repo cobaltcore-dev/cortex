@@ -1,7 +1,10 @@
 name: Update Helm AppVersion
 
 on:
-  workflow_run:
+  # workflow_run runs on the default branch with write access regardless of the
+  # triggering run. It only reacts to our own "Build and Push Docker Images"
+  # workflow completing and reads no untrusted PR input, so it is safe here.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: ["Build and Push Docker Images"]
     types:
       - completed

@@ -10,26 +10,30 @@ on:
 env:
   REGISTRY: ghcr.io
 
+permissions:
+  contents: read
+
 jobs:
   helm-lint:
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Helm
-        uses: azure/setup-helm@v5.1.0
+        uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
 
-      - uses: actions/setup-python@v7.1.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
           check-latest: true
 
       - name: Set up chart linting
-        uses: helm/chart-testing-action@v2.9.0
+        uses: helm/chart-testing-action@720270857a28afd41e2426521a7801db09e9b510 # v2.9.0
 
       - name: Check new Chart changes
         id: list-changed
