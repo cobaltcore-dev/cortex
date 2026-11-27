@@ -7,7 +7,11 @@
 name: Cortex Agents
 
 on:
-  pull_request_target:
+  # pull_request_target is required so the agents can comment on and review
+  # fork PRs (fork pull_request events carry no secrets). The entry workflow is
+  # fork-safe: it checks out the base ref, never the fork head, and gates every
+  # agent job behind an allowlist. See cortex-agents-entry.yaml.
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened, synchronize, reopened]
   pull_request:
     types: [opened, synchronize, reopened]
@@ -38,4 +42,13 @@ permissions:
 jobs:
   cortex-agents:
     uses: ./.github/workflows/cortex-agents-entry.yaml
-    secrets: inherit
+    # Forward only the secrets the entry workflow declares, rather than
+    # inheriting the caller's entire secret set.
+    secrets:
+      AICORE_RESOURCE_GROUP: ${{ secrets.AICORE_RESOURCE_GROUP }}
+      AICORE_BASE_URL: ${{ secrets.AICORE_BASE_URL }}
+      AICORE_AUTH_URL: ${{ secrets.AICORE_AUTH_URL }}
+      AICORE_CLIENT_ID: ${{ secrets.AICORE_CLIENT_ID }}
+      AICORE_CLIENT_SECRET: ${{ secrets.AICORE_CLIENT_SECRET }}
+      CORTEX_AI_AGENTS_APP_ID: ${{ secrets.CORTEX_AI_AGENTS_APP_ID }}
+      CORTEX_AI_AGENTS_CLIENT_PKEY: ${{ secrets.CORTEX_AI_AGENTS_CLIENT_PKEY }}

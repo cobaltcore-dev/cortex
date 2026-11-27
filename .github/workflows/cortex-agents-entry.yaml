@@ -86,17 +86,19 @@ jobs:
     steps:
       # Check out the base ref, never the fork head — the fork-safety linchpin
       # for pull_request_target.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          persist-credentials: false
       # Clone cortex at the exact commit this workflow was called from, to
       # reuse the composite actions co-located with this file.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: .cortex-agent
           sparse-checkout: .github/actions
+          persist-credentials: false
       - id: parse
         uses: ./.cortex-agent/.github/actions/parse-cortex-config
 
@@ -111,12 +113,13 @@ jobs:
     outputs:
       allowed: ${{ steps.gate.outputs.allowed }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: .cortex-agent
           sparse-checkout: .github/actions
+          persist-credentials: false
       - id: check
         uses: ./.cortex-agent/.github/actions/check-allowlist
         with:
@@ -220,12 +223,13 @@ jobs:
       allowed: ${{ steps.check.outputs.allowed }}
       triggered: ${{ steps.trigger.outputs.triggered }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: .cortex-agent
           sparse-checkout: .github/actions
+          persist-credentials: false
       - id: check
         uses: ./.cortex-agent/.github/actions/check-allowlist
         with:
@@ -282,12 +286,13 @@ jobs:
     outputs:
       should_run: ${{ steps.gate.outputs.should_run }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: .cortex-agent
           sparse-checkout: .github/actions
+          persist-credentials: false
       - id: check
         uses: ./.cortex-agent/.github/actions/check-allowlist
         with:

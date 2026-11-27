@@ -19,13 +19,15 @@ jobs:
       id-token: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Login to Docker Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -34,14 +36,14 @@ jobs:
       # postgres directory.
       - name: Get all changed postgres/ files
         id: changed_postgres_files
-        uses: tj-actions/changed-files@v47
+        uses: tj-actions/changed-files@24d32ffd492484c1d75e0c0b894501ddb9d30d62 # v47.0.0
         with:
           files: |
             postgres/**
       - name: Docker Meta (Cortex Postgres)
         if: steps.changed_postgres_files.outputs.all_changed_files != ''
         id: meta_cortex_postgres
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}-postgres
           tags: |
@@ -54,7 +56,7 @@ jobs:
       - name: Build and Push Cortex Postgres
         if: steps.changed_postgres_files.outputs.all_changed_files != ''
         id: push_cortex_postgres
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: postgres
           platforms: linux/amd64,linux/arm64
@@ -66,7 +68,7 @@ jobs:
             GIT_COMMIT=${{ github.sha }}
       - name: Generate Artifact Attestation for Cortex Postgres
         if: steps.changed_postgres_files.outputs.all_changed_files != ''
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-postgres
           subject-digest: ${{ steps.push_cortex_postgres.outputs.digest }}
@@ -76,7 +78,7 @@ jobs:
       # to the cortex shims (e.g., in cmd/shim or internal/shim).
       - name: Get all changed shim/ files
         id: changed_shim_files
-        uses: tj-actions/changed-files@v47
+        uses: tj-actions/changed-files@24d32ffd492484c1d75e0c0b894501ddb9d30d62 # v47.0.0
         with:
           files: |
             cmd/shim/**
@@ -89,7 +91,7 @@ jobs:
       - name: Docker Meta (Cortex Shim)
         if: steps.changed_shim_files.outputs.all_changed_files != ''
         id: meta_cortex_shim
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}-shim
           tags: |
@@ -102,7 +104,7 @@ jobs:
       - name: Build and Push Cortex Shim
         if: steps.changed_shim_files.outputs.all_changed_files != ''
         id: push_cortex_shim
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -115,7 +117,7 @@ jobs:
             GOMAIN=cmd/shim/main.go
       - name: Generate Artifact Attestation for Cortex Shim
         if: steps.changed_shim_files.outputs.all_changed_files != ''
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository }}-shim
           subject-digest: ${{ steps.push_cortex_shim.outputs.digest }}
@@ -124,7 +126,7 @@ jobs:
       # Build & push new cortex image
       - name: Docker Meta (Cortex)
         id: meta_cortex
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}
           tags: |
@@ -136,7 +138,7 @@ jobs:
           DOCKER_METADATA_SHORT_SHA_LENGTH: 8
       - name: Build and Push Cortex
         id: push_cortex
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: Dockerfile
@@ -149,7 +151,7 @@ jobs:
             GIT_COMMIT=${{ github.sha }}
             GOMAIN=cmd/manager/main.go
       - name: Generate Artifact Attestation for Cortex
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository }}
           subject-digest: ${{ steps.push_cortex.outputs.digest }}

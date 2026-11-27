@@ -11,6 +11,10 @@ on:
     branches:
       - '*'
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -21,9 +25,11 @@ jobs:
           - 2375:2375
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: 'go.mod'
       - name: Run tests and calculate coverage
@@ -44,7 +50,7 @@ jobs:
           go tool cover -func profile_filtered.cov > func_coverage.txt
 
       - name: Upload coverage files
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pr-func-coverage
           path: |
@@ -52,7 +58,7 @@ jobs:
       # Steps below are only executed if the workflow is triggered by a pull request
       - name: Delete old coverage comments (PR only)
         if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const { data: comments } = await github.rest.issues.listComments({
@@ -72,13 +78,13 @@ jobs:
             }
       - name: Download coverage files (PR only)
         if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: pr-func-coverage
           path: .
       - name: Post coverage comment (PR only)
         if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         # For external contributors, posting comments fail due to permission issues.
         continue-on-error: true
         with:
