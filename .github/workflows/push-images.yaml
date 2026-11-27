@@ -36,7 +36,7 @@ jobs:
       # postgres directory.
       - name: Get all changed postgres/ files
         id: changed_postgres_files
-        uses: tj-actions/changed-files@24d32ffd492484c1d75e0c0b894501ddb9d30d62 # v47.0.0
+        uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
         with:
           files: |
             postgres/**
@@ -78,7 +78,7 @@ jobs:
       # to the cortex shims (e.g., in cmd/shim or internal/shim).
       - name: Get all changed shim/ files
         id: changed_shim_files
-        uses: tj-actions/changed-files@24d32ffd492484c1d75e0c0b894501ddb9d30d62 # v47.0.0
+        uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
         with:
           files: |
             cmd/shim/**
